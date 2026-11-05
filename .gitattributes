@@ -1,0 +1,4 @@
+# Gli script per sistemi Unix (Mac, container Docker) devono avere fine riga LF
+*.sh text eol=lf
+# File binari del kernel di Alpine
+kernel/* binary

@@ -1,0 +1,5 @@
+# Prodotti della compilazione: li rigenera build.sh a ogni avvio
+build/
+
+# Il disco di mshell (512 MB): run.ps1 / run.sh lo ricreano se manca
+disco.img
