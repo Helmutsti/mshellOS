@@ -14,8 +14,9 @@ KVER=6.18.60-0-virt
 MODULI="lib/crc/crc16 fs/mbcache fs/jbd2/jbd2 fs/ext4/ext4 drivers/block/virtio_blk"
 
 # Programmi di sistema che vanno sul disco in /system/bin.
-# Nome del programma = nome del file in src/ (la shell, src/shell.c, diventa mshell).
-PROGRAMMI="shutdown ls cat mkdir"
+# Nome del programma = nome del file in src/bin/.
+# La shell (src/shell/, con dentro i suoi comandi interni) diventa /system/bin/mshell.
+PROGRAMMI="shutdown ls cat mkdir rm cp mv"
 
 if [ "$1" = "disco" ]; then
     apk add -q e2fsprogs >/dev/null
@@ -33,13 +34,14 @@ apk add -q gcc musl-dev cpio squashfs-tools >/dev/null
 rm -rf build
 mkdir -p build/rootfs/lib/modules build/disco/bin
 
-# init: va nell'archivio di avvio
-gcc -static -O2 -Wall -o build/rootfs/init src/init.c src/file_sicuro.c
+# init: va nell'archivio di avvio; si porta dentro la libreria mshelllib
+LIB="-I src/mshelllib src/mshelllib/*.c"
+gcc -static -O2 -Wall -o build/rootfs/init src/init/*.c $LIB
 
 # programmi di sistema: vanno sul disco
-gcc -static -O2 -Wall -o build/disco/bin/mshell src/shell.c
+gcc -static -O2 -Wall -o build/disco/bin/mshell src/shell/*.c
 for p in $PROGRAMMI; do
-    gcc -static -O2 -Wall -o "build/disco/bin/$p" "src/$p.c"
+    gcc -static -O2 -Wall -o "build/disco/bin/$p" "src/bin/$p.c"
 done
 
 # moduli del kernel, presi dall'archivio dei moduli di Alpine

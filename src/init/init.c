@@ -20,7 +20,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "file_sicuro.h"
+#include "mshelllib.h"
 
 // Moduli del kernel da caricare, nell'ordine giusto: prima le dipendenze.
 // I file li mette run.ps1 nell'archivio di avvio, in /lib/modules.
@@ -71,9 +71,10 @@ static int monta_system(void) {
 // File degli utenti, in stile /etc/passwd di Linux. Una riga per utente:
 //   nome:password:uid:gid:descrizione:cartella_personale:programma_da_avviare
 // La password "x" vuol dire "non impostata".
+// La cartella personale vuota vuol dire "nessuna": il programma parte dalla cartella principale /.
 #define FILE_UTENTI "/system/users"
 static const char *utenti_iniziali =
-    "admin:x:0:0:Amministratore:/system/admin:/system/bin/mshell\n";
+    "admin:x:0:0:Amministratore::/system/bin/mshell\n";
 
 // Un utente letto dal file: solo i campi che servono per avviare la sua shell.
 struct utente {
@@ -123,8 +124,8 @@ static pid_t avvia_shell(const char *nome) {
         printf("mshell: utente %s non trovato in %s\n", nome, FILE_UTENTI);
         return -1;
     }
-    // cartella personale: se manca la crea, di proprieta' dell'utente e solo sua
-    if (mkdir(u.casa, 0700) == 0 && chown(u.casa, u.uid, u.gid) != 0)
+    // cartella personale (se l'utente ne ha una): se manca la crea, di proprieta' dell'utente e solo sua
+    if (u.casa[0] && mkdir(u.casa, 0700) == 0 && chown(u.casa, u.uid, u.gid) != 0)
         printf("mshell: chown %s fallito: %s\n", u.casa, strerror(errno));
 
     pid_t figlio = fork();
@@ -150,13 +151,16 @@ static pid_t avvia_shell(const char *nome) {
         printf("mshell: impossibile diventare %s: %s\n", u.nome, strerror(errno));
         _exit(1);
     }
-    if (chdir(u.casa) != 0)
+    // un processo e' sempre dentro una cartella: senza cartella personale parte da /
+    if (!u.casa[0] || chdir(u.casa) != 0)
         chdir("/");
 
     char e_home[160], e_user[48];
     snprintf(e_home, sizeof e_home, "HOME=%s", u.casa);
     snprintf(e_user, sizeof e_user, "USER=%s", u.nome);
-    char *ambiente[] = { e_home, e_user, "PATH=/system/bin", "TERM=linux", NULL };
+    char *ambiente[] = { e_user, "PATH=/system/bin", "TERM=linux", NULL, NULL };
+    if (u.casa[0])
+        ambiente[3] = e_home;                  // HOME solo per chi ha una cartella personale
     char *argomenti[] = { u.programma, NULL };
     execve(u.programma, argomenti, ambiente);
     printf("mshell: impossibile avviare %s: %s\n", u.programma, strerror(errno));
@@ -239,7 +243,7 @@ static void al_segnale_spegnimento(int segnale) {
 
 // Chiude tutti i processi tranne init: prima con gentilezza (SIGTERM), poi d'autorita' (SIGKILL).
 // Serve perche' un disco non si puo' smontare mentre qualcuno lo sta usando
-// (per esempio la shell, che ha come cartella corrente /system/admin).
+// (per esempio la shell, se ha come cartella corrente una cartella dentro /system).
 static void chiudi_processi(void) {
     kill(-1, SIGTERM);                         // -1 = tutti i processi tranne il PID 1
     for (int i = 0; i < 20 && waitpid(-1, NULL, WNOHANG) >= 0; i++)

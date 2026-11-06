@@ -1,6 +1,6 @@
 // mshell: shell rudimentale.
 // Ciclo: mostra il prompt, legge una riga, la spezza in parole, esegue, ricomincia.
-//   - comandi interni: cd, exit
+//   - comandi interni (cd, exit): scritti in questa cartella, elencati qui sotto
 //   - tutti gli altri: cerca il programma nelle cartelle di PATH (es. /system/bin),
 //     crea un processo figlio (fork), lo trasforma nel programma (execve) e aspetta (waitpid).
 #include <errno.h>
@@ -10,10 +10,27 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "comandi.h"
 
 #define MAX_PAROLE 32
 
 extern char **environ;
+
+// Elenco dei comandi interni. Per aggiungerne uno: scrivi nome.c in questa cartella,
+// dichiaralo in comandi.h e aggiungi una riga qui.
+static const struct comando comandi_interni[] = {
+    { "cd",   comando_cd },
+    { "exit", comando_exit },
+    { NULL,   NULL },
+};
+
+// Cerca un comando interno per nome. Restituisce NULL se non c'e'.
+static const struct comando *comando_interno(const char *nome) {
+    for (const struct comando *c = comandi_interni; c->nome; c++)
+        if (strcmp(c->nome, nome) == 0)
+            return c;
+    return NULL;
+}
 
 // Spezza la riga in parole separate da spazi. Modifica la riga.
 static int spezza(char *riga, char *parole[]) {
@@ -102,12 +119,10 @@ int main(void) {
         if (spezza(riga, parole) == 0)
             continue;
 
-        if (strcmp(parole[0], "exit") == 0)
-            break;
-        if (strcmp(parole[0], "cd") == 0) {
-            const char *dove = parole[1] ? parole[1] : getenv("HOME");
-            if (!dove || chdir(dove) != 0)
-                printf("mshell: cd: %s\n", strerror(errno));
+        const struct comando *interno = comando_interno(parole[0]);
+        if (interno) {
+            if (interno->esegui(parole) == ESCI)
+                break;
             continue;
         }
         esegui(parole);

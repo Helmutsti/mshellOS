@@ -3,7 +3,7 @@
 //   2. fsync: chiede al kernel di salvarlo sul disco subito, e aspetta la conferma
 //   3. rename: gli da' il nome definitivo con un'unica operazione indivisibile
 //   4. fsync della cartella: salva su disco anche il cambio di nome
-#include "file_sicuro.h"
+#include "mshelllib.h"
 
 #include <errno.h>
 #include <fcntl.h>

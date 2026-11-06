@@ -1,5 +1,9 @@
-#ifndef MSHELL_FILE_SICURO_H
-#define MSHELL_FILE_SICURO_H
+// mshelllib: libreria di mshell, codice condiviso tra i programmi del sistema.
+// Ogni funzione sta in un suo file f_<nome>.c in questa cartella; qui ci sono le loro dichiarazioni.
+// Per usarla: #include "mshelllib.h" (build.sh compila con -I src/mshelllib e unisce src/mshelllib/*.c).
+
+#ifndef MSHELLLIB_H
+#define MSHELLLIB_H
 
 #include <stddef.h>
 #include <sys/types.h>
