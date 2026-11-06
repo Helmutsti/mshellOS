@@ -11,6 +11,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "mshelllib.h"
+
 static int e_cartella(const char *percorso) {
     struct stat info;
     return stat(percorso, &info) == 0 && S_ISDIR(info.st_mode);
@@ -46,17 +48,11 @@ static int copia(const char *origine, const char *destinazione) {
             errore = 1;
             break;
         }
-        for (ssize_t fatti = 0; fatti < letti;) {
-            ssize_t scritti = write(a, blocco + fatti, (size_t)(letti - fatti));
-            if (scritti < 0) {
-                if (errno == EINTR) continue;
-                fprintf(stderr, "cp: %s: %s\n", destinazione, strerror(errno));
-                errore = 1;
-                break;
-            }
-            fatti += scritti;
+        if (scrivi_tutto(a, blocco, (size_t)letti) != 0) {
+            fprintf(stderr, "cp: %s: %s\n", destinazione, strerror(errno));
+            errore = 1;
+            break;
         }
-        if (errore) break;
     }
     close(da);
     if (close(a) != 0 && !errore) {

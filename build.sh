@@ -16,14 +16,20 @@ MODULI="lib/crc/crc16 fs/mbcache fs/jbd2/jbd2 fs/ext4/ext4 drivers/block/virtio_
 # Programmi di sistema che vanno sul disco in /system/bin.
 # Nome del programma = nome del file in src/bin/.
 # La shell (src/shell/, con dentro i suoi comandi interni) diventa /system/bin/mshell.
-PROGRAMMI="shutdown ls cat mkdir rm cp mv"
+PROGRAMMI="shutdown ls cat mkdir rm cp mv svcc write"
+
+# Servicenter e i servizi di sistema: vanno sul disco in /system/servizi.
+# Non sono comandi: li avvia init (servicenter, login) e servicenter (i servizi).
+SERVIZI="prova"
 
 if [ "$1" = "disco" ]; then
     apk add -q e2fsprogs >/dev/null
     rm -rf /tmp/disco
     cp -r build/disco /tmp/disco
     chown -R 0:0 /tmp/disco
-    chmod 755 /tmp/disco/bin /tmp/disco/bin/*
+    chmod 755 /tmp/disco/bin/* /tmp/disco/servizi/*
+    chmod 711 /tmp/disco/bin        # avviabili da tutti, ma solo root ne vede l'elenco
+    chmod 700 /tmp/disco/servizi    # solo root: ogni servizio riceve il suo programma nel suo mondo
     rm -f disco.img
     truncate -s 512M disco.img
     mkfs.ext4 -q -L mshell -d /tmp/disco disco.img
@@ -32,16 +38,24 @@ fi
 
 apk add -q gcc musl-dev cpio squashfs-tools >/dev/null
 rm -rf build
-mkdir -p build/rootfs/lib/modules build/disco/bin
+mkdir -p build/rootfs/lib/modules build/disco/bin build/disco/servizi
 
-# init: va nell'archivio di avvio; si porta dentro la libreria mshelllib
+# Tutti i programmi di mshell si compilano con la libreria mshelllib.
+# init: va nell'archivio di avvio
 LIB="-I src/mshelllib src/mshelllib/*.c"
 gcc -static -O2 -Wall -o build/rootfs/init src/init/*.c $LIB
 
 # programmi di sistema: vanno sul disco
-gcc -static -O2 -Wall -o build/disco/bin/mshell src/shell/*.c
+gcc -static -O2 -Wall -o build/disco/bin/mshell src/shell/*.c $LIB
 for p in $PROGRAMMI; do
-    gcc -static -O2 -Wall -o "build/disco/bin/$p" "src/bin/$p.c"
+    gcc -static -O2 -Wall -o "build/disco/bin/$p" "src/bin/$p.c" $LIB
+done
+
+# servicenter, login e servizi: vanno sul disco in /system/servizi
+gcc -static -O2 -Wall -o build/disco/servizi/servicenter src/servicenter/*.c $LIB
+gcc -static -O2 -Wall -o build/disco/servizi/login src/login/*.c $LIB
+for s in $SERVIZI; do
+    gcc -static -O2 -Wall -o "build/disco/servizi/$s" "src/servizi/$s.c" $LIB
 done
 
 # moduli del kernel, presi dall'archivio dei moduli di Alpine

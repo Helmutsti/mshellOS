@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
+#include <grp.h>
 #include <unistd.h>
 
 #include "mshelllib.h"
@@ -65,112 +66,84 @@ static int monta_system(void) {
     stat("/system", &s);
     printf("mshell: disco montato su /system (proprietario %u, permessi %o)\n",
            s.st_uid, s.st_mode & 0777);
+
+    // I programmi di sistema compaiono anche in /bin, in sola lettura: e' la stessa
+    // cartella del disco (aggancio), non una copia. Cosi' tutti li trovano in /bin.
+    if (mkdir("/bin", 0755) != 0 && errno != EEXIST)
+        return -1;
+    if (mount("/system/bin", "/bin", NULL, MS_BIND, NULL) != 0
+        || mount(NULL, "/bin", NULL, MS_REMOUNT | MS_BIND | MS_RDONLY | MS_NOSUID | MS_NODEV, NULL) != 0) {
+        printf("mshell: aggancio di /system/bin su /bin fallito: %s\n", strerror(errno));
+        return -1;
+    }
     return 0;
 }
 
 // File degli utenti, in stile /etc/passwd di Linux. Una riga per utente:
-//   nome:password:uid:gid:descrizione:cartella_personale:programma_da_avviare
+//   nome:password:uid:gid:descrizione:cartella:programma_da_avviare
 // La password "x" vuol dire "non impostata".
-// La cartella personale vuota vuol dire "nessuna": il programma parte dalla cartella principale /.
-#define FILE_UTENTI "/system/users"
+// La cartella e' /system/users/<uid>: per l'utente diventa la radice "/" del suo mondo, con dentro
+//   /home  i suoi file (e i suoi programmi in /home/bin)
+//   /bin   i programmi di sistema, agganciati in sola lettura
+// L'amministratore non ha cartella: vede tutto il sistema e parte da /.
+// Il programma e' il punto d'ingresso dell'utente, col percorso che vede lui. Per una persona e' la shell.
 static const char *utenti_iniziali =
-    "admin:x:0:0:Amministratore::/system/bin/mshell\n";
+    "admin:x:0:0:Amministratore::/bin/mshell\n"
+    "utente:x:1000:1000:Utente di prova:/system/users/1000:/bin/mshell\n";
 
-// Un utente letto dal file: solo i campi che servono per avviare la sua shell.
-struct utente {
-    char nome[32];
-    unsigned uid, gid;
-    char casa[128];     // cartella personale
-    char programma[128];
-};
-
-// Cerca un utente per nome nel file degli utenti. Restituisce 0 se lo trova.
-static int leggi_utente(const char *nome, struct utente *u) {
-    FILE *f = fopen(FILE_UTENTI, "r");
-    if (!f)
-        return -1;
-    char riga[512];
-    int trovato = -1;
-    while (trovato != 0 && fgets(riga, sizeof riga, f)) {
-        riga[strcspn(riga, "\n")] = '\0';
-        char *campi[7];
-        int n = 0;
-        char *p = riga;
-        while (n < 7) {                        // 7 campi separati da ':' (anche vuoti)
-            campi[n++] = p;
-            p = strchr(p, ':');
-            if (!p)
-                break;
-            *p++ = '\0';
-        }
-        if (n != 7 || strcmp(campi[0], nome) != 0)
-            continue;
-        snprintf(u->nome, sizeof u->nome, "%s", campi[0]);
-        u->uid = (unsigned)strtoul(campi[2], NULL, 10);
-        u->gid = (unsigned)strtoul(campi[3], NULL, 10);
-        snprintf(u->casa, sizeof u->casa, "%s", campi[5]);
-        snprintf(u->programma, sizeof u->programma, "%s", campi[6]);
-        trovato = 0;
-    }
-    fclose(f);
-    return trovato;
-}
-
-// Avvia il programma dell'utente (la sua shell) sulla prima console dello schermo.
-// Restituisce il numero del processo figlio, o -1.
-static pid_t avvia_shell(const char *nome) {
-    struct utente u;
-    if (leggi_utente(nome, &u) != 0) {
-        printf("mshell: utente %s non trovato in %s\n", nome, FILE_UTENTI);
-        return -1;
-    }
-    // cartella personale (se l'utente ne ha una): se manca la crea, di proprieta' dell'utente e solo sua
-    if (u.casa[0] && mkdir(u.casa, 0700) == 0 && chown(u.casa, u.uid, u.gid) != 0)
-        printf("mshell: chown %s fallito: %s\n", u.casa, strerror(errno));
-
+// Avvia il programma di accesso sulla console indicata (es. /dev/tty1), come root.
+// Login chiede nome e password e poi diventa la shell della persona: quando la persona
+// esce, il processo finisce e init rimette login su quella console.
+#define LOGIN "/system/servizi/login"
+static pid_t avvia_login(const char *console) {
     pid_t figlio = fork();
     if (figlio != 0)
         return figlio;                         // init (o errore: -1)
 
     // --- da qui siamo nel processo figlio ---
-    // nuova sessione con tty1 come terminale: Ctrl+C arriva qui, non a init
-    setsid();
-    int tty = open("/dev/tty1", O_RDWR);
-    if (tty < 0)
+    // la console diventa il suo terminale: Ctrl+C arriva qui, non a init
+    if (collega_console(console) != 0)
         _exit(1);
-    ioctl(tty, TIOCSCTTY, 0);
-    dup2(tty, 0);
-    dup2(tty, 1);
-    dup2(tty, 2);
-    if (tty > 2)
-        close(tty);
-
     signal(SIGINT, SIG_DFL);
-    // diventa l'utente: prima il gruppo, poi l'utente (dopo non si torna indietro)
-    if (setgid(u.gid) != 0 || setuid(u.uid) != 0) {
-        printf("mshell: impossibile diventare %s: %s\n", u.nome, strerror(errno));
-        _exit(1);
-    }
-    // un processo e' sempre dentro una cartella: senza cartella personale parte da /
-    if (!u.casa[0] || chdir(u.casa) != 0)
-        chdir("/");
 
-    char e_home[160], e_user[48];
-    snprintf(e_home, sizeof e_home, "HOME=%s", u.casa);
-    snprintf(e_user, sizeof e_user, "USER=%s", u.nome);
-    char *ambiente[] = { e_user, "PATH=/system/bin", "TERM=linux", NULL, NULL };
-    if (u.casa[0])
-        ambiente[3] = e_home;                  // HOME solo per chi ha una cartella personale
-    char *argomenti[] = { u.programma, NULL };
-    execve(u.programma, argomenti, ambiente);
-    printf("mshell: impossibile avviare %s: %s\n", u.programma, strerror(errno));
+    char *argomenti[] = { LOGIN, NULL };
+    char *ambiente[] = { "TERM=linux", NULL };
+    execve(LOGIN, argomenti, ambiente);
+    printf("mshell: impossibile avviare %s: %s\n", LOGIN, strerror(errno));
     _exit(127);
+}
+
+// La persona e' uscita (exit): ferma anche i programmi che ha lasciato accesi.
+// Il processo di login apre un gruppo di processi con il suo stesso numero, e tutto quello
+// che la shell avvia ci resta dentro: kill(-numero) li raggiunge tutti, anche dopo che la
+// shell e' finita. Limite: un programma che si crea un gruppo suo (setsid) sfugge.
+static void chiudi_sessione(pid_t gruppo) {
+    if (kill(-gruppo, SIGTERM) != 0)
+        return;                                // nessuno rimasto
+    usleep(300000);                            // un attimo per chiudersi da soli
+    kill(-gruppo, SIGKILL);
+}
+
+// Avvia servicenter, che tiene accesi i servizi di sistema. Gira come root.
+#define SERVICENTER "/system/servizi/servicenter"
+static pid_t avvia_servicenter(void) {
+    pid_t figlio = fork();
+    if (figlio == 0) {
+        char *argomenti[] = { SERVICENTER, NULL };
+        char *ambiente[] = { NULL };
+        execve(SERVICENTER, argomenti, ambiente);
+        printf("mshell: impossibile avviare %s: %s\n", SERVICENTER, strerror(errno));
+        _exit(127);
+    }
+    return figlio;
 }
 
 // Al primo avvio crea il file degli utenti, leggibile e scrivibile solo da root (0600),
 // con la scrittura sicura: dopo un'interruzione il file c'e' intero oppure non c'e'.
 // Se esiste gia' non lo tocca. In entrambi i casi ne stampa il contenuto.
 static void prepara_utenti(void) {
+    if (mkdir(CARTELLA_UTENTI, 0700) != 0 && errno != EEXIST)
+        printf("mshell: mkdir %s fallito: %s\n", CARTELLA_UTENTI, strerror(errno));
     if (access(FILE_UTENTI, F_OK) != 0) {
         if (scrivi_file_sicuro(FILE_UTENTI, utenti_iniziali, strlen(utenti_iniziali), 0600) != 0) {
             printf("mshell: impossibile creare %s: %s\n", FILE_UTENTI, strerror(errno));
@@ -258,6 +231,7 @@ static void spegni(void) {
     printf("mshell: spegnimento in corso\n");
     chiudi_processi();
     sync();                                    // tutto quello che e' in memoria va sul disco
+    umount("/bin");                            // l'aggancio dei programmi tiene occupato il disco
     if (umount("/system") == 0) {
         printf("mshell: /system smontato\n");
     } else {
@@ -293,17 +267,27 @@ int main(void) {
 
     printf("mshell: pronto. Per spegnere: shutdown, oppure Ctrl+Alt+Canc\n");
 
-    pid_t shell = -1;
+    // Il programma di accesso su ogni console: Alt+F1, Alt+F2, ...
+    const char *console[] = { "/dev/tty1", "/dev/tty2" };
+    enum { N_CONSOLE = sizeof console / sizeof console[0] };
+    pid_t accesso[N_CONSOLE];
+    pid_t servicenter = -1;
+    for (int i = 0; i < N_CONSOLE; i++)
+        accesso[i] = -1;
     if (monta_system() == 0) {
         prepara_utenti();
+        servicenter = avvia_servicenter();
+        usleep(200000);                        // lascia stampare a servicenter il suo messaggio
         // Zittisce il kernel sulla console: da qui in poi stampa solo i messaggi
         // critici (livello < 3), cosi' non si mescolano con la shell. Gli altri
         // non si perdono: restano nel registro del kernel, leggibile da /dev/kmsg.
         klogctl(LOG_CONSOLE_IMPOSTA_LIVELLO, NULL, 3);
-        shell = avvia_shell("admin");
+        for (int i = 0; i < N_CONSOLE; i++)
+            accesso[i] = avvia_login(console[i]);
     }
     // Ciclo del PID 1: aspetta che un figlio termini (wait). Raccoglie cosi' anche
-    // i processi orfani che il kernel gli affida. Se termina la shell, la riavvia.
+    // i processi orfani che il kernel gli affida. Se una persona esce (o login termina),
+    // rimette login su quella console.
     // Un segnale (spegnimento) interrompe l'attesa.
     while (!richiesta_spegnimento) {
         pid_t finito = wait(NULL);
@@ -312,10 +296,16 @@ int main(void) {
                 pause();                       // nessun figlio: dorme fino a un segnale
             continue;
         }
-        if (finito == shell && !richiesta_spegnimento) {
-            printf("mshell: la shell e' terminata, la riavvio\n");
+        for (int i = 0; i < N_CONSOLE; i++) {
+            if (finito == accesso[i] && !richiesta_spegnimento) {
+                chiudi_sessione(finito);
+                sleep(1);
+                accesso[i] = avvia_login(console[i]);
+            }
+        }
+        if (finito == servicenter && !richiesta_spegnimento) {
             sleep(1);
-            shell = avvia_shell("admin");
+            servicenter = avvia_servicenter();
         }
     }
     spegni();

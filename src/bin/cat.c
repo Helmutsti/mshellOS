@@ -6,6 +6,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "mshelllib.h"
+
 // Copia tutto da un descrittore all'uscita standard.
 static int copia(int da, const char *nome) {
     char blocco[4096];
@@ -19,15 +21,8 @@ static int copia(int da, const char *nome) {
             fprintf(stderr, "cat: %s: %s\n", nome, strerror(errno));
             return 1;
         }
-        for (ssize_t fatti = 0; fatti < letti;) {
-            ssize_t scritti = write(1, blocco + fatti, (size_t)(letti - fatti));
-            if (scritti < 0) {
-                if (errno == EINTR)
-                    continue;
-                return 1;
-            }
-            fatti += scritti;
-        }
+        if (scrivi_tutto(1, blocco, (size_t)letti) != 0)
+            return 1;
     }
 }
 

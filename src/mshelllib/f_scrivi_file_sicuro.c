@@ -27,18 +27,8 @@ int scrivi_file_sicuro(const char *percorso, const void *dati, size_t lunghezza,
     if (fchmod(fd, permessi) != 0)
         goto errore;
 
-    const char *p = dati;
-    size_t mancano = lunghezza;
-    while (mancano > 0) {
-        ssize_t scritti = write(fd, p, mancano);
-        if (scritti < 0) {
-            if (errno == EINTR)
-                continue;
-            goto errore;
-        }
-        p += scritti;
-        mancano -= (size_t)scritti;
-    }
+    if (scrivi_tutto(fd, dati, lunghezza) != 0)
+        goto errore;
 
     // 2. sul disco, adesso
     if (fsync(fd) != 0)

@@ -17,5 +17,6 @@ struct comando {
 
 int comando_cd(char *parole[]);
 int comando_exit(char *parole[]);
+int comando_help(char *parole[]);
 
 #endif
