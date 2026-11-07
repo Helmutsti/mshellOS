@@ -12,6 +12,9 @@ void pagine_prepara(struct multiboot_info *info);
 /* 2. Chiede una pagina libera. Restituisce il suo indirizzo, o 0 se la memoria e' finita. */
 unsigned int pagina_chiedi(void);
 
+/* Chiede n pagine una dopo l'altra (memoria consecutiva). Indirizzo della prima, o 0. */
+unsigned int pagine_chiedi_consecutive(unsigned int n);
+
 /* 3. Restituisce una pagina avuta da pagina_chiedi. */
 void pagina_restituisci(unsigned int indirizzo);
 

@@ -97,13 +97,20 @@ static const char *descrivi(unsigned char accesso) {
     return ring ? "dati programmi" : "dati kernel";
 }
 
-void gdt_mostra(void) {
+void gdt_mostra(int dettagli) {
     struct registro_gdt letto;
     unsigned short cs, ds, ss;
     __asm__ volatile("sgdt %0" : "=m"(letto));   /* chiede alla CPU: dov'e' la GDT adesso? */
     __asm__ volatile("mov %%cs, %0" : "=r"(cs));
     __asm__ volatile("mov %%ds, %0" : "=r"(ds));
     __asm__ volatile("mov %%ss, %0" : "=r"(ss));
+
+    if (!dettagli) {
+        kprintf("GDT     : %s a %p, %u righe, CS=%02x DS=%02x SS=%02x\n",
+                letto.indirizzo == (unsigned int)gdt ? "la nostra" : "NON la nostra",
+                (void *)letto.indirizzo, (letto.dimensione + 1) / 8, cs, ds, ss);
+        return;
+    }
 
     kprintf("La CPU usa la GDT a %p, %u righe  (la nostra e' a %p)\n",
             (void *)letto.indirizzo, (letto.dimensione + 1) / 8, (void *)gdt);

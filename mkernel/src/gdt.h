@@ -12,7 +12,7 @@
 /* Prepara la tabella, la consegna alla CPU e ricarica i registri di segmento. */
 void gdt_prepara(void);
 
-/* Stampa la tabella e i registri di segmento attuali. */
-void gdt_mostra(void);
+/* Stampa dove sta la GDT e i registri di segmento; con dettagli=1 anche le righe. */
+void gdt_mostra(int dettagli);
 
 #endif

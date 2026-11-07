@@ -105,6 +105,22 @@ unsigned int pagina_chiedi(void) {
     return 0;   /* memoria finita (la pagina 0 non viene mai consegnata) */
 }
 
+/* Cerca n caselle libere di fila: scorre il registro contando quante libere ha visto
+ * una dopo l'altra; una occupata azzera il conto. Arrivato a n, le occupa tutte. */
+unsigned int pagine_chiedi_consecutive(unsigned int n) {
+    unsigned int di_fila = 0;
+    for (unsigned int p = 0; p < n_pagine; p++) {
+        if (e_occupata(p)) { di_fila = 0; continue; }
+        if (++di_fila == n) {
+            unsigned int prima = p - n + 1;
+            for (unsigned int q = prima; q <= p; q++)
+                segna_occupata(q);
+            return prima * PAGINA;
+        }
+    }
+    return 0;
+}
+
 /* --- 3. Restituire una pagina --- */
 
 void pagina_restituisci(unsigned int indirizzo) {

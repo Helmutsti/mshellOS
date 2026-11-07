@@ -61,8 +61,9 @@ void idt_mostra(void) {
     int collegate = 0;
     for (int n = 0; n < RIGHE; n++)
         if (idt[n].tipo & 0x80) collegate++;
-    kprintf("La CPU usa la IDT a %p, %u righe, %d collegate (nostra: %p)\n",
-            (void *)letto.indirizzo, (letto.dimensione + 1) / 8, collegate, (void *)idt);
+    kprintf("IDT     : %s a %p, %u righe, %d collegate\n",
+            letto.indirizzo == (unsigned int)idt ? "la nostra" : "NON la nostra",
+            (void *)letto.indirizzo, (letto.dimensione + 1) / 8, collegate);
 }
 
 /* --- il gestore in C: lo chiama isr_comune --- */

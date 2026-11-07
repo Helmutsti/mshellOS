@@ -8,6 +8,7 @@
 #include "timer.h"
 #include "tastiera.h"
 #include "pagine.h"
+#include "kmalloc.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
 
@@ -63,6 +64,40 @@ static void prova_pagine(void) {
     controlla(pagine_libere() == all_inizio, "restituite tutte: il conto torna");
 }
 
+/* kmalloc: tre pezzi, un buco nel mezzo, il buco riusato, tutto restituito. */
+static void prova_kmalloc(void) {
+    unsigned int blocchi, liberi_inizio, liberi;
+    kmalloc_conta(&blocchi, &liberi_inizio);
+
+    char *a = kmalloc(10), *b = kmalloc(100), *c = kmalloc(1000);
+    controlla(a && b && c, "kmalloc ha dato i tre pezzi");
+    controlla((unsigned int)a % 8 == 0 && (unsigned int)b % 8 == 0 && (unsigned int)c % 8 == 0,
+              "i pezzi sono allineati a 8");
+    controlla(a + 10 <= b && b + 100 <= c, "i pezzi non si sovrappongono");
+
+    /* ognuno scrive nel suo pezzo: se si sovrapponessero, si rovinerebbero a vicenda */
+    for (int i = 0; i < 10; i++)   a[i] = 'a';
+    for (int i = 0; i < 100; i++)  b[i] = 'b';
+    for (int i = 0; i < 1000; i++) c[i] = 'c';
+    controlla(a[9] == 'a' && b[0] == 'b' && b[99] == 'b' && c[0] == 'c', "ognuno tiene il suo");
+
+    kfree(b);                         /* un buco nel mezzo */
+    kprintf("Dopo kmalloc(10), kmalloc(100), kmalloc(1000) e kfree del secondo:\n");
+    kmalloc_mostra();
+
+    char *d = kmalloc(50);
+    controlla(d == b, "kmalloc(50) riusa il buco lasciato dal secondo");
+
+    char *grande = kmalloc(2 * 1024 * 1024);   /* piu' della zona iniziale: deve crescere */
+    controlla(grande != 0, "un pezzo da 2 MB fa crescere il quaderno");
+
+    kfree(a); kfree(c); kfree(d); kfree(grande);
+    kmalloc_conta(&blocchi, &liberi);
+    controlla(liberi >= liberi_inizio, "tutto restituito: i blocchi liberi si sono fusi");
+    kprintf("Alla fine: %u blocco/i, %u KB liberi (all'inizio %u KB)\n",
+            blocchi, liberi / 1024, liberi_inizio / 1024);
+}
+
 void kernel_main(unsigned int magic, struct multiboot_info *info) {
     console_pulisci();
     console_colore(BIANCO);
@@ -74,24 +109,26 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     if (!(info->flags & MB_FLAG_MMAP))
         panico("il bootloader non ha dato la mappa della memoria");
 
-    kprintf("Kernel: %p -> %p  (%u KB)\n",
+    kprintf("Kernel  : %p -> %p  (%u KB)\n",
             kernel_start, kernel_end, (unsigned)(kernel_end - kernel_start) / 1024);
 
     /* La GDT per prima: quella del bootloader potrebbe stare in memoria che
      * il magazziniere sta per considerare libera. */
-    titolo("GDT");
     gdt_prepara();
-    gdt_mostra();
+    gdt_mostra(0);
 
     /* La IDT subito dopo: le sue righe usano il segmento di codice della GDT. */
-    titolo("IDT");
     idt_prepara();
     idt_mostra();
 
-    titolo("Magazziniere delle pagine");
     pagine_prepara(info);
-    kprintf("Libere: %u pagine = %u KB\n", pagine_libere(), pagine_libere() * 4);
+    kprintf("Pagine  : %u libere = %u KB\n", pagine_libere(), pagine_libere() * 4);
     prova_pagine();
+
+    /* kmalloc sopra il magazziniere: si prende 1 MB consecutivo e lo divide a pezzi. */
+    titolo("kmalloc");
+    kmalloc_prepara();
+    prova_kmalloc();
 
     console_colore(falliti ? ROSSO : VERDE);
     kprintf("\n%s\n", falliti ? "Qualche controllo e' fallito." : "Tutti i controlli sono passati.");
