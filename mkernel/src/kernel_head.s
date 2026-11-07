@@ -23,7 +23,9 @@ stack_top:
 .global _start
 _start:
     mov $stack_top, %esp     # lo stack cresce verso il basso: si parte dalla cima
-    call kernel_main         # salto al codice C
+    push %ebx                # 2o argomento: puntatore alle info Multiboot
+    push %eax                # 1o argomento: numero magico del bootloader
+    call kernel_main         # salto al codice C (kernel_main(magic, info))
     cli                      # se il C ritorna: spegni le interruzioni...
 1:  hlt                      # ...e ferma il processore
     jmp 1b
