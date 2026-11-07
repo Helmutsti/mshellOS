@@ -12,6 +12,7 @@
 #include "kmalloc.h"
 #include "timer.h"
 #include "disco.h"
+#include "mfs.h"
 #include "shell.h"
 
 #define LUNGHEZZA_RIGA 128
@@ -39,6 +40,17 @@ static int numero(const char *s) {
 }
 
 static unsigned char settore[SETTORE];   /* il settore letto o da scrivere */
+
+/* Rimette insieme le parole da parole[da] in poi, separate da uno spazio.
+ * Restituisce quanti byte ha scritto in 'dest' (al massimo 'max'). */
+static int unisci(int n, char **parole, int da, char *dest, int max) {
+    int pos = 0;
+    for (int p = da; p < n; p++) {
+        if (p > da && pos < max) dest[pos++] = ' ';
+        for (const char *c = parole[p]; *c && pos < max; c++) dest[pos++] = *c;
+    }
+    return pos;
+}
 
 /* --- i comandi: ognuno riceve le parole della riga (parole[0] e' il comando) --- */
 
@@ -119,17 +131,88 @@ static void cmd_scrivi(int n, char **parole) {
         return;
     }
     /* il settore si scrive sempre intero: si parte da tutti zeri e si copia il testo */
-    for (int i = 0; i < SETTORE; i++) settore[i] = 0;
-    int pos = 0;
-    for (int p = 2; p < n; p++) {            /* rimette insieme le parole con uno spazio */
-        if (p > 2 && pos < SETTORE) settore[pos++] = ' ';
-        for (const char *c = parole[p]; *c && pos < SETTORE; c++) settore[pos++] = *c;
-    }
+    memset(settore, 0, SETTORE);
+    int pos = unisci(n, parole, 2, (char *)settore, SETTORE);
     if (!disco_presente || disco_scrivi(s, settore) < 0) {
         kprintf("Errore nella scrittura del settore %d\n", s);
         return;
     }
     kprintf("Scritti %d byte nel settore %d\n", pos, s);
+}
+
+/* --- il file system --- */
+
+/* Se r e' un errore di mfs, lo stampa e restituisce 1. */
+static int errore_mfs(int r, const char *percorso) {
+    if (r >= 0) return 0;
+    kprintf("%s: %s\n", percorso, mfs_messaggio(r));
+    return 1;
+}
+
+static void cmd_formatta(int n, char **parole) {
+    (void)n; (void)parole;
+    if (!disco_presente) { kprintf("Nessun disco collegato\n"); return; }
+    if (errore_mfs(mfs_formatta(), "formatta")) return;
+    kprintf("Disco formattato con mfs: radice / vuota\n");
+}
+
+static void stampa_voce(const char *nome, int tipo, unsigned int dimensione) {
+    int l = 0;
+    while (nome[l]) l++;
+    if (tipo == MFS_CARTELLA) {
+        unsigned char vecchio = console_colore(CIANO);
+        kprintf("  %s/\n", nome);
+        console_colore(vecchio);
+    } else {
+        kprintf("  %s", nome);
+        for (; l < 28; l++) kprintf(" ");
+        kprintf("%u byte\n", dimensione);
+    }
+}
+
+static void cmd_ls(int n, char **parole) {
+    const char *percorso = n > 1 ? parole[1] : "/";
+    errore_mfs(mfs_elenca(percorso, stampa_voce), percorso);
+}
+
+static void cmd_mkdir(int n, char **parole) {
+    if (n < 2) { kprintf("Uso: mkdir /percorso\n"); return; }
+    errore_mfs(mfs_mkdir(parole[1]), parole[1]);
+}
+
+static void cmd_crea(int n, char **parole) {
+    if (n < 2) { kprintf("Uso: crea /percorso testo...\n"); return; }
+    char testo[LUNGHEZZA_RIGA];
+    int byte = unisci(n, parole, 2, testo, sizeof testo);
+    if (errore_mfs(mfs_crea(parole[1], testo, byte), parole[1])) return;
+    kprintf("Creato %s (%d byte)\n", parole[1], byte);
+}
+
+static void cmd_cat(int n, char **parole) {
+    if (n < 2) { kprintf("Uso: cat /percorso\n"); return; }
+    /* si legge un settore alla volta, finche' il file non finisce */
+    unsigned int da = 0;
+    int letti;
+    char ultimo = '\n';
+    while ((letti = mfs_leggi(parole[1], da, settore, SETTORE)) > 0) {
+        for (int i = 0; i < letti; i++) console_putc(settore[i]);
+        ultimo = settore[letti - 1];
+        da += letti;
+    }
+    if (errore_mfs(letti, parole[1])) return;
+    if (ultimo != '\n') kprintf("\n");
+}
+
+static void cmd_rm(int n, char **parole) {
+    if (n < 2) { kprintf("Uso: rm /percorso\n"); return; }
+    errore_mfs(mfs_rm(parole[1]), parole[1]);
+}
+
+static void cmd_spazio(int n, char **parole) {
+    (void)n; (void)parole;
+    unsigned int schede, settori;
+    if (errore_mfs(mfs_spazio(&schede, &settori), "spazio")) return;
+    kprintf("Liberi: %u schede su 128, %u settori (%u KB)\n", schede, settori, settori / 2);
 }
 
 static void cmd_riavvia(int n, char **parole) {
@@ -157,7 +240,13 @@ static const struct {
     { "disco",   "informazioni sul disco",                 cmd_disco   },
     { "leggi",   "mostra un settore: leggi N [inizio]",    cmd_leggi   },
     { "scrivi",  "scrive in un settore: scrivi N testo",   cmd_scrivi  },
-    { "pulisci", "svuota lo schermo",                      cmd_pulisci },
+    { "formatta","scrive un mfs vuoto (CANCELLA TUTTO)",   cmd_formatta},
+    { "ls",      "elenca una cartella: ls [/percorso]",    cmd_ls      },
+    { "mkdir",   "crea una cartella: mkdir /percorso",     cmd_mkdir   },
+    { "crea",    "crea un file: crea /percorso testo",     cmd_crea    },
+    { "cat",     "mostra un file: cat /percorso",          cmd_cat     },
+    { "rm",      "cancella un file o una cartella vuota",  cmd_rm      },
+    { "spazio",  "schede e settori liberi",                cmd_spazio  },    { "pulisci", "svuota lo schermo",                      cmd_pulisci },
     { "riavvia", "riavvia la macchina",                    cmd_riavvia },
 };
 #define N_COMANDI (int)(sizeof comandi / sizeof comandi[0])

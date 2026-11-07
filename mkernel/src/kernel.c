@@ -10,6 +10,7 @@
 #include "pagine.h"
 #include "kmalloc.h"
 #include "disco.h"
+#include "mfs.h"
 #include "shell.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
@@ -153,6 +154,10 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
                 disco_modello(), disco_settori(), disco_settori() / 2);
     else
         kprintf("Disco   : nessuno\n");
+
+    /* Il file system: si legge il superblocco e si controlla il numero magico. */
+    if (c_e_il_disco)
+        kprintf("mfs     : %s\n", mfs_monta() ? "montato" : "disco non formattato (usa formatta)");
 
     shell_avvia(c_e_il_disco);
 

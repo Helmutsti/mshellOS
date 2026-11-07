@@ -13,6 +13,12 @@ void console_vai(int riga, int colonna);              /* sposta il cursore */
 /* kprintf.c */
 void kprintf(const char *fmt, ...);
 
+/* memoria.c */
+void *memset(void *dest, int valore, unsigned int n);
+void *memcpy(void *dest, const void *src, unsigned int n);
+void *memmove(void *dest, const void *src, unsigned int n);
+int memcmp(const void *a, const void *b, unsigned int n);
+
 /* kernel.c: errore senza rimedio, scrive il messaggio in rosso e ferma la CPU */
 void panico(const char *fmt, ...) __attribute__((noreturn));
 
