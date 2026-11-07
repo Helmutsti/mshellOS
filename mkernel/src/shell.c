@@ -11,6 +11,7 @@
 #include "pagine.h"
 #include "kmalloc.h"
 #include "timer.h"
+#include "disco.h"
 #include "shell.h"
 
 #define LUNGHEZZA_RIGA 128
@@ -25,6 +26,19 @@ static int uguali(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
     return *a == *b;
 }
+
+/* Da testo a numero (solo cifre decimali). -1 se non e' un numero. */
+static int numero(const char *s) {
+    int n = 0;
+    if (!*s) return -1;
+    for (; *s; s++) {
+        if (*s < '0' || *s > '9') return -1;
+        n = n * 10 + (*s - '0');
+    }
+    return n;
+}
+
+static unsigned char settore[SETTORE];   /* il settore letto o da scrivere */
 
 /* --- i comandi: ognuno riceve le parole della riga (parole[0] e' il comando) --- */
 
@@ -62,6 +76,62 @@ static void cmd_gdt(int n, char **parole) {
     gdt_mostra(1);
 }
 
+static int disco_presente;
+
+static void cmd_disco(int n, char **parole) {
+    (void)n; (void)parole;
+    if (!disco_presente) { kprintf("Nessun disco collegato\n"); return; }
+    kprintf("Disco: %s, %u settori da %u byte (%u KB)\n",
+            disco_modello(), disco_settori(), SETTORE, disco_settori() / 2);
+}
+
+/* leggi N [inizio]: mostra 128 byte del settore N, da 'inizio' (0, 128, 256 o 384).
+ * Ogni riga: posizione, 16 byte in esadecimale, gli stessi byte come testo. */
+static void cmd_leggi(int n, char **parole) {
+    int s = n > 1 ? numero(parole[1]) : -1;
+    int da = n > 2 ? numero(parole[2]) : 0;
+    if (s < 0 || da < 0 || da >= SETTORE) {
+        kprintf("Uso: leggi N [inizio]   es. leggi 0, leggi 0 128\n");
+        return;
+    }
+    da -= da % 16;   /* le righe partono a multipli di 16: cosi' non escono mai dal settore */
+    if (!disco_presente || disco_leggi(s, settore) < 0) {
+        kprintf("Errore nella lettura del settore %d\n", s);
+        return;
+    }
+    for (int riga = da; riga < da + 128 && riga < SETTORE; riga += 16) {
+        kprintf("%03x  ", riga);
+        for (int i = 0; i < 16; i++) kprintf("%02x ", settore[riga + i]);
+        kprintf(" ");
+        for (int i = 0; i < 16; i++) {
+            unsigned char c = settore[riga + i];
+            console_putc(c >= 32 && c < 127 ? c : '.');   /* i byte non stampabili come '.' */
+        }
+        kprintf("\n");
+    }
+}
+
+/* scrivi N testo...: scrive il testo all'inizio del settore N, il resto a zero. */
+static void cmd_scrivi(int n, char **parole) {
+    int s = n > 2 ? numero(parole[1]) : -1;
+    if (s < 0) {
+        kprintf("Uso: scrivi N testo   es. scrivi 5 ciao disco\n");
+        return;
+    }
+    /* il settore si scrive sempre intero: si parte da tutti zeri e si copia il testo */
+    for (int i = 0; i < SETTORE; i++) settore[i] = 0;
+    int pos = 0;
+    for (int p = 2; p < n; p++) {            /* rimette insieme le parole con uno spazio */
+        if (p > 2 && pos < SETTORE) settore[pos++] = ' ';
+        for (const char *c = parole[p]; *c && pos < SETTORE; c++) settore[pos++] = *c;
+    }
+    if (!disco_presente || disco_scrivi(s, settore) < 0) {
+        kprintf("Errore nella scrittura del settore %d\n", s);
+        return;
+    }
+    kprintf("Scritti %d byte nel settore %d\n", pos, s);
+}
+
 static void cmd_riavvia(int n, char **parole) {
     (void)n; (void)parole;
     kprintf("Riavvio...\n");
@@ -84,6 +154,9 @@ static const struct {
     { "mem",     "memoria libera (mem blocchi: i blocchi)", cmd_mem    },
     { "tempo",   "da quanto e' acceso il kernel",          cmd_tempo   },
     { "gdt",     "le righe della GDT",                     cmd_gdt     },
+    { "disco",   "informazioni sul disco",                 cmd_disco   },
+    { "leggi",   "mostra un settore: leggi N [inizio]",    cmd_leggi   },
+    { "scrivi",  "scrive in un settore: scrivi N testo",   cmd_scrivi  },
     { "pulisci", "svuota lo schermo",                      cmd_pulisci },
     { "riavvia", "riavvia la macchina",                    cmd_riavvia },
 };
@@ -139,7 +212,8 @@ static void esegui(void) {
     kprintf("Comando sconosciuto: %s (scrivi aiuto)\n", parole[0]);
 }
 
-void shell_avvia(void) {
+void shell_avvia(int c_e_il_disco) {
+    disco_presente = c_e_il_disco;
     unsigned char vecchio = console_colore(BIANCO);
     kprintf("\nShell del kernel. Scrivi aiuto per l'elenco dei comandi.\n");
     console_colore(vecchio);

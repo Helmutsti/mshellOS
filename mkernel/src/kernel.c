@@ -9,6 +9,7 @@
 #include "tastiera.h"
 #include "pagine.h"
 #include "kmalloc.h"
+#include "disco.h"
 #include "shell.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
@@ -145,7 +146,15 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     kprintf("PIC sulle righe %d-%d, timer a 100 Hz, tastiera, interruzioni accese\n",
             IRQ_BASE, IRQ_BASE + 15);
 
-    shell_avvia();
+    /* Il disco: si chiede al controller "chi sei?". Con polling, quindi non servono interruzioni. */
+    int c_e_il_disco = disco_prepara();
+    if (c_e_il_disco)
+        kprintf("Disco   : %s, %u settori (%u KB)\n",
+                disco_modello(), disco_settori(), disco_settori() / 2);
+    else
+        kprintf("Disco   : nessuno\n");
+
+    shell_avvia(c_e_il_disco);
 
     /* Il ciclo principale: la CPU dorme (hlt) finche' un'interruzione non la sveglia.
      * Al risveglio: passa i tasti arrivati alla shell e, se e' passato un secondo,
