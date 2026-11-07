@@ -9,6 +9,7 @@
 #include "tastiera.h"
 #include "pagine.h"
 #include "kmalloc.h"
+#include "shell.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
 
@@ -144,21 +145,18 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     kprintf("PIC sulle righe %d-%d, timer a 100 Hz, tastiera, interruzioni accese\n",
             IRQ_BASE, IRQ_BASE + 15);
 
-    console_colore(BIANCO);
-    kprintf("\nScrivi qualcosa (tastiera italiana):\n> ");
-    console_colore(GRIGIO);
+    shell_avvia();
 
     /* Il ciclo principale: la CPU dorme (hlt) finche' un'interruzione non la sveglia.
-     * Al risveglio: stampa i tasti arrivati e, se e' passato un secondo, aggiorna l'orologio. */
+     * Al risveglio: passa i tasti arrivati alla shell e, se e' passato un secondo,
+     * aggiorna l'orologio. */
     unsigned int ultimo = (unsigned int)-1;
     for (;;) {
         __asm__ volatile("hlt");
 
         char c;
-        while ((c = tastiera_leggi())) {
-            console_putc(c);
-            if (c == '\n') kprintf("> ");
-        }
+        while ((c = tastiera_leggi()))
+            shell_tasto(c);
 
         unsigned int secondi = timer_tick() / 100;
         if (secondi != ultimo) {
