@@ -19,5 +19,6 @@ unsigned int pagine_chiedi_consecutive(unsigned int n);
 void pagina_restituisci(unsigned int indirizzo);
 
 unsigned int pagine_libere(void);   /* quante pagine si possono ancora chiedere */
+unsigned int memoria_fine(void);    /* l'indirizzo dopo l'ultima pagina di RAM */
 
 #endif

@@ -14,6 +14,7 @@
 #include "disco.h"
 #include "mfs.h"
 #include "compiti.h"
+#include "paginazione.h"
 #include "shell.h"
 
 #define LUNGHEZZA_RIGA 128
@@ -38,6 +39,26 @@ static int numero(const char *s) {
         n = n * 10 + (*s - '0');
     }
     return n;
+}
+
+/* Da testo a indirizzo: decimale, o esadecimale se comincia con 0x. 1 se va bene. */
+static int indirizzo(const char *s, unsigned int *v) {
+    *v = 0;
+    if (s[0] == '0' && s[1] == 'x') {
+        if (!s[2]) return 0;
+        for (s += 2; *s; s++) {
+            int c = *s >= '0' && *s <= '9' ? *s - '0'
+                  : *s >= 'a' && *s <= 'f' ? *s - 'a' + 10
+                  : *s >= 'A' && *s <= 'F' ? *s - 'A' + 10 : -1;
+            if (c < 0) return 0;
+            *v = *v * 16 + c;
+        }
+        return 1;
+    }
+    int n = numero(s);
+    if (n < 0) return 0;
+    *v = n;
+    return 1;
 }
 
 static unsigned char settore[SETTORE];   /* il settore letto o da scrivere */
@@ -69,6 +90,7 @@ static void cmd_mem(int n, char **parole) {
     kmalloc_conta(&blocchi, &liberi);
     kprintf("Magazziniere: %u pagine libere = %u KB\n", pagine_libere(), pagine_libere() * 4);
     kprintf("kmalloc     : %u blocchi, %u KB liberi\n", blocchi, liberi / 1024);
+    kprintf("Paginazione : %u tabelle (%u KB)\n", pag_tabelle(), pag_tabelle() * 4);
     if (n > 1 && uguali(parole[1], "blocchi"))
         kmalloc_mostra();
 }
@@ -247,12 +269,44 @@ static void ciclo(unsigned int non_usato) {
     }
 }
 
+/* Un compito che sbaglia apposta: scrive all'indirizzo che riceve.
+ * Con la paginazione la CPU lo ferma, e si chiude solo lui. */
+static void guasto(unsigned int dove) {
+    dormi(300);   /* un attimo, cosi' la shell fa in tempo a scrivere il prompt */
+    *(volatile unsigned int *)dove = 0xDEAD;
+}
+
+/* traduci INDIRIZZO: dove porta un indirizzo virtuale, e con quali permessi. */
+static void cmd_traduci(int n, char **parole) {
+    unsigned int virt, fis, permessi;
+    if (n < 2 || !indirizzo(parole[1], &virt)) {
+        kprintf("Uso: traduci INDIRIZZO   es. traduci 0xB8000, traduci 0\n");
+        return;
+    }
+    if (!pag_traduci(virt, &fis, &permessi)) {
+        kprintf("%08x -> nessuna pagina: un accesso farebbe page fault\n", virt);
+        return;
+    }
+    kprintf("%08x -> fisico %08x   %s, %s\n", virt, fis,
+            permessi & PAG_SCRITTURA ? "lettura e scrittura" : "sola lettura",
+            permessi & PAG_UTENTE ? "anche ring 3" : "solo kernel");
+}
+
 static void cmd_compiti(int n, char **parole) {
     (void)n; (void)parole;
     compiti_elenca();
 }
 
 static void cmd_avvia(int n, char **parole) {
+    if (n > 1 && uguali(parole[1], "guasto")) {
+        /* avvia guasto          -> scrive all'indirizzo 0 (puntatore nullo)
+         * avvia guasto codice   -> scrive sul codice del kernel (sola lettura) */
+        unsigned int dove = n > 2 && uguali(parole[2], "codice") ? (unsigned int)cmd_avvia : 0;
+        struct compito *c = compito_crea("guasto", guasto, dove);
+        if (!c) { kprintf("Memoria finita\n"); return; }
+        kprintf("Avviato il compito %d: tra poco scrivera' all'indirizzo %08x\n", c->numero, dove);
+        return;
+    }
     if (n > 1 && uguali(parole[1], "ciclo")) {
         struct compito *c = compito_crea("ciclo", ciclo, 0);
         if (!c) { kprintf("Memoria finita\n"); return; }
@@ -314,7 +368,8 @@ static const struct {
     { "rm",      "cancella un file o una cartella vuota",  cmd_rm      },
     { "spazio",  "schede e settori liberi",                cmd_spazio  },
     { "compiti", "l'elenco dei compiti e il loro stato",   cmd_compiti },
-    { "avvia",   "avvia contatore [ms] / avvia ciclo",     cmd_avvia   },
+    { "avvia",   "contatore [ms] / ciclo / guasto [codice]", cmd_avvia },
+    { "traduci", "indirizzo virtuale -> fisico: traduci 0x1000", cmd_traduci },
     { "ferma",   "ferma un compito: ferma N",              cmd_ferma   },    { "pulisci", "svuota lo schermo",                      cmd_pulisci },
     { "riavvia", "riavvia la macchina",                    cmd_riavvia },
 };

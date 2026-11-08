@@ -87,14 +87,14 @@ void irq_collega(int irq, gestore_irq gestore) {
     gestori[irq] = gestore;
 }
 
-static void eccezione(struct registri *r) __attribute__((noreturn));
+static unsigned int eccezione(struct registri *r);
 
 /* Il punto d'arrivo di TUTTE le righe collegate: lo chiama isr_comune.
  * Restituisce l'ESP da cui isr_comune ripeschera' i registri: quello di 'r' per
  * tornare al compito interrotto, o quello di un altro compito scelto dallo scheduler. */
 unsigned int interruzione(struct registri *r) {
     if (r->numero < 32)
-        eccezione(r);   /* un errore della CPU: non si torna */
+        return eccezione(r);   /* un errore della CPU */
 
     /* cedi(): il compito vuole passare il turno */
     if (r->numero == INT_CEDI)
@@ -114,21 +114,44 @@ unsigned int interruzione(struct registri *r) {
     return (unsigned int)r;
 }
 
-static void eccezione(struct registri *r) {
+/* Il page fault: CR2 dice QUALE indirizzo, il codice di errore dice COSA si voleva fare.
+ *   bit 0: 0 = la pagina non c'e'          1 = c'e', ma il permesso manca
+ *   bit 1: 0 = in lettura                   1 = in scrittura
+ *   bit 2: 0 = mentre girava il kernel      1 = mentre girava un programma (ring 3) */
+static void spiega_page_fault(unsigned int errore) {
+    unsigned int cr2;
+    __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+    kprintf("  %s all'indirizzo %08x: %s (%s)\n",
+            errore & 2 ? "scrittura" : "lettura", cr2,
+            errore & 1 ? "permesso negato" : "pagina assente",
+            errore & 4 ? "ring 3" : "ring 0");
+    if (cr2 < 4096)
+        kprintf("  (e' la pagina 0: quasi certamente un puntatore nullo)\n");
+}
+
+static unsigned int eccezione(struct registri *r) {
     console_colore(ROSSO);
-    kprintf("\nECCEZIONE %u: %s\n", r->numero, r->numero < 32 ? nomi[r->numero] : "?");
+    kprintf("\nECCEZIONE %u: %s\n", r->numero, nomi[r->numero]);
     console_colore(GRIGIO);
+    if (r->numero == 14) spiega_page_fault(r->errore);
     kprintf("  dove : EIP=%08x  CS=%02x  EFLAGS=%08x  codice errore=%x\n",
             r->eip, r->cs, r->eflags, r->errore);
     kprintf("  reg. : EAX=%08x EBX=%08x ECX=%08x EDX=%08x\n", r->eax, r->ebx, r->ecx, r->edx);
     kprintf("         ESI=%08x EDI=%08x EBP=%08x\n", r->esi, r->edi, r->ebp);
 
-    if (r->numero == 14) {   /* page fault: CR2 dice quale indirizzo ha dato problemi */
-        unsigned int cr2;
-        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
-        kprintf("  indirizzo che ha causato il page fault: %08x\n", cr2);
+    /* Se ha sbagliato un compito con una pila sua (non la shell, non il kernel prima
+     * dello scheduler), si chiude SOLO LUI e il sistema continua: lo scheduler passa
+     * a un altro compito e liberera' questo. E' quello che fanno i sistemi veri con
+     * un programma che sbaglia ("Segmentation fault"). */
+    struct compito *c = compito_attuale();
+    if (c && c->pila) {
+        console_colore(GIALLO);
+        kprintf("  Il compito %d (%s) e' stato chiuso. Il sistema continua.\n", c->numero, c->nome);
+        console_colore(GRIGIO);
+        c->stato = FINITO;
+        return scheduler((unsigned int)r);
     }
 
-    /* Per ora nessuna eccezione si puo' riparare: ci fermiamo qui. */
+    /* Ha sbagliato il kernel stesso (o la shell): non c'e' nessuno a cui tornare. */
     panico("sistema fermato dopo l'eccezione %u", r->numero);
 }

@@ -8,6 +8,7 @@
 #include "tastiera.h"
 #include "pagine.h"
 #include "kmalloc.h"
+#include "paginazione.h"
 #include "disco.h"
 #include "mfs.h"
 #include "shell.h"
@@ -145,6 +146,13 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
 
     console_colore(falliti ? ROSSO : VERDE);
     kprintf("\n%s\n", falliti ? "Qualche controllo e' fallito." : "Tutti i controlli sono passati.");
+    console_colore(GRIGIO);
+
+    /* La paginazione: dopo il magazziniere, perche' le tabelle sono pagine sue.
+     * Da qui ogni indirizzo passa dalla traduzione della CPU. */
+    paginazione_prepara();
+    kprintf("Paginazione: accesa (%u tabelle), pagina 0 assente, codice in sola lettura\n",
+            pag_tabelle());
 
     /* Le interruzioni hardware: centralino, metronomo, e poi si accende il campanello.
      * L'ordine conta: se si accendessero prima, il primo tick finirebbe su una riga

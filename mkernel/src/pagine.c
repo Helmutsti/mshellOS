@@ -142,3 +142,4 @@ void pagina_restituisci(unsigned int indirizzo) {
 }
 
 unsigned int pagine_libere(void) { return libere; }
+unsigned int memoria_fine(void) { return n_pagine * PAGINA; }
