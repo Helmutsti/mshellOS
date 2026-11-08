@@ -82,7 +82,7 @@ void kmalloc_prepara(void) {
         panico("kmalloc: il magazziniere non ha 1 MB consecutivo");
 }
 
-void *kmalloc(unsigned int byte) {
+static void *kmalloc_dentro(unsigned int byte) {
     if (byte == 0) return 0;
     byte = (byte + ALLINEA - 1) / ALLINEA * ALLINEA;   /* arrotonda a multiplo di 8 */
 
@@ -113,7 +113,7 @@ void *kmalloc(unsigned int byte) {
     return 0;   /* memoria finita */
 }
 
-void kfree(void *p) {
+static void kfree_dentro(void *p) {
     if (!p) return;
     struct blocco *b = (struct blocco *)p - 1;   /* indietro di un'etichetta */
 
@@ -125,6 +125,22 @@ void kfree(void *p) {
     b->stato = LIBERO;
     fondi_col_successivo(b);                    /* prima con quello dopo... */
     if (b->prec) fondi_col_successivo(b->prec); /* ...poi con quello prima */
+}
+
+/* Le funzioni pubbliche sono SEZIONI CRITICHE: se un tick fermasse un compito
+ * tra "ho trovato un blocco libero" e "l'ho segnato occupato", un altro compito
+ * potrebbe ricevere lo stesso blocco. Con le interruzioni spente non succede. */
+void *kmalloc(unsigned int byte) {
+    unsigned int s = interruzioni_spegni();
+    void *p = kmalloc_dentro(byte);
+    interruzioni_ripristina(s);
+    return p;
+}
+
+void kfree(void *p) {
+    unsigned int s = interruzioni_spegni();
+    kfree_dentro(p);
+    interruzioni_ripristina(s);
 }
 
 /* --- per vedere cosa succede --- */

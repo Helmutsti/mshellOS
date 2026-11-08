@@ -1,5 +1,4 @@
-/* Il kernel: prepara GDT e magazziniere delle pagine, e li controlla. */
-#include <stdarg.h>
+/* Il kernel: prepara tutto, nell'ordine giusto, e poi diventa il compito "shell". */
 #include "kernel.h"
 #include "multiboot.h"
 #include "gdt.h"
@@ -12,18 +11,31 @@
 #include "disco.h"
 #include "mfs.h"
 #include "shell.h"
+#include "compiti.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
 
 void panico(const char *fmt, ...) {
-    /* kprintf non accetta una va_list: stampiamo il formato con al massimo un argomento */
+    __asm__ volatile("cli");   /* niente piu' tick: nessun compito deve ripartire */
     va_list ap;
     va_start(ap, fmt);
     console_colore(ROSSO);
     kprintf("\nPANICO: ");
-    kprintf(fmt, va_arg(ap, unsigned int));
+    vkprintf(fmt, ap);
     va_end(ap);
     for (;;) __asm__ volatile("cli; hlt");
+}
+
+/* Il compito "orologio": ogni quarto di secondo scrive l'ora nella barra di stato. */
+static void orologio(unsigned int argomento) {
+    (void)argomento;
+    char testo[16];
+    for (;;) {
+        unsigned int s = timer_tick() / 100;
+        ksnprintf(testo, sizeof testo, " %02u:%02u:%02u ", s / 3600, s / 60 % 60, s % 60);
+        console_stato(70, BIANCO, testo);
+        dormi(250);   /* non gira per 250 ms: la CPU va agli altri */
+    }
 }
 
 static int falliti;
@@ -102,10 +114,8 @@ static void prova_kmalloc(void) {
 }
 
 void kernel_main(unsigned int magic, struct multiboot_info *info) {
-    console_pulisci();
-    console_colore(BIANCO);
-    kprintf("mkernel\n");
-    console_colore(GRIGIO);
+    console_prepara();
+    console_stato(1, GIALLO, "mkernel");
 
     if (magic != MULTIBOOT_MAGIC_BOOT)
         panico("non sono stato caricato da un bootloader Multiboot (eax=%x)", magic);
@@ -159,30 +169,16 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     if (c_e_il_disco)
         kprintf("mfs     : %s\n", mfs_monta() ? "montato" : "disco non formattato (usa formatta)");
 
+    /* Lo scheduler: da qui in poi questo codice e' il compito "shell", e altri compiti
+     * si alternano con lui a ogni tick. Il primo e' l'orologio nella barra di stato. */
+    compiti_prepara();
+    compito_crea("orologio", orologio, 0);
+    kprintf("Compiti : scheduler acceso (shell, inattivo, orologio)\n");
+
     shell_avvia(c_e_il_disco);
 
-    /* Il ciclo principale: la CPU dorme (hlt) finche' un'interruzione non la sveglia.
-     * Al risveglio: passa i tasti arrivati alla shell e, se e' passato un secondo,
-     * aggiorna l'orologio. */
-    unsigned int ultimo = (unsigned int)-1;
-    for (;;) {
-        __asm__ volatile("hlt");
-
-        char c;
-        while ((c = tastiera_leggi()))
-            shell_tasto(c);
-
-        unsigned int secondi = timer_tick() / 100;
-        if (secondi != ultimo) {
-            ultimo = secondi;
-            /* l'orologio in alto a destra: ci si sposta, si scrive, si torna dov'eravamo */
-            int r, col;
-            console_dove(&r, &col);
-            unsigned char vecchio = console_colore(CIANO);
-            console_vai(0, 62);
-            kprintf("[ %02u:%02u:%02u ]", secondi / 3600, secondi / 60 % 60, secondi % 60);
-            console_colore(vecchio);
-            console_vai(r, col);
-        }
-    }
+    /* Il compito shell: aspetta un tasto (dormendo, senza consumare CPU) e lo passa
+     * alla shell. Per sempre. */
+    for (;;)
+        shell_tasto(tastiera_aspetta());
 }

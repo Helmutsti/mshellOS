@@ -78,6 +78,10 @@ SENZA_ERRORE 45    # IRQ 13 coprocessore
 SENZA_ERRORE 46    # IRQ 14 disco principale
 SENZA_ERRORE 47    # IRQ 15 disco secondario
 
+# L'interruzione software con cui un compito cede il turno (cedi, in compiti.c).
+.global isr129
+SENZA_ERRORE 129   # 0x81
+
 # Il pezzo comune: salva tutto, chiama il C, rimette tutto, torna.
 isr_comune:
     pusha                    # salva EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
@@ -93,7 +97,12 @@ isr_comune:
     cld                      # il C si aspetta la "direzione" in avanti
     push %esp                # argomento: dove stanno i registri salvati
     call interruzione        # il gestore in C (idt.c)
-    add $4, %esp
+
+    # IL CAMBIO DI CONTESTO. interruzione() restituisce in EAX dove ripescare i
+    # registri. Di solito e' lo stesso posto (si torna al compito interrotto).
+    # Se lo scheduler ha scelto un altro compito, e' la cima della SUA pila:
+    # da qui in poi pop e iret lavorano sulla pila dell'altro compito.
+    mov %eax, %esp
 
     pop %eax                 # rimette il segmento dei dati
     mov %ax, %ds

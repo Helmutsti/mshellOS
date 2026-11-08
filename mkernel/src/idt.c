@@ -11,6 +11,7 @@
 #include "gdt.h"
 #include "idt.h"
 #include "pic.h"
+#include "compiti.h"
 
 struct riga_idt {
     unsigned short indirizzo_basso;   /* bit 0-15 dell'indirizzo del gestore */
@@ -46,9 +47,12 @@ static void collega(int n, unsigned int gestore) {
     idt[n].indirizzo_alto  = gestore >> 16;
 }
 
+extern void isr129(void);
+
 void idt_prepara(void) {
     for (int n = 0; n < INGRESSI; n++)
         collega(n, isr_tabella[n]);
+    collega(INT_CEDI, (unsigned int)isr129);   /* cedi(): un compito passa il turno */
 
     idtr.dimensione = sizeof idt - 1;
     idtr.indirizzo  = (unsigned int)idt;
@@ -83,20 +87,31 @@ void irq_collega(int irq, gestore_irq gestore) {
     gestori[irq] = gestore;
 }
 
-static void eccezione(struct registri *r);
+static void eccezione(struct registri *r) __attribute__((noreturn));
 
-/* Il punto d'arrivo di TUTTE le righe collegate: lo chiama isr_comune. */
-void interruzione(struct registri *r) {
-    if (r->numero < 32) {
+/* Il punto d'arrivo di TUTTE le righe collegate: lo chiama isr_comune.
+ * Restituisce l'ESP da cui isr_comune ripeschera' i registri: quello di 'r' per
+ * tornare al compito interrotto, o quello di un altro compito scelto dallo scheduler. */
+unsigned int interruzione(struct registri *r) {
+    if (r->numero < 32)
         eccezione(r);   /* un errore della CPU: non si torna */
-        return;
-    }
 
-    /* Un'interruzione hardware: il dispositivo ha chiamato, lo serviamo e torniamo. */
+    /* cedi(): il compito vuole passare il turno */
+    if (r->numero == INT_CEDI)
+        return scheduler((unsigned int)r);
+
+    /* Un'interruzione hardware: il dispositivo ha chiamato, lo serviamo. */
     int irq = r->numero - IRQ_BASE;
     if (gestori[irq])
         gestori[irq](r);
     pic_ricevuto(irq);   /* senza questo il PIC non ci passa piu' niente */
+
+    /* Il timer decide i turni. Per le altre interruzioni (es. un tasto) si cambia
+     * compito solo se stava girando l'inattivo: chi e' stato appena svegliato
+     * riparte subito, senza aspettare il prossimo tick. */
+    if (irq == IRQ_TIMER || scheduler_sta_riposando())
+        return scheduler((unsigned int)r);
+    return (unsigned int)r;
 }
 
 static void eccezione(struct registri *r) {

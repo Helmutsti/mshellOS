@@ -13,6 +13,7 @@
 #include "timer.h"
 #include "disco.h"
 #include "mfs.h"
+#include "compiti.h"
 #include "shell.h"
 
 #define LUNGHEZZA_RIGA 128
@@ -215,6 +216,71 @@ static void cmd_spazio(int n, char **parole) {
     kprintf("Liberi: %u schede su 128, %u settori (%u KB)\n", schede, settori, settori / 2);
 }
 
+/* --- i compiti --- */
+
+/* Ogni contatore ha un posto nella barra di stato, scelto dal suo numero. */
+#define POSTI_CONTATORI 4
+static int colonna_contatore(int numero) { return 12 + (numero % POSTI_CONTATORI) * 13; }
+
+/* Un compito di prova: conta, scrive il numero nella barra di stato e dorme. */
+static void contatore(unsigned int ms) {
+    int numero = compito_attuale()->numero;
+    char testo[16];
+    for (unsigned int n = 0;; n++) {
+        ksnprintf(testo, sizeof testo, " #%d:%6u ", numero, n);
+        console_stato(colonna_contatore(numero), GIALLO, testo);
+        dormi(ms);
+    }
+}
+
+/* Un compito "maleducato": un ciclo infinito che non dorme e non cede mai il turno.
+ * Gli altri vanno avanti lo stesso: e' il timer a togliergli la CPU (preemption). */
+static void ciclo(unsigned int non_usato) {
+    (void)non_usato;
+    int numero = compito_attuale()->numero;
+    char testo[16];
+    for (unsigned int n = 0;; n++) {
+        if (n % 1000000 == 0) {
+            ksnprintf(testo, sizeof testo, " #%d:%5uM ", numero, n / 1000000);
+            console_stato(colonna_contatore(numero), ROSSO, testo);
+        }
+    }
+}
+
+static void cmd_compiti(int n, char **parole) {
+    (void)n; (void)parole;
+    compiti_elenca();
+}
+
+static void cmd_avvia(int n, char **parole) {
+    if (n > 1 && uguali(parole[1], "ciclo")) {
+        struct compito *c = compito_crea("ciclo", ciclo, 0);
+        if (!c) { kprintf("Memoria finita\n"); return; }
+        kprintf("Avviato il compito %d: un ciclo infinito che non cede mai\n", c->numero);
+        return;
+    }
+    if (n < 2 || !uguali(parole[1], "contatore")) {
+        kprintf("Uso: avvia contatore [ms]   oppure   avvia ciclo\n");
+        return;
+    }
+    int ms = n > 2 ? numero(parole[2]) : 500;
+    if (ms <= 0) { kprintf("Millisecondi non validi\n"); return; }
+    struct compito *c = compito_crea("contatore", contatore, ms);
+    if (!c) { kprintf("Memoria finita\n"); return; }
+    kprintf("Avviato il compito %d (un passo ogni %d ms)\n", c->numero, ms);
+}
+
+static void cmd_ferma(int n, char **parole) {
+    int num = n > 1 ? numero(parole[1]) : -1;
+    if (num < 0) { kprintf("Uso: ferma N   (il numero lo dice: compiti)\n"); return; }
+    if (compito_ferma(num) < 0) {
+        kprintf("Non posso fermare il compito %d\n", num);
+        return;
+    }
+    console_stato(colonna_contatore(num), GIALLO, "            ");   /* libera il suo posto */
+    kprintf("Fermato il compito %d\n", num);
+}
+
 static void cmd_riavvia(int n, char **parole) {
     (void)n; (void)parole;
     kprintf("Riavvio...\n");
@@ -246,7 +312,10 @@ static const struct {
     { "crea",    "crea un file: crea /percorso testo",     cmd_crea    },
     { "cat",     "mostra un file: cat /percorso",          cmd_cat     },
     { "rm",      "cancella un file o una cartella vuota",  cmd_rm      },
-    { "spazio",  "schede e settori liberi",                cmd_spazio  },    { "pulisci", "svuota lo schermo",                      cmd_pulisci },
+    { "spazio",  "schede e settori liberi",                cmd_spazio  },
+    { "compiti", "l'elenco dei compiti e il loro stato",   cmd_compiti },
+    { "avvia",   "avvia contatore [ms] / avvia ciclo",     cmd_avvia   },
+    { "ferma",   "ferma un compito: ferma N",              cmd_ferma   },    { "pulisci", "svuota lo schermo",                      cmd_pulisci },
     { "riavvia", "riavvia la macchina",                    cmd_riavvia },
 };
 #define N_COMANDI (int)(sizeof comandi / sizeof comandi[0])
