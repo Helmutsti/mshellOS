@@ -292,6 +292,46 @@ static void cmd_traduci(int n, char **parole) {
             permessi & PAG_UTENTE ? "anche ring 3" : "solo kernel");
 }
 
+/* Un compito che usa mfs a raffica: crea un file, lo rilegge, controlla che il
+ * contenuto sia il suo, lo cancella, per GIRI_SCRITTORE volte. Ne partono alcuni
+ * insieme: con il lucchetto non sbagliano mai; senza ("lucchetto no") si pestano i piedi. */
+#define GIRI_SCRITTORE 300
+
+static void scrittore(unsigned int non_usato) {
+    (void)non_usato;
+    int numero = compito_attuale()->numero;
+    char percorso[32], scritto[48], letto[48], stato[16];
+    int errori = 0;
+
+    for (int giro = 1; giro <= GIRI_SCRITTORE; giro++) {
+        ksnprintf(percorso, sizeof percorso, "/s%d_%d", numero, giro);
+        int byte = ksnprintf(scritto, sizeof scritto, "compito %d, giro %d", numero, giro);
+
+        if (mfs_crea(percorso, scritto, byte) < 0) errori++;
+        memset(letto, 0, sizeof letto);
+        if (mfs_leggi(percorso, 0, letto, sizeof letto - 1) != byte || memcmp(letto, scritto, byte))
+            errori++;
+        if (mfs_rm(percorso) < 0) errori++;
+
+        ksnprintf(stato, sizeof stato, " #%d:%3d e%d ", numero, giro, errori);
+        console_stato(colonna_contatore(numero), errori ? ROSSO : VERDE, stato);
+    }
+    kprintf("[scrittore %d: %d giri, %d errori]\n", numero, GIRI_SCRITTORE, errori);
+    /* return: il compito finisce da solo (fine_compito) */
+}
+
+static void cmd_lucchetto(int n, char **parole) {
+    if (n > 1 && uguali(parole[1], "si")) {
+        mfs_lucchetto(1);
+        kprintf("Lucchetto di mfs acceso\n");
+    } else if (n > 1 && uguali(parole[1], "no")) {
+        mfs_lucchetto(0);
+        kprintf("Lucchetto di mfs SPENTO: solo per prova, il disco si puo' rovinare\n");
+    } else {
+        kprintf("Uso: lucchetto si | lucchetto no\n");
+    }
+}
+
 static void cmd_compiti(int n, char **parole) {
     (void)n; (void)parole;
     compiti_elenca();
@@ -305,6 +345,16 @@ static void cmd_avvia(int n, char **parole) {
         struct compito *c = compito_crea("guasto", guasto, dove);
         if (!c) { kprintf("Memoria finita\n"); return; }
         kprintf("Avviato il compito %d: tra poco scrivera' all'indirizzo %08x\n", c->numero, dove);
+        return;
+    }
+    if (n > 1 && uguali(parole[1], "scrittore")) {
+        /* tutti nello stesso istante, cosi' lavorano davvero insieme */
+        int quanti = n > 2 ? numero(parole[2]) : 3;
+        if (quanti < 1 || quanti > POSTI_CONTATORI) quanti = 3;
+        kprintf("Avvio %d scrittori: %d giri ciascuno di crea, leggi, controlla, cancella\n",
+                quanti, GIRI_SCRITTORE);
+        for (int i = 0; i < quanti; i++)
+            if (!compito_crea("scrittore", scrittore, 0)) kprintf("Memoria finita\n");
         return;
     }
     if (n > 1 && uguali(parole[1], "ciclo")) {
@@ -327,7 +377,12 @@ static void cmd_avvia(int n, char **parole) {
 static void cmd_ferma(int n, char **parole) {
     int num = n > 1 ? numero(parole[1]) : -1;
     if (num < 0) { kprintf("Uso: ferma N   (il numero lo dice: compiti)\n"); return; }
-    if (compito_ferma(num) < 0) {
+    int r = compito_ferma(num);
+    if (r == -2) {
+        kprintf("Il compito %d sta usando una risorsa (lucchetto): riprova tra poco\n", num);
+        return;
+    }
+    if (r < 0) {
         kprintf("Non posso fermare il compito %d\n", num);
         return;
     }
@@ -352,39 +407,56 @@ static const struct {
     const char *descrizione;
     void (*esegui)(int n, char **parole);
 } comandi[] = {
-    { "aiuto",   "questo elenco",                          cmd_aiuto   },
-    { "eco",     "ripete il testo: eco ciao mondo",        cmd_eco     },
-    { "mem",     "memoria libera (mem blocchi: i blocchi)", cmd_mem    },
-    { "tempo",   "da quanto e' acceso il kernel",          cmd_tempo   },
-    { "gdt",     "le righe della GDT",                     cmd_gdt     },
-    { "disco",   "informazioni sul disco",                 cmd_disco   },
-    { "leggi",   "mostra un settore: leggi N [inizio]",    cmd_leggi   },
-    { "scrivi",  "scrive in un settore: scrivi N testo",   cmd_scrivi  },
-    { "formatta","scrive un mfs vuoto (CANCELLA TUTTO)",   cmd_formatta},
-    { "ls",      "elenca una cartella: ls [/percorso]",    cmd_ls      },
-    { "mkdir",   "crea una cartella: mkdir /percorso",     cmd_mkdir   },
-    { "crea",    "crea un file: crea /percorso testo",     cmd_crea    },
-    { "cat",     "mostra un file: cat /percorso",          cmd_cat     },
-    { "rm",      "cancella un file o una cartella vuota",  cmd_rm      },
-    { "spazio",  "schede e settori liberi",                cmd_spazio  },
-    { "compiti", "l'elenco dei compiti e il loro stato",   cmd_compiti },
-    { "avvia",   "contatore [ms] / ciclo / guasto [codice]", cmd_avvia },
-    { "traduci", "indirizzo virtuale -> fisico: traduci 0x1000", cmd_traduci },
-    { "ferma",   "ferma un compito: ferma N",              cmd_ferma   },    { "pulisci", "svuota lo schermo",                      cmd_pulisci },
-    { "riavvia", "riavvia la macchina",                    cmd_riavvia },
+    /* generali */
+    { "aiuto",    "l'elenco dei comandi; aiuto NOME: cosa fa un comando", cmd_aiuto },
+    { "eco",      "ripete il testo: eco ciao mondo",               cmd_eco      },
+    { "tempo",    "da quanto e' acceso il kernel",                 cmd_tempo    },
+    { "pulisci",  "svuota lo schermo",                             cmd_pulisci  },
+    { "riavvia",  "riavvia la macchina",                           cmd_riavvia  },
+    /* memoria e CPU */
+    { "mem",      "memoria libera (mem blocchi: i blocchi di kmalloc)", cmd_mem },
+    { "traduci",  "indirizzo virtuale -> fisico: traduci 0xB8000", cmd_traduci  },
+    { "gdt",      "le righe della GDT",                            cmd_gdt      },
+    /* disco */
+    { "disco",    "informazioni sul disco",                        cmd_disco    },
+    { "leggi",    "mostra un settore: leggi N [inizio]",           cmd_leggi    },
+    { "scrivi",   "scrive in un settore: scrivi N testo",          cmd_scrivi   },
+    /* file */
+    { "formatta", "scrive un mfs vuoto (CANCELLA TUTTO)",          cmd_formatta },
+    { "ls",       "elenca una cartella: ls [/percorso]",           cmd_ls       },
+    { "mkdir",    "crea una cartella: mkdir /percorso",            cmd_mkdir    },
+    { "crea",     "crea un file: crea /percorso testo",            cmd_crea     },
+    { "cat",      "mostra un file: cat /percorso",                 cmd_cat      },
+    { "rm",       "cancella un file o una cartella vuota",         cmd_rm       },
+    { "spazio",   "schede e settori liberi di mfs",                cmd_spazio   },
+    /* compiti */
+    { "compiti",  "l'elenco dei compiti e il loro stato",          cmd_compiti  },
+    { "avvia",    "avvia contatore [ms] | ciclo | guasto [codice] | scrittore", cmd_avvia },
+    { "ferma",    "ferma un compito: ferma N",                     cmd_ferma    },
+    { "lucchetto","lucchetto si|no: accende o spegne il lucchetto di mfs (prova)", cmd_lucchetto },
 };
 #define N_COMANDI (int)(sizeof comandi / sizeof comandi[0])
 
+/* aiuto: i nomi in colonne. aiuto NOME: la descrizione di un comando. */
 static void cmd_aiuto(int n, char **parole) {
-    (void)n; (void)parole;
+    if (n > 1) {
+        for (int i = 0; i < N_COMANDI; i++)
+            if (uguali(parole[1], comandi[i].nome)) {
+                kprintf("%s: %s\n", comandi[i].nome, comandi[i].descrizione);
+                return;
+            }
+        kprintf("Non conosco il comando %s\n", parole[1]);
+        return;
+    }
     for (int i = 0; i < N_COMANDI; i++) {
-        /* kprintf non sa allineare a sinistra: si aggiungono spazi fino a 10 caratteri */
+        /* kprintf non sa allineare a sinistra: si aggiungono spazi fino a 12 caratteri */
         kprintf("  %s", comandi[i].nome);
         int l = 0;
         while (comandi[i].nome[l]) l++;
-        for (; l < 10; l++) kprintf(" ");
-        kprintf("%s\n", comandi[i].descrizione);
+        for (; l < 12; l++) kprintf(" ");
+        if (i % 5 == 4 || i == N_COMANDI - 1) kprintf("\n");
     }
+    kprintf("Scrivi aiuto NOME per sapere cosa fa un comando.\n");
 }
 
 /* --- leggere ed eseguire la riga --- */

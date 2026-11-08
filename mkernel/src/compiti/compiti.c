@@ -48,6 +48,8 @@ static void in_fila(struct compito *c) {
 /* La funzione di ogni compito "ritorna" qui: la pila finta e' fatta apposta. */
 static void fine_compito(void) {
     interruzioni_spegni();
+    if (attuale->lucchetti)   /* nessuno lo lascerebbe piu': chi aspetta dormirebbe per sempre */
+        panico("il compito %d e' finito tenendo un lucchetto", attuale->numero);
     attuale->stato = FINITO;
     /* non si puo' liberare la propria pila mentre ci si sta sopra:
      * lo fara' lo scheduler, quando staremo girando su un'altra */
@@ -200,10 +202,12 @@ int compito_ferma(int numero) {
     for (int i = 0; i < numero_compiti; i++, c = c->prossimo) {
         if (c->numero != numero) continue;
         /* la shell, l'inattivo e chi sta girando non si fermano */
-        if (c != attuale && c != inattivo && c->pila) {
-            c->stato = FINITO;     /* lo scheduler liberera' scheda e pila */
-            risultato = 0;
-        }
+        if (c == attuale || c == inattivo || !c->pila) break;
+        /* chi tiene un lucchetto lascerebbe la risorsa a meta' e il lucchetto preso
+         * per sempre; chi e' in fila lascerebbe nella fila una scheda liberata */
+        if (c->lucchetti || c->aspetta) { risultato = -2; break; }
+        c->stato = FINITO;         /* lo scheduler liberera' scheda e pila */
+        risultato = 0;
         break;
     }
     interruzioni_ripristina(s);

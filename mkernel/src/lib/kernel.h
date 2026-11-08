@@ -21,7 +21,7 @@ void kprintf(const char *fmt, ...);
 void vkprintf(const char *fmt, va_list ap);
 int ksnprintf(char *buf, unsigned int max, const char *fmt, ...);   /* come kprintf, ma in buf */
 
-/* memoria.c */
+/* stringhe.c (le funzioni di string.h che il compilatore puo' chiamare da solo) */
 void *memset(void *dest, int valore, unsigned int n);
 void *memcpy(void *dest, const void *src, unsigned int n);
 void *memmove(void *dest, const void *src, unsigned int n);

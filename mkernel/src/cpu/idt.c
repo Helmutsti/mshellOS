@@ -144,6 +144,8 @@ static unsigned int eccezione(struct registri *r) {
      * a un altro compito e liberera' questo. E' quello che fanno i sistemi veri con
      * un programma che sbaglia ("Segmentation fault"). */
     struct compito *c = compito_attuale();
+    if (c && c->pila && c->lucchetti)   /* la risorsa che teneva e' rimasta a meta' */
+        panico("il compito %d ha sbagliato mentre teneva un lucchetto", c->numero);
     if (c && c->pila) {
         console_colore(GIALLO);
         kprintf("  Il compito %d (%s) e' stato chiuso. Il sistema continua.\n", c->numero, c->nome);

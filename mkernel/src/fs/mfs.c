@@ -16,9 +16,14 @@
  * La radice "/" e' sempre la scheda 0.
  *
  * Niente cache: registro, schede e cartelle si leggono dal disco ogni volta che servono
- * e si riscrivono subito quando cambiano. */
+ * e si riscrivono subito quando cambiano.
+ *
+ * UN COMPITO ALLA VOLTA: ogni operazione pubblica prende il lucchetto di mfs all'inizio
+ * e lo lascia alla fine (vedi in fondo al file). Senza, due compiti potrebbero trovare
+ * libero lo stesso settore o la stessa scheda, o mescolare i comandi al disco. */
 #include "kernel.h"
 #include "disco.h"
+#include "lucchetto.h"
 #include "mfs.h"
 
 typedef unsigned int u32;
@@ -346,7 +351,7 @@ static int separa(const char *percorso, char *genitore, char *nome) {
 
 /* ======================= le operazioni ======================= */
 
-int mfs_monta(void) {
+static int monta_dentro(void) {
     unsigned char buf[SETTORE];
     montato = 0;
     if (leggi(0, buf) < 0) return 0;
@@ -356,7 +361,7 @@ int mfs_monta(void) {
     return 1;
 }
 
-int mfs_formatta(void) {
+static int formatta_dentro(void) {
     unsigned char buf[SETTORE];
     int r;
 
@@ -414,7 +419,7 @@ static int nuova_scheda(const char *percorso, u32 *genitore, char *nome) {
     return scheda_libera();
 }
 
-int mfs_mkdir(const char *percorso) {
+static int mkdir_dentro(const char *percorso) {
     u32 genitore;
     char nome[MFS_NOME_MAX + 1];
     int n = nuova_scheda(percorso, &genitore, nome);
@@ -428,7 +433,7 @@ int mfs_mkdir(const char *percorso) {
     return aggiungi_voce(genitore, nome, n);
 }
 
-int mfs_crea(const char *percorso, const void *dati, unsigned int byte) {
+static int crea_dentro(const char *percorso, const void *dati, unsigned int byte) {
     if (byte > MAX_SETTORI * SETTORE) return MFS_ERR_TROPPO_GRANDE;
     u32 genitore;
     char nome[MFS_NOME_MAX + 1];
@@ -460,7 +465,7 @@ int mfs_crea(const char *percorso, const void *dati, unsigned int byte) {
     return aggiungi_voce(genitore, nome, n);
 }
 
-int mfs_leggi(const char *percorso, unsigned int da, void *dove, unsigned int n) {
+static int leggi_dentro(const char *percorso, unsigned int da, void *dove, unsigned int n) {
     u32 num;
     int r;
     if (!montato) return MFS_ERR_NON_FORMATTATO;
@@ -500,7 +505,7 @@ static int visita_elenca(struct voce *v, void *ctx) {
     return CONTINUA;
 }
 
-int mfs_elenca(const char *percorso, mfs_visita f) {
+static int elenca_dentro(const char *percorso, mfs_visita f) {
     u32 num;
     int r;
     if (!montato) return MFS_ERR_NON_FORMATTATO;
@@ -513,7 +518,7 @@ int mfs_elenca(const char *percorso, mfs_visita f) {
     return r < 0 ? r : 0;
 }
 
-int mfs_rm(const char *percorso) {
+static int rm_dentro(const char *percorso) {
     char cartella[128], nome[MFS_NOME_MAX + 1];
     u32 genitore, num;
     int r;
@@ -536,7 +541,7 @@ int mfs_rm(const char *percorso) {
     return scrivi_scheda(num, &sc);
 }
 
-int mfs_spazio(unsigned int *schede_libere, unsigned int *settori_liberi) {
+static int spazio_dentro(unsigned int *schede_libere, unsigned int *settori_liberi) {
     if (!montato) return MFS_ERR_NON_FORMATTATO;
     struct scheda sc;
     int r;
@@ -570,4 +575,33 @@ const char *mfs_messaggio(int errore) {
     case MFS_ERR_TROPPO_GRANDE:  return "file troppo grande (massimo 70 KB)";
     default:                     return "errore sconosciuto";
     }
+}
+
+/* ======================= le operazioni pubbliche, col lucchetto ======================= */
+
+static struct lucchetto lucchetto_mfs = LUCCHETTO("mfs");
+static int usa_lucchetto = 1;   /* solo per la prova di "lucchetto no": sempre 1 */
+
+void mfs_lucchetto(int acceso) { usa_lucchetto = acceso; }
+
+/* Prende il lucchetto, esegue l'operazione, lo lascia, restituisce il risultato. */
+#define CON_LUCCHETTO(operazione) do {                          \
+        int preso = usa_lucchetto;                              \
+        if (preso) lucchetto_prendi(&lucchetto_mfs);            \
+        int r = (operazione);                                   \
+        if (preso) lucchetto_lascia(&lucchetto_mfs);            \
+        return r;                                               \
+    } while (0)
+
+int mfs_monta(void)                         { CON_LUCCHETTO(monta_dentro()); }
+int mfs_formatta(void)                      { CON_LUCCHETTO(formatta_dentro()); }
+int mfs_mkdir(const char *p)                { CON_LUCCHETTO(mkdir_dentro(p)); }
+int mfs_crea(const char *p, const void *d, unsigned int b) { CON_LUCCHETTO(crea_dentro(p, d, b)); }
+int mfs_leggi(const char *p, unsigned int da, void *dove, unsigned int n) {
+    CON_LUCCHETTO(leggi_dentro(p, da, dove, n));
+}
+int mfs_elenca(const char *p, mfs_visita f) { CON_LUCCHETTO(elenca_dentro(p, f)); }
+int mfs_rm(const char *p)                   { CON_LUCCHETTO(rm_dentro(p)); }
+int mfs_spazio(unsigned int *schede, unsigned int *settori) {
+    CON_LUCCHETTO(spazio_dentro(schede, settori));
 }

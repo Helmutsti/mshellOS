@@ -21,6 +21,11 @@ struct compito {
     void *pila;                  /* la sua pila (0 per la shell: usa quella del kernel) */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
     struct compito *prossimo;    /* il successivo nella fila (circolare) */
+
+    /* i lucchetti (lucchetto.c) */
+    int lucchetti;                    /* quanti ne tiene adesso */
+    struct lucchetto *aspetta;        /* il lucchetto per cui e' in fila (0 = nessuno) */
+    struct compito *dopo_in_fila;     /* il successivo nella fila di quel lucchetto */
 };
 
 /* Trasforma il codice che sta girando (kernel_main) nel compito "shell",
@@ -39,7 +44,9 @@ void compito_aspetta(void);
 void compito_sveglia(struct compito *c);
 
 struct compito *compito_attuale(void);
-int compito_ferma(int numero);         /* 0 se fermato, -1 se non si puo' */
+/* 0 se fermato, -1 se non si puo' (shell, inattivo, chi gira),
+ * -2 se sta usando un lucchetto (riprovare piu' tardi) */
+int compito_ferma(int numero);
 void compiti_elenca(void);             /* stampa la tabella dei compiti */
 
 /* Chiamato da interruzione() a ogni tick e a ogni cedi(): riceve l'ESP del compito

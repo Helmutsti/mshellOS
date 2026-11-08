@@ -1,6 +1,6 @@
 #!/bin/sh
 # Compila il kernel. Gira dentro un container Docker alpine con la cartella montata in /w.
-#   src/    il codice
+#   src/    il codice, una cartella per argomento (avvio, cpu, memoria, dispositivi, ...)
 #   build/  il compilato (si puo' cancellare, viene rifatto)
 set -e
 cd /w
@@ -12,18 +12,21 @@ mkdir -p build
 # -mno-sse ...      : niente istruzioni SSE/MMX. Il compilatore le userebbe per velocizzare
 #                     i cicli, ma la CPU le accetta solo dopo che il kernel le ha attivate:
 #                     senza questo, la prima che incontra manda in crash la macchina.
-CFLAGS="--target=i686-elf -ffreestanding -O2 -Wall -Wextra -mno-sse -mno-sse2 -mno-mmx"
+# -I...             : gli header si cercano in tutte le cartelle di src/, cosi' basta
+#                     scrivere #include "pagine.h" ovunque si trovi il file
+INCLUDE=$(find src -type d | sed 's/^/-I/')
+CFLAGS="--target=i686-elf -ffreestanding -O2 -Wall -Wextra -mno-sse -mno-sse2 -mno-mmx $INCLUDE"
 
 rm -f build/*.o   # si riparte puliti: niente .o vecchi di file cancellati
 
-# assembla ogni .s e compila ogni .c di src/, poi li lega insieme
-for f in src/*.s; do
+# assembla ogni .s e compila ogni .c di src/ (in tutte le cartelle), poi li lega insieme
+for f in $(find src -name '*.s'); do
     clang --target=i686-elf -c "$f" -o "build/$(basename "$f" .s).o"
 done
-for f in src/*.c; do
+for f in $(find src -name '*.c'); do
     clang $CFLAGS -c "$f" -o "build/$(basename "$f" .c).o"
 done
 # l'ordine dei .o non conta: e' linker.ld a mettere la firma Multiboot per prima
-ld.lld -T src/linker.ld -o build/kernel build/*.o
+ld.lld -T src/avvio/linker.ld -o build/kernel build/*.o
 
 echo "build/kernel pronto"
