@@ -1,7 +1,7 @@
 /* I compiti e lo scheduler.
  *
- * Un COMPITO e' una funzione con una pila sua e una scheda. I compiti stanno in una
- * fila circolare; lo scheduler, a ogni tick del timer (e a ogni cedi), passa al
+ * Un COMPITO e' un programma in ring 3 (o l'inattivo, il kernel stesso) con una
+ * pila sua e una scheda. I compiti stanno in una fila circolare; lo scheduler, a ogni tick del timer (e a ogni cedi), passa al
  * prossimo compito PRONTO: e' il "giro" (round robin).
  *
  * IL TRUCCO DEL CAMBIO DI CONTESTO
@@ -12,7 +12,7 @@
  *
  * IL PRIMO AVVIO
  * Un compito nuovo non e' mai stato interrotto: sulla sua pila prepariamo a mano
- * i registri "come se" lo fosse stato, con EIP = inizio della sua funzione. */
+ * i registri "come se" lo fosse stato, con EIP = inizio del programma. */
 #include "kernel.h"
 #include "gdt.h"
 #include "idt.h"
@@ -48,59 +48,6 @@ static void in_fila(struct compito *c) {
     if (!primo) { primo = ultimo = c; c->prossimo = c; }
     else { c->prossimo = primo; ultimo->prossimo = c; ultimo = c; }
     numero_compiti++;
-}
-
-/* --- quando un compito finisce --- */
-
-/* La funzione di ogni compito "ritorna" qui: la pila finta e' fatta apposta. */
-static void fine_compito(void) {
-    interruzioni_spegni();
-    if (attuale->lucchetti)   /* nessuno lo lascerebbe piu': chi aspetta dormirebbe per sempre */
-        panico("il compito %d e' finito tenendo un lucchetto", attuale->numero);
-    attuale->stato = FINITO;
-    /* non si puo' liberare la propria pila mentre ci si sta sopra:
-     * lo fara' lo scheduler, quando staremo girando su un'altra */
-    for (;;) cedi();
-}
-
-/* --- creare un compito --- */
-
-struct compito *compito_crea(const char *nome, void (*funzione)(unsigned int), unsigned int argomento) {
-    struct compito *c = kmalloc(sizeof *c);
-    unsigned char *pila = kmalloc(DIM_PILA);
-    if (!c || !pila) { kfree(c); kfree(pila); return 0; }
-
-    memset(c, 0, sizeof *c);
-    copia_nome(c->nome, nome);
-    c->pila = pila;
-
-    /* LA PILA FINTA. Dall'alto (fine della pila) verso il basso:
-     *
-     *   argomento          \ come se qualcuno avesse fatto "call funzione(argomento)":
-     *   fine_compito       / quando la funzione fa return, salta a fine_compito
-     *   EFLAGS, CS, EIP    \
-     *   errore, numero      |  quello che la CPU e isr_comune avrebbero salvato
-     *   registri (pusha)    |  se il compito fosse stato interrotto
-     *   DS                 /   <- qui punta l'ESP salvato nella scheda
-     */
-    unsigned int *cima = (unsigned int *)(pila + DIM_PILA);
-    cima[-1] = argomento;
-    cima[-2] = (unsigned int)fine_compito;
-
-    struct registri *r = (struct registri *)((unsigned char *)&cima[-2] - sizeof(struct registri));
-    memset(r, 0, sizeof *r);
-    r->ds = SEL_KERNEL_DATI;
-    r->eip = (unsigned int)funzione;        /* iret "tornera'" all'inizio della funzione */
-    r->cs = SEL_KERNEL_CODICE;
-    r->eflags = EFLAGS_INTERRUZIONI_ACCESE; /* senno' nessun tick lo fermerebbe piu' */
-    c->esp = (unsigned int)r;
-
-    unsigned int s = interruzioni_spegni();
-    c->numero = prossimo_numero++;
-    c->stato = PRONTO;
-    in_fila(c);
-    interruzioni_ripristina(s);
-    return c;
 }
 
 /* --- creare un programma in ring 3, da un file ELF sul disco --- */

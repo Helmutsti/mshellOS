@@ -28,18 +28,6 @@ void panico(const char *fmt, ...) {
     for (;;) __asm__ volatile("cli; hlt");
 }
 
-/* Il compito "orologio": ogni quarto di secondo scrive l'ora nella barra di stato. */
-static void orologio(unsigned int argomento) {
-    (void)argomento;
-    char testo[16];
-    for (;;) {
-        unsigned int s = timer_tick() / 100;
-        ksnprintf(testo, sizeof testo, " %02u:%02u:%02u ", s / 3600, s / 60 % 60, s % 60);
-        console_stato(70, BIANCO, testo);
-        dormi(250);   /* non gira per 250 ms: la CPU va agli altri */
-    }
-}
-
 static int falliti;
 
 /* Stampa solo i controlli falliti: quelli riusciti si contano e basta. */
@@ -117,7 +105,6 @@ static void prova_kmalloc(void) {
 
 void kernel_main(unsigned int magic, struct multiboot_info *info) {
     console_prepara();
-    console_stato(1, GIALLO, "mkernel");
 
     if (magic != MULTIBOOT_MAGIC_BOOT)
         panico("non sono stato caricato da un bootloader Multiboot (eax=%x)", magic);
@@ -189,9 +176,7 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     struct compito *init = compito_crea_programma("/init", &errore);
     if (!init) panico("non posso avviare /init: %s", errore);
 
-    /* L'orologio nella barra di stato: un compito del kernel (ring 0). */
-    compito_crea("orologio", orologio, 0);
-    kprintf("Compiti : scheduler acceso (inattivo, init, orologio)\n\n");
+    kprintf("Compiti : scheduler acceso (inattivo, init)\n\n");
 
     /* Il compito inattivo: ferma la CPU fino alla prossima interruzione. Lo scheduler
      * torna qui solo quando nessun altro ha niente da fare. */

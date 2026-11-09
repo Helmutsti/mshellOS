@@ -3,8 +3,7 @@
  * e il prefisso l per i long.
  *
  * Il lavoro vero lo fa formatta(), che non sa DOVE va il testo: per ogni carattere
- * chiama una funzione 'metti'. Cosi' la stessa formattazione serve sia per lo
- * schermo (kprintf) sia per un testo in memoria (ksnprintf). */
+ * chiama una funzione 'metti' (oggi solo lo schermo). */
 #include <stdarg.h>
 #include "kernel.h"
 
@@ -84,23 +83,4 @@ void kprintf(const char *fmt, ...) {
     va_start(ap, fmt);
     vkprintf(fmt, ap);
     va_end(ap);
-}
-
-/* --- in un testo in memoria --- */
-
-struct testo { char *buf; unsigned int pos, max; };
-
-static void nel_testo(char c, void *dove) {
-    struct testo *t = dove;
-    if (t->pos + 1 < t->max) t->buf[t->pos++] = c;   /* lascia posto per lo 0 finale */
-}
-
-int ksnprintf(char *buf, unsigned int max, const char *fmt, ...) {
-    struct testo t = { buf, 0, max };
-    va_list ap;
-    va_start(ap, fmt);
-    formatta(nel_testo, &t, fmt, ap);
-    va_end(ap);
-    if (max) buf[t.pos] = 0;
-    return t.pos;
 }

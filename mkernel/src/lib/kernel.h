@@ -4,18 +4,14 @@
 
 #include <stdarg.h>
 
-/* console.c
- * La riga 0 dello schermo e' la BARRA DI STATO (orologio, contatori): non scorre.
- * Il testo normale usa le righe 1-24. */
-void console_prepara(void);                           /* pulisce tutto, barra compresa */
+/* console.c */
+void console_prepara(void);                           /* pulisce lo schermo, cursore in alto */
 unsigned char console_colore(unsigned char colore);   /* 0xSF: S sfondo, F primo piano. Restituisce il vecchio */
 void console_putc(char c);
-void console_stato(int colonna, unsigned char colore, const char *testo);  /* scrive nella barra */
 
 /* kprintf.c */
 void kprintf(const char *fmt, ...);
 void vkprintf(const char *fmt, va_list ap);
-int ksnprintf(char *buf, unsigned int max, const char *fmt, ...);   /* come kprintf, ma in buf */
 
 /* stringhe.c (le funzioni di string.h che il compilatore puo' chiamare da solo) */
 void *memset(void *dest, int valore, unsigned int n);

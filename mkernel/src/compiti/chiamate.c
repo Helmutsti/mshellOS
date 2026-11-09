@@ -9,6 +9,7 @@
 #include "pagine.h"
 #include "paginazione.h"
 #include "compiti.h"
+#include "tastiera.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA 1024
@@ -42,6 +43,30 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         dormi(r->ebx);
         r->eax = 0;
         break;
+    case SIS_LEGGI: {
+        /* dorme finche' non arriva un tasto, come dormi(): si riparte da qui */
+        char c = tastiera_aspetta();
+        r->eax = c ? (unsigned char)c : (unsigned int)-1;
+        break;
+    }
+    case SIS_AVVIA: {
+        /* il percorso sta nella memoria del programma: lo si copia nel kernel una
+         * lettera alla volta, controllando ogni lettera, fino allo 0 finale */
+        char percorso[MAX_PERCORSO];
+        const char *da = (const char *)r->ebx;
+        int finito = 0;
+        for (int i = 0; i < MAX_PERCORSO && !finito; i++) {
+            if (!del_programma((unsigned int)(da + i), 1)) break;   /* fuori dalla sua memoria */
+            percorso[i] = da[i];
+            finito = percorso[i] == 0;
+        }
+        if (!finito) { r->eax = -1; break; }   /* troppo lungo, o fuori dalla sua memoria */
+
+        const char *errore;
+        struct compito *c = compito_crea_programma(percorso, &errore);
+        r->eax = c ? (unsigned int)c->numero : (unsigned int)-1;
+        break;
+    }
     case SIS_ESCI:
         /* come un compito che sbaglia: si segna finito e si passa a un altro.
          * Lo scheduler liberera' pile e scheda. Al programma non si torna piu'. */

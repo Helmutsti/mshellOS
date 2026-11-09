@@ -34,9 +34,6 @@ struct compito {
  * e accende lo scheduler. */
 void compiti_prepara(void);
 
-/* Crea un compito che esegue funzione(argomento). Restituisce la sua scheda, o 0. */
-struct compito *compito_crea(const char *nome, void (*funzione)(unsigned int), unsigned int argomento);
-
 /* Crea un compito in RING 3 dal file eseguibile (ELF) 'percorso' sul disco.
  * Ha una mappa sua (le sue pagine piu' il kernel, condiviso) e due pile: una pagina per
  * il programma e una pila del kernel. Restituisce la scheda, oppure 0 e in *errore il

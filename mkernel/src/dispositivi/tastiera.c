@@ -17,8 +17,13 @@
 #include "idt.h"
 #include "tastiera.h"
 #include "kernel.h"
+#include "compiti.h"
 
 #define PORTA_DATI 0x60
+
+/* Il compito che dorme aspettando un tasto. UNO SOLO: se due aspettassero insieme, ogni
+ * tasto andrebbe a uno a caso. Chi arriva mentre un altro aspetta viene rifiutato. */
+static struct compito *in_attesa;
 
 /* codici della code page 437 */
 #define A_GRAVE 0x85   /* à */
@@ -79,6 +84,25 @@ char tastiera_leggi(void) {
     return c;
 }
 
+/* Aspetta un tasto DORMENDO: il compito non consuma CPU finche' il gestore della
+ * tastiera non lo sveglia. Restituisce il carattere, o 0 se c'e' gia' un altro compito
+ * che aspetta (la tastiera e' sua).
+ * Perche' le interruzioni spente: tra "il buffer e' vuoto" e "mi metto in attesa"
+ * potrebbe arrivare proprio il tasto. Il gestore non vedrebbe nessuno da svegliare,
+ * e noi ci addormenteremmo con un tasto gia' nel buffer (la "sveglia persa").
+ * A interruzioni spente il tasto puo' arrivare solo prima o dopo, mai in mezzo. */
+char tastiera_aspetta(void) {
+    for (;;) {
+        unsigned int s = interruzioni_spegni();
+        char c = tastiera_leggi();
+        if (c) { interruzioni_ripristina(s); return c; }
+        if (in_attesa && in_attesa != compito_attuale()) { interruzioni_ripristina(s); return 0; }
+        in_attesa = compito_attuale();
+        compito_aspetta();          /* dorme qui; al risveglio si ricontrolla il buffer */
+        interruzioni_ripristina(s);
+    }
+}
+
 /* Combinazioni con AltGr sulla tastiera italiana. */
 static char con_altgr(unsigned char sc) {
     switch (sc) {
@@ -120,7 +144,13 @@ static void al_tasto(struct registri *r) {
         if (caps && c >= 'a' && c <= 'z') c -= 'a' - 'A';
         else if (caps && c >= 'A' && c <= 'Z') c += 'a' - 'A';
     }
-    if (c) metti_nel_buffer(c);
+    if (c) {
+        metti_nel_buffer(c);
+        if (in_attesa) {            /* qualcuno aspettava un tasto: si sveglia */
+            compito_sveglia(in_attesa);
+            in_attesa = 0;
+        }
+    }
 }
 
 void tastiera_prepara(void) {

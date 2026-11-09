@@ -16,6 +16,12 @@
 #define SIS_SCRIVI 1       /* scrivi(testo, byte): scrive sullo schermo */
 #define SIS_DORMI  2       /* dormi(millisecondi): non gira per quel tempo */
 #define SIS_ESCI   3       /* esci(): il programma finisce */
+#define SIS_LEGGI  4       /* leggi(): aspetta un tasto e lo restituisce (-1: la tastiera
+                            * e' gia' di un altro programma che sta aspettando) */
+#define SIS_AVVIA  5       /* avvia(percorso): fa partire il programma del disco.
+                            * Restituisce il suo numero di compito, o -1 */
+
+#define MAX_PERCORSO 64    /* lettere di un percorso passato al kernel, compreso lo 0 finale */
 
 /* Dove vivono i programmi nella loro mappa: da 1 GB in su il codice e le variabili,
  * la pila appena sotto i 2 GB. Sotto 1 GB c'e' il kernel (invisibile al ring 3). */

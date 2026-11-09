@@ -8,4 +8,8 @@ void tastiera_prepara(void);
 /* Il prossimo carattere scritto, oppure 0 se non ce ne sono. Non aspetta. */
 char tastiera_leggi(void);
 
+/* Il prossimo carattere scritto: se non ce ne sono, il compito dorme finche' non arriva.
+ * 0 se un altro compito sta gia' aspettando (un solo compito alla volta). */
+char tastiera_aspetta(void);
+
 #endif
