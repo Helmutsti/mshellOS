@@ -24,7 +24,10 @@ for f in $(find src -name '*.s'); do
     clang --target=i686-elf -c "$f" -o "build/$(basename "$f" .s).o"
 done
 for f in $(find src -name '*.c'); do
-    clang $CFLAGS -c "$f" -o "build/$(basename "$f" .c).o"
+    nome=$(basename "$f" .c)
+    # i programmi (ring 3) si chiamano prog_*.o: linker.ld li mette in una zona a parte
+    case "$f" in src/programmi/*) nome="prog_$nome" ;; esac
+    clang $CFLAGS -c "$f" -o "build/$nome.o"
 done
 # l'ordine dei .o non conta: e' linker.ld a mettere la firma Multiboot per prima
 ld.lld -T src/avvio/linker.ld -o build/kernel build/*.o

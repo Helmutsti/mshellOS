@@ -15,13 +15,21 @@
  *
  * Il registro CR3 dice alla CPU dove sta la directory. Il bit 31 di CR0 accende tutto.
  *
- * QUESTO PRIMO PASSO: una sola mappa, per il kernel, con indirizzo virtuale = fisico
- * ("mappatura identica"), cosi' dopo l'accensione tutto funziona come prima. In piu':
+ * LA MAPPA DEL KERNEL: indirizzo virtuale = fisico ("mappatura identica") per tutta la
+ * RAM, solo ring 0. In piu':
  *   - la pagina 0 non c'e': un puntatore nullo fa page fault invece di fare danni
  *   - codice e costanti del kernel sono di sola lettura
  *
- * Le tabelle sono pagine prese dal magazziniere: qui contabilita' (il magazziniere)
- * e hardware (la MMU) si incontrano. */
+ * LE MAPPE DEI PROGRAMMI: una per ogni programma in ring 3. Ogni mappa ha
+ *   - le stesse righe della directory del kernel, che puntano alle STESSE tabelle del
+ *     kernel: il kernel c'e' in ogni mappa (serve quando arriva un'interruzione), ma
+ *     le sue pagine non hanno il bit utente, quindi il programma non le puo' toccare;
+ *   - dal 1 GB in su (PROGRAMMI_INIZIO) tabelle solo sue, con le sue pagine.
+ * Lo scheduler, a ogni cambio di turno, mette in CR3 la mappa di chi parte.
+ *
+ * Le directory e le tabelle sono pagine prese dal magazziniere. Siccome il kernel ha la
+ * mappatura identica in ogni mappa, il loro indirizzo fisico si puo' usare direttamente
+ * come puntatore. */
 #include "kernel.h"
 #include "pagine.h"
 #include "paginazione.h"
@@ -36,7 +44,7 @@
 
 extern char kernel_start[], sola_lettura_fine[];   /* dal linker script */
 
-static unsigned int *directory;   /* la directory del kernel */
+static unsigned int *kernel;   /* la directory del kernel */
 static int accesa;
 static unsigned int tabelle;
 
@@ -46,13 +54,20 @@ static void dimentica(unsigned int virt) {
     __asm__ volatile("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
-/* La tabella che copre l'indirizzo 'virt'. Con crea=1, se non c'e' la si crea. */
-static unsigned int *tabella_di(unsigned int virt, int crea) {
-    unsigned int *riga = &directory[INDICE_DIR(virt)];
+static unsigned int *attuale(void) {   /* la directory che la CPU sta usando */
+    unsigned int cr3;
+    __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
+    return (unsigned int *)cr3;
+}
+
+/* Nella directory 'dir', la tabella che copre l'indirizzo 'virt'.
+ * Con crea=1, se non c'e' la si crea (0 se il magazziniere non ha pagine). */
+static unsigned int *tabella_di(unsigned int *dir, unsigned int virt, int crea) {
+    unsigned int *riga = &dir[INDICE_DIR(virt)];
     if (!(*riga & PAG_PRESENTE)) {
         if (!crea) return 0;
         unsigned int nuova = pagina_chiedi();   /* una tabella e' una pagina */
-        if (!nuova) panico("paginazione: memoria finita per le tabelle");
+        if (!nuova) return 0;
         memset((void *)nuova, 0, PAGINA);       /* tutte le righe "assente" */
         /* la riga della directory e' permissiva: i permessi veri li decide la tabella
          * (la CPU guarda tutti e due i livelli e applica il piu' severo) */
@@ -62,14 +77,21 @@ static unsigned int *tabella_di(unsigned int virt, int crea) {
     return (unsigned int *)INDIRIZZO(*riga);
 }
 
-void pag_mappa(unsigned int virt, unsigned int fis, unsigned int permessi) {
-    unsigned int *tab = tabella_di(virt, 1);
+static int mappa_in(unsigned int *dir, unsigned int virt, unsigned int fis, unsigned int permessi) {
+    unsigned int *tab = tabella_di(dir, virt, 1);
+    if (!tab) return 0;
     tab[INDICE_TAB(virt)] = INDIRIZZO(fis) | permessi | PAG_PRESENTE;
-    if (accesa) dimentica(virt);
+    if (accesa && dir == attuale()) dimentica(virt);
+    return 1;
+}
+
+void pag_mappa(unsigned int virt, unsigned int fis, unsigned int permessi) {
+    if (!mappa_in(kernel, virt, fis, permessi))
+        panico("paginazione: memoria finita per le tabelle");
 }
 
 int pag_traduci(unsigned int virt, unsigned int *fis, unsigned int *permessi) {
-    unsigned int *tab = tabella_di(virt, 0);
+    unsigned int *tab = tabella_di(accesa ? attuale() : kernel, virt, 0);
     if (!tab) return 0;
     unsigned int riga = tab[INDICE_TAB(virt)];
     if (!(riga & PAG_PRESENTE)) return 0;
@@ -80,15 +102,61 @@ int pag_traduci(unsigned int virt, unsigned int *fis, unsigned int *permessi) {
 
 unsigned int pag_tabelle(void) { return tabelle; }
 
-void paginazione_prepara(void) {
-    directory = (unsigned int *)pagina_chiedi();
-    if (!directory) panico("paginazione: memoria finita per la directory");
-    memset(directory, 0, PAGINA);
+/* --- le mappe dei programmi --- */
 
-    /* Mappatura identica di tutta la RAM, tranne la pagina 0.
-     * Il codice e le costanti del kernel: sola lettura. Il resto: lettura e scrittura.
-     * Nessuna pagina e' PAG_UTENTE: per ora il ring 3 non vede niente. */
+unsigned int pag_nuova_mappa(void) {
+    unsigned int *dir = (unsigned int *)pagina_chiedi();
+    if (!dir) return 0;
+    /* la parte del kernel: le stesse righe, quindi le stesse tabelle (condivise).
+     * Dal 1 GB in su la directory del kernel e' vuota: li' andranno le tabelle del programma. */
+    for (int i = 0; i < RIGHE_TABELLA; i++) dir[i] = kernel[i];
+    tabelle++;
+    return (unsigned int)dir;
+}
+
+int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis, unsigned int permessi) {
+    if (virt < PROGRAMMI_INIZIO) return 0;   /* sotto c'e' il kernel: le sue tabelle non si toccano */
+    return mappa_in((unsigned int *)mappa, virt, fis, permessi);
+}
+
+void pag_cancella_mappa(unsigned int mappa) {
+    unsigned int *dir = (unsigned int *)mappa;
+    if (dir == attuale()) panico("paginazione: cancello la mappa che sto usando");
+    /* solo le righe del programma: quelle del kernel sono condivise e restano */
+    for (unsigned int i = INDICE_DIR(PROGRAMMI_INIZIO); i < RIGHE_TABELLA; i++) {
+        if (!(dir[i] & PAG_PRESENTE)) continue;
+        unsigned int *tab = (unsigned int *)INDIRIZZO(dir[i]);
+        for (int j = 0; j < RIGHE_TABELLA; j++)
+            if (tab[j] & PAG_PRESENTE) pagina_restituisci(INDIRIZZO(tab[j]));   /* le sue pagine */
+        pagina_restituisci((unsigned int)tab);                                   /* la tabella */
+        tabelle--;
+    }
+    pagina_restituisci(mappa);                                                   /* la directory */
+    tabelle--;
+}
+
+void pag_usa_mappa(unsigned int mappa) {
+    unsigned int *dir = mappa ? (unsigned int *)mappa : kernel;
+    /* scrivere CR3 fa dimenticare alla CPU tutto il TLB: lo si fa solo se cambia davvero */
+    if (dir != attuale()) __asm__ volatile("mov %0, %%cr3" : : "r"(dir) : "memory");
+}
+
+/* --- l'avvio --- */
+
+void paginazione_prepara(void) {
+    kernel = (unsigned int *)pagina_chiedi();
+    if (!kernel) panico("paginazione: memoria finita per la directory");
+    memset(kernel, 0, PAGINA);
+
+    /* I programmi vivono dal 1 GB in su: la RAM deve stare sotto, se no le due zone
+     * si sovrapporrebbero. Con QEMU (128 MB di serie) c'e' molto margine. */
     unsigned int fine = memoria_fine();
+    if (fine > PROGRAMMI_INIZIO)
+        panico("paginazione: piu' di %u MB di RAM, la zona dei programmi si sovrappone",
+               PROGRAMMI_INIZIO >> 20);
+
+    /* Mappatura identica di tutta la RAM, tranne la pagina 0. Solo ring 0.
+     * Il codice e le costanti del kernel: sola lettura. Il resto: lettura e scrittura. */
     for (unsigned int p = PAGINA; p < fine; p += PAGINA) {
         int codice = p >= (unsigned int)kernel_start && p < (unsigned int)sola_lettura_fine;
         pag_mappa(p, p, codice ? 0 : PAG_SCRITTURA);
@@ -97,7 +165,7 @@ void paginazione_prepara(void) {
     /* "la directory e' qui", poi si accende. Da questa istruzione in poi ogni
      * indirizzo passa dalla traduzione: se le tabelle fossero sbagliate, la prossima
      * istruzione (che sta in una pagina del kernel) farebbe page fault. */
-    __asm__ volatile("mov %0, %%cr3" : : "r"(directory));
+    __asm__ volatile("mov %0, %%cr3" : : "r"(kernel));
     unsigned int cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     cr0 |= CR0_PAGINAZIONE | CR0_PROTEGGI_SCRITTURA;

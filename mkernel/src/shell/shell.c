@@ -17,6 +17,8 @@
 #include "paginazione.h"
 #include "shell.h"
 
+void saluto(void);   /* il programma in ring 3 (src/programmi/saluto.c) */
+
 #define LUNGHEZZA_RIGA 128
 #define MAX_PAROLE     8
 
@@ -357,6 +359,13 @@ static void cmd_avvia(int n, char **parole) {
             if (!compito_crea("scrittore", scrittore, 0)) kprintf("Memoria finita\n");
         return;
     }
+    if (n > 1 && uguali(parole[1], "programma")) {
+        /* il primo programma in ring 3 (src/programmi/saluto.c) */
+        struct compito *c = compito_crea_programma("saluto", saluto);
+        if (!c) { kprintf("Memoria finita\n"); return; }
+        kprintf("Avviato il compito %d: un programma in ring 3\n", c->numero);
+        return;
+    }
     if (n > 1 && uguali(parole[1], "ciclo")) {
         struct compito *c = compito_crea("ciclo", ciclo, 0);
         if (!c) { kprintf("Memoria finita\n"); return; }
@@ -364,7 +373,7 @@ static void cmd_avvia(int n, char **parole) {
         return;
     }
     if (n < 2 || !uguali(parole[1], "contatore")) {
-        kprintf("Uso: avvia contatore [ms]   oppure   avvia ciclo\n");
+        kprintf("Uso: avvia contatore [ms] | ciclo | guasto [codice] | scrittore | programma\n");
         return;
     }
     int ms = n > 2 ? numero(parole[2]) : 500;
@@ -431,7 +440,7 @@ static const struct {
     { "spazio",   "schede e settori liberi di mfs",                cmd_spazio   },
     /* compiti */
     { "compiti",  "l'elenco dei compiti e il loro stato",          cmd_compiti  },
-    { "avvia",    "avvia contatore [ms] | ciclo | guasto [codice] | scrittore", cmd_avvia },
+    { "avvia",    "avvia contatore [ms] | ciclo | guasto [codice] | scrittore | programma", cmd_avvia },
     { "ferma",    "ferma un compito: ferma N",                     cmd_ferma    },
     { "lucchetto","lucchetto si|no: accende o spegne il lucchetto di mfs (prova)", cmd_lucchetto },
 };

@@ -15,6 +15,7 @@
 # Lo stack: 16 KB riservati, il C ne ha bisogno per funzionare.
 .section .bss
 .align 16
+.global stack_top                # serve allo scheduler: e' la pila della shell
 stack_bottom:
 .skip 16384
 stack_top:

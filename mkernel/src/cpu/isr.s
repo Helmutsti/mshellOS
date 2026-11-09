@@ -78,6 +78,12 @@ SENZA_ERRORE 45    # IRQ 13 coprocessore
 SENZA_ERRORE 46    # IRQ 14 disco principale
 SENZA_ERRORE 47    # IRQ 15 disco secondario
 
+# La porta delle chiamate di sistema: l'unica che un programma in ring 3 puo' usare
+# (vedi chiamate.h). Se arriva dal ring 3, la CPU ha gia' cambiato pila: siamo sulla
+# pila del kernel del programma, presa dalla TSS.
+.global isr128
+SENZA_ERRORE 128   # 0x80
+
 # L'interruzione software con cui un compito cede il turno (cedi, in compiti.c).
 .global isr129
 SENZA_ERRORE 129   # 0x81

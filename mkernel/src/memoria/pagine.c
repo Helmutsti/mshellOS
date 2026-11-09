@@ -88,7 +88,12 @@ void pagine_prepara(struct multiboot_info *info) {
 
 /* --- 2. Chiedere una pagina --- */
 
-unsigned int pagina_chiedi(void) {
+/* Le funzioni per chiedere e restituire sono SEZIONI CRITICHE, come in kmalloc: le
+ * chiamano sia i compiti (es. la shell che crea un programma) sia lo scheduler, dentro
+ * un'interruzione (quando libera la pila di un programma finito). Se un tick arrivasse
+ * a meta' di una ricerca, la stessa pagina potrebbe finire a due. */
+
+static unsigned int pagina_chiedi_dentro(void) {
     unsigned int gruppi = (n_pagine + BIT_GRUPPO - 1) / BIT_GRUPPO;
 
     for (unsigned int g = ripresa; g < gruppi; g++) {
@@ -105,9 +110,16 @@ unsigned int pagina_chiedi(void) {
     return 0;   /* memoria finita (la pagina 0 non viene mai consegnata) */
 }
 
+unsigned int pagina_chiedi(void) {
+    unsigned int s = interruzioni_spegni();
+    unsigned int pagina = pagina_chiedi_dentro();
+    interruzioni_ripristina(s);
+    return pagina;
+}
+
 /* Cerca n caselle libere di fila: scorre il registro contando quante libere ha visto
  * una dopo l'altra; una occupata azzera il conto. Arrivato a n, le occupa tutte. */
-unsigned int pagine_chiedi_consecutive(unsigned int n) {
+static unsigned int pagine_chiedi_consecutive_dentro(unsigned int n) {
     unsigned int di_fila = 0;
     for (unsigned int p = 0; p < n_pagine; p++) {
         if (e_occupata(p)) { di_fila = 0; continue; }
@@ -119,6 +131,13 @@ unsigned int pagine_chiedi_consecutive(unsigned int n) {
         }
     }
     return 0;
+}
+
+unsigned int pagine_chiedi_consecutive(unsigned int n) {
+    unsigned int s = interruzioni_spegni();
+    unsigned int prima = pagine_chiedi_consecutive_dentro(n);
+    interruzioni_ripristina(s);
+    return prima;
 }
 
 /* --- 3. Restituire una pagina --- */
@@ -136,9 +155,11 @@ void pagina_restituisci(unsigned int indirizzo) {
     if (!e_occupata(p))
         panico("pagina_restituisci: %x restituita due volte", indirizzo);
 
+    unsigned int s = interruzioni_spegni();
     segna_libera(p);
     if (p / BIT_GRUPPO < ripresa)
         ripresa = p / BIT_GRUPPO;   /* c'e' un posto libero prima: la prossima ricerca parte da qui */
+    interruzioni_ripristina(s);
 }
 
 unsigned int pagine_libere(void) { return libere; }

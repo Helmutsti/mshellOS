@@ -12,6 +12,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "compiti.h"
+#include "chiamate.h"
 
 struct riga_idt {
     unsigned short indirizzo_basso;   /* bit 0-15 dell'indirizzo del gestore */
@@ -29,6 +30,10 @@ struct registro_idt {
 /* tipo = presente (0x80) | ring 0 | "porta di interruzione a 32 bit" (0x0E).
  * Porta di interruzione: mentre il gestore gira, le interruzioni hardware sono spente. */
 #define PORTA_KERNEL 0x8E
+/* Come sopra, ma ring 3 (0x60): l'istruzione "int" la puo' usare anche un programma.
+ * Le altre righe restano ring 0: se un programma prova "int" su una di quelle, la CPU
+ * lo ferma (protezione generale). */
+#define PORTA_PROGRAMMI 0xEE
 
 #define RIGHE 256
 static struct riga_idt idt[RIGHE];
@@ -39,20 +44,22 @@ extern unsigned int isr_tabella[INGRESSI];   /* gli indirizzi degli ingressi, da
 
 static gestore_irq gestori[16];              /* chi chiamare per ogni linea del PIC */
 
-static void collega(int n, unsigned int gestore) {
+static void collega(int n, unsigned int gestore, unsigned char tipo) {
     idt[n].indirizzo_basso = gestore & 0xFFFF;
     idt[n].segmento        = SEL_KERNEL_CODICE;
     idt[n].zero            = 0;
-    idt[n].tipo            = PORTA_KERNEL;
+    idt[n].tipo            = tipo;
     idt[n].indirizzo_alto  = gestore >> 16;
 }
 
-extern void isr129(void);
+extern void isr128(void), isr129(void);
+unsigned int chiamata_di_sistema(struct registri *r);   /* chiamate.c */
 
 void idt_prepara(void) {
     for (int n = 0; n < INGRESSI; n++)
-        collega(n, isr_tabella[n]);
-    collega(INT_CEDI, (unsigned int)isr129);   /* cedi(): un compito passa il turno */
+        collega(n, isr_tabella[n], PORTA_KERNEL);
+    collega(INT_CEDI, (unsigned int)isr129, PORTA_KERNEL);         /* cedi(): un compito passa il turno */
+    collega(INT_SISTEMA, (unsigned int)isr128, PORTA_PROGRAMMI);   /* la porta per i programmi */
 
     idtr.dimensione = sizeof idt - 1;
     idtr.indirizzo  = (unsigned int)idt;
@@ -95,6 +102,10 @@ static unsigned int eccezione(struct registri *r);
 unsigned int interruzione(struct registri *r) {
     if (r->numero < 32)
         return eccezione(r);   /* un errore della CPU */
+
+    /* un programma chiede un servizio al kernel */
+    if (r->numero == INT_SISTEMA)
+        return chiamata_di_sistema(r);
 
     /* cedi(): il compito vuole passare il turno */
     if (r->numero == INT_CEDI)

@@ -12,13 +12,34 @@
 void paginazione_prepara(void);
 
 /* Collega la pagina virtuale 'virt' alla pagina fisica 'fis' con questi permessi,
- * nelle tabelle attuali. */
+ * nella mappa del kernel. */
 void pag_mappa(unsigned int virt, unsigned int fis, unsigned int permessi);
 
-/* Dove porta l'indirizzo virtuale 'virt'? Mette in *fis l'indirizzo fisico e in
- * *permessi i bit. Restituisce 1 se la pagina c'e', 0 se no. */
+/* Dove porta l'indirizzo virtuale 'virt', nella mappa che la CPU sta usando adesso?
+ * Mette in *fis l'indirizzo fisico e in *permessi i bit. 1 se la pagina c'e', 0 se no. */
 int pag_traduci(unsigned int virt, unsigned int *fis, unsigned int *permessi);
 
 unsigned int pag_tabelle(void);   /* quante tabelle (pagine da 4 KB) usano le mappe */
+
+/* --- le mappe dei programmi --- */
+
+/* Da qui in su gli indirizzi sono dei programmi: ogni mappa ha li' le sue pagine.
+ * Sotto c'e' il kernel, uguale e condiviso in tutte le mappe. */
+#define PROGRAMMI_INIZIO 0x40000000   /* 1 GB */
+
+/* Una mappa nuova: la parte del kernel gia' dentro, quella del programma vuota.
+ * Restituisce l'indirizzo della sua directory, o 0 se la memoria e' finita. */
+unsigned int pag_nuova_mappa(void);
+
+/* Nella mappa di un programma collega 'virt' (dal 1 GB in su) alla pagina fisica 'fis'.
+ * 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' sotto il 1 GB. */
+int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis, unsigned int permessi);
+
+/* Restituisce al magazziniere tutte le pagine del programma, le sue tabelle e la
+ * directory. Non si puo' fare sulla mappa che la CPU sta usando. */
+void pag_cancella_mappa(unsigned int mappa);
+
+/* Fa usare alla CPU questa mappa (0 = quella del kernel). */
+void pag_usa_mappa(unsigned int mappa);
 
 #endif

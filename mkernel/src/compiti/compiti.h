@@ -18,7 +18,9 @@ struct compito {
     char nome[16];
     enum stato_compito stato;
     unsigned int esp;            /* dove era arrivata la sua pila quando e' stato fermato */
-    void *pila;                  /* la sua pila (0 per la shell: usa quella del kernel) */
+    void *pila;                  /* la sua pila (0 per la shell: usa quella del kernel).
+                                  * Per un programma in ring 3 e' la sua pila DEL KERNEL */
+    unsigned int mappa;          /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
     struct compito *prossimo;    /* il successivo nella fila (circolare) */
 
@@ -34,6 +36,12 @@ void compiti_prepara(void);
 
 /* Crea un compito che esegue funzione(argomento). Restituisce la sua scheda, o 0. */
 struct compito *compito_crea(const char *nome, void (*funzione)(unsigned int), unsigned int argomento);
+
+/* Crea un compito che parte in RING 3 dall'indirizzo 'inizio', che deve stare nella
+ * zona dei programmi (src/programmi). Ha una mappa sua (le sue pagine piu' il kernel,
+ * condiviso) e due pile: una pagina per il programma e una pila del kernel.
+ * Il programma deve finire con la chiamata di sistema esci. */
+struct compito *compito_crea_programma(const char *nome, void (*inizio)(void));
 
 void cedi(void);                       /* passa il turno al prossimo */
 void dormi(unsigned int millisecondi); /* non girare per almeno questo tempo */
