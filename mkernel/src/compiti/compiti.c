@@ -20,18 +20,21 @@
 #include "timer.h"
 #include "pagine.h"
 #include "paginazione.h"
+#include "mfs.h"
+#include "elf.h"
+#include "chiamate.h"
 #include "compiti.h"
 
 #define DIM_PILA 8192
 
-extern char stack_top[];   /* la cima della pila dell'avvio (kernel_head.s): e' della shell */
+extern char stack_top[];   /* la cima della pila dell'avvio (kernel_head.s): e' dell'inattivo */
 #define EFLAGS_INTERRUZIONI_ACCESE 0x202   /* bit IF acceso (+ il bit 1, sempre a 1) */
 
 static struct compito *attuale;     /* chi sta girando */
 static struct compito *primo, *ultimo;
 static struct compito *inattivo;    /* il compito che fa hlt quando nessuno ha da fare */
 static int numero_compiti;
-static int prossimo_numero = 1;
+static int prossimo_numero = 0;    /* 0 l'inattivo, 1 init: come in Linux */
 static int acceso;                  /* lo scheduler parte solo dopo compiti_prepara */
 
 static void copia_nome(char *dest, const char *src) {
@@ -58,13 +61,6 @@ static void fine_compito(void) {
     /* non si puo' liberare la propria pila mentre ci si sta sopra:
      * lo fara' lo scheduler, quando staremo girando su un'altra */
     for (;;) cedi();
-}
-
-/* --- il compito inattivo --- */
-
-static void ciclo_inattivo(unsigned int argomento) {
-    (void)argomento;
-    for (;;) __asm__ volatile("hlt");   /* dorme fino alla prossima interruzione */
 }
 
 /* --- creare un compito --- */
@@ -107,61 +103,114 @@ struct compito *compito_crea(const char *nome, void (*funzione)(unsigned int), u
     return c;
 }
 
-/* --- creare un programma in ring 3 --- */
+/* --- creare un programma in ring 3, da un file ELF sul disco --- */
 
-/* Dal linker script: la zona dei programmi. Gli indirizzi "inizio/fine" sono quelli
- * VIRTUALI (1 GB in su), utente_carica e' dove sta in RAM la copia originale. */
-extern char utente_carica[], utente_codice_inizio[], utente_dati_inizio[],
-            utente_bss_inizio[], utente_fine[];
+#define MAX_PROGRAMMA (140 * 512)   /* il file piu' grande che mfs sa tenere (70 KB) */
 
-#define PILA_PROGRAMMA_CIMA 0x80000000u   /* la pila del programma: l'ultima pagina sotto i 2 GB */
+/* Legge il file ELF 'percorso' dal disco e mette i suoi pezzi nella mappa, ognuno in
+ * pagine nuove al suo indirizzo virtuale. Restituisce l'indirizzo da cui il programma
+ * parte, oppure 0 e in *errore il perche'.
+ *
+ * NON SI CREDE AL FILE: lo ha scritto chiunque. Ogni numero che contiene (dove sta un
+ * pezzo, quanto e' grande, a che indirizzo va) si controlla prima di usarlo: un pezzo
+ * fuori dal file, o fuori dalla zona dei programmi, e il file viene rifiutato. */
+static unsigned int carica_elf(unsigned int mappa, const char *percorso, const char **errore) {
+    unsigned int inizio = 0;
+    unsigned char *file = kmalloc(MAX_PROGRAMMA);
+    if (!file) { *errore = "memoria finita"; return 0; }
 
-/* Copia la zona dei programmi in pagine nuove e le mette nella mappa al loro indirizzo
- * virtuale: codice e costanti in sola lettura, variabili in lettura e scrittura,
- * le variabili a zero (bss) azzerate. */
-static int carica_programmi(unsigned int mappa) {
-    unsigned int inizio = (unsigned int)utente_codice_inizio;
-    unsigned int dati = (unsigned int)utente_dati_inizio;
-    unsigned int bss = (unsigned int)utente_bss_inizio, fine = (unsigned int)utente_fine;
+    int byte = mfs_leggi(percorso, 0, file, MAX_PROGRAMMA);
+    if (byte < 0) { *errore = mfs_messaggio(byte); goto fine; }
 
-    for (unsigned int v = inizio; v < fine; v += PAGINA) {
-        unsigned int pagina = pagina_chiedi();
-        if (!pagina) return 0;
-        memcpy((void *)pagina, utente_carica + (v - inizio), PAGINA);
-        if (v + PAGINA > bss) {                          /* questa pagina ha variabili a zero */
-            unsigned int da = v > bss ? v : bss;
-            memset((void *)(pagina + (da - v)), 0, v + PAGINA - da);
+    /* 1. l'intestazione: e' davvero un eseguibile ELF a 32 bit per questa CPU? */
+    struct elf_intestazione *e = (struct elf_intestazione *)file;
+    *errore = "non e' un eseguibile ELF a 32 bit per x86";
+    if ((unsigned int)byte < sizeof *e || memcmp(e->magico, "\x7F" "ELF", 4) || e->classe != 1 ||
+        e->tipo != ELF_ESEGUIBILE || e->macchina != ELF_386 ||
+        e->dim_pezzo != sizeof(struct elf_pezzo) ||
+        e->tabella_pezzi + e->numero_pezzi * sizeof(struct elf_pezzo) > (unsigned int)byte)
+        goto fine;
+
+    /* 2. i pezzi da caricare, in ordine di indirizzo, ognuno a pagina nuova */
+    struct elf_pezzo *pezzi = (struct elf_pezzo *)(file + e->tabella_pezzi);
+    unsigned int fine_precedente = PROGRAMMI_INIZIO;
+    for (int i = 0; i < e->numero_pezzi; i++) {
+        struct elf_pezzo *p = &pezzi[i];
+        if (p->tipo != PT_LOAD) continue;
+        unsigned int fine_pezzo = p->virtuale + p->byte_memoria;
+
+        *errore = "un pezzo del file e' fuori posto";
+        if (p->virtuale % PAGINA || p->virtuale < fine_precedente ||
+            fine_pezzo < p->virtuale || fine_pezzo > PILA_PROGRAMMA_CIMA - PAGINA ||
+            p->byte_file > p->byte_memoria || p->nel_file + p->byte_file > (unsigned int)byte ||
+            p->nel_file + p->byte_file < p->nel_file)
+            goto fine;
+
+        unsigned int permessi = PAG_UTENTE | (p->permessi & PF_W ? PAG_SCRITTURA : 0);
+        for (unsigned int v = p->virtuale; v < fine_pezzo; v += PAGINA) {
+            unsigned int pagina = pagina_chiedi();
+            if (!pagina) { *errore = "memoria finita"; goto fine; }
+            memset((void *)pagina, 0, PAGINA);   /* cio' che non sta nel file resta a zero */
+            unsigned int dentro = v - p->virtuale;
+            if (dentro < p->byte_file) {
+                unsigned int n = p->byte_file - dentro < PAGINA ? p->byte_file - dentro : PAGINA;
+                memcpy((void *)pagina, file + p->nel_file + dentro, n);
+            }
+            if (!pag_mappa_programma(mappa, v, pagina, permessi)) {
+                pagina_restituisci(pagina);
+                *errore = "memoria finita";
+                goto fine;
+            }
         }
-        unsigned int permessi = v < dati ? PAG_UTENTE : PAG_UTENTE | PAG_SCRITTURA;
-        if (!pag_mappa_programma(mappa, v, pagina, permessi)) { pagina_restituisci(pagina); return 0; }
+        fine_precedente = (fine_pezzo + PAGINA - 1) & ~(PAGINA - 1);
     }
-    return 1;
+
+    /* 3. da dove parte: deve stare dentro quello che si e' appena caricato */
+    *errore = "l'indirizzo di partenza e' fuori dal programma";
+    if (e->inizio < PROGRAMMI_INIZIO || e->inizio >= fine_precedente) goto fine;
+    inizio = e->inizio;
+    *errore = 0;
+
+fine:
+    kfree(file);
+    return inizio;
 }
 
-struct compito *compito_crea_programma(const char *nome, void (*inizio)(void)) {
+/* Il nome di un compito: l'ultimo pezzo del percorso ("/init" -> "init"). */
+static const char *nome_da_percorso(const char *percorso) {
+    const char *nome = percorso;
+    for (const char *c = percorso; *c; c++)
+        if (*c == '/') nome = c + 1;
+    return nome;
+}
+
+struct compito *compito_crea_programma(const char *percorso, const char **errore) {
     struct compito *c = kmalloc(sizeof *c);
     unsigned char *pila = kmalloc(DIM_PILA);    /* la pila del kernel per questo programma */
     unsigned int mappa = pag_nuova_mappa();      /* la sua mappa: il kernel gia' dentro */
     unsigned int pila_programma = 0;
-    if (!c || !pila || !mappa) goto memoria_finita;
+    *errore = "memoria finita";
+    if (!c || !pila || !mappa) goto non_va;
 
-    /* 1. le sue pagine: codice e variabili, copiate dalla copia originale */
-    if (!carica_programmi(mappa)) goto memoria_finita;
+    /* 1. le sue pagine: i pezzi del file ELF, ognuno al suo indirizzo virtuale */
+    unsigned int inizio = carica_elf(mappa, percorso, errore);
+    if (!inizio) goto non_va;
 
     /* 2. la sua pila: una pagina nuova, nella sua mappa appena sotto i 2 GB.
-     *    In cima un indirizzo di ritorno 0: se la funzione del programma facesse return
-     *    invece di esci, salterebbe a 0 -> page fault, e il kernel chiuderebbe il compito.
+     *    In cima un indirizzo di ritorno 0: se il programma tornasse da _start invece di
+     *    chiamare esci, salterebbe a 0 -> page fault, e il kernel chiuderebbe il compito.
      *    (La pagina si scrive dal suo indirizzo fisico: nella mappa del kernel, che e'
      *    quella che stiamo usando, il suo indirizzo virtuale non esiste.) */
+    *errore = "memoria finita";
     pila_programma = pagina_chiedi();
-    if (!pila_programma) goto memoria_finita;
-    ((unsigned int *)(pila_programma + PAGINA))[-1] = 0;
+    if (!pila_programma) goto non_va;
+    memset((void *)pila_programma, 0, PAGINA);
     if (!pag_mappa_programma(mappa, PILA_PROGRAMMA_CIMA - PAGINA, pila_programma,
-                             PAG_UTENTE | PAG_SCRITTURA)) goto memoria_finita;
+                             PAG_UTENTE | PAG_SCRITTURA)) goto non_va;
     pila_programma = 0;   /* ora e' della mappa: la restituira' pag_cancella_mappa */
 
     memset(c, 0, sizeof *c);
-    copia_nome(c->nome, nome);
+    copia_nome(c->nome, nome_da_percorso(percorso));
     c->pila = pila;
     c->mappa = mappa;
 
@@ -183,7 +232,7 @@ struct compito *compito_crea_programma(const char *nome, void (*inizio)(void)) {
     struct registri *r = (struct registri *)((unsigned char *)&cima[-2] - sizeof(struct registri));
     memset(r, 0, sizeof *r);
     r->ds = SEL_UTENTE_DATI;
-    r->eip = (unsigned int)inizio;
+    r->eip = inizio;
     r->cs = SEL_UTENTE_CODICE;
     r->eflags = EFLAGS_INTERRUZIONI_ACCESE;   /* il timer deve poterlo fermare */
     c->esp = (unsigned int)r;
@@ -193,9 +242,10 @@ struct compito *compito_crea_programma(const char *nome, void (*inizio)(void)) {
     c->stato = PRONTO;
     in_fila(c);
     interruzioni_ripristina(s);
+    *errore = 0;
     return c;
 
-memoria_finita:
+non_va:
     if (pila_programma) pagina_restituisci(pila_programma);
     if (mappa) pag_cancella_mappa(mappa);
     kfree(pila);
@@ -205,21 +255,21 @@ memoria_finita:
 
 void compiti_prepara(void) {
     /* Il codice che sta girando adesso (kernel_main, sulla pila di kernel_head.s)
-     * diventa il compito 1. Non serve una pila finta: e' gia' in esecuzione, e il
-     * suo ESP verra' salvato al primo tick come per tutti. */
-    struct compito *shell = kmalloc(sizeof *shell);
-    memset(shell, 0, sizeof *shell);
-    copia_nome(shell->nome, "shell");
-    shell->stato = IN_ESECUZIONE;
+     * diventa il compito 0, l'INATTIVO. Come in Linux: finito l'avvio il kernel non ha
+     * altro da fare, e resta li' a fermare la CPU (hlt) quando nessuno ha lavoro.
+     * Non serve una pila finta: e' gia' in esecuzione, e il suo ESP verra' salvato al
+     * primo tick come per tutti. */
+    struct compito *c = kmalloc(sizeof *c);
+    memset(c, 0, sizeof *c);
+    copia_nome(c->nome, "inattivo");
+    c->stato = IN_ESECUZIONE;
 
     unsigned int s = interruzioni_spegni();
-    shell->numero = prossimo_numero++;
-    in_fila(shell);
-    attuale = shell;
-    interruzioni_ripristina(s);
-
-    inattivo = compito_crea("inattivo", ciclo_inattivo, 0);
+    c->numero = prossimo_numero++;
+    in_fila(c);
+    attuale = inattivo = c;
     acceso = 1;
+    interruzioni_ripristina(s);
 }
 
 /* --- lo scheduler: gira dentro l'interruzione, a interruzioni spente --- */
@@ -263,7 +313,7 @@ unsigned int scheduler(unsigned int esp) {
     /* 4. la TSS: se mentre gira il compito scelto arrivasse un'interruzione dal
      *    ring 3, la CPU salverebbe i registri sulla cima della SUA pila del kernel.
      *    Per i compiti del kernel (ring 0) la CPU non la legge, ma la si aggiorna lo
-     *    stesso. La shell usa la pila dell'avvio (kernel_head.s). */
+     *    stesso. L'inattivo usa la pila dell'avvio (kernel_head.s). */
     tss_pila_kernel(scelto->pila ? (unsigned int)scelto->pila + DIM_PILA
                                  : (unsigned int)stack_top);
 
@@ -307,37 +357,3 @@ void compito_sveglia(struct compito *c) {
 }
 
 struct compito *compito_attuale(void) { return attuale; }
-
-int compito_ferma(int numero) {
-    int risultato = -1;
-    unsigned int s = interruzioni_spegni();
-    struct compito *c = primo;
-    for (int i = 0; i < numero_compiti; i++, c = c->prossimo) {
-        if (c->numero != numero) continue;
-        /* la shell, l'inattivo e chi sta girando non si fermano */
-        if (c == attuale || c == inattivo || !c->pila) break;
-        /* chi tiene un lucchetto lascerebbe la risorsa a meta' e il lucchetto preso
-         * per sempre; chi e' in fila lascerebbe nella fila una scheda liberata */
-        if (c->lucchetti || c->aspetta) { risultato = -2; break; }
-        c->stato = FINITO;         /* lo scheduler liberera' scheda e pila */
-        risultato = 0;
-        break;
-    }
-    interruzioni_ripristina(s);
-    return risultato;
-}
-
-void compiti_elenca(void) {
-    static const char *nomi_stato[] = { "pronto", "in esecuzione", "dorme", "attesa", "finito" };
-    kprintf("  N.  nome          stato\n");
-    unsigned int s = interruzioni_spegni();
-    struct compito *c = primo;
-    for (int i = 0; i < numero_compiti; i++, c = c->prossimo) {
-        kprintf("  %2d  %s", c->numero, c->nome);
-        int l = 0;
-        while (c->nome[l]) l++;
-        for (; l < 14; l++) kprintf(" ");
-        kprintf("%s\n", nomi_stato[c->stato]);
-    }
-    interruzioni_ripristina(s);
-}

@@ -43,7 +43,7 @@ unsigned char console_colore(unsigned char c) {
     return vecchio;
 }
 
-void console_pulisci(void) {
+static void console_pulisci(void) {
     unsigned int s = interruzioni_spegni();
     for (int i = PRIMA_RIGA * COLONNE; i < COLONNE * RIGHE; i++)
         schermo[i] = casella(' ');
@@ -63,21 +63,6 @@ void console_stato(int col, unsigned char primo_piano, const char *testo) {
     unsigned int s = interruzioni_spegni();
     for (; *testo && col < COLONNE; col++, testo++)
         schermo[col] = casella_colore(*testo, COLORE_BARRA(primo_piano));
-    interruzioni_ripristina(s);
-}
-
-void console_dove(int *r, int *c) {
-    unsigned int s = interruzioni_spegni();
-    *r = riga;
-    *c = colonna;
-    interruzioni_ripristina(s);
-}
-
-void console_vai(int r, int c) {
-    unsigned int s = interruzioni_spegni();
-    riga = r < PRIMA_RIGA ? PRIMA_RIGA : r;
-    colonna = c;
-    sposta_cursore();
     interruzioni_ripristina(s);
 }
 
@@ -114,13 +99,6 @@ static void metti(char c) {
 void console_putc(char c) {
     unsigned int s = interruzioni_spegni();
     metti(c);
-    sposta_cursore();
-    interruzioni_ripristina(s);
-}
-
-void console_scrivi(const char *str) {
-    unsigned int s = interruzioni_spegni();
-    while (*str) metti(*str++);
     sposta_cursore();
     interruzioni_ripristina(s);
 }

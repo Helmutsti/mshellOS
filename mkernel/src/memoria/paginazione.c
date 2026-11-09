@@ -85,7 +85,8 @@ static int mappa_in(unsigned int *dir, unsigned int virt, unsigned int fis, unsi
     return 1;
 }
 
-void pag_mappa(unsigned int virt, unsigned int fis, unsigned int permessi) {
+/* Nella mappa del kernel. */
+static void pag_mappa(unsigned int virt, unsigned int fis, unsigned int permessi) {
     if (!mappa_in(kernel, virt, fis, permessi))
         panico("paginazione: memoria finita per le tabelle");
 }

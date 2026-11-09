@@ -1,16 +1,10 @@
-# Compila il kernel con Docker e lo avvia in QEMU (Windows).
-# Il disco del kernel e' disco.img (16 MB): se manca viene creato vuoto.
+# Compila il kernel, i programmi e il disco con Docker e li avvia in QEMU (Windows).
+# Il disco e' build\disco.img: build.sh lo rifa' a ogni compilazione, con dentro /init.
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 
 docker run --rm -v "${qui}:/w" alpine:3.24 sh /w/build.sh
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$disco = "$qui\disco.img"
-if (-not (Test-Path $disco)) {
-    $f = [IO.File]::Create($disco); $f.SetLength(16MB); $f.Close()
-    Write-Host "disco.img creato (16 MB, tutto a zero)"
-}
-
 & "C:\Program Files\qemu\qemu-system-i386.exe" -kernel "$qui\build\kernel" `
-    -drive "file=$disco,format=raw,if=ide,index=0"
+    -drive "file=$qui\build\disco.img,format=raw,if=ide,index=0"

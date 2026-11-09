@@ -150,7 +150,7 @@ static unsigned int eccezione(struct registri *r) {
     kprintf("  reg. : EAX=%08x EBX=%08x ECX=%08x EDX=%08x\n", r->eax, r->ebx, r->ecx, r->edx);
     kprintf("         ESI=%08x EDI=%08x EBP=%08x\n", r->esi, r->edi, r->ebp);
 
-    /* Se ha sbagliato un compito con una pila sua (non la shell, non il kernel prima
+    /* Se ha sbagliato un compito con una pila sua (non l'inattivo, non il kernel prima
      * dello scheduler), si chiude SOLO LUI e il sistema continua: lo scheduler passa
      * a un altro compito e liberera' questo. E' quello che fanno i sistemi veri con
      * un programma che sbaglia ("Segmentation fault"). */
@@ -165,6 +165,6 @@ static unsigned int eccezione(struct registri *r) {
         return scheduler((unsigned int)r);
     }
 
-    /* Ha sbagliato il kernel stesso (o la shell): non c'e' nessuno a cui tornare. */
+    /* Ha sbagliato il kernel stesso (o l'inattivo): non c'e' nessuno a cui tornare. */
     panico("sistema fermato dopo l'eccezione %u", r->numero);
 }

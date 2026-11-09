@@ -18,7 +18,7 @@ void gdt_prepara(void);
  * interruzione che arriva mentre gira codice in ring 3. */
 void tss_pila_kernel(unsigned int cima);
 
-/* Stampa dove sta la GDT e i registri di segmento; con dettagli=1 anche le righe. */
-void gdt_mostra(int dettagli);
+/* Stampa dove sta la GDT, quante righe ha e i registri di segmento (e quello della TSS). */
+void gdt_mostra(void);
 
 #endif

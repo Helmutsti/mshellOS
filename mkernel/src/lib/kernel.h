@@ -8,12 +8,8 @@
  * La riga 0 dello schermo e' la BARRA DI STATO (orologio, contatori): non scorre.
  * Il testo normale usa le righe 1-24. */
 void console_prepara(void);                           /* pulisce tutto, barra compresa */
-void console_pulisci(void);                           /* pulisce il testo, non la barra */
 unsigned char console_colore(unsigned char colore);   /* 0xSF: S sfondo, F primo piano. Restituisce il vecchio */
 void console_putc(char c);
-void console_scrivi(const char *s);
-void console_dove(int *riga, int *colonna);           /* dove si trova il cursore */
-void console_vai(int riga, int colonna);              /* sposta il cursore */
 void console_stato(int colonna, unsigned char colore, const char *testo);  /* scrive nella barra */
 
 /* kprintf.c */

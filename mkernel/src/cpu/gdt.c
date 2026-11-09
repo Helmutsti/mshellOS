@@ -134,15 +134,7 @@ void gdt_prepara(void) {
 
 /* --- per vedere cosa abbiamo fatto --- */
 
-static const char *descrivi(unsigned char accesso) {
-    if (!(accesso & PRESENTE)) return "vuota";
-    if (!(accesso & CODICE_DATI)) return "TSS";
-    int ring = (accesso >> 5) & 3;
-    if (accesso & ESEGUIBILE) return ring ? "codice programmi" : "codice kernel";
-    return ring ? "dati programmi" : "dati kernel";
-}
-
-void gdt_mostra(int dettagli) {
+void gdt_mostra(void) {
     struct registro_gdt letto;
     unsigned short cs, ds, ss, tr;
     __asm__ volatile("sgdt %0" : "=m"(letto));   /* chiede alla CPU: dov'e' la GDT adesso? */
@@ -151,25 +143,7 @@ void gdt_mostra(int dettagli) {
     __asm__ volatile("mov %%ds, %0" : "=r"(ds));
     __asm__ volatile("mov %%ss, %0" : "=r"(ss));
 
-    if (!dettagli) {
-        kprintf("GDT     : %s a %p, %u righe, CS=%02x DS=%02x SS=%02x\n",
-                letto.indirizzo == (unsigned int)gdt ? "la nostra" : "NON la nostra",
-                (void *)letto.indirizzo, (letto.dimensione + 1) / 8, cs, ds, ss);
-        return;
-    }
-
-    kprintf("La CPU usa la GDT a %p, %u righe  (la nostra e' a %p)\n",
-            (void *)letto.indirizzo, (letto.dimensione + 1) / 8, (void *)gdt);
-    for (int i = 0; i < RIGHE; i++) {
-        unsigned int base   = gdt[i].base_bassa | (gdt[i].base_media << 16) | (gdt[i].base_alta << 24);
-        unsigned int limite = gdt[i].limite_basso | ((gdt[i].limite_flag & 0x0F) << 16);
-        unsigned int in_pagine = gdt[i].limite_flag & 0x80;   /* il flag G */
-        unsigned int fine   = !gdt[i].accesso ? 0
-                            : in_pagine ? base + limite * 4096 + 4095 : base + limite;
-        kprintf("  riga %d  sel %02x  %08x-%08x  ring %d  %s\n",
-                i, i * 8 | ((gdt[i].accesso >> 5) & 3), base, fine,
-                (gdt[i].accesso >> 5) & 3, descrivi(gdt[i].accesso));
-    }
-    kprintf("Registri: CS=%02x DS=%02x SS=%02x TR=%02x\n", cs, ds, ss, tr);
-    kprintf("TSS     : pila del kernel per il ring 3 = %08x\n", tss.esp0);
+    kprintf("GDT     : %s a %p, %u righe, CS=%02x DS=%02x SS=%02x TR=%02x\n",
+            letto.indirizzo == (unsigned int)gdt ? "la nostra" : "NON la nostra",
+            (void *)letto.indirizzo, (letto.dimensione + 1) / 8, cs, ds, ss, tr);
 }

@@ -563,7 +563,7 @@ static int spazio_dentro(unsigned int *schede_libere, unsigned int *settori_libe
 const char *mfs_messaggio(int errore) {
     switch (errore) {
     case MFS_ERR_DISCO:          return "errore del disco";
-    case MFS_ERR_NON_FORMATTATO: return "il disco non ha mfs (usa formatta)";
+    case MFS_ERR_NON_FORMATTATO: return "il disco non ha mfs";
     case MFS_ERR_NOME:           return "percorso non valido (deve iniziare con /, nomi fino a 27 lettere)";
     case MFS_ERR_NON_TROVATO:    return "non esiste";
     case MFS_ERR_ESISTE:         return "esiste gia'";
@@ -580,16 +580,12 @@ const char *mfs_messaggio(int errore) {
 /* ======================= le operazioni pubbliche, col lucchetto ======================= */
 
 static struct lucchetto lucchetto_mfs = LUCCHETTO("mfs");
-static int usa_lucchetto = 1;   /* solo per la prova di "lucchetto no": sempre 1 */
-
-void mfs_lucchetto(int acceso) { usa_lucchetto = acceso; }
 
 /* Prende il lucchetto, esegue l'operazione, lo lascia, restituisce il risultato. */
 #define CON_LUCCHETTO(operazione) do {                          \
-        int preso = usa_lucchetto;                              \
-        if (preso) lucchetto_prendi(&lucchetto_mfs);            \
+        lucchetto_prendi(&lucchetto_mfs);                       \
         int r = (operazione);                                   \
-        if (preso) lucchetto_lascia(&lucchetto_mfs);            \
+        lucchetto_lascia(&lucchetto_mfs);                       \
         return r;                                               \
     } while (0)
 

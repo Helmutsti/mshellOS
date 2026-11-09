@@ -1,4 +1,6 @@
-/* Il kernel: prepara tutto, nell'ordine giusto, e poi diventa il compito "shell". */
+/* Il kernel: prepara tutto, nell'ordine giusto, lancia il primo programma (/init, in
+ * ring 3, letto dal disco) e poi diventa il compito "inattivo". Da li' in poi il kernel
+ * lavora solo quando qualcuno lo chiama: un'interruzione o una chiamata di sistema. */
 #include "kernel.h"
 #include "multiboot.h"
 #include "gdt.h"
@@ -11,7 +13,6 @@
 #include "paginazione.h"
 #include "disco.h"
 #include "mfs.h"
-#include "shell.h"
 #include "compiti.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
@@ -129,7 +130,7 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     /* La GDT per prima: quella del bootloader potrebbe stare in memoria che
      * il magazziniere sta per considerare libera. */
     gdt_prepara();
-    gdt_mostra(0);
+    gdt_mostra();
 
     /* La IDT subito dopo: le sue righe usano il segmento di codice della GDT. */
     idt_prepara();
@@ -174,19 +175,26 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
         kprintf("Disco   : nessuno\n");
 
     /* Il file system: si legge il superblocco e si controlla il numero magico. */
-    if (c_e_il_disco)
-        kprintf("mfs     : %s\n", mfs_monta() ? "montato" : "disco non formattato (usa formatta)");
+    if (!c_e_il_disco) panico("nessun disco: non posso leggere /init");
+    if (!mfs_monta()) panico("il disco non ha mfs: non posso leggere /init");
+    kprintf("mfs     : montato\n");
 
-    /* Lo scheduler: da qui in poi questo codice e' il compito "shell", e altri compiti
-     * si alternano con lui a ogni tick. Il primo e' l'orologio nella barra di stato. */
+    /* Lo scheduler: da qui in poi questo codice e' il compito 0, "inattivo", e gli altri
+     * compiti si alternano a ogni tick. */
     compiti_prepara();
+
+    /* IL PRIMO PROGRAMMA. Come in Linux, il kernel lancia un solo programma, /init, e
+     * sara' lui a far nascere tutto il resto. Senza init non c'e' sistema: panico. */
+    const char *errore;
+    struct compito *init = compito_crea_programma("/init", &errore);
+    if (!init) panico("non posso avviare /init: %s", errore);
+
+    /* L'orologio nella barra di stato: un compito del kernel (ring 0). */
     compito_crea("orologio", orologio, 0);
-    kprintf("Compiti : scheduler acceso (shell, inattivo, orologio)\n");
+    kprintf("Compiti : scheduler acceso (inattivo, init, orologio)\n\n");
 
-    shell_avvia(c_e_il_disco);
-
-    /* Il compito shell: aspetta un tasto (dormendo, senza consumare CPU) e lo passa
-     * alla shell. Per sempre. */
+    /* Il compito inattivo: ferma la CPU fino alla prossima interruzione. Lo scheduler
+     * torna qui solo quando nessun altro ha niente da fare. */
     for (;;)
-        shell_tasto(tastiera_aspetta());
+        __asm__ volatile("hlt");
 }

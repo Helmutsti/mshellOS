@@ -1,9 +1,9 @@
 /* La libreria dei programmi in ring 3.
  *
- * Un programma non puo' chiamare le funzioni del kernel: stanno in pagine senza il
- * bit utente, e saltarci farebbe page fault. Tutto quello che gli serve deve stare
- * nella zona dei programmi: queste funzioni sono "static inline", quindi il
- * compilatore le copia dentro il programma stesso.
+ * Un programma non puo' chiamare le funzioni del kernel: nella sua mappa il kernel
+ * c'e', ma in pagine senza il bit utente, e saltarci farebbe page fault. Tutto quello
+ * che gli serve deve stare nel programma stesso: queste funzioni sono "static inline",
+ * quindi il compilatore le copia dentro ogni programma.
  *
  * Ognuna bussa alla porta (int 0x80): numero del servizio in EAX, argomenti in EBX
  * ed ECX, risposta in EAX. */

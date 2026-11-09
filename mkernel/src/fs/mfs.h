@@ -48,8 +48,4 @@ int mfs_spazio(unsigned int *schede_libere, unsigned int *settori_liberi);
 /* Il messaggio per un codice di errore. */
 const char *mfs_messaggio(int errore);
 
-/* SOLO PER PROVA: 0 spegne il lucchetto di mfs, per vedere cosa succede senza.
- * Senza lucchetto, due compiti che usano mfs insieme possono rovinare il disco. */
-void mfs_lucchetto(int acceso);
-
 #endif
