@@ -4,8 +4,16 @@
 
 #include <stdarg.h>
 
+/* Lo schermo a pixel, come ce lo descrive GRUB. */
+struct schermo {
+    unsigned int indirizzo;                /* dove sta la memoria dello schermo */
+    unsigned int passo;                    /* byte da una riga di pixel alla successiva */
+    unsigned int larghezza, altezza, bpp;  /* pixel, pixel, bit per pixel */
+    unsigned int rosso, verde, blu;        /* dove sta ogni colore dentro il pixel (bit) */
+};
+
 /* console.c */
-void console_prepara(void);                           /* pulisce lo schermo, cursore in alto */
+int console_prepara(const struct schermo *s);         /* pulisce, cursore in alto. 0 se non sa usarlo */
 unsigned char console_colore(unsigned char colore);   /* 0xSF: S sfondo, F primo piano. Restituisce il vecchio */
 void console_putc(char c);
 

@@ -1,8 +1,16 @@
-/* La console: scrive caratteri sullo schermo in modalita' testo.
- * Lo schermo e' una zona di memoria a 0xB8000: 80x25 caselle da 2 byte,
- * il primo e' il carattere, il secondo il colore.
+/* La console: scrive testo sullo schermo in MODALITA' PIXEL, come la console grafica
+ * di Linux (fbcon).
  *
- * Tutte le 25 righe sono del testo: quando si arriva in fondo, scorre in su.
+ * Lo schermo e' una zona di memoria (il framebuffer) con un numero per ogni pixel:
+ * 4 byte, cioe' rosso, verde, blu e un byte vuoto. GRUB ha acceso la modalita' pixel
+ * e ci ha detto dove sta, quanto e' grande e in che ordine stanno i colori.
+ * La scheda non sa piu' disegnare le lettere: lo facciamo noi, con il font 8x16
+ * (font.c). Ogni carattere e' una CASELLA di 8x16 pixel: a 800x600 sono 100 colonne
+ * per 37 righe. Ci teniamo in memoria cosa c'e' in ogni casella (carattere e colore),
+ * cosi' possiamo ridisegnarla, per esempio per togliere il cursore.
+ *
+ * Il CURSORE non lo disegna piu' la scheda: e' una linea sotto la casella dove si
+ * scrivera' il prossimo carattere, e la disegniamo noi.
  *
  * I CODICI DEI TERMINALI. Come i terminali di Linux, la console riconosce alcune
  * sequenze speciali dentro il testo: iniziano con ESC (il carattere 27) e '[', poi
@@ -18,26 +26,102 @@
  * CONDIVISI, quindi ogni funzione pubblica e' una sezione critica (interruzioni
  * spente): nessun tick puo' fermarla a meta'. */
 #include "kernel.h"
-#include "io.h"
+#include "font.h"
 
-#define COLONNE 80
-#define RIGHE   25
+#define MAX_COLONNE 256
+#define MAX_RIGHE   128
 
-static volatile unsigned short *const schermo = (unsigned short *)0xB8000;
+static unsigned char *memoria;            /* il framebuffer */
+static unsigned int passo;                /* byte da una riga di pixel alla successiva */
+static int colonne, righe;                /* quante caselle di testo ci stanno */
+static unsigned int tavolozza[16];        /* i 16 colori, gia' nel formato dello schermo */
+
+static unsigned short caselle[MAX_COLONNE * MAX_RIGHE];   /* carattere | colore << 8 */
 static int riga = 0, colonna = 0;
 static unsigned char colore = (NERO << 4) | GRIGIO;
 
-/* Una casella dello schermo: il carattere nel byte basso, il colore in quello alto. */
-static unsigned short casella(char c) {
-    return (unsigned short)(unsigned char)c | ((unsigned short)colore << 8);
+/* I 16 colori della vecchia modalita' testo (NERO, BLU, ... in kernel.h), in RGB. */
+static const unsigned int colori_rgb[16] = {
+    0x000000, 0x0000AA, 0x00AA00, 0x00AAAA, 0xAA0000, 0xAA00AA, 0xAA5500, 0xAAAAAA,
+    0x555555, 0x5555FF, 0x55FF55, 0x55FFFF, 0xFF5555, 0xFF55FF, 0xFFFF55, 0xFFFFFF,
+};
+
+/* --- disegnare --- */
+
+/* Ridisegna la casella (r, c) da quello che ricordiamo. Con cursore=1 aggiunge la
+ * linea del cursore nelle ultime due righe di pixel. */
+static void disegna(int r, int c, int cursore) {
+    unsigned short casella = caselle[r * colonne + c];
+    const unsigned char *lettera = font_8x16[casella & 0xFF];
+    unsigned int davanti = tavolozza[(casella >> 8) & 0x0F];
+    unsigned int dietro  = tavolozza[(casella >> 12) & 0x0F];
+
+    for (int y = 0; y < FONT_ALTEZZA; y++) {
+        unsigned int *pixel = (unsigned int *)(memoria + (r * FONT_ALTEZZA + y) * passo)
+                              + c * FONT_LARGHEZZA;
+        unsigned char bit = lettera[y];
+        if (cursore && y >= FONT_ALTEZZA - 2) bit = 0xFF;
+        for (int x = 0; x < FONT_LARGHEZZA; x++)
+            pixel[x] = (bit & (0x80 >> x)) ? davanti : dietro;
+    }
 }
 
-/* Il cursore lampeggiante non e' in memoria: e' della scheda video, e lo si sposta
- * dalle sue porte. 0x3D4 sceglie quale registro della scheda, 0x3D5 ci scrive. */
-static void sposta_cursore(void) {
-    unsigned short pos = riga * COLONNE + colonna;
-    outb(0x3D4, 0x0F); outb(0x3D5, pos & 0xFF);   /* parte bassa della posizione */
-    outb(0x3D4, 0x0E); outb(0x3D5, pos >> 8);     /* parte alta */
+static void metti_casella(int r, int c, char ch) {
+    caselle[r * colonne + c] = (unsigned char)ch | ((unsigned short)colore << 8);
+    disegna(r, c, 0);
+}
+
+/* Il cursore si toglie prima di cambiare qualcosa e si rimette alla fine. */
+static void togli_cursore(void)   { disegna(riga, colonna, 0); }
+static void mostra_cursore(void)  { disegna(riga, colonna, 1); }
+
+/* Svuota lo schermo. Il cursore resta dov'e'. */
+static void svuota_testo(void) {
+    for (int r = 0; r < righe; r++)
+        for (int c = 0; c < colonne; c++)
+            metti_casella(r, c, ' ');
+}
+
+/* Le righe salgono di uno, l'ultima si svuota. Si spostano insieme i pixel (una sola
+ * copia di memoria) e le caselle ricordate. */
+static void scorri(void) {
+    unsigned int byte_riga = passo * FONT_ALTEZZA;
+    memmove(memoria, memoria + byte_riga, byte_riga * (righe - 1));
+    memmove(caselle, caselle + colonne, sizeof caselle[0] * colonne * (righe - 1));
+    for (int c = 0; c < colonne; c++) metti_casella(righe - 1, c, ' ');
+    riga = righe - 1;
+}
+
+static void a_capo(void) {
+    colonna = 0;
+    if (++riga == righe) scorri();
+}
+
+/* --- preparare --- */
+
+int console_prepara(const struct schermo *s) {
+    if (s->bpp != 32) return 0;   /* sappiamo disegnare solo pixel da 4 byte */
+    memoria = (unsigned char *)s->indirizzo;
+    passo = s->passo;
+    colonne = s->larghezza / FONT_LARGHEZZA;
+    righe = s->altezza / FONT_ALTEZZA;
+    if (colonne > MAX_COLONNE) colonne = MAX_COLONNE;
+    if (righe > MAX_RIGHE) righe = MAX_RIGHE;
+
+    /* i colori nell'ordine che vuole lo schermo: ogni componente al suo posto */
+    for (int i = 0; i < 16; i++) {
+        unsigned int rgb = colori_rgb[i];
+        tavolozza[i] = ((rgb >> 16) & 0xFF) << s->rosso
+                     | ((rgb >> 8) & 0xFF) << s->verde
+                     | (rgb & 0xFF) << s->blu;
+    }
+
+    unsigned int st = interruzioni_spegni();
+    svuota_testo();
+    riga = colonna = 0;
+    mostra_cursore();
+    interruzioni_ripristina(st);
+    return 1;
 }
 
 unsigned char console_colore(unsigned char c) {
@@ -46,35 +130,6 @@ unsigned char console_colore(unsigned char c) {
     colore = c;
     interruzioni_ripristina(s);
     return vecchio;
-}
-
-/* Svuota lo schermo. Il cursore resta dov'e'. */
-static void svuota_testo(void) {
-    for (int i = 0; i < COLONNE * RIGHE; i++)
-        schermo[i] = casella(' ');
-}
-
-void console_prepara(void) {
-    unsigned int s = interruzioni_spegni();
-    svuota_testo();
-    riga = 0;
-    colonna = 0;
-    sposta_cursore();
-    interruzioni_ripristina(s);
-}
-
-/* Le righe salgono di uno, l'ultima si svuota. */
-static void scorri(void) {
-    for (int i = 0; i < COLONNE * (RIGHE - 1); i++)
-        schermo[i] = schermo[i + COLONNE];
-    for (int i = 0; i < COLONNE; i++)
-        schermo[COLONNE * (RIGHE - 1) + i] = casella(' ');
-    riga = RIGHE - 1;
-}
-
-static void a_capo(void) {
-    colonna = 0;
-    if (++riga == RIGHE) scorri();
 }
 
 /* --- i codici dei terminali --- */
@@ -92,8 +147,8 @@ static void esegui_codice(char lettera) {
     case 'H': {   /* righe e colonne contano da 1; mancanti o 0 valgono 1 */
         int r = quanti_numeri > 0 && numeri[0] ? numeri[0] : 1;
         int c = quanti_numeri > 1 && numeri[1] ? numeri[1] : 1;
-        riga = tra(r, 1, RIGHE) - 1;
-        colonna = tra(c, 1, COLONNE) - 1;
+        riga = tra(r, 1, righe) - 1;
+        colonna = tra(c, 1, colonne) - 1;
         break;
     }
     case 'J':
@@ -135,6 +190,8 @@ static int dentro_codice(char c) {
     return 0;
 }
 
+/* --- scrivere --- */
+
 static void metti(char c) {
     if (dentro_codice(c)) return;
     switch (c) {
@@ -142,19 +199,18 @@ static void metti(char c) {
     case '\r': colonna = 0; return;
     case '\t': do metti(' '); while (colonna % 8); return;
     case '\b':                       /* cancella: indietro di uno e svuota la casella */
-        if (colonna > 0) {
-            colonna--;
-            schermo[riga * COLONNE + colonna] = casella(' ');
-        }
+        if (colonna > 0) metti_casella(riga, --colonna, ' ');
         return;
     }
-    schermo[riga * COLONNE + colonna] = casella(c);
-    if (++colonna == COLONNE) a_capo();
+    metti_casella(riga, colonna, c);
+    if (++colonna == colonne) a_capo();
 }
 
 void console_putc(char c) {
+    if (!memoria) return;            /* niente schermo: niente da fare */
     unsigned int s = interruzioni_spegni();
+    togli_cursore();
     metti(c);
-    sposta_cursore();
+    mostra_cursore();
     interruzioni_ripristina(s);
 }

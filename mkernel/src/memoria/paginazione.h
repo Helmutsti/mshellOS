@@ -7,9 +7,9 @@
 #define PAG_SCRITTURA 0x2   /* si puo' scrivere (senza: sola lettura) */
 #define PAG_UTENTE    0x4   /* la puo' usare anche il ring 3 (senza: solo kernel) */
 
-/* Costruisce le tabelle del kernel (indirizzo virtuale = fisico, pagina 0 assente,
- * codice di sola lettura) e accende la paginazione. */
-void paginazione_prepara(void);
+/* Costruisce le tabelle del kernel (indirizzo virtuale = fisico per la RAM e per la
+ * memoria dello schermo, pagina 0 assente, codice di sola lettura) e accende la paginazione. */
+void paginazione_prepara(unsigned int schermo, unsigned int byte_schermo);
 
 /* Dove porta l'indirizzo virtuale 'virt', nella mappa che la CPU sta usando adesso?
  * Mette in *fis l'indirizzo fisico e in *permessi i bit. 1 se la pagina c'e', 0 se no. */
@@ -19,16 +19,17 @@ unsigned int pag_tabelle(void);   /* quante tabelle (pagine da 4 KB) usano le ma
 
 /* --- le mappe dei programmi --- */
 
-/* Da PROGRAMMI_INIZIO (1 GB, in chiamate.h) in su gli indirizzi sono dei programmi:
- * ogni mappa ha li' le sue pagine. Sotto c'e' il kernel, uguale e condiviso in tutte. */
+/* Da PROGRAMMI_INIZIO a PROGRAMMI_FINE (1-2 GB, in chiamate.h) gli indirizzi sono dei
+ * programmi: ogni mappa ha li' le sue pagine. Il resto e' del kernel, uguale e
+ * condiviso in tutte. */
 #include "chiamate.h"
 
 /* Una mappa nuova: la parte del kernel gia' dentro, quella del programma vuota.
  * Restituisce l'indirizzo della sua directory, o 0 se la memoria e' finita. */
 unsigned int pag_nuova_mappa(void);
 
-/* Nella mappa di un programma collega 'virt' (dal 1 GB in su) alla pagina fisica 'fis'.
- * 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' sotto il 1 GB. */
+/* Nella mappa di un programma collega 'virt' (tra 1 e 2 GB) alla pagina fisica 'fis'.
+ * 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' fuori da 1-2 GB. */
 int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis, unsigned int permessi);
 
 /* Restituisce al magazziniere tutte le pagine del programma, le sue tabelle e la

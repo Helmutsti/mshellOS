@@ -103,11 +103,33 @@ static void prova_kmalloc(void) {
             blocchi, liberi / 1024, liberi_inizio / 1024);
 }
 
-void kernel_main(unsigned int magic, struct multiboot_info *info) {
-    console_prepara();
+/* Senza modalita' pixel non abbiamo dove scrivere: e' rimasta accesa la vecchia
+ * modalita' testo (succede se il kernel non e' stato avviato da GRUB, per esempio con
+ * "qemu -kernel", che la modalita' pixel non la sa accendere). Si lascia un messaggio
+ * direttamente nella memoria del testo, a 0xB8000, e ci si ferma. */
+static void senza_schermo(void) {
+    static const char messaggio[] = "mkernel: serve la modalita' pixel. Avvialo con GRUB (run.ps1).";
+    volatile unsigned short *testo = (unsigned short *)0xB8000;
+    for (int i = 0; messaggio[i]; i++)
+        testo[i] = (unsigned char)messaggio[i] | (((NERO << 4) | ROSSO) << 8);
+    for (;;) __asm__ volatile("cli; hlt");
+}
 
-    if (magic != MULTIBOOT_MAGIC_BOOT)
-        panico("non sono stato caricato da un bootloader Multiboot (eax=%x)", magic);
+void kernel_main(unsigned int magic, struct multiboot_info *info) {
+    /* Lo schermo per primo, per poter scrivere tutto il resto (anche i panici). */
+    if (magic != MULTIBOOT_MAGIC_BOOT || !(info->flags & MB_FLAG_SCHERMO) ||
+        info->framebuffer_type != MB_SCHERMO_RGB || (info->framebuffer_addr >> 32))
+        senza_schermo();
+    struct schermo s = {
+        .indirizzo = (unsigned int)info->framebuffer_addr,
+        .passo = info->framebuffer_pitch,
+        .larghezza = info->framebuffer_width, .altezza = info->framebuffer_height,
+        .bpp = info->framebuffer_bpp,
+        .rosso = info->rosso_posizione, .verde = info->verde_posizione, .blu = info->blu_posizione,
+    };
+    if (!console_prepara(&s)) senza_schermo();
+    kprintf("Schermo : %ux%u, %u bit per pixel, a %p\n", s.larghezza, s.altezza, s.bpp,
+            (void *)s.indirizzo);
     if (!(info->flags & MB_FLAG_MMAP))
         panico("il bootloader non ha dato la mappa della memoria");
 
@@ -138,7 +160,7 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
 
     /* La paginazione: dopo il magazziniere, perche' le tabelle sono pagine sue.
      * Da qui ogni indirizzo passa dalla traduzione della CPU. */
-    paginazione_prepara();
+    paginazione_prepara(s.indirizzo, s.passo * s.altezza);
     kprintf("Paginazione: accesa (%u tabelle), pagina 0 assente, codice in sola lettura\n",
             pag_tabelle());
 

@@ -5,10 +5,12 @@
 #   comune/    quello che kernel e programmi devono vedere uguale (le chiamate di sistema)
 #   strumenti/ programmi che girano qui, sul computer che compila (crea_disco)
 #   build/     il compilato (si puo' cancellare, viene rifatto):
-#              build/kernel, build/utente/<programma>, build/disco.img
+#              build/kernel, build/utente/<programma>, build/disco.img,
+#              build/mkernel.iso (l'immagine avviabile: GRUB + kernel)
 set -e
 cd /w
-apk add --no-cache clang lld gcc musl-dev >/dev/null
+# grub-bios e xorriso servono a grub-mkrescue, che prepara l'immagine avviabile
+apk add --no-cache clang lld gcc musl-dev grub grub-bios xorriso >/dev/null
 rm -rf build
 mkdir -p build/kernel.o build/utente
 
@@ -56,3 +58,19 @@ gcc -O2 -Wall -Istrumenti/finto -Isrc/dispositivi -Isrc/fs \
     -o build/crea_disco strumenti/crea_disco.c src/fs/mfs.c
 ./build/crea_disco build/disco.img 32768 $SUL_DISCO   # 32768 settori = 16 MB
 echo "build/disco.img pronto"
+
+# --- 4. l'immagine avviabile: GRUB, che accende la modalita' pixel e carica il kernel ---
+# Come un CD: GRUB si avvia per primo, legge grub.cfg, trova la firma Multiboot nel
+# kernel (con la richiesta 800x600 a 32 bit), accende lo schermo e salta a _start.
+mkdir -p build/iso/boot/grub
+cp build/kernel build/iso/boot/kernel
+cat > build/iso/boot/grub/grub.cfg <<'FINE'
+set timeout=0
+insmod all_video
+menuentry "mkernel" {
+    multiboot /boot/kernel
+    boot
+}
+FINE
+grub-mkrescue -o build/mkernel.iso build/iso 2>/dev/null
+echo "build/mkernel.iso pronto"

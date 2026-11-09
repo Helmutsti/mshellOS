@@ -16,7 +16,7 @@
  * Il registro CR3 dice alla CPU dove sta la directory. Il bit 31 di CR0 accende tutto.
  *
  * LA MAPPA DEL KERNEL: indirizzo virtuale = fisico ("mappatura identica") per tutta la
- * RAM, solo ring 0. In piu':
+ * RAM e per la memoria dello schermo, solo ring 0. In piu':
  *   - la pagina 0 non c'e': un puntatore nullo fa page fault invece di fare danni
  *   - codice e costanti del kernel sono di sola lettura
  *
@@ -24,7 +24,7 @@
  *   - le stesse righe della directory del kernel, che puntano alle STESSE tabelle del
  *     kernel: il kernel c'e' in ogni mappa (serve quando arriva un'interruzione), ma
  *     le sue pagine non hanno il bit utente, quindi il programma non le puo' toccare;
- *   - dal 1 GB in su (PROGRAMMI_INIZIO) tabelle solo sue, con le sue pagine.
+ *   - da 1 a 2 GB (PROGRAMMI_INIZIO - PROGRAMMI_FINE) tabelle solo sue, con le sue pagine.
  * Lo scheduler, a ogni cambio di turno, mette in CR3 la mappa di chi parte.
  *
  * Le directory e le tabelle sono pagine prese dal magazziniere. Siccome il kernel ha la
@@ -109,14 +109,14 @@ unsigned int pag_nuova_mappa(void) {
     unsigned int *dir = (unsigned int *)pagina_chiedi();
     if (!dir) return 0;
     /* la parte del kernel: le stesse righe, quindi le stesse tabelle (condivise).
-     * Dal 1 GB in su la directory del kernel e' vuota: li' andranno le tabelle del programma. */
+     * Da 1 a 2 GB la directory del kernel e' vuota: li' andranno le tabelle del programma. */
     for (int i = 0; i < RIGHE_TABELLA; i++) dir[i] = kernel[i];
     tabelle++;
     return (unsigned int)dir;
 }
 
 int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis, unsigned int permessi) {
-    if (virt < PROGRAMMI_INIZIO) return 0;   /* sotto c'e' il kernel: le sue tabelle non si toccano */
+    if (virt < PROGRAMMI_INIZIO || virt >= PROGRAMMI_FINE) return 0;   /* fuori: e' del kernel */
     return mappa_in((unsigned int *)mappa, virt, fis, permessi);
 }
 
@@ -124,7 +124,7 @@ void pag_cancella_mappa(unsigned int mappa) {
     unsigned int *dir = (unsigned int *)mappa;
     if (dir == attuale()) panico("paginazione: cancello la mappa che sto usando");
     /* solo le righe del programma: quelle del kernel sono condivise e restano */
-    for (unsigned int i = INDICE_DIR(PROGRAMMI_INIZIO); i < RIGHE_TABELLA; i++) {
+    for (unsigned int i = INDICE_DIR(PROGRAMMI_INIZIO); i < INDICE_DIR(PROGRAMMI_FINE); i++) {
         if (!(dir[i] & PAG_PRESENTE)) continue;
         unsigned int *tab = (unsigned int *)INDIRIZZO(dir[i]);
         for (int j = 0; j < RIGHE_TABELLA; j++)
@@ -144,7 +144,7 @@ void pag_usa_mappa(unsigned int mappa) {
 
 /* --- l'avvio --- */
 
-void paginazione_prepara(void) {
+void paginazione_prepara(unsigned int schermo, unsigned int byte_schermo) {
     kernel = (unsigned int *)pagina_chiedi();
     if (!kernel) panico("paginazione: memoria finita per la directory");
     memset(kernel, 0, PAGINA);
@@ -162,6 +162,17 @@ void paginazione_prepara(void) {
         int codice = p >= (unsigned int)kernel_start && p < (unsigned int)sola_lettura_fine;
         pag_mappa(p, p, codice ? 0 : PAG_SCRITTURA);
     }
+
+    /* La memoria dello schermo: non e' RAM, e' la memoria della scheda video, che il
+     * bootloader ci ha detto dove sta (di solito sopra i 3 GB). Anche lei con indirizzo
+     * virtuale = fisico, lettura e scrittura, solo kernel. Non deve cadere nella RAM ne'
+     * nella zona dei programmi. */
+    unsigned int schermo_fine = schermo + byte_schermo;
+    if (schermo < fine || schermo_fine < schermo ||
+        (schermo < PROGRAMMI_FINE && schermo_fine > PROGRAMMI_INIZIO))
+        panico("paginazione: lo schermo a %p e' in una zona gia' occupata", (void *)schermo);
+    for (unsigned int p = schermo & ~(PAGINA - 1); p < schermo_fine; p += PAGINA)
+        pag_mappa(p, p, PAG_SCRITTURA);
 
     /* "la directory e' qui", poi si accende. Da questa istruzione in poi ogni
      * indirizzo passa dalla traduzione: se le tabelle fossero sbagliate, la prossima

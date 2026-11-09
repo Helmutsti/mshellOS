@@ -23,9 +23,11 @@
 
 #define MAX_PERCORSO 64    /* lettere di un percorso passato al kernel, compreso lo 0 finale */
 
-/* Dove vivono i programmi nella loro mappa: da 1 GB in su il codice e le variabili,
- * la pila appena sotto i 2 GB. Sotto 1 GB c'e' il kernel (invisibile al ring 3). */
+/* Dove vivono i programmi nella loro mappa: tra 1 e 2 GB. Il codice e le variabili
+ * dal basso, la pila appena sotto i 2 GB. Il resto della mappa e' del kernel
+ * (invisibile al ring 3): la RAM sotto 1 GB, la memoria dello schermo sopra i 2 GB. */
 #define PROGRAMMI_INIZIO    0x40000000u
-#define PILA_PROGRAMMA_CIMA 0x80000000u
+#define PROGRAMMI_FINE      0x80000000u
+#define PILA_PROGRAMMA_CIMA PROGRAMMI_FINE
 
 #endif

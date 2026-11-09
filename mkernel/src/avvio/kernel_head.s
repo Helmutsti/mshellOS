@@ -1,9 +1,10 @@
 # Punto di ingresso del kernel.
-# Il caricatore di avvio (qui QEMU) cerca la firma Multiboot,
+# Il caricatore di avvio (GRUB) cerca la firma Multiboot,
 # carica il file in memoria e salta a _start.
 
 .set MAGIC,    0x1BADB002          # firma Multiboot
-.set FLAGS,    3                   # bit 0: moduli allineati, bit 1: mappa della memoria
+.set FLAGS,    7                   # bit 0: moduli allineati, bit 1: mappa della memoria,
+                                   # bit 2: accendimi la modalita' pixel (campi in fondo)
 .set CHECKSUM, -(MAGIC + FLAGS)    # MAGIC + FLAGS + CHECKSUM deve fare 0
 
 .section .multiboot
@@ -11,6 +12,9 @@
 .long MAGIC
 .long FLAGS
 .long CHECKSUM
+.long 0, 0, 0, 0, 0                # indirizzi di caricamento: non servono (il bit 16 e' spento)
+.long 0                            # modalita' video: 0 = pixel (1 sarebbe testo)
+.long 800, 600, 32                 # larghezza, altezza, bit per pixel
 
 # Lo stack: 16 KB riservati, il C ne ha bisogno per funzionare.
 .section .bss
