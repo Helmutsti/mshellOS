@@ -55,7 +55,8 @@ static void crea_cartelle(const char *percorso) {
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "uso: crea_disco IMMAGINE SETTORI /percorso=file[:permessi] ...\n");
+        fprintf(stderr, "uso: crea_disco IMMAGINE SETTORI /percorso=file[:permessi] "
+                        "+/cartella:proprietario:permessi ...\n");
         return 1;
     }
     settori = (unsigned int)strtoul(argv[2], 0, 10);
@@ -70,6 +71,20 @@ int main(int argc, char **argv) {
     if (r < 0) errore("formatta", mfs_messaggio(r));
 
     for (int i = 3; i < argc; i++) {
+        if (argv[i][0] == '+') {   /* una cartella: +/percorso:proprietario:permessi */
+            char *percorso = argv[i] + 1, *p1 = strchr(percorso, ':');
+            char *p2 = p1 ? strchr(p1 + 1, ':') : 0;
+            if (!p2) errore(argv[i], "serve +/cartella:proprietario:permessi");
+            *p1 = *p2 = 0;
+            unsigned int proprietario = (unsigned int)strtoul(p1 + 1, 0, 10);
+            unsigned int permessi = (unsigned int)strtoul(p2 + 1, 0, 8);
+            crea_cartelle(percorso);
+            r = mfs_mkdir(percorso, proprietario, permessi);
+            if (r < 0 && r != MFS_ERR_ESISTE) errore(percorso, mfs_messaggio(r));
+            if ((r = mfs_permessi(percorso, proprietario, permessi)) < 0) errore(percorso, mfs_messaggio(r));
+            printf("  %-40s cartella  di %u, %03o\n", percorso, proprietario, permessi);
+            continue;
+        }
         char *uguale = strchr(argv[i], '=');
         if (!uguale) errore(argv[i], "serve /percorso=file");
         *uguale = 0;

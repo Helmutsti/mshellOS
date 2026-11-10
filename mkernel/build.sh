@@ -47,6 +47,7 @@ for f in utente/libreria/*.c; do
     clang $NUDO $UTENTE -c "$f" -o "build/utente/libreria/$(basename "$f" .c).o"
 done
 SUL_DISCO=""
+APPS=""
 
 # I programmi del sistema (utente/programmi): init in /Sistema, i servizi in
 # /Sistema/Servizi.
@@ -82,6 +83,16 @@ for cartella in utente/applicazioni/*/; do
         case "$r" in *.c|*.h) continue ;; esac
         [ -f "$r" ] && SUL_DISCO="$SUL_DISCO /Applicazioni/$nome/$(basename "$r")=$r:644"
     done
+    APPS="$APPS $nome"
+done
+
+# L'utente (per ora uno solo, 1000): la sua cartella e' sua e di nessun altro (700). Le
+# applicazioni la vedono come /home: dentro, Apps/<Nome> per i dati di ognuna e Scrivania.
+UTENTE_UID=1000
+SUL_DISCO="$SUL_DISCO +/Utenti:0:755 +/Utenti/$UTENTE_UID:$UTENTE_UID:700"
+SUL_DISCO="$SUL_DISCO +/Utenti/$UTENTE_UID/Apps:$UTENTE_UID:700 +/Utenti/$UTENTE_UID/Scrivania:$UTENTE_UID:700"
+for nome in $APPS; do
+    SUL_DISCO="$SUL_DISCO +/Utenti/$UTENTE_UID/Apps/$nome:$UTENTE_UID:700"
 done
 echo "build/utente pronto"
 

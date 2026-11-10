@@ -125,7 +125,11 @@ struct info_file {
  * PERMESSO_LEGGERE, _SCRIVERE, _ESEGUIRE; la prima per il proprietario, l'ultima per
  * tutti gli altri (quella di mezzo, il gruppo, per ora non si usa). Per creare,
  * cancellare o rinominare qualcosa bisogna poter scrivere nella cartella che lo contiene.
- * Un file nuovo e' di chi lo crea, con 0644; una cartella nuova con 0755. */
+ * Un file nuovo e' di chi lo crea, con 0644; una cartella nuova con 0755.
+ *
+ * /home e' la casa di chi chiede: per un programma con uid U e' /Utenti/U (il kernel
+ * traduce il percorso). Le applicazioni ci trovano Apps/<Nome>, per i loro dati, e
+ * Scrivania. */
 #define UID_SISTEMA       0
 #define UID_APPLICAZIONI  1000
 #define PERMESSO_LEGGERE  4

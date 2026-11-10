@@ -47,6 +47,12 @@ static int del_programma(unsigned int inizio, unsigned int byte, unsigned int se
  * una lettera alla volta, controllando ogni lettera, fino allo 0 finale. 0 se e' troppo
  * lunga o esce dalla sua memoria. Si copia per non rileggerla dopo: il programma
  * potrebbe cambiarla mentre il kernel la usa. */
+static int lunghezza_c(const char *s) {
+    int n = 0;
+    while (s[n]) n++;
+    return n;
+}
+
 static int copia_stringa(char *dove, const char *da, int massimo) {
     for (int i = 0; i < massimo; i++) {
         if (!del_programma((unsigned int)(da + i), 1, LEGGERE)) return 0;
@@ -54,6 +60,34 @@ static int copia_stringa(char *dove, const char *da, int massimo) {
         if (!dove[i]) return 1;
     }
     return 0;
+}
+
+/* /home E' LA CASA DI CHI CHIEDE. Come i mount namespace di Linux: ogni programma vede
+ * il file system a modo suo. Per un programma con uid U, "/home" e' "/Utenti/U": per
+ * un'applicazione (1000) "/home/Scrivania" e' "/Utenti/1000/Scrivania". Il kernel lo
+ * traduce qui, appena riceve un percorso, e poi tutto il resto vede il percorso vero.
+ * 0 se il percorso tradotto non ci sta. */
+static int traduci_home(char *percorso) {
+    static const char home[] = "/home";
+    int i = 0;
+    while (home[i] && percorso[i] == home[i]) i++;
+    if (home[i] || (percorso[i] && percorso[i] != '/')) return 1;   /* non comincia con /home */
+
+    char casa[24] = "/Utenti/", cifre[12];
+    unsigned int uid = compito_attuale()->uid;
+    int n = 0, l = 8;
+    do { cifre[n++] = '0' + uid % 10; uid /= 10; } while (uid);
+    while (n) casa[l++] = cifre[--n];
+    int resto = lunghezza_c(percorso + i);
+    if (l + resto + 1 > MAX_PERCORSO) return 0;
+    memmove(percorso + l, percorso + i, resto + 1);   /* il resto, con lo 0 finale */
+    memcpy(percorso, casa, l);
+    return 1;
+}
+
+/* Un percorso dalla memoria del programma, copiato e tradotto (/home). */
+static int copia_percorso(char *dove, const char *da) {
+    return copia_stringa(dove, da, MAX_PERCORSO) && traduci_home(dove);
 }
 
 unsigned int chiamata_di_sistema(struct registri *r) {
@@ -83,7 +117,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
     }
     case SIS_AVVIA: {
         char percorso[MAX_PERCORSO];
-        if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) { r->eax = -1; break; }
+        if (!copia_percorso(percorso, (const char *)r->ebx)) { r->eax = -1; break; }
 
         /* serve il permesso di eseguirlo; il programma nuovo e' "di" chi lo fa partire */
         const char *errore;
@@ -97,8 +131,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         char percorso[MAX_PERCORSO];
         unsigned int uid = r->ecx;
         r->eax = -1;
-        if (compito_attuale()->uid != UID_SISTEMA ||
-            !copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) break;
+        if (compito_attuale()->uid != UID_SISTEMA || !copia_percorso(percorso, (const char *)r->ebx)) break;
         const char *errore;
         struct compito *c = compito_crea_programma(percorso, uid, &errore);
         if (c) r->eax = c->numero;
@@ -229,7 +262,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         char percorso[MAX_PERCORSO] = {0};
         unsigned int servizio = r->eax;
         r->eax = -1;
-        if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) break;
+        if (!copia_percorso(percorso, (const char *)r->ebx)) break;
         if (servizio == SIS_APRI) {
             r->eax = file_apri(percorso, r->ecx);
         } else if (servizio == SIS_INFO) {
@@ -255,8 +288,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
     case SIS_RINOMINA: {
         char da[MAX_PERCORSO], a[MAX_PERCORSO];
         r->eax = -1;
-        if (!copia_stringa(da, (const char *)r->ebx, MAX_PERCORSO) ||
-            !copia_stringa(a, (const char *)r->ecx, MAX_PERCORSO)) break;
+        if (!copia_percorso(da, (const char *)r->ebx) || !copia_percorso(a, (const char *)r->ecx)) break;
         /* si toglie da una cartella e si mette in un'altra: si deve poter scrivere in tutte e due */
         if (!file_puo_nella_cartella(da, PERMESSO_SCRIVERE) ||
             !file_puo_nella_cartella(a, PERMESSO_SCRIVERE)) break;
@@ -267,7 +299,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         char percorso[MAX_PERCORSO];
         unsigned int nuovo_proprietario = r->ecx, nuovi_permessi = r->edx;
         r->eax = -1;
-        if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) break;
+        if (!copia_percorso(percorso, (const char *)r->ebx)) break;
         int tipo;
         unsigned int dimensione, proprietario;
         if (mfs_info(percorso, &tipo, &dimensione, &proprietario, 0) < 0) break;
