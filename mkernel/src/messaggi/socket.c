@@ -225,6 +225,8 @@ int socket_accetta(int d) {
 /* Il padrone dell'altro capo e' vivo finche' l'altro capo esiste: quando un compito
  * finisce si chiudono i suoi capi (e il suo ascolto, con i collegamenti non ancora
  * accettati), e il nostro 'altro' torna 0. */
+int e_un_capo(struct aperto *a) { return a->op == &operazioni_capo; }
+
 struct compito *socket_altro(int d) {
     struct aperto *a = descrittore(d);
     if (!a || a->op != &operazioni_capo) return 0;

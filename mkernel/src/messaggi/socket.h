@@ -13,4 +13,9 @@ struct compito;
  * o 0 se 'd' non e' un collegamento o l'altro ha chiuso. */
 struct compito *socket_altro(int d);
 
+struct aperto;
+/* E' un capo di un collegamento? (Quelli non si passano ad altri programmi: chi() deve
+ * sapere chi lo tiene.) */
+int e_un_capo(struct aperto *a);
+
 #endif

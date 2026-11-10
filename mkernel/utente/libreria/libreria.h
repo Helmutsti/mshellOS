@@ -46,14 +46,10 @@ static inline int avvia(const char *percorso) {
     return risultato;
 }
 
-/* Chiede lo schermo al kernel. Se va bene (0) la sua memoria e' a SCHERMO_PROGRAMMA e
- * 'info' dice com'e' fatto; -1 se e' gia' di un altro programma. */
-static inline int prendi_schermo(struct info_schermo *info) {
+/* Lo schermo: un descrittore, o -1 se e' gia' aperto (vedi chiamate.h). */
+static inline int apri_schermo(void) {
     int risultato;
-    __asm__ volatile("int %1"
-                     : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(SIS_SCHERMO), "b"(info)
-                     : "memory");
+    __asm__ volatile("int %1" : "=a"(risultato) : "i"(INT_SISTEMA), "a"(SIS_APRI_SCHERMO) : "memory");
     return risultato;
 }
 
@@ -195,6 +191,21 @@ static inline int cambia_permessi(const char *percorso, unsigned int proprietari
 static inline int avvia_come(const char *percorso, unsigned int uid) {
     return chiamata3(SIS_AVVIA_COME, (unsigned int)percorso, uid, 0);
 }
+
+/* Mette lo schermo del descrittore 'd' nella memoria del programma, a SCHERMO_PROGRAMMA:
+ * scrivere li' un numero vuol dire accendere un pixel. 'info' dice com'e' fatto. 0, o -1. */
+static inline int mappa_schermo(int d, struct info_schermo *info) {
+    return chiamata3(SIS_MAPPA_SCHERMO, d, (unsigned int)info, 0);
+}
+
+/* Fa partire un programma che trova gia' aperti i descrittori dell'elenco, ai posti
+ * 0, 1, 2... Il numero del compito, o -1. */
+static inline int avvia_con(const char *percorso, const int *descrittori, int quanti) {
+    return chiamata3(SIS_AVVIA_CON, (unsigned int)percorso, (unsigned int)descrittori, quanti);
+}
+
+/* Un descrittore del programma 'numero': ricevi aspetta che finisca. -1 se non c'e'. */
+static inline int processo(int numero) { return chiamata1(SIS_PROCESSO, numero); }
 
 /* L'uid del programma all'altro capo del collegamento 'd', o -1. */
 static inline int chi(int d) { return chiamata1(SIS_CHI, d); }

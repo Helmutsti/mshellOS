@@ -24,11 +24,9 @@
                             * stesso uid di chi lo chiede (serve il permesso di eseguirlo).
                             * Restituisce il suo numero di compito, o -1 */
 
-#define SIS_SCHERMO 6      /* prendi_schermo(&info): lo schermo diventa di questo programma.
-                            * Il kernel mette la memoria dello schermo nella sua mappa, a
-                            * SCHERMO_PROGRAMMA, riempie 'info' e smette di scriverci.
-                            * -1 se lo schermo e' gia' di un altro programma. Quando il
-                            * programma finisce, lo schermo torna alla console del kernel. */
+#define SIS_APRI_SCHERMO 6 /* apri_schermo(): un descrittore dello schermo, che la console
+                            * del kernel smette di usare; -1 se e' gia' aperto. Torna alla
+                            * console quando nessuno lo tiene piu'. Come /dev/fb0 */
 
 /* I SOCKET: i tubi tra programmi, come i socket locali di Linux "a pacchetti"
  * (SOCK_SEQPACKET). Ogni messaggio arriva intero e separato dagli altri.
@@ -150,6 +148,20 @@ struct voce_cartella {
     unsigned int tipo;
     unsigned int dimensione;
 };
+
+#define SIS_MAPPA_SCHERMO 29 /* mappa_schermo(d, &info): mette la memoria dello schermo
+                              * del descrittore d nella memoria del programma, a
+                              * SCHERMO_PROGRAMMA, e dice com'e' fatto. 0, o -1 */
+#define SIS_AVVIA_CON     30 /* avvia_con(percorso, descrittori, quanti): come avvia, ma il
+                              * programma nuovo trova gia' aperti quei descrittori, ai posti
+                              * 0, 1, 2... (al massimo MAX_PASSATI). Cosi' init presta
+                              * schermo, tastiera e il nome del compositore. Un collegamento
+                              * (un capo di socket) non si passa */
+#define SIS_PROCESSO      31 /* processo(numero): un descrittore del programma 'numero' (quello
+                              * che danno avvia, avvia_come, avvia_con): ricevi aspetta che
+                              * finisca e da' 0, e aspetta lo vede pronto quando e' finito.
+                              * Come pidfd in Linux */
+#define MAX_PASSATI 8
 
 #define MANDA_SUBITO 1     /* il modo di manda che non aspetta mai */
 

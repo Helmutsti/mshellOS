@@ -26,6 +26,7 @@
 #include "compiti.h"
 #include "descrittori.h"
 #include "fogli.h"
+#include "processo.h"
 
 #define DIM_PILA 8192
 
@@ -251,9 +252,9 @@ unsigned int scheduler(unsigned int esp) {
             if (c == primo) primo = dopo;
             if (c == ultimo) ultimo = prec;
             numero_compiti--;
-            console_riprendi(c);   /* se lo schermo era suo, torna alla console */
-            descrittori_chiudi_tutti(c);   /* i suoi socket: chi era collegato lo sapra' */
+            descrittori_chiudi_tutti(c);   /* socket, schermo...: chi li usava lo sapra' */
             fogli_lascia_tutti(c);         /* i fogli nella sua memoria */
+            processo_finito(c->numero);    /* chi lo aspettava (init) si sveglia */
             if (c->mappa) pag_cancella_mappa(c->mappa);   /* pagine, tabelle, directory */
             kfree(c->pila);
             kfree(c);
@@ -339,3 +340,12 @@ void compito_fine_se_terminato(void) {
 }
 
 struct compito *compito_attuale(void) { return attuale; }
+
+int compito_esiste(int numero) {
+    struct compito *c = primo;
+    for (int i = 0; i < numero_compiti; i++, c = c->prossimo)
+        if (c->numero == numero) return 1;
+    return 0;
+}
+
+int compito_prossimo_numero(void) { return prossimo_numero; }

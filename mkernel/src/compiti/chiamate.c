@@ -17,6 +17,8 @@
 #include "dinamica.h"
 #include "mfs.h"
 #include "file.h"
+#include "schermo.h"
+#include "processo.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA (1024 * 1024)   /* il pezzo piu' grande in una chiamata: 1 MB */
@@ -142,28 +144,34 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = c ? c->uid : (unsigned int)-1;
         break;
     }
-    case SIS_SCHERMO: {
-        /* Lo schermo diventa del programma: le pagine della memoria dello schermo (che
-         * non sono RAM del magazziniere) vanno nella SUA mappa, a SCHERMO_PROGRAMMA,
-         * con il bit utente. Segnate PRESTATE: quando il programma finisce, non si
-         * restituiscono al magazziniere. Come mmap di /dev/fb0 in Linux. */
-        struct info_schermo *info = (struct info_schermo *)r->ebx;
+    case SIS_APRI_SCHERMO: {
+        struct aperto *a = schermo_apri();
+        r->eax = -1;
+        if (!a) break;                         /* e' gia' aperto */
+        int d = descrittore_nuovo(a);
+        if (d < 0) { a->op->chiudi(a); break; }
+        r->eax = d;
+        break;
+    }
+    case SIS_MAPPA_SCHERMO: {
+        /* Le pagine della memoria dello schermo (che non sono RAM del magazziniere) vanno
+         * nella mappa di chi tiene il descrittore, a SCHERMO_PROGRAMMA, con il bit utente.
+         * Segnate PRESTATE: quando il programma finisce, non si restituiscono al
+         * magazziniere. Come mmap di /dev/fb0 in Linux. */
+        struct aperto *a = descrittore(r->ebx);
+        struct info_schermo *info = (struct info_schermo *)r->ecx;
         const struct schermo *s = console_schermo();
         r->eax = -1;
-        if (!del_programma((unsigned int)info, sizeof *info, SCRIVERE) || !s) break;
+        if (!a || !e_lo_schermo(a) || !s || !del_programma((unsigned int)info, sizeof *info, SCRIVERE))
+            break;
         unsigned int byte = s->passo * s->altezza;
         if (s->indirizzo % PAGINA || byte > PILA_PROGRAMMA_CIMA - PAGINA - SCHERMO_PROGRAMMA)
             break;                                 /* non ci sta nella zona dei programmi */
-        struct compito *chi = compito_attuale();
-        if (!console_presta(chi)) break;           /* e' gia' di qualcun altro */
-
-        unsigned int mappa = chi->mappa;
-        for (unsigned int p = 0; p < byte; p += PAGINA)
+        unsigned int mappa = compito_attuale()->mappa, p;
+        for (p = 0; p < byte; p += PAGINA)
             if (!pag_mappa_programma(mappa, SCHERMO_PROGRAMMA + p, s->indirizzo + p,
-                                     PAG_UTENTE | PAG_SCRITTURA | PAG_PRESTATA)) {
-                console_riprendi(chi);             /* memoria finita per le tabelle */
-                return (unsigned int)r;
-            }
+                                     PAG_UTENTE | PAG_SCRITTURA | PAG_PRESTATA)) break;
+        if (p < byte) break;                       /* memoria finita per le tabelle */
         info->passo = s->passo;
         info->larghezza = s->larghezza;
         info->altezza = s->altezza;
@@ -173,6 +181,39 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = 0;
         break;
     }
+    case SIS_AVVIA_CON: {
+        /* Come avvia, ma il figlio nasce con dei descrittori gia' aperti: gli stessi di chi
+         * lo fa partire (ognuno e' un uso in piu', vedi descrittori.h), ai posti 0, 1, 2...
+         * Come i descrittori ereditati di Unix, e come la "socket activation" di systemd. */
+        char percorso[MAX_PERCORSO];
+        const int *elenco = (const int *)r->ecx;
+        int quanti = r->edx;
+        struct aperto *passati[MAX_PASSATI];
+        r->eax = -1;
+        if (quanti < 0 || quanti > MAX_PASSATI || !copia_percorso(percorso, (const char *)r->ebx) ||
+            (quanti && !del_programma((unsigned int)elenco, quanti * sizeof(int), LEGGERE)))
+            break;
+        int ok = 1;
+        for (int i = 0; i < quanti && ok; i++) {
+            passati[i] = descrittore(elenco[i]);
+            ok = passati[i] && !e_un_capo(passati[i]);
+        }
+        if (!ok || !file_puo(percorso, PERMESSO_ESEGUIRE)) break;
+        const char *errore;
+        struct compito *c = compito_crea_programma(percorso, compito_attuale()->uid, &errore);
+        if (!c) break;
+        /* il figlio non gira finche' non si torna dalla chiamata (le interruzioni sono
+         * spente): i descrittori sono al loro posto prima della sua prima istruzione */
+        for (int i = 0; i < quanti; i++) {
+            c->aperti[i] = passati[i];
+            aperto_tieni(passati[i]);
+        }
+        r->eax = c->numero;
+        break;
+    }
+    case SIS_PROCESSO:
+        r->eax = processo_apri(r->ebx);
+        break;
     case SIS_ASCOLTA:
     case SIS_COLLEGA: {
         char nome[MAX_NOME] = {0};

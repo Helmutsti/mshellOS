@@ -80,6 +80,11 @@ void compito_fine_se_terminato(void);
 
 struct compito *compito_attuale(void);
 
+/* Il compito 'numero' c'e' ancora (non e' stato liberato)? */
+int compito_esiste(int numero);
+/* Il numero che avra' il prossimo compito: quelli sotto sono gia' stati dati. */
+int compito_prossimo_numero(void);
+
 /* Chiamato da interruzione() a ogni tick e a ogni cedi(): riceve l'ESP del compito
  * interrotto (con i suoi registri salvati sopra) e restituisce l'ESP di chi deve girare. */
 unsigned int scheduler(unsigned int esp);

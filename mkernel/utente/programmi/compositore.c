@@ -16,7 +16,12 @@
  *   - SPOSTA le finestre quando un'applicazione chiede TRASCINAMI, e porta davanti
  *     quella cliccata.
  *
- * LO SCHERMO, VISTO DA QUI. Dopo prendi_schermo la memoria dello schermo e' nella
+ * LE SUE RISORSE GLIELE PRESTA INIT. Lo schermo, tastiera e mouse, e il nome
+ * "compositore" su cui si collegano le applicazioni non li apre lui: li tiene init,
+ * che glieli passa gia' aperti ai descrittori 0, 1 e 2 (avvia_con). Se il compositore
+ * cade, init li ha ancora, e lo fa ripartire con le stesse.
+ *
+ * LO SCHERMO, VISTO DA QUI. Dopo mappa_schermo la memoria dello schermo e' nella
  * nostra mappa, a SCHERMO_PROGRAMMA: scrivere li' un numero vuol dire accendere un
  * pixel. Riga dopo riga, da sinistra a destra, 4 byte per pixel. Tra l'inizio di una
  * riga e la successiva ci sono 'passo' byte (puo' essere piu' della larghezza * 4).
@@ -42,6 +47,11 @@
 #include "libreria.h"
 #include "protocollo.h"
 #include "stile.h"
+
+/* Le risorse che init gli passa gia' aperte (vedi sopra). */
+#define D_SCHERMO 0
+#define D_EVENTI  1
+#define D_ASCOLTO 2
 
 #define MAX_LARGHEZZA 1280  /* quanto chiede il kernel a GRUB (kernel_head.s) */
 #define MAX_ALTEZZA   800
@@ -656,8 +666,8 @@ static void al_tasto(const struct evento *e) {
 }
 
 int main(void) {
-    if (prendi_schermo(&schermo) < 0) {
-        scrivi_testo("compositore: lo schermo e' gia' di un altro programma\n");
+    if (mappa_schermo(D_SCHERMO, &schermo) < 0) {
+        scrivi_testo("compositore: non ho lo schermo (mi deve far partire init)\n");
         return 0;
     }
     if (schermo.larghezza > MAX_LARGHEZZA || schermo.altezza > MAX_ALTEZZA) {
@@ -671,12 +681,7 @@ int main(void) {
     scena = (struct tela){ disegno, larghezza, altezza };
     pennello_prepara(&pennello, &scena);
     prepara_sfondo();
-    int eventi = apri_eventi();   /* tastiera e mouse, come un descrittore */
-    int ascolto = ascolta(NOME_COMPOSITORE);
-    if (eventi < 0 || ascolto < 0) {
-        scrivi_testo("compositore: eventi o nome gia' di un altro programma\n");
-        return 0;
-    }
+    int eventi = D_EVENTI, ascolto = D_ASCOLTO;   /* prestati da init */
     componi();
 
     /* Il ciclo di ogni compositore: aspetta che succeda qualcosa (un evento, un
