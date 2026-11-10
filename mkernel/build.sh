@@ -37,16 +37,21 @@ ld.lld -T src/avvio/linker.ld -o build/kernel build/kernel.o/*.o
 echo "build/kernel pronto"
 
 # --- 2. l'area utente: ogni programma e' un file ELF a se' ---
-# Ognuno e' legato con avvio.o (che contiene _start: chiama main, poi esci) e con
-# programma.ld (che lo mette a 1 GB, dove vivono i programmi nella loro mappa).
+# Ognuno e' legato con i pezzi della libreria che non sono negli header: avvio.o (che
+# contiene _start: chiama main, poi esci) e stringhe.o (le funzioni sulla memoria che il
+# compilatore puo' chiamare da solo); e con programma.ld (che lo mette a 1 GB, dove
+# vivono i programmi nella loro mappa).
 UTENTE="-Iutente/libreria -Icomune"
-clang $NUDO $UTENTE -c utente/libreria/avvio.c -o build/utente/avvio.o
+mkdir -p build/utente/libreria
+for f in utente/libreria/*.c; do
+    clang $NUDO $UTENTE -c "$f" -o "build/utente/libreria/$(basename "$f" .c).o"
+done
 SUL_DISCO=""
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     clang $NUDO $UTENTE -c "$f" -o "build/utente/$nome.o"
     ld.lld -T utente/libreria/programma.ld -o "build/utente/$nome" \
-        build/utente/avvio.o "build/utente/$nome.o"
+        build/utente/libreria/*.o "build/utente/$nome.o"
     SUL_DISCO="$SUL_DISCO /$nome=build/utente/$nome"
 done
 echo "build/utente pronto"

@@ -401,14 +401,18 @@ static void al_mouse(const struct evento *e) {
             presa = i;
         }
     }
-    if (!premuto) presa = trascinata = -1;
     if (trascinata >= 0) {
-        finestre[trascinata].x = px - presa_x;
-        finestre[trascinata].y = py - presa_y;
-        return;
+        if (!premuto) presa = trascinata = -1;   /* lasciata: lo spostamento finisce */
+        else {
+            finestre[trascinata].x = px - presa_x;
+            finestre[trascinata].y = py - presa_y;
+            return;
+        }
     }
 
-    /* a chi va il puntatore: a quella presa, se c'e'; se no a quella sotto */
+    /* a chi va il puntatore: a quella presa, se c'e'; se no a quella sotto. Anche il
+     * "lasciato" va a quella presa, ovunque sia il puntatore: chi ha avuto il "premuto"
+     * deve sapere che e' finito (come in Wayland) */
     int a_chi = presa >= 0 ? presa : finestra_sotto(px, py);
     if (sotto >= 0 && sotto != a_chi) avvisa(sotto, (struct notizia){ .tipo = USCITO });
     sotto = a_chi;
@@ -417,6 +421,7 @@ static void al_mouse(const struct evento *e) {
         avvisa(a_chi, (struct notizia){ .tipo = PUNTATORE, .x = px - f->x, .y = py - f->y,
                                         .pulsanti = e->pulsanti });
     }
+    if (!premuto) presa = -1;
 }
 
 static void al_tasto(const struct evento *e) {

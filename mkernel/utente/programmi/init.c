@@ -2,7 +2,8 @@
  *
  * Il kernel, finito di prepararsi, lo legge dal disco (/init) e lo fa partire in
  * ring 3. E' lui a far nascere gli altri programmi: il compositore, che si prende lo
- * schermo, e (finche' non c'e' un lanciatore) due finestre di esempio. Non finisce mai:
+ * schermo, e (finche' non c'e' un lanciatore) due applicazioni: esempio, che si
+ * disegna tutto a mano, e contatore, fatto con il toolkit. Non finisce mai:
  * dopo resta in attesa. */
 #include "libreria.h"
 
@@ -11,7 +12,7 @@ int main(void) {
     if (avvia("/compositore") < 0)
         scrivi_testo("init: non riesco ad avviare /compositore\n");
     avvia("/esempio");   /* aspettano da sole che il compositore sia pronto */
-    avvia("/esempio");
+    avvia("/contatore");
     for (;;)
         dormi(60 * 1000);   /* in attesa: dorme, un minuto alla volta, senza usare CPU */
 }
