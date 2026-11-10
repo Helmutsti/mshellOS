@@ -1,6 +1,6 @@
 /* init: il primo programma, come in Linux.
  *
- * Il kernel, finito di prepararsi, lo legge dal disco (/init) e lo fa partire in
+ * Il kernel, finito di prepararsi, lo legge dal disco (/Sistema/init) e lo fa partire in
  * ring 3, come sistema (uid 0). E' lui a far nascere gli altri programmi: il
  * compositore, che si prende lo schermo, e (finche' non c'e' un lanciatore) tre
  * applicazioni: esempio, che si disegna tutto a mano, contatore e impostazioni, fatte
@@ -9,8 +9,8 @@
 
 int main(void) {
     scrivi_testo("ciao come va\n");
-    if (avvia("/compositore") < 0)
-        scrivi_testo("init: non riesco ad avviare /compositore\n");
+    if (avvia("/Sistema/Servizi/compositore") < 0)
+        scrivi_testo("init: non riesco ad avviare /Sistema/Servizi/compositore\n");
     /* le applicazioni non sono del sistema: partono come UID_APPLICAZIONI (1000) e
      * aspettano da sole che il compositore sia pronto */
     avvia_come("/esempio", UID_APPLICAZIONI);

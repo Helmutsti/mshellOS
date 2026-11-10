@@ -3,7 +3,7 @@
  *     crea_disco IMMAGINE SETTORI /percorso=file [/percorso=file ...]
  *
  * Crea un file IMMAGINE di SETTORI settori da 512 byte, ci scrive un mfs vuoto e ci
- * copia dentro i file indicati (per esempio /init=build/utente/init).
+ * copia dentro i file indicati (per esempio /Sistema/init=build/utente/init; le cartelle che mancano si creano).
  *
  * IL TRUCCO: non riscrive mfs. Compila INSIEME a questo file lo stesso src/fs/mfs.c del
  * kernel, e gli da' un "disco finto" fatto con il file IMMAGINE (le funzioni disco_*
@@ -40,6 +40,19 @@ static void errore(const char *cosa, const char *dettaglio) {
     exit(1);
 }
 
+/* Crea le cartelle che mancano lungo il percorso (/Sistema/Servizi/compositore crea
+ * /Sistema e /Sistema/Servizi), del sistema, con 0755. */
+static void crea_cartelle(const char *percorso) {
+    char parziale[256];
+    for (int i = 1; percorso[i] && i < (int)sizeof parziale; i++) {
+        if (percorso[i] != '/') continue;
+        memcpy(parziale, percorso, i);
+        parziale[i] = 0;
+        int r = mfs_mkdir(parziale, 0, 0755);
+        if (r < 0 && r != MFS_ERR_ESISTE) errore(parziale, mfs_messaggio(r));
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) {
         fprintf(stderr, "uso: crea_disco IMMAGINE SETTORI /percorso=file ...\n");
@@ -68,9 +81,10 @@ int main(int argc, char **argv) {
         size_t byte = fread(dati, 1, sizeof dati, f);
         fclose(f);
 
+        crea_cartelle(percorso);
         r = mfs_crea(percorso, dati, (unsigned int)byte, 0, 0755);   /* del sistema, eseguibili da tutti */
         if (r < 0) errore(percorso, mfs_messaggio(r));
-        printf("  %-20s %6zu byte\n", percorso, byte);
+        printf("  %-32s %7zu byte\n", percorso, byte);
     }
 
     fclose(immagine);

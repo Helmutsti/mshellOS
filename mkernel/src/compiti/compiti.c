@@ -127,7 +127,7 @@ fine:
     return inizio;
 }
 
-/* Il nome di un compito: l'ultimo pezzo del percorso ("/init" -> "init"). */
+/* Il nome di un compito: l'ultimo pezzo del percorso ("/Sistema/init" -> "init"). */
 static const char *nome_da_percorso(const char *percorso) {
     const char *nome = percorso;
     for (const char *c = percorso; *c; c++)

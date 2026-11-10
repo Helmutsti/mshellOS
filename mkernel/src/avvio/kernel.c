@@ -1,6 +1,7 @@
-/* Il kernel: prepara tutto, nell'ordine giusto, lancia il primo programma (/init, in
- * ring 3, letto dal disco) e poi diventa il compito "inattivo". Da li' in poi il kernel
- * lavora solo quando qualcuno lo chiama: un'interruzione o una chiamata di sistema. */
+/* Il kernel: prepara tutto, nell'ordine giusto, lancia il primo programma
+ * (/Sistema/init, in ring 3, letto dal disco) e poi diventa il compito "inattivo". Da li'
+ * in poi il kernel lavora solo quando qualcuno lo chiama: un'interruzione o una chiamata
+ * di sistema. */
 #include "kernel.h"
 #include "multiboot.h"
 #include "gdt.h"
@@ -187,19 +188,20 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
         kprintf("Disco   : nessuno\n");
 
     /* Il file system: si legge il superblocco e si controlla il numero magico. */
-    if (!c_e_il_disco) panico("nessun disco: non posso leggere /init");
-    if (!mfs_monta()) panico("il disco non ha mfs: non posso leggere /init");
+    if (!c_e_il_disco) panico("nessun disco: non posso leggere /Sistema/init");
+    if (!mfs_monta()) panico("il disco non ha mfs: non posso leggere /Sistema/init");
     kprintf("mfs     : montato\n");
 
     /* Lo scheduler: da qui in poi questo codice e' il compito 0, "inattivo", e gli altri
      * compiti si alternano a ogni tick. */
     compiti_prepara();
 
-    /* IL PRIMO PROGRAMMA. Come in Linux, il kernel lancia un solo programma, /init, e
-     * sara' lui a far nascere tutto il resto. Senza init non c'e' sistema: panico. */
+    /* IL PRIMO PROGRAMMA. Come in Linux, il kernel lancia un solo programma,
+     * /Sistema/init, e sara' lui a far nascere tutto il resto. Senza init non c'e'
+     * sistema: panico. */
     const char *errore;
-    struct compito *init = compito_crea_programma("/init", UID_SISTEMA, &errore);
-    if (!init) panico("non posso avviare /init: %s", errore);
+    struct compito *init = compito_crea_programma("/Sistema/init", UID_SISTEMA, &errore);
+    if (!init) panico("non posso avviare /Sistema/init: %s", errore);
 
     kprintf("Compiti : scheduler acceso (inattivo, init)\n\n");
 

@@ -3,7 +3,7 @@
 #   ./run.sh
 #   build/mkernel.iso : l'immagine avviabile, come un CD: GRUB accende la modalita'
 #                       pixel (1280x800) e carica il kernel
-#   build/disco.img   : il disco con il file system e i programmi (/init e gli altri)
+#   build/disco.img   : il disco con il file system e i programmi (/Sistema/init e gli altri)
 set -e
 qui="$(cd "$(dirname "$0")" && pwd)"
 

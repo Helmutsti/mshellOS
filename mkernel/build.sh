@@ -52,7 +52,13 @@ for f in utente/programmi/*.c; do
     clang $NUDO $UTENTE -c "$f" -o "build/utente/$nome.o"
     ld.lld -T utente/libreria/programma.ld -o "build/utente/$nome" \
         build/utente/libreria/*.o "build/utente/$nome.o"
-    SUL_DISCO="$SUL_DISCO /$nome=build/utente/$nome"
+    # dove va sul disco: init e i servizi in /Sistema, il resto (per ora) nella radice
+    case "$nome" in
+        init)        posto=/Sistema/init ;;
+        compositore) posto=/Sistema/Servizi/$nome ;;
+        *)           posto=/$nome ;;
+    esac
+    SUL_DISCO="$SUL_DISCO $posto=build/utente/$nome"
 done
 echo "build/utente pronto"
 
