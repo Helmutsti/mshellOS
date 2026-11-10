@@ -37,7 +37,7 @@ FONT_USATI = [
 CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á'}
 CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
 
-ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert']
+ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square']
 LATI = [12, 14, 16, 20, 24]
 
 def svg_in_png(file, l, a):
@@ -46,9 +46,10 @@ def svg_in_png(file, l, a):
 
 def icona_in_png(file, lato):
     """Come le disegna Figma: il tratto resta di 2 pixel a qualunque misura (non si
-    rimpicciolisce con l'icona). Nella griglia da 24 diventa quindi 2 * 24 / lato."""
+    rimpicciolisce con l'icona). In una griglia da G diventa quindi 2 * G / lato."""
     svg = open(file, encoding='utf-8').read()
-    svg = svg.replace('stroke-width="2"', 'stroke-width="%.4f"' % (2 * 24 / lato))
+    griglia = float(svg.split('viewBox="')[1].split()[2])   # di solito 24, a volte 16
+    svg = svg.replace('stroke-width="2"', 'stroke-width="%.4f"' % (2 * griglia / lato))
     return Image.open(io.BytesIO(subprocess.check_output(
         ['rsvg-convert', '-w', str(lato), '-h', str(lato)], input=svg.encode()))).convert('RGBA')
 

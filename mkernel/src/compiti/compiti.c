@@ -164,6 +164,7 @@ struct compito *compito_crea_programma(const char *percorso, unsigned int uid, c
 
     memset(c, 0, sizeof *c);
     copia_nome(c->nome, nome_da_percorso(percorso));
+    for (int i = 0; i < MAX_PERCORSO - 1 && percorso[i]; i++) c->percorso[i] = percorso[i];
     c->pila = pila;
     c->mappa = mappa;
     c->dati_inizio = c->rottura = fine;   /* la zona dinamica, vuota */

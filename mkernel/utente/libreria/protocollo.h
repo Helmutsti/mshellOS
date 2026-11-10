@@ -19,13 +19,28 @@
  *   - ogni tanto il compositore chiede "ci sei?" (PING) e l'applicazione risponde
  *     "ci sono" (PONG). Lo fa la libreria delle finestre, da sola, ogni volta che
  *     l'applicazione aspetta le sue notizie. Se la risposta non arriva, l'applicazione
- *     e' bloccata: il compositore oscura la finestra e ci mette sopra un pulsante di
+ *     e' bloccata: il compositore ne ridisegna la barra in rosso, con il pulsante di
  *     chiusura d'emergenza. Come GNOME e il Mac.
+ *
+ * I RUOLI SPECIALI (solo per i programmi del sistema, uid 0: il compositore lo chiede al
+ * kernel con chi). Oltre alle finestre normali ci sono superfici che stanno in uno strato
+ * fisso, e che sceglie la scrivania (come layer-shell di Wayland):
+ *
+ *     PANNELLO   sopra tutte le finestre (l'isola)
+ *     finestre   le applicazioni, nel mezzo: si spostano e si portano davanti
+ *     SFONDO     sotto tutto
+ *
+ * Una superficie speciale sta dove dice lei (x, y), non si trascina e non prende il fuoco
+ * della tastiera. A un PANNELLO il compositore racconta anche quali finestre ci sono:
+ * FINESTRA_APERTA e FINESTRA_CHIUSA, con il programma a cui appartengono (come
+ * foreign-toplevel di Wayland). Cosi' la scrivania sa quali applicazioni sono aperte.
  *
  * Una finestra per collegamento: per due finestre, due collegamenti.
  * Ogni messaggio comincia con il suo tipo. */
 #ifndef PROTOCOLLO_H
 #define PROTOCOLLO_H
+
+#include "chiamate.h"   /* MAX_PERCORSO */
 
 #define NOME_COMPOSITORE "compositore"   /* il nome su cui ascolta */
 #define MAX_TITOLO 32
@@ -44,11 +59,26 @@
                              * mentre il pulsante premuto dentro la finestra e' ancora
                              * giu'; se e' gia' stato lasciato, il compositore la ignora */
 #define PONG            4   /* "ci sono": la risposta al PING 'numero' */
+#define CHIEDI_SCHERMO  5   /* "quanto e' grande lo schermo?": risponde SCHERMO. Si puo'
+                             * chiedere anche prima di VOGLIO_FINESTRA */
+
+#define RUOLO_FINESTRA  0   /* una finestra normale */
+#define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
+#define RUOLO_PANNELLO  2   /* sopra tutte le finestre (solo il sistema) */
+#define RAGGIO_PREDEFINITO 12
 
 struct voglio_finestra {
     unsigned int tipo;
     unsigned int larghezza, altezza;   /* tutta la finestra, barra compresa */
     char titolo[MAX_TITOLO];
+    unsigned int ruolo;                /* RUOLO_... */
+    int x, y;                          /* dove sta: solo per i ruoli speciali */
+    unsigned int raggio;               /* gli angoli arrotondati: li usa il compositore per
+                                        * l'ombra e il vetro smerigliato sotto */
+};
+
+struct chiedi_schermo {
+    unsigned int tipo;
 };
 
 struct mostra {
@@ -74,6 +104,10 @@ struct pong {
 #define TASTO      4   /* e' stato premuto il tasto 'tasto' (code page 437) */
 #define FUOCO      5   /* 'fuoco' = 1: i tasti ora vengono a te; 0: non piu' */
 #define PING       6   /* "ci sei?": rispondi PONG con lo stesso 'numero' */
+#define FINESTRA_APERTA 7   /* (solo a un PANNELLO) e' comparsa la finestra 'numero', del
+                             * programma 'testo' (il suo percorso sul disco) */
+#define FINESTRA_CHIUSA 8   /* (solo a un PANNELLO) la finestra 'numero' non c'e' piu' */
+#define SCHERMO    9   /* la risposta a CHIEDI_SCHERMO: lo schermo e' x per y pixel */
 
 struct notizia {
     unsigned int tipo;
@@ -82,7 +116,8 @@ struct notizia {
     unsigned int pulsanti;   /* PUNTATORE */
     unsigned int tasto;      /* TASTO */
     unsigned int fuoco;      /* FUOCO */
-    unsigned int numero;     /* PING */
+    unsigned int numero;     /* PING, FINESTRA_APERTA, FINESTRA_CHIUSA */
+    char testo[MAX_PERCORSO];   /* FINESTRA_APERTA */
 };
 
 #endif

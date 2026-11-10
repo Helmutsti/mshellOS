@@ -11,8 +11,9 @@ docker run --rm --platform linux/amd64 -v "$qui:/w" alpine:3.24 sh /w/build.sh
 
 # -cdrom + -boot d  : si parte dal "CD" con GRUB
 # -drive ... if=ide : il disco.img e' il primo disco ATA, quello che legge il kernel
+# -rtc base=localtime : l'orologio del PC virtuale segna l'ora di casa
 # zoom-to-fit       : la finestra si puo' ingrandire
 qemu-system-i386 \
-    -cdrom "$qui/build/mkernel.iso" -boot d \
+    -cdrom "$qui/build/mkernel.iso" -boot d -rtc base=localtime \
     -drive file="$qui/build/disco.img",format=raw,if=ide,index=0 \
     -display cocoa,zoom-to-fit=on

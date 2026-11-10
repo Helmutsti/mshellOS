@@ -32,14 +32,36 @@ struct finestra {
     int quante;
 };
 
-/* Si collega al compositore (se non e' ancora pronto riprova per qualche secondo), crea
- * il foglio con le due immagini e chiede la finestra. 0 se fatto, -1 se no. */
-static inline int finestra_apri(struct finestra *f, int larghezza, int altezza, const char *titolo) {
-    f->collegamento = -1;
-    for (int prove = 0; prove < 100 && f->collegamento < 0; prove++) {
-        f->collegamento = collega(NOME_COMPOSITORE);
-        if (f->collegamento < 0) dormi(50);
+/* Si collega al compositore; se non e' ancora pronto riprova per qualche secondo. */
+static inline int collega_compositore(void) {
+    int d = -1;
+    for (int prove = 0; prove < 100 && d < 0; prove++) {
+        d = collega(NOME_COMPOSITORE);
+        if (d < 0) dormi(50);
     }
+    return d;
+}
+
+/* Quanto e' grande lo schermo: lo si chiede al compositore. 0, o -1. */
+static inline int finestra_schermo(int *larghezza, int *altezza) {
+    int d = collega_compositore();
+    if (d < 0) return -1;
+    struct chiedi_schermo m = { .tipo = CHIEDI_SCHERMO };
+    struct notizia n;
+    int fatto = manda(d, &m, sizeof m) >= 0 && ricevi(d, &n, sizeof n) == sizeof n && n.tipo == SCHERMO;
+    chiudi(d);
+    if (!fatto) return -1;
+    *larghezza = n.x;
+    *altezza = n.y;
+    return 0;
+}
+
+/* Come finestra_apri, ma con un ruolo speciale (RUOLO_SFONDO, RUOLO_PANNELLO: solo per i
+ * programmi del sistema), il posto sullo schermo e il raggio degli angoli. */
+static inline int finestra_apri_come(struct finestra *f, int larghezza, int altezza,
+                                     const char *titolo, unsigned int ruolo, int x, int y,
+                                     unsigned int raggio) {
+    f->collegamento = collega_compositore();
     if (f->collegamento < 0) return -1;
 
     unsigned int pixel = larghezza * altezza;
@@ -54,9 +76,16 @@ static inline int finestra_apri(struct finestra *f, int larghezza, int altezza, 
     f->in_uso = 0;
     f->quante = 0;
 
-    struct voglio_finestra m = { .tipo = VOGLIO_FINESTRA, .larghezza = larghezza, .altezza = altezza };
+    struct voglio_finestra m = { .tipo = VOGLIO_FINESTRA, .larghezza = larghezza, .altezza = altezza,
+                                 .ruolo = ruolo, .x = x, .y = y, .raggio = raggio };
     for (int i = 0; i < MAX_TITOLO - 1 && titolo[i]; i++) m.titolo[i] = titolo[i];
     return manda_foglio(f->collegamento, &m, sizeof m, f->foglio) < 0 ? -1 : 0;
+}
+
+/* Si collega al compositore (se non e' ancora pronto riprova per qualche secondo), crea
+ * il foglio con le due immagini e chiede una finestra normale. 0 se fatto, -1 se no. */
+static inline int finestra_apri(struct finestra *f, int larghezza, int altezza, const char *titolo) {
+    return finestra_apri_come(f, larghezza, altezza, titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_PREDEFINITO);
 }
 
 /* Riceve un messaggio dal compositore. Le immagini restituite si segnano qui, e al

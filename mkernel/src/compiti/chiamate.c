@@ -19,6 +19,7 @@
 #include "file.h"
 #include "schermo.h"
 #include "processo.h"
+#include "orologio.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA (1024 * 1024)   /* il pezzo piu' grande in una chiamata: 1 MB */
@@ -209,6 +210,23 @@ unsigned int chiamata_di_sistema(struct registri *r) {
             aperto_tieni(passati[i]);
         }
         r->eax = c->numero;
+        break;
+    }
+    case SIS_DATA_ORA: {
+        struct data_ora *d = (struct data_ora *)r->ebx;
+        r->eax = -1;
+        if (!del_programma((unsigned int)d, sizeof *d, SCRIVERE)) break;
+        orologio_leggi(d);
+        r->eax = 0;
+        break;
+    }
+    case SIS_PROGRAMMA_DI: {
+        struct compito *c = socket_altro(r->ebx);
+        char *dove = (char *)r->ecx;
+        r->eax = -1;
+        if (!c || !del_programma((unsigned int)dove, MAX_PERCORSO, SCRIVERE)) break;
+        memcpy(dove, c->percorso, MAX_PERCORSO);
+        r->eax = 0;
         break;
     }
     case SIS_PROCESSO:

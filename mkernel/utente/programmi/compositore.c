@@ -5,8 +5,9 @@
  * collegano al socket "compositore" e parlano con il protocollo delle finestre
  * (protocollo.h): ognuna disegna da sola la sua finestra in un foglio di memoria
  * condivisa, e dice "mostra". Il compositore:
- *   - COMPONE: lo sfondo, poi le finestre dal fondo al primo piano, ognuna con la sua
- *     ombra morbida intorno, poi il puntatore. Le finestre sono di VETRO SMERIGLIATO:
+ *   - COMPONE, a strati: lo sfondo (una superficie della scrivania), le finestre dal
+ *     fondo al primo piano, ognuna con la sua ombra morbida intorno, l'isola (un'altra
+ *     superficie della scrivania), poi il puntatore. Le finestre sono di VETRO SMERIGLIATO:
  *     sotto ognuna il compositore sfoca quello che c'e' dietro, e ci mescola sopra
  *     l'immagine dell'applicazione (i suoi pixel hanno un'opacita'). Dentro le finestre
  *     non disegna niente, neanche la barra del titolo: ogni applicazione si disegna da
@@ -66,30 +67,9 @@ static unsigned int disegno[MAX_LARGHEZZA * MAX_ALTEZZA];
 static struct tela scena;
 static struct pennello pennello;
 
-/* LO SFONDO, ingrandito una volta sola all'avvio da quello piccolo (320x200) di
- * grafica_dati.h. E' una sfumatura morbida: ingrandendolo "a mescolanza" (ogni pixel
- * nuovo e' una media pesata dei quattro vicini di quello piccolo) non si perde niente. */
-static unsigned int sfondo[MAX_LARGHEZZA * MAX_ALTEZZA];
-
-static void prepara_sfondo(void) {
-    for (int y = 0; y < altezza; y++) {
-        int fy = y * ((SFONDO_A - 1) << 8) / (altezza - 1);   /* in 256esimi di pixel piccolo */
-        int iy = fy >> 8, ty = fy & 255, iy2 = iy + 1 < SFONDO_A ? iy + 1 : iy;
-        for (int x = 0; x < larghezza; x++) {
-            int fx = x * ((SFONDO_L - 1) << 8) / (larghezza - 1);
-            int ix = fx >> 8, tx = fx & 255, ix2 = ix + 1 < SFONDO_L ? ix + 1 : ix;
-            unsigned int a = sfondo_piccolo[iy * SFONDO_L + ix], b = sfondo_piccolo[iy * SFONDO_L + ix2];
-            unsigned int c = sfondo_piccolo[iy2 * SFONDO_L + ix], d = sfondo_piccolo[iy2 * SFONDO_L + ix2];
-            unsigned int px = 0xFF000000u;
-            for (int k = 0; k < 24; k += 8) {
-                int sopra = ((a >> k) & 0xFF) * (256 - tx) + ((b >> k) & 0xFF) * tx;
-                int sotto = ((c >> k) & 0xFF) * (256 - tx) + ((d >> k) & 0xFF) * tx;
-                px |= (unsigned int)((sopra * (256 - ty) + sotto * ty) >> 16) << k;
-            }
-            sfondo[y * larghezza + x] = px;
-        }
-    }
-}
+/* LO SFONDO NON E' SUO: e' una superficie della scrivania (RUOLO_SFONDO). Finche' la
+ * scrivania non c'e', sotto le finestre c'e' solo questo colore. */
+#define SENZA_SFONDO OPACO(0x0F172A)
 
 /* Un'immagine di un'applicazione (premoltiplicata) a x, y, mescolata con quello che c'e'
  * sotto; le prime 'salta' righe no. Quello che esce dallo schermo si taglia. */
@@ -127,6 +107,12 @@ struct finestra {
     int da_rilasciare;          /* un'immagine da restituire che non le si e' potuto
                                  * dire (casella piena): glielo si dice quando risponde */
     unsigned int generazione;   /* cresce a ogni MOSTRA: l'immagine e' cambiata */
+
+    unsigned int ruolo;         /* RUOLO_FINESTRA, o una superficie speciale della scrivania */
+    int raggio;                 /* gli angoli: per l'ombra e il vetro smerigliato */
+    unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
+    char programma[MAX_PERCORSO];   /* di quale programma e': lo dice il kernel */
+    int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
 };
 
 static struct finestra finestre[MAX_FINESTRE];
@@ -144,6 +130,7 @@ static int trascinata = -1; /* quella che si sta spostando (TRASCINAMI) */
 static int presa_x, presa_y;
 static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto si muove */
 static unsigned int prossimo_ping = 1;
+static unsigned int prossimo_id = 1;
 
 /* L'OMBRA di una finestra: morbida, spostata in giu' e larga quanto la sfocatura, come
  * nel disegno. Calcolarla costa (le distanze dal bordo arrotondato), e dipende solo
@@ -155,11 +142,19 @@ static unsigned int prossimo_ping = 1;
 static unsigned char ombre[MAX_FINESTRE][(MAX_LARGHEZZA + 2 * OMBRA_MARGINE) *
                                          (MAX_ALTEZZA + 2 * OMBRA_MARGINE + FINESTRA_OMBRA_GIU)];
 
+/* Il pannello (l'isola) ha un'ombra piu' corta di quella delle finestre: nel disegno,
+ * spostata di 10 e sfocata di 15, al 28%. */
+#define PANNELLO_OMBRA_GIU      10
+#define PANNELLO_OMBRA_SFOCATA  15
+#define PANNELLO_OMBRA          VELATO(0x050A24, 71)
+
 static void prepara_ombra(int i) {
     const struct finestra *f = &finestre[i];
-    struct tondo forma = tondo(0, 0, f->l, f->a, RAGGIO_FINESTRA);
-    struct tondo giu = tondo(0, FINESTRA_OMBRA_GIU, f->l, f->a, RAGGIO_FINESTRA);
-    int s = FINESTRA_OMBRA_SFOCATA * 256;
+    int pannello = f->ruolo == RUOLO_PANNELLO;
+    int quanto_giu = pannello ? PANNELLO_OMBRA_GIU : FINESTRA_OMBRA_GIU;
+    struct tondo forma = tondo(0, 0, f->l, f->a, f->raggio);
+    struct tondo giu = tondo(0, quanto_giu, f->l, f->a, f->raggio);
+    int s = (pannello ? PANNELLO_OMBRA_SFOCATA : FINESTRA_OMBRA_SFOCATA) * 256;
     for (int y = 0; y < OMBRA_A(f); y++)
         for (int x = 0; x < OMBRA_L(f); x++) {
             int wx = x - OMBRA_MARGINE, wy = y - OMBRA_MARGINE;
@@ -174,7 +169,8 @@ static void prepara_ombra(int i) {
 
 static void disegna_ombra(int i) {
     const struct finestra *f = &finestre[i];
-    pennello_colore(&pennello, i == fuoco ? FINESTRA_OMBRA : FINESTRA_OMBRA_SFONDO);
+    pennello_colore(&pennello, f->ruolo == RUOLO_PANNELLO ? PANNELLO_OMBRA
+                               : i == fuoco ? FINESTRA_OMBRA : FINESTRA_OMBRA_SFONDO);
     for (int y = 0; y < OMBRA_A(f); y++)
         for (int x = 0; x < OMBRA_L(f); x++) {
             int v = ombre[i][y * OMBRA_L(f) + x];
@@ -263,10 +259,10 @@ static void prepara_sfocatura(int i) {
 static void metti_sfocatura(int i) {
     const struct finestra *f = &finestre[i];
     const struct sfocata *s = &sfocate[i];
-    struct tondo forma = tondo(f->x, f->y, f->l, f->a, RAGGIO_FINESTRA);
+    struct tondo forma = tondo(f->x, f->y, f->l, f->a, f->raggio);
     for (int y = f->y; y < f->y + f->a; y++) {
         if (y < 0 || y >= altezza) continue;
-        int vicino_sopra_sotto = y < f->y + RAGGIO_FINESTRA || y >= f->y + f->a - RAGGIO_FINESTRA;
+        int vicino_sopra_sotto = y < f->y + f->raggio || y >= f->y + f->a - f->raggio;
         /* dove cade il pixel nella copia piccola, in 256esimi (centro su centro) */
         int fy = (y * 256 + 128) / SCALA - 128 - s->y * 256;
         int vy = fy >> 8, ty = fy & 255;
@@ -275,7 +271,7 @@ static void metti_sfocatura(int i) {
         for (int x = f->x; x < f->x + f->l; x++) {
             if (x < 0 || x >= larghezza) continue;
             int c = 256;
-            if (vicino_sopra_sotto && (x < f->x + RAGGIO_FINESTRA || x >= f->x + f->l - RAGGIO_FINESTRA))
+            if (vicino_sopra_sotto && (x < f->x + f->raggio || x >= f->x + f->l - f->raggio))
                 c = coperto(distanza(&forma, x, y));        /* gli angoli arrotondati */
             if (!c) continue;
             int fx = (x * 256 + 128) / SCALA - 128 - s->x * 256;
@@ -345,11 +341,15 @@ static void barra_non_risponde(const struct finestra *f) {
 
 static void disegna_finestra(int i, int ricalcola) {
     const struct finestra *f = &finestre[i];
+    if (f->ruolo == RUOLO_SFONDO) {           /* sotto tutto: niente ombra, niente vetro */
+        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], 0);
+        return;
+    }
     disegna_ombra(i);
     if (ricalcola) prepara_sfocatura(i);
     metti_sfocatura(i);
     immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? BARRA_ALTEZZA : 0);
-    if (f->non_risponde) barra_non_risponde(f);
+    if (f->non_risponde && f->ruolo == RUOLO_FINESTRA) barra_non_risponde(f);
 }
 
 /* Un messaggio a un'applicazione, senza aspettare. Se non si puo', la sua casella e'
@@ -378,19 +378,41 @@ static void in_primo_piano(int i) {
 
 /* La finestra sotto il punto (x, y): si cerca dal primo piano in giu', perche' quella
  * davanti copre le altre. -1 se sotto c'e' lo sfondo. */
+/* GLI STRATI, dal basso: le superfici SFONDO, poi le finestre normali nel loro ordine,
+ * poi i PANNELLI. Si disegna in quest'ordine, e si cerca chi sta sotto il puntatore al
+ * contrario. */
+static const unsigned int strati[] = { RUOLO_SFONDO, RUOLO_FINESTRA, RUOLO_PANNELLO };
+#define QUANTI_STRATI 3
+
 static int finestra_sotto(int x, int y) {
-    for (int k = quante - 1; k >= 0; k--) {
-        const struct finestra *f = &finestre[ordine[k]];
-        if (f->mostrata < 0) continue;
-        if (x >= f->x && x < f->x + f->l && y >= f->y && y < f->y + f->a)
-            return ordine[k];
-    }
+    for (int s = QUANTI_STRATI - 1; s >= 0; s--)
+        for (int k = quante - 1; k >= 0; k--) {
+            const struct finestra *f = &finestre[ordine[k]];
+            if (f->mostrata < 0 || f->ruolo != strati[s]) continue;
+            if (x >= f->x && x < f->x + f->l && y >= f->y && y < f->y + f->a)
+                return ordine[k];
+        }
     return -1;
+}
+
+/* FINESTRA_APERTA e FINESTRA_CHIUSA a tutti i pannelli (la scrivania): una finestra
+ * normale e' comparsa, o non c'e' piu'. */
+static void racconta_a(int pannello, int i, unsigned int tipo) {
+    struct notizia n = { .tipo = tipo, .numero = finestre[i].id };
+    for (int k = 0; k < MAX_PERCORSO; k++) n.testo[k] = finestre[i].programma[k];
+    avvisa(pannello, n);
+}
+
+static void racconta(int i, unsigned int tipo) {
+    for (int k = 0; k < MAX_FINESTRE; k++)
+        if (finestre[k].usata && finestre[k].ruolo == RUOLO_PANNELLO && finestre[k].immagini[0])
+            racconta_a(k, i, tipo);
 }
 
 static void scollega(int i) {
     struct finestra *f = &finestre[i];
     if (!f->usata) return;
+    if (f->annunciata) racconta(i, FINESTRA_CHIUSA);
     if (f->immagini[0]) togli(f->immagini[0]);
     if (f->foglio >= 0) chiudi(f->foglio);
     chiudi(f->collegamento);
@@ -430,7 +452,12 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     int l = m->larghezza, a = m->altezza;
     unsigned int byte;
     unsigned int *pixel = foglio >= 0 ? mappa(foglio, &byte) : 0;
-    if (!pixel || l < 1 || a < 1 || l > larghezza || a > altezza || byte < 2u * l * a * 4) {
+    /* i ruoli speciali solo al sistema: lo dice il kernel, non lo si puo' fingere */
+    int ruolo_valido = m->ruolo == RUOLO_FINESTRA ||
+                       ((m->ruolo == RUOLO_SFONDO || m->ruolo == RUOLO_PANNELLO) &&
+                        chi(f->collegamento) == UID_SISTEMA);
+    if (!pixel || !ruolo_valido || l < 1 || a < 1 || l > larghezza || a > altezza ||
+        byte < 2u * l * a * 4) {
         if (pixel) f->immagini[0] = pixel;   /* lo toglie scollega */
         scollega(i);
         return;
@@ -441,9 +468,18 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     f->a = a;
     for (int k = 0; k < MAX_TITOLO; k++) f->titolo[k] = m->titolo[k];
     f->titolo[MAX_TITOLO - 1] = 0;
-    f->x = 60 + i * 40;   /* a cascata */
-    f->y = 50 + i * 40;
-    prepara_ombra(i);
+    programma_di(f->collegamento, f->programma);
+    f->id = prossimo_id++;
+    f->ruolo = m->ruolo;
+    f->raggio = m->raggio > (unsigned int)(l < a ? l : a) / 2 ? (l < a ? l : a) / 2 : (int)m->raggio;
+    if (f->ruolo == RUOLO_FINESTRA) {
+        f->x = 60 + i * 40;   /* a cascata */
+        f->y = 50 + i * 40;
+    } else {
+        f->x = m->x;          /* le superfici speciali stanno dove dicono loro */
+        f->y = m->y;
+    }
+    if (f->ruolo != RUOLO_SFONDO) prepara_ombra(i);
 }
 
 static void mostra(int i, const struct mostra *m) {
@@ -452,9 +488,14 @@ static void mostra(int i, const struct mostra *m) {
     int prima = f->mostrata;
     f->mostrata = m->immagine;
     f->generazione++;
-    if (prima < 0) {                 /* la prima volta: davanti e con il fuoco */
+    if (prima < 0 && f->ruolo == RUOLO_FINESTRA) {   /* la prima volta: davanti e con il fuoco */
         in_primo_piano(i);
         dai_fuoco(i);
+        f->annunciata = 1;
+        racconta(i, FINESTRA_APERTA);
+    } else if (prima < 0 && f->ruolo == RUOLO_PANNELLO) {   /* un pannello nuovo: le finestre che ci sono */
+        for (int k = 0; k < MAX_FINESTRE; k++)
+            if (finestre[k].usata && finestre[k].annunciata) racconta_a(i, k, FINESTRA_APERTA);
     } else if (prima != f->mostrata) {
         if (!avvisa(i, (struct notizia){ .tipo = RILASCIATA, .immagine = prima }))
             f->da_rilasciare = prima;
@@ -496,7 +537,7 @@ static void controlla_risposte(void) {
  * Se l'utente l'ha gia' lasciato (il messaggio e' arrivato tardi), non si sposta niente:
  * se no la finestra seguirebbe il mouse senza che nessuno la tenga. */
 static void trascinami(int i) {
-    if (presa != i) return;
+    if (presa != i || finestre[i].ruolo != RUOLO_FINESTRA) return;   /* le superfici speciali no */
     trascinata = i;
     presa_x = px - finestre[i].x;
     presa_y = py - finestre[i].y;
@@ -510,6 +551,7 @@ static void trascinami(int i) {
 static void da_applicazione(int i) {
     union {
         unsigned int tipo;
+        struct chiedi_schermo c;
         struct voglio_finestra v;
         struct mostra m;
         struct trascinami t;
@@ -523,6 +565,10 @@ static void da_applicazione(int i) {
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
     if (m.tipo == PONG && n == sizeof m.p) { pong(i, &m.p); return; }
+    if (m.tipo == CHIEDI_SCHERMO && n == sizeof m.c) {
+        avvisa(i, (struct notizia){ .tipo = SCHERMO, .x = larghezza, .y = altezza });
+        return;
+    }
     scollega(i);                       /* messaggio sbagliato */
 }
 
@@ -587,9 +633,11 @@ static int scena_cambiata(void) {
 
 static void componi(void) {
     int ricalcola = scena_cambiata();
-    for (int i = 0; i < larghezza * altezza; i++) disegno[i] = sfondo[i];
-    for (int k = 0; k < quante; k++)
-        if (finestre[ordine[k]].mostrata >= 0) disegna_finestra(ordine[k], ricalcola);
+    for (int i = 0; i < larghezza * altezza; i++) disegno[i] = SENZA_SFONDO;
+    for (int s = 0; s < QUANTI_STRATI; s++)
+        for (int k = 0; k < quante; k++)
+            if (finestre[ordine[k]].mostrata >= 0 && finestre[ordine[k]].ruolo == strati[s])
+                disegna_finestra(ordine[k], ricalcola);
     disegna_puntatore();
 
     /* la copia, riga per riga. La scena e' tutta opaca: i colori sono gia' quelli veri.
@@ -632,11 +680,11 @@ static void al_mouse(const struct evento *e) {
             termina(finestre[i].collegamento);
             return;
         }
-        dai_fuoco(i);
-        if (i >= 0) {
-            in_primo_piano(i);
-            presa = i;
+        if (i < 0 || finestre[i].ruolo == RUOLO_FINESTRA) {
+            dai_fuoco(i);
+            if (i >= 0) in_primo_piano(i);
         }
+        if (i >= 0) presa = i;
     }
     if (trascinata >= 0) {
         if (!premuto) presa = trascinata = -1;   /* lasciata: lo spostamento finisce */
@@ -680,7 +728,6 @@ int main(void) {
     py = altezza / 2;
     scena = (struct tela){ disegno, larghezza, altezza };
     pennello_prepara(&pennello, &scena);
-    prepara_sfondo();
     int eventi = D_EVENTI, ascolto = D_ASCOLTO;   /* prestati da init */
     componi();
 

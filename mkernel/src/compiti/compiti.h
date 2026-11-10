@@ -22,6 +22,7 @@ struct aperto;
 struct compito {
     int numero;
     char nome[16];
+    char percorso[64];           /* il programma da cui e' nato (MAX_PERCORSO) */
     enum stato_compito stato;
     unsigned int esp;            /* dove era arrivata la sua pila quando e' stato fermato */
     void *pila;                  /* la sua pila (0 per l'inattivo: usa quella dell'avvio).

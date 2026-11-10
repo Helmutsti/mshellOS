@@ -162,6 +162,17 @@ struct voce_cartella {
                               * finisca e da' 0, e aspetta lo vede pronto quando e' finito.
                               * Come pidfd in Linux */
 #define MAX_PASSATI 8
+#define SIS_DATA_ORA      32 /* data_ora(&d): la data e l'ora, dall'orologio del PC */
+#define SIS_PROGRAMMA_DI  33 /* programma_di(d, dove): il percorso del programma all'altro
+                              * capo del collegamento d (per esempio
+                              * "/Applicazioni/Contatore/Contatore"), in 'dove' (MAX_PERCORSO
+                              * byte). Come chi, il kernel lo sa e non si puo' fingere. 0, o -1 */
+
+struct data_ora {
+    unsigned int anno, mese, giorno;   /* mese da 1 a 12 */
+    unsigned int giorno_settimana;     /* 0 domenica, 1 lunedi'... */
+    unsigned int ore, minuti, secondi;
+};
 
 #define MANDA_SUBITO 1     /* il modo di manda che non aspetta mai */
 

@@ -207,6 +207,15 @@ static inline int avvia_con(const char *percorso, const int *descrittori, int qu
 /* Un descrittore del programma 'numero': ricevi aspetta che finisca. -1 se non c'e'. */
 static inline int processo(int numero) { return chiamata1(SIS_PROCESSO, numero); }
 
+/* La data e l'ora, dall'orologio del PC. */
+static inline int data_ora(struct data_ora *d) { return chiamata1(SIS_DATA_ORA, (unsigned int)d); }
+
+/* Il percorso del programma all'altro capo del collegamento 'd', in 'dove' (MAX_PERCORSO
+ * byte). 0, o -1. */
+static inline int programma_di(int d, char *dove) {
+    return chiamata3(SIS_PROGRAMMA_DI, d, (unsigned int)dove, 0);
+}
+
 /* L'uid del programma all'altro capo del collegamento 'd', o -1. */
 static inline int chi(int d) { return chiamata1(SIS_CHI, d); }
 
