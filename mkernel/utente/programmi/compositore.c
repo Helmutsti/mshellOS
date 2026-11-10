@@ -1,13 +1,17 @@
 /* Il compositore: il programma padrone dello schermo.
  *
  * Come in un sistema vero, il kernel non disegna finestre: presta lo schermo a un solo
- * programma, questo, e gli consegna gli eventi di tastiera e mouse. Il compositore
- * disegna lo sfondo, le finestre e il puntatore, e decide a quale finestra va ogni
- * evento. Le applicazioni (non ancora) gli manderanno ORDINI ("un rettangolo qui",
- * "questo testo la'") invece di disegnare da sole.
- *
- * Per ora: due finestre finte che si spostano trascinandole per la barra del titolo.
- * Un clic su una finestra la porta in primo piano.
+ * programma, questo, e gli consegna gli eventi di tastiera e mouse. Le applicazioni si
+ * collegano al socket "compositore" e parlano con il protocollo delle finestre
+ * (protocollo.h): ognuna disegna da sola la sua finestra in un foglio di memoria
+ * condivisa, e dice "mostra". Il compositore:
+ *   - COMPONE: sfondo, poi le immagini delle finestre dal fondo al primo piano, poi il
+ *     puntatore. Dentro le finestre non disegna niente, neanche la barra del titolo:
+ *     ogni applicazione si disegna da sola, tutta;
+ *   - SMISTA L'INPUT: il puntatore alla finestra che ci sta sotto (in coordinate sue),
+ *     i tasti a quella che ha il fuoco;
+ *   - SPOSTA le finestre quando un'applicazione chiede TRASCINAMI, e porta davanti
+ *     quella cliccata.
  *
  * LO SCHERMO, VISTO DA QUI. Dopo prendi_schermo la memoria dello schermo e' nella
  * nostra mappa, a SCHERMO_PROGRAMMA: scrivere li' un numero vuol dire accendere un
@@ -16,9 +20,15 @@
  *
  * IL DOPPIO BUFFER. Non si disegna direttamente sullo schermo: se no, a ogni movimento
  * si vedrebbe lo sfondo cancellare per un attimo le finestre (lo schermo "sfarfalla").
- * Si disegna tutta la scena in una memoria nostra, 'disegno', e poi la si copia sullo
- * schermo in un colpo. Lo fanno tutti i sistemi grafici. */
+ * Si compone tutta la scena in una memoria nostra, 'disegno', e poi la si copia sullo
+ * schermo in un colpo.
+ *
+ * NON SI ASPETTA MAI UN'APPLICAZIONE. Il compositore manda i suoi messaggi senza
+ * aspettare (manda_subito): se un'applicazione non legge, la sua casella si riempie e
+ * lui la scollega, invece di restare bloccato con tutto lo schermo. E non si fida di
+ * quello che riceve: misure, immagini e foglio si controllano. */
 #include "libreria.h"
+#include "protocollo.h"
 
 #define MAX_LARGHEZZA 800   /* quanto chiede il kernel a GRUB (kernel_head.s) */
 #define MAX_ALTEZZA   600
@@ -50,6 +60,18 @@ static void rettangolo(int x, int y, int l, int a, unsigned int rgb) {
             disegno[r * larghezza + k] = c;
 }
 
+/* Un'immagine di un'applicazione (0xRRGGBB) a x, y. Quello che esce si taglia. */
+static void immagine(int x, int y, int l, int a, const unsigned int *pixel) {
+    for (int r = 0; r < a; r++) {
+        int sy = y + r;
+        if (sy < 0 || sy >= altezza) continue;
+        for (int k = 0; k < l; k++) {
+            int sx = x + k;
+            if (sx >= 0 && sx < larghezza) disegno[sy * larghezza + sx] = colore(pixel[r * l + k]);
+        }
+    }
+}
+
 static void sfondo(void) {   /* una sfumatura dall'alto in basso, una riga alla volta */
     for (int y = 0; y < altezza; y++) {
         unsigned int t = y * 255 / altezza;
@@ -57,42 +79,169 @@ static void sfondo(void) {   /* una sfumatura dall'alto in basso, una riga alla 
     }
 }
 
-/* --- le finestre --- */
+/* --- le finestre, una per applicazione collegata --- */
 
-#define BARRA 23   /* altezza della barra del titolo, bordo compreso */
+#define MAX_FINESTRE 8
 
-struct finestra { int x, y, l, a; unsigned int barra; };
-
-static struct finestra finestre[] = {
-    { 80, 70, 360, 260, 0x3A6EA5 },
-    { 320, 220, 400, 300, 0x5A8F4E },
+struct finestra {
+    int usata;
+    int collegamento, foglio;
+    unsigned int *immagini[2];
+    int mostrata;          /* l'immagine che si vede (-1: nessuna ancora, non si disegna) */
+    int x, y;              /* l'angolo in alto a sinistra sullo schermo */
+    int l, a;
+    char titolo[MAX_TITOLO];
 };
-#define QUANTE ((int)(sizeof finestre / sizeof finestre[0]))
 
-/* L'ordine: ordine[0] e' quella piu' in fondo, l'ultima quella in primo piano.
+static struct finestra finestre[MAX_FINESTRE];
+
+/* L'ordine: ordine[0] e' quella piu' in fondo, ordine[quante-1] quella in primo piano.
  * Si disegnano dal fondo: ognuna copre quelle disegnate prima. */
-static int ordine[QUANTE] = { 0, 1 };
+static int ordine[MAX_FINESTRE];
+static int quante;
 
-static void disegna_finestra(const struct finestra *f) {
-    rettangolo(f->x, f->y, f->l, f->a, 0x202020);                         /* il bordo */
-    rettangolo(f->x + 1, f->y + 1, f->l - 2, BARRA - 1, f->barra);        /* la barra */
-    rettangolo(f->x + 1, f->y + BARRA, f->l - 2, f->a - BARRA - 1, 0xF0F0F0); /* il contenuto */
+static int fuoco = -1;      /* la finestra che riceve i tasti */
+static int sotto = -1;      /* quella che ha ricevuto l'ultimo PUNTATORE */
+static int presa = -1;      /* quella su cui si e' premuto il pulsante: finche' e' premuto,
+                             * il puntatore va a lei anche fuori (come in Wayland) */
+static int trascinata = -1; /* quella che si sta spostando (TRASCINAMI) */
+static int presa_x, presa_y;
+static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto si muove */
+
+static void disegna_finestra(int i) {
+    const struct finestra *f = &finestre[i];
+    immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata]);
+}
+
+static void scollega(int i);
+
+/* Un messaggio a un'applicazione, senza aspettare. Se non si puo', la si scollega. */
+static void avvisa(int i, struct notizia n) {
+    if (manda_subito(finestre[i].collegamento, &n, sizeof n) != sizeof n) scollega(i);
+}
+
+static void dai_fuoco(int i) {
+    if (i == fuoco) return;
+    int prima = fuoco;
+    fuoco = i;
+    if (prima >= 0) avvisa(prima, (struct notizia){ .tipo = FUOCO, .fuoco = 0 });
+    if (i >= 0 && finestre[i].usata) avvisa(i, (struct notizia){ .tipo = FUOCO, .fuoco = 1 });
+}
+
+static void in_primo_piano(int i) {
+    if (!finestre[i].usata) return;   /* scollegata intanto (avvisa non e' riuscita) */
+    int k = 0;
+    while (k < quante && ordine[k] != i) k++;
+    for (; k < quante - 1; k++) ordine[k] = ordine[k + 1];
+    ordine[quante - 1] = i;
 }
 
 /* La finestra sotto il punto (x, y): si cerca dal primo piano in giu', perche' quella
- * davanti copre le altre. -1 se sotto c'e' lo sfondo. Restituisce la posizione in 'ordine'. */
+ * davanti copre le altre. -1 se sotto c'e' lo sfondo. */
 static int finestra_sotto(int x, int y) {
-    for (int i = QUANTE - 1; i >= 0; i--) {
-        const struct finestra *f = &finestre[ordine[i]];
-        if (x >= f->x && x < f->x + f->l && y >= f->y && y < f->y + f->a) return i;
+    for (int k = quante - 1; k >= 0; k--) {
+        const struct finestra *f = &finestre[ordine[k]];
+        if (f->mostrata < 0) continue;
+        if (x >= f->x && x < f->x + f->l && y >= f->y && y < f->y + f->a)
+            return ordine[k];
     }
     return -1;
 }
 
-static void in_primo_piano(int i) {   /* la finestra in posizione i va in cima */
-    int f = ordine[i];
-    for (; i < QUANTE - 1; i++) ordine[i] = ordine[i + 1];
-    ordine[QUANTE - 1] = f;
+static void scollega(int i) {
+    struct finestra *f = &finestre[i];
+    if (!f->usata) return;
+    if (f->immagini[0]) togli(f->immagini[0]);
+    if (f->foglio >= 0) chiudi(f->foglio);
+    chiudi(f->collegamento);
+    f->usata = 0;
+    int k = 0;
+    while (k < quante && ordine[k] != i) k++;
+    for (; k < quante - 1; k++) ordine[k] = ordine[k + 1];
+    if (k < quante) quante--;
+    if (sotto == i) sotto = -1;
+    if (presa == i) presa = -1;
+    if (trascinata == i) trascinata = -1;
+    if (fuoco == i) fuoco = -1;
+}
+
+/* Un collegamento nuovo: si accetta e si aspetta il suo VOGLIO_FINESTRA. */
+static void nuovo_collegamento(int ascolto) {
+    int d = accetta(ascolto);
+    if (d < 0) return;
+    int i = 0;
+    while (i < MAX_FINESTRE && finestre[i].usata) i++;
+    if (i == MAX_FINESTRE) { chiudi(d); return; }   /* troppe finestre */
+    struct finestra *f = &finestre[i];
+    *f = (struct finestra){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1 };
+    ordine[quante++] = i;
+}
+
+/* Il primo messaggio: la finestra, con il suo foglio. Tutto si controlla. */
+static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) {
+    struct finestra *f = &finestre[i];
+    if (f->immagini[0]) {                /* ne ha gia' una: messaggio sbagliato */
+        if (foglio >= 0) chiudi(foglio);
+        scollega(i);
+        return;
+    }
+    f->foglio = foglio;
+    int l = m->larghezza, a = m->altezza;
+    unsigned int byte;
+    unsigned int *pixel = foglio >= 0 ? mappa(foglio, &byte) : 0;
+    if (!pixel || l < 1 || a < 1 || l > larghezza || a > altezza || byte < 2u * l * a * 4) {
+        if (pixel) f->immagini[0] = pixel;   /* lo toglie scollega */
+        scollega(i);
+        return;
+    }
+    f->immagini[0] = pixel;
+    f->immagini[1] = pixel + l * a;
+    f->l = l;
+    f->a = a;
+    for (int k = 0; k < MAX_TITOLO; k++) f->titolo[k] = m->titolo[k];
+    f->titolo[MAX_TITOLO - 1] = 0;
+    f->x = 40 + i * 40;   /* a cascata */
+    f->y = 30 + i * 40;
+}
+
+static void mostra(int i, const struct mostra *m) {
+    struct finestra *f = &finestre[i];
+    if (!f->immagini[0] || m->immagine > 1) { scollega(i); return; }
+    int prima = f->mostrata;
+    f->mostrata = m->immagine;
+    if (prima < 0) {                 /* la prima volta: davanti e con il fuoco */
+        in_primo_piano(i);
+        dai_fuoco(i);
+    } else if (prima != f->mostrata) {
+        avvisa(i, (struct notizia){ .tipo = RILASCIATA, .immagine = prima });
+    }
+}
+
+/* TRASCINAMI: vale solo se il pulsante premuto su questa finestra e' ancora giu'.
+ * Se l'utente l'ha gia' lasciato (il messaggio e' arrivato tardi), non si sposta niente:
+ * se no la finestra seguirebbe il mouse senza che nessuno la tenga. */
+static void trascinami(int i) {
+    if (presa != i) return;
+    trascinata = i;
+    presa_x = px - finestre[i].x;
+    presa_y = py - finestre[i].y;
+    if (sotto == i) {   /* finche' si sposta, il puntatore non e' suo */
+        avvisa(i, (struct notizia){ .tipo = USCITO });
+        sotto = -1;
+    }
+}
+
+/* Un messaggio da un'applicazione. */
+static void da_applicazione(int i) {
+    union { unsigned int tipo; struct voglio_finestra v; struct mostra m; struct trascinami t; } m;
+    int foglio = -1;
+    int n = ricevi_foglio(finestre[i].collegamento, &m, sizeof m, &foglio);
+    if (n <= 0) { if (foglio >= 0) chiudi(foglio); scollega(i); return; }   /* ha chiuso */
+    if (m.tipo == VOGLIO_FINESTRA && n == sizeof m.v) { voglio_finestra(i, &m.v, foglio); return; }
+    if (foglio >= 0) chiudi(foglio);   /* un foglio va solo col primo messaggio */
+    if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
+    if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
+    scollega(i);                       /* messaggio sbagliato */
 }
 
 /* --- il puntatore --- */
@@ -121,8 +270,6 @@ static const char *const freccia[] = {
     "       XX   ",
 };
 
-static int px, py;   /* dov'e' il puntatore: il mouse dice solo di quanto si muove */
-
 static void disegna_puntatore(void) {
     unsigned int nero = colore(0x000000), bianco = colore(0xFFFFFF);
     for (int r = 0; r < (int)(sizeof freccia / sizeof freccia[0]); r++)
@@ -137,7 +284,8 @@ static void disegna_puntatore(void) {
 
 static void componi(void) {
     sfondo();
-    for (int i = 0; i < QUANTE; i++) disegna_finestra(&finestre[ordine[i]]);
+    for (int k = 0; k < quante; k++)
+        if (finestre[ordine[k]].mostrata >= 0) disegna_finestra(ordine[k]);
     disegna_puntatore();
 
     for (int y = 0; y < altezza; y++) {   /* la copia, riga per riga */
@@ -147,11 +295,9 @@ static void componi(void) {
     }
 }
 
-/* --- gli eventi --- */
+/* --- gli eventi del kernel: mouse e tastiera --- */
 
 static unsigned int pulsanti_prima;
-static int trascino;          /* si sta trascinando la finestra in primo piano */
-static int presa_x, presa_y;  /* dove la si e' presa, rispetto al suo angolo */
 
 static void al_mouse(const struct evento *e) {
     px += e->dx;
@@ -165,22 +311,34 @@ static void al_mouse(const struct evento *e) {
     int appena_premuto = premuto && !(pulsanti_prima & PULSANTE_SINISTRO);
     pulsanti_prima = e->pulsanti;
 
-    if (appena_premuto) {   /* un clic: la finestra sotto va davanti; sulla barra, la si prende */
+    if (appena_premuto) {   /* un clic: la finestra sotto va davanti e prende il fuoco */
         int i = finestra_sotto(px, py);
-        if (i >= 0) {
+        dai_fuoco(i);
+        if (i >= 0 && finestre[i].usata) {
             in_primo_piano(i);
-            struct finestra *f = &finestre[ordine[QUANTE - 1]];
-            trascino = py < f->y + BARRA;
-            presa_x = px - f->x;
-            presa_y = py - f->y;
+            presa = i;
         }
     }
-    if (!premuto) trascino = 0;
-    if (trascino) {
-        struct finestra *f = &finestre[ordine[QUANTE - 1]];
-        f->x = px - presa_x;
-        f->y = py - presa_y;
+    if (!premuto) presa = trascinata = -1;
+    if (trascinata >= 0) {
+        finestre[trascinata].x = px - presa_x;
+        finestre[trascinata].y = py - presa_y;
+        return;
     }
+
+    /* a chi va il puntatore: a quella presa, se c'e'; se no a quella sotto */
+    int a_chi = presa >= 0 ? presa : finestra_sotto(px, py);
+    if (sotto >= 0 && sotto != a_chi) avvisa(sotto, (struct notizia){ .tipo = USCITO });
+    sotto = a_chi;
+    if (a_chi >= 0) {
+        const struct finestra *f = &finestre[a_chi];
+        avvisa(a_chi, (struct notizia){ .tipo = PUNTATORE, .x = px - f->x, .y = py - f->y,
+                                        .pulsanti = e->pulsanti });
+    }
+}
+
+static void al_tasto(const struct evento *e) {
+    if (fuoco >= 0) avvisa(fuoco, (struct notizia){ .tipo = TASTO, .tasto = e->tasto });
 }
 
 int main(void) {
@@ -197,18 +355,37 @@ int main(void) {
     px = larghezza / 2;
     py = altezza / 2;
     int eventi = apri_eventi();   /* tastiera e mouse, come un descrittore */
-    if (eventi < 0) {
-        scrivi_testo("compositore: gli eventi sono gia' di un altro programma\n");
+    int ascolto = ascolta(NOME_COMPOSITORE);
+    if (eventi < 0 || ascolto < 0) {
+        scrivi_testo("compositore: eventi o nome gia' di un altro programma\n");
         return 0;
     }
     componi();
 
-    /* Il ciclo di ogni sistema grafico: aspetta un evento, aggiorna, ridisegna. */
+    /* Il ciclo di ogni compositore: aspetta che succeda qualcosa (un evento, un
+     * collegamento, un messaggio da un'applicazione), aggiorna, ricompone. */
     for (;;) {
-        struct evento e;
-        if (ricevi(eventi, &e, sizeof e) != sizeof e) return 0;
-        if (e.tipo == EVENTO_MOUSE) al_mouse(&e);
-        /* i tasti: andranno alla finestra in primo piano, quando ci saranno le applicazioni */
+        struct da_guardare g[2 + MAX_FINESTRE];
+        int chi[2 + MAX_FINESTRE];
+        int n = 0;
+        g[n].descrittore = eventi;  chi[n++] = -1;
+        g[n].descrittore = ascolto; chi[n++] = -1;
+        for (int i = 0; i < MAX_FINESTRE; i++)
+            if (finestre[i].usata) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
+        if (aspetta(g, n) < 0) return 0;
+
+        if (g[0].pronto) {
+            struct evento e;
+            if (ricevi(eventi, &e, sizeof e) != sizeof e) return 0;
+            if (e.tipo == EVENTO_MOUSE) al_mouse(&e);
+            else if (e.tipo == EVENTO_TASTO) al_tasto(&e);
+        }
+        /* prima i messaggi, poi i collegamenti nuovi: un collegamento nuovo potrebbe
+         * riusare il numero di uno appena scollegato, e prendersi il suo 'pronto' */
+        for (int k = 2; k < n; k++)
+            if (g[k].pronto && finestre[chi[k]].usata && finestre[chi[k]].collegamento == g[k].descrittore)
+                da_applicazione(chi[k]);
+        if (g[1].pronto) nuovo_collegamento(ascolto);
         componi();
     }
 }

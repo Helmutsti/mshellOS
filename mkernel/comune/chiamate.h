@@ -12,7 +12,7 @@
 
 #define INT_SISTEMA 0x80   /* la porta: come Linux */
 
-/* I servizi. Argomenti in EBX, ECX, EDX, ESI; risultato in EAX (-1 = errore). */
+/* I servizi. Argomenti in EBX, ECX, EDX, ESI, EDI; risultato in EAX (-1 = errore). */
 #define SIS_SCRIVI 1       /* scrivi(testo, byte): scrive sullo schermo */
 #define SIS_DORMI  2       /* dormi(millisecondi): non gira per quel tempo */
 #define SIS_ESCI   3       /* esci(): il programma finisce */
@@ -42,10 +42,11 @@
                             * 'nome'. -1 se nessuno ascolta con quel nome */
 #define SIS_ACCETTA 9      /* accetta(d): il prossimo collegamento arrivato su d (dorme se
                             * non ce n'e'). Un descrittore nuovo, per parlare con lui */
-#define SIS_MANDA   10     /* manda(d, dati, byte, allegato): un messaggio (al massimo
-                            * MAX_MESSAGGIO byte). Dorme se l'altro ha la casella piena.
-                            * -1 se l'altro ha chiuso. 'allegato' e' il descrittore di un
-                            * foglio da passare con il messaggio, o -1 */
+#define SIS_MANDA   10     /* manda(d, dati, byte, allegato, modo): un messaggio (al massimo
+                            * MAX_MESSAGGIO byte). Dorme se l'altro ha la casella piena,
+                            * tranne con modo MANDA_SUBITO: allora -1. -1 anche se l'altro
+                            * ha chiuso. 'allegato' e' il descrittore di un foglio da
+                            * passare con il messaggio, o -1 */
 #define SIS_RICEVI  11     /* ricevi(d, dove, byte, &allegato): il prossimo messaggio (dorme
                             * se non ce n'e'). Quanti byte, o 0 se l'altro ha chiuso. Se il
                             * messaggio e' piu' lungo di 'byte', il resto si perde. Se aveva
@@ -64,9 +65,13 @@
  * pagine. E' cosi' che un'applicazione da' al compositore il disegno della sua finestra.
  * Il foglio sparisce quando nessuno lo tiene piu' (ne' descrittori ne' mappe). */
 #define SIS_FOGLIO  14     /* foglio(byte): un foglio nuovo, pieno di zeri. Il descrittore */
-#define SIS_MAPPA   15     /* mappa(d): mette il foglio nella memoria del programma, nella
-                            * zona dei fogli. L'indirizzo, o -1 */
+#define SIS_MAPPA   15     /* mappa(d, &byte): mette il foglio nella memoria del programma,
+                            * nella zona dei fogli. L'indirizzo, o -1. In 'byte' (se non e'
+                            * 0) quanto e' grande: chi riceve un foglio da un altro lo deve
+                            * sapere, per non leggere oltre la fine */
 #define SIS_TOGLI   16     /* togli(indirizzo): leva il foglio messo li' da mappa */
+
+#define MANDA_SUBITO 1     /* il modo di manda che non aspetta mai */
 
 #define MAX_NOME       32  /* lettere di un nome di socket, compreso lo 0 finale */
 #define MAX_MESSAGGIO 512  /* byte di un messaggio */

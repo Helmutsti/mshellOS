@@ -91,19 +91,25 @@ static inline int collega(const char *nome) { return chiamata1(SIS_COLLEGA, (uns
 /* Il prossimo collegamento arrivato su 'd' (dorme se non ce n'e'): un descrittore nuovo. */
 static inline int accetta(int d) { return chiamata1(SIS_ACCETTA, d); }
 
-static inline int chiamata4(int servizio, unsigned int a, unsigned int b, unsigned int c,
-                            unsigned int d) {
+static inline int chiamata5(int servizio, unsigned int a, unsigned int b, unsigned int c,
+                            unsigned int d, unsigned int e) {
     int risultato;
     __asm__ volatile("int %1"
                      : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(servizio), "b"(a), "c"(b), "d"(c), "S"(d)
+                     : "i"(INT_SISTEMA), "a"(servizio), "b"(a), "c"(b), "d"(c), "S"(d), "D"(e)
                      : "memory");
     return risultato;
 }
+#define chiamata4(s, a, b, c, d) chiamata5(s, a, b, c, d, 0)
 
 /* Manda un messaggio: i byte mandati, o -1 se l'altro ha chiuso. */
 static inline int manda(int d, const void *dati, unsigned int byte) {
     return chiamata4(SIS_MANDA, d, (unsigned int)dati, byte, -1);
+}
+
+/* Come manda, ma senza mai aspettare: -1 anche se la casella dell'altro e' piena. */
+static inline int manda_subito(int d, const void *dati, unsigned int byte) {
+    return chiamata5(SIS_MANDA, d, (unsigned int)dati, byte, -1, MANDA_SUBITO);
 }
 
 /* Come manda, con allegato il foglio del descrittore 'foglio'. */
@@ -127,9 +133,10 @@ static inline int ricevi_foglio(int d, void *dove, unsigned int byte, int *fogli
 /* Un foglio nuovo di 'byte' byte: il descrittore, o -1. */
 static inline int foglio(unsigned int byte) { return chiamata1(SIS_FOGLIO, byte); }
 
-/* Mette il foglio nella memoria del programma: dove sta, o 0. */
-static inline void *mappa(int d) {
-    int r = chiamata1(SIS_MAPPA, d);
+/* Mette il foglio nella memoria del programma: dove sta, o 0. In *byte (se non e' 0)
+ * quanto e' grande. */
+static inline void *mappa(int d, unsigned int *byte) {
+    int r = chiamata3(SIS_MAPPA, d, (unsigned int)byte, 0);
     return r == -1 ? 0 : (void *)r;
 }
 

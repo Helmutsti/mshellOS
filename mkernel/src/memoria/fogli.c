@@ -36,8 +36,9 @@ static int ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto
     return -1;
 }
 
-static int manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
-    (void)a; (void)da; (void)byte; (void)allegato;
+static int manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato,
+                 int subito) {
+    (void)a; (void)da; (void)byte; (void)allegato; (void)subito;
     return -1;
 }
 
@@ -75,7 +76,7 @@ int foglio_nuovo(unsigned int byte) {
 
 static unsigned int indirizzo_del_posto(int i) { return FOGLI_INIZIO + i * FOGLIO_MAX; }
 
-unsigned int foglio_mappa(int d) {
+unsigned int foglio_mappa(int d, unsigned int *byte) {
     struct aperto *a = descrittore(d);
     if (!a || !e_un_foglio(a)) return 0;
     struct foglio *f = (struct foglio *)a;
@@ -93,6 +94,7 @@ unsigned int foglio_mappa(int d) {
             return 0;                 /* memoria finita per le tabelle */
         }
     c->mappati[i] = a;
+    *byte = f->pagine * PAGINA;
     aperto_tieni(a);                  /* la mappa e' un uso: il foglio resta anche se si chiude d */
     return inizio;
 }

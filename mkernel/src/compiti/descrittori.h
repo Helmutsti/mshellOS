@@ -29,8 +29,10 @@ struct operazioni {
      * 0 se dall'altra parte hanno chiuso, -1 se qui non si riceve. Se col messaggio
      * arriva una cosa aperta, va in *allegato (con un uso gia' contato), se no 0. */
     int (*ricevi)(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato);
-    /* Manda 'byte' da 'da', con 'allegato' (o 0); puo' dormire. Byte mandati, o -1. */
-    int (*manda)(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato);
+    /* Manda 'byte' da 'da', con 'allegato' (o 0); puo' dormire, se non e' 'subito'.
+     * Byte mandati, o -1. */
+    int (*manda)(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato,
+                 int subito);
     /* C'e' qualcosa da ricevere adesso (o la fine)? Non dorme: serve ad aspetta. */
     int (*pronto)(struct aperto *a);
     /* Nessuno la tiene piu': si libera tutto. */

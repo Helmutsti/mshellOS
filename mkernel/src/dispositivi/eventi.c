@@ -50,8 +50,9 @@ static int ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto
     return sizeof(struct evento);
 }
 
-static int manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
-    (void)a; (void)da; (void)byte; (void)allegato;
+static int manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato,
+                 int subito) {
+    (void)a; (void)da; (void)byte; (void)allegato; (void)subito;
     return -1;   /* gli eventi li mette solo il kernel */
 }
 

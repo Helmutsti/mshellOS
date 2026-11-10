@@ -139,7 +139,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
             /* l'allegato: un descrittore del mittente, o -1 per niente */
             struct aperto *allegato = (int)r->esi == -1 ? 0 : descrittore(r->esi);
             if ((int)r->esi != -1 && !allegato) { r->eax = -1; break; }
-            r->eax = a->op->manda(a, (const void *)dati, byte, allegato);
+            r->eax = a->op->manda(a, (const void *)dati, byte, allegato, r->edi == MANDA_SUBITO);
             break;
         }
         /* dove scrivere il descrittore dell'allegato (0 = non interessa): si controlla
@@ -165,7 +165,13 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = foglio_nuovo(r->ebx);
         break;
     case SIS_MAPPA: {
-        unsigned int indirizzo = foglio_mappa(r->ebx);
+        unsigned int *dove_byte = (unsigned int *)r->ecx, byte;
+        if (dove_byte && !del_programma((unsigned int)dove_byte, sizeof byte, SCRIVERE)) {
+            r->eax = -1;
+            break;
+        }
+        unsigned int indirizzo = foglio_mappa(r->ebx, &byte);
+        if (indirizzo && dove_byte) *dove_byte = byte;
         r->eax = indirizzo ? indirizzo : (unsigned int)-1;
         break;
     }

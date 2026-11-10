@@ -87,12 +87,14 @@ static int capo_ricevi(struct aperto *a, void *dove, unsigned int byte, struct a
 /* SI ALLEGANO SOLO FOGLI. Un socket allegato a un messaggio che viaggia dentro se'
  * stesso non si chiuderebbe mai (si terrebbe in vita da solo): Linux per questo ha un
  * raccoglitore apposta. A noi per ora servono solo i fogli. */
-static int capo_manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
+static int capo_manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato,
+                      int subito) {
     struct capo *c = (struct capo *)a;
     if (byte > MAX_MESSAGGIO || (allegato && !e_un_foglio(allegato))) return -1;
     for (;;) {
         if (!c->altro) return -1;    /* l'altro ha chiuso: non c'e' a chi mandare */
         if (!piena(c->altro)) break;
+        if (subito) return -1;       /* chi non puo' aspettare (il compositore) lo sa subito */
         aperto_aspetta(a);           /* ci sveglia l'altro quando prende un messaggio */
     }
     struct capo *d = c->altro;
@@ -142,8 +144,9 @@ static int ascolto_ricevi(struct aperto *a, void *dove, unsigned int byte, struc
     return -1;                       /* qui arrivano collegamenti, non messaggi: accetta */
 }
 
-static int ascolto_manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
-    (void)a; (void)da; (void)byte; (void)allegato;
+static int ascolto_manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato,
+                         int subito) {
+    (void)a; (void)da; (void)byte; (void)allegato; (void)subito;
     return -1;
 }
 
