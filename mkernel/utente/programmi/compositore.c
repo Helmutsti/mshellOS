@@ -113,6 +113,7 @@ struct finestra {
     unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
     char programma[MAX_PERCORSO];   /* di quale programma e': lo dice il kernel */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
+    int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
 };
 
 static struct finestra finestre[MAX_FINESTRE];
@@ -361,12 +362,25 @@ static int avvisa(int i, struct notizia n) {
     return 0;
 }
 
+static void racconta_attiva(void);
+
 static void dai_fuoco(int i) {
     if (i == fuoco) return;
     int prima = fuoco;
     fuoco = i;
     if (prima >= 0) avvisa(prima, (struct notizia){ .tipo = FUOCO, .fuoco = 0 });
     if (i >= 0) avvisa(i, (struct notizia){ .tipo = FUOCO, .fuoco = 1 });
+    racconta_attiva();
+}
+
+/* La finestra normale piu' davanti tra quelle che si vedono, o -1: quando quella con il
+ * fuoco sparisce (chiusa o ridotta), il fuoco passa a lei. */
+static int piu_davanti(void) {
+    for (int k = quante - 1; k >= 0; k--) {
+        const struct finestra *f = &finestre[ordine[k]];
+        if (f->usata && f->ruolo == RUOLO_FINESTRA && f->mostrata >= 0 && !f->ridotta) return ordine[k];
+    }
+    return -1;
 }
 
 static void in_primo_piano(int i) {
@@ -388,7 +402,7 @@ static int finestra_sotto(int x, int y) {
     for (int s = QUANTI_STRATI - 1; s >= 0; s--)
         for (int k = quante - 1; k >= 0; k--) {
             const struct finestra *f = &finestre[ordine[k]];
-            if (f->mostrata < 0 || f->ruolo != strati[s]) continue;
+            if (f->mostrata < 0 || f->ridotta || f->ruolo != strati[s]) continue;
             if (x >= f->x && x < f->x + f->l && y >= f->y && y < f->y + f->a)
                 return ordine[k];
         }
@@ -409,6 +423,18 @@ static void racconta(int i, unsigned int tipo) {
             racconta_a(k, i, tipo);
 }
 
+/* FINESTRA_ATTIVA: quale finestra ha il fuoco (0 nessuna). */
+static void racconta_attiva_a(int pannello) {
+    avvisa(pannello, (struct notizia){ .tipo = FINESTRA_ATTIVA,
+                                       .numero = fuoco >= 0 ? finestre[fuoco].id : 0 });
+}
+
+static void racconta_attiva(void) {
+    for (int k = 0; k < MAX_FINESTRE; k++)
+        if (finestre[k].usata && finestre[k].ruolo == RUOLO_PANNELLO && finestre[k].mostrata >= 0)
+            racconta_attiva_a(k);
+}
+
 static void scollega(int i) {
     struct finestra *f = &finestre[i];
     if (!f->usata) return;
@@ -424,7 +450,10 @@ static void scollega(int i) {
     if (sotto == i) sotto = -1;
     if (presa == i) presa = -1;
     if (trascinata == i) trascinata = -1;
-    if (fuoco == i) fuoco = -1;
+    if (fuoco == i) {                 /* il fuoco passa alla finestra che c'era sotto */
+        fuoco = -1;
+        dai_fuoco(piu_davanti());
+    }
 }
 
 /* Un collegamento nuovo: si accetta e si aspetta il suo VOGLIO_FINESTRA. */
@@ -496,6 +525,7 @@ static void mostra(int i, const struct mostra *m) {
     } else if (prima < 0 && f->ruolo == RUOLO_PANNELLO) {   /* un pannello nuovo: le finestre che ci sono */
         for (int k = 0; k < MAX_FINESTRE; k++)
             if (finestre[k].usata && finestre[k].annunciata) racconta_a(i, k, FINESTRA_APERTA);
+        racconta_attiva_a(i);
     } else if (prima != f->mostrata) {
         if (!avvisa(i, (struct notizia){ .tipo = RILASCIATA, .immagine = prima }))
             f->da_rilasciare = prima;
@@ -547,11 +577,41 @@ static void trascinami(int i) {
     }
 }
 
+/* RIDUCIMI: la finestra si nasconde, e il fuoco passa a quella che c'era sotto. */
+static void riducimi(int i) {
+    struct finestra *f = &finestre[i];
+    if (f->ruolo != RUOLO_FINESTRA || f->mostrata < 0 || f->ridotta) return;
+    f->ridotta = 1;
+    if (presa == i) presa = -1;
+    if (trascinata == i) trascinata = -1;
+    if (sotto == i) {
+        avvisa(i, (struct notizia){ .tipo = USCITO });
+        sotto = -1;
+    }
+    if (fuoco == i) dai_fuoco(piu_davanti());
+}
+
+/* PORTA_DAVANTI, da un pannello (la scrivania): la finestra torna visibile, davanti a
+ * tutte, con il fuoco. */
+static void porta_davanti(int pannello, unsigned int numero) {
+    if (finestre[pannello].ruolo != RUOLO_PANNELLO) return;
+    for (int i = 0; i < MAX_FINESTRE; i++) {
+        struct finestra *f = &finestre[i];
+        if (!f->usata || f->ruolo != RUOLO_FINESTRA || f->id != numero || f->mostrata < 0) continue;
+        f->ridotta = 0;
+        in_primo_piano(i);
+        dai_fuoco(i);
+        return;
+    }
+}
+
 /* Un messaggio da un'applicazione. */
 static void da_applicazione(int i) {
     union {
         unsigned int tipo;
         struct chiedi_schermo c;
+        struct riducimi r;
+        struct porta_davanti d;
         struct voglio_finestra v;
         struct mostra m;
         struct trascinami t;
@@ -565,6 +625,8 @@ static void da_applicazione(int i) {
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
     if (m.tipo == PONG && n == sizeof m.p) { pong(i, &m.p); return; }
+    if (m.tipo == RIDUCIMI && n == sizeof m.r) { riducimi(i); return; }
+    if (m.tipo == PORTA_DAVANTI && n == sizeof m.d) { porta_davanti(i, m.d.numero); return; }
     if (m.tipo == CHIEDI_SCHERMO && n == sizeof m.c) {
         avvisa(i, (struct notizia){ .tipo = SCHERMO, .x = larghezza, .y = altezza });
         return;
@@ -621,7 +683,7 @@ static int scena_cambiata(void) {
     for (int k = 0; k < quante; k++) {
         const struct finestra *f = &finestre[ordine[k]];
         unsigned int valori[] = { ordine[k], f->x, f->y, f->l, f->mostrata, f->generazione,
-                                  f->non_risponde, ordine[k] == fuoco };
+                                  f->non_risponde | f->ridotta << 1, ordine[k] == fuoco };
         for (int v = 0; v < 8; v++) firma[n++] = valori[v];
     }
     for (int k = 0; k < MAX_FIRMA; k++) {
@@ -636,7 +698,8 @@ static void componi(void) {
     for (int i = 0; i < larghezza * altezza; i++) disegno[i] = SENZA_SFONDO;
     for (int s = 0; s < QUANTI_STRATI; s++)
         for (int k = 0; k < quante; k++)
-            if (finestre[ordine[k]].mostrata >= 0 && finestre[ordine[k]].ruolo == strati[s])
+            if (finestre[ordine[k]].mostrata >= 0 && !finestre[ordine[k]].ridotta &&
+                finestre[ordine[k]].ruolo == strati[s])
                 disegna_finestra(ordine[k], ricalcola);
     disegna_puntatore();
 

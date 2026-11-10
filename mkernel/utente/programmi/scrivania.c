@@ -12,9 +12,15 @@
  * il compositore, che a un pannello racconta ogni finestra che compare o sparisce, con il
  * programma a cui appartiene.
  *
- * NON FA PARTIRE NIENTE DA SOLA: quando si clicca un'applicazione nell'isola, chiede al
- * launcher (il servizio che fa partire le applicazioni) "apri questa". E' lui a farla
- * partire, come applicazione; la scrivania mostra e basta.
+ * IL CLIC SU UN'APPLICAZIONE DELL'ISOLA:
+ *   - se e' chiusa, la scrivania chiede al launcher (il servizio che fa partire le
+ *     applicazioni) "apri questa": e' lui a farla partire, la scrivania non fa partire
+ *     niente da sola;
+ *   - se e' aperta, ma ridotta o dietro le altre, chiede al compositore di riportare
+ *     davanti la sua finestra (PORTA_DAVANTI);
+ *   - se e' gia' in primo piano, niente, come il Dock del Mac.
+ * Sotto le applicazioni aperte c'e' un puntino; sotto quella in primo piano, una
+ * lineetta.
  *
  * Disegna con la libreria di disegno e lo stile del sistema, come il disegno Figma
  * "mshell - interfaccia" (Isola, Voce dell'isola, Pulsante applicazioni, Orologio). */
@@ -78,6 +84,21 @@ static void leggi_applicazioni(void) {
 
 static struct { unsigned int id; char programma[MAX_PERCORSO]; } aperte[MAX_APERTE];
 static int quante_aperte;
+static unsigned int attiva;   /* la finestra che ha il fuoco (0 nessuna) */
+
+/* La finestra piu' recente dell'applicazione, o 0 se non ne ha. */
+static unsigned int finestra_di(const struct app *a) {
+    for (int i = quante_aperte - 1; i >= 0; i--)
+        if (uguali(aperte[i].programma, a->programma)) return aperte[i].id;
+    return 0;
+}
+
+/* L'applicazione ha la finestra con il fuoco? */
+static int in_primo_piano(const struct app *a) {
+    for (int i = 0; i < quante_aperte; i++)
+        if (aperte[i].id == attiva && uguali(aperte[i].programma, a->programma)) return 1;
+    return 0;
+}
 
 static int e_aperta(const struct app *a) {
     for (int i = 0; i < quante_aperte; i++)
@@ -91,6 +112,10 @@ static int notizia(const struct notizia *n) {
         aperte[quante_aperte].id = n->numero;
         copia(aperte[quante_aperte].programma, n->testo, MAX_PERCORSO);
         quante_aperte++;
+        return 1;
+    }
+    if (n->tipo == FINESTRA_ATTIVA) {
+        attiva = n->numero;
         return 1;
     }
     if (n->tipo == FINESTRA_CHIUSA) {
@@ -213,7 +238,10 @@ static int disegna_isola(void) {
 
     for (int i = 0; i < quante_app; i++) {                   /* le applicazioni */
         voce(&p, x, y, app[i].colore, app[i].icona);
-        if (e_aperta(&app[i])) {                              /* il puntino: e' aperta */
+        if (in_primo_piano(&app[i])) {                       /* la lineetta: in primo piano */
+            pennello_colore(&p, CONTENUTO_PRINCIPALE);
+            riempi_tondo(&p, x + VOCE_LATO / 2 - 7, y + VOCE_LATO + 2, 14, 4, 2);
+        } else if (e_aperta(&app[i])) {                       /* il puntino: e' aperta */
             pennello_colore(&p, CONTENUTO_PRINCIPALE);
             riempi_tondo(&p, x + VOCE_LATO / 2 - 2, y + VOCE_LATO + 2, 4, 4, 2);
         }
@@ -245,6 +273,15 @@ static int app_sotto(int x, int y) {
     return -1;
 }
 
+/* Il clic su un'applicazione: aprirla, riportarla davanti, o niente (vedi in cima). */
+static void clic_su(const struct app *a) {
+    unsigned int finestra = finestra_di(a);
+    if (!finestra) { apri_applicazione(a->cartella); return; }
+    if (in_primo_piano(a)) return;
+    struct porta_davanti m = { .tipo = PORTA_DAVANTI, .numero = finestra };
+    manda(isola.collegamento, &m, sizeof m);
+}
+
 /* Il puntatore sull'isola. Come un pulsante: scatta quando si LASCIA, sulla stessa voce
  * su cui si era premuto. Allora si chiede al launcher di aprire quell'applicazione. */
 static void puntatore(const struct notizia *n) {
@@ -254,7 +291,7 @@ static void puntatore(const struct notizia *n) {
     pulsanti_prima = n->pulsanti;
     if (giu && !prima) premuta = app_sotto(n->x, n->y);
     if (!giu && prima) {
-        if (premuta >= 0 && app_sotto(n->x, n->y) == premuta) apri_applicazione(app[premuta].cartella);
+        if (premuta >= 0 && app_sotto(n->x, n->y) == premuta) clic_su(&app[premuta]);
         premuta = -1;
     }
 }

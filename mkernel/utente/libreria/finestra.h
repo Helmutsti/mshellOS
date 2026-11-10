@@ -133,6 +133,13 @@ static inline int finestra_trascinami(struct finestra *f) {
     return manda(f->collegamento, &m, sizeof m);
 }
 
+/* Chiede al compositore di nascondere la finestra (il pulsante "riduci"). Tornera'
+ * quando la scrivania la fa tornare. */
+static inline int finestra_riducimi(struct finestra *f) {
+    struct riducimi m = { .tipo = RIDUCIMI };
+    return manda(f->collegamento, &m, sizeof m);
+}
+
 /* La prossima notizia (un clic, un tasto...); dorme se non ce n'e'. 0 se il
  * compositore ha chiuso. */
 static inline int finestra_notizia(struct finestra *f, struct notizia *n) {

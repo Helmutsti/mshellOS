@@ -44,10 +44,9 @@
  * quando succede qualcosa che le interessa ("quando premono questo pulsante, chiama
  * questa funzione": in GTK i segnali, in AppKit target-action).
  *
- * I WIDGET LI DICHIARA L'APPLICAZIONE, come variabili sue: i programmi non possono
- * ancora chiedere memoria al kernel mentre girano. Una finestra per applicazione, che
- * non cambia misura. Il pulsante "riduci" per ora non fa niente: servira' la scrivania,
- * da cui una finestra ridotta possa tornare. */
+ * I WIDGET LI DICHIARA L'APPLICAZIONE, come variabili sue. Una finestra per
+ * applicazione, che non cambia misura. Il pulsante "riduci" la nasconde: torna con un
+ * clic sulla sua icona nell'isola della scrivania. */
 #ifndef TOOLKIT_H
 #define TOOLKIT_H
 
@@ -597,6 +596,7 @@ struct finestra_tk {
     struct widget *sotto;              /* quello che ha il puntatore sopra */
     struct widget *con_fuoco;          /* quello che riceve i tasti */
     int chiudi_premuto;
+    int riduci_premuto;
     int da_chiudere;
     unsigned int pulsanti_prima;
 };
@@ -740,7 +740,7 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
 
     if (appena_premuto) {
         if (su_comando(&f->base, 1, x, y)) { f->chiudi_premuto = 1; return; }
-        if (su_comando(&f->base, 0, x, y)) return;          /* riduci: non ancora */
+        if (su_comando(&f->base, 0, x, y)) { f->riduci_premuto = 1; return; }
         if (y < BARRA_ALTEZZA) { finestra_trascinami(&f->finestra); return; }
         f->catturato = widget_sotto(&f->base, x, y);
         toolkit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
@@ -749,6 +749,13 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
         if (!giu) {
             f->chiudi_premuto = 0;
             if (su_comando(&f->base, 1, x, y)) f->da_chiudere = 1;
+        }
+        return;
+    }
+    if (f->riduci_premuto) {                /* scatta quando si lascia, se si e' ancora sopra */
+        if (!giu) {
+            f->riduci_premuto = 0;
+            if (su_comando(&f->base, 0, x, y)) finestra_riducimi(&f->finestra);
         }
         return;
     }
@@ -783,6 +790,7 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
             if (f->catturato) f->catturato->tipo->puntatore(f->catturato, -1, -1, 0);
             f->catturato = 0;
             f->chiudi_premuto = 0;
+            f->riduci_premuto = 0;
             f->pulsanti_prima = 0;
             toolkit_sotto(f, 0);
         } else if (n.tipo == TASTO && f->con_fuoco) {

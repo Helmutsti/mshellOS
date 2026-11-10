@@ -34,6 +34,12 @@
  * della tastiera. A un PANNELLO il compositore racconta anche quali finestre ci sono:
  * FINESTRA_APERTA e FINESTRA_CHIUSA, con il programma a cui appartengono (come
  * foreign-toplevel di Wayland). Cosi' la scrivania sa quali applicazioni sono aperte.
+ * Le racconta anche quale finestra ha il fuoco (FINESTRA_ATTIVA), e un pannello puo'
+ * chiedere di riportarne una davanti (PORTA_DAVANTI), anche se era stata ridotta.
+ *
+ * IL "RIDUCI". Un'applicazione chiede RIDUCIMI (il pulsante nella sua barra): il
+ * compositore nasconde la finestra, che non si vede e non sente il puntatore finche'
+ * la scrivania non la fa tornare con PORTA_DAVANTI.
  *
  * Una finestra per collegamento: per due finestre, due collegamenti.
  * Ogni messaggio comincia con il suo tipo. */
@@ -61,6 +67,9 @@
 #define PONG            4   /* "ci sono": la risposta al PING 'numero' */
 #define CHIEDI_SCHERMO  5   /* "quanto e' grande lo schermo?": risponde SCHERMO. Si puo'
                              * chiedere anche prima di VOGLIO_FINESTRA */
+#define RIDUCIMI        6   /* "nascondimi": hanno premuto il mio pulsante riduci */
+#define PORTA_DAVANTI   7   /* (solo un PANNELLO) la finestra 'numero' torna visibile,
+                             * davanti a tutte, con il fuoco */
 
 #define RUOLO_FINESTRA  0   /* una finestra normale */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
@@ -79,6 +88,15 @@ struct voglio_finestra {
 
 struct chiedi_schermo {
     unsigned int tipo;
+};
+
+struct riducimi {
+    unsigned int tipo;
+};
+
+struct porta_davanti {
+    unsigned int tipo;
+    unsigned int numero;
 };
 
 struct mostra {
@@ -108,6 +126,8 @@ struct pong {
                              * programma 'testo' (il suo percorso sul disco) */
 #define FINESTRA_CHIUSA 8   /* (solo a un PANNELLO) la finestra 'numero' non c'e' piu' */
 #define SCHERMO    9   /* la risposta a CHIEDI_SCHERMO: lo schermo e' x per y pixel */
+#define FINESTRA_ATTIVA 10  /* (solo a un PANNELLO) ora ha il fuoco la finestra 'numero'
+                             * (0: nessuna) */
 
 struct notizia {
     unsigned int tipo;
