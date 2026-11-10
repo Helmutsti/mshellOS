@@ -162,6 +162,35 @@ static inline unsigned int tempo(void) {
 /* Chiude il programma all'altro capo del collegamento 'd'. 0 se fatto, o -1. */
 static inline int termina(int d) { return chiamata1(SIS_TERMINA, d); }
 
+/* --- i file e le cartelle (vedi chiamate.h) --- */
+
+/* Apre un file o una cartella: il descrittore, o -1. modo: APRI_LEGGERE, APRI_SCRIVERE,
+ * APRI_CREARE, APRI_SVUOTARE, sommati. */
+static inline int apri(const char *percorso, unsigned int modo) {
+    return chiamata3(SIS_APRI, (unsigned int)percorso, modo, 0);
+}
+
+/* Legge fino a 'byte' byte dalla posizione del file: quanti ne ha letti, 0 alla fine.
+ * Su una cartella: la prossima voce (struct voce_cartella), 0 quando sono finite. */
+static inline int leggi(int d, void *dove, unsigned int byte) { return ricevi(d, dove, byte); }
+
+/* Scrive 'byte' byte alla posizione del file (allungandolo se serve): quanti ne ha scritti. */
+static inline int scrivi_in(int d, const void *dati, unsigned int byte) { return manda(d, dati, byte); }
+
+static inline int posiziona(int d, unsigned int byte) { return chiamata3(SIS_POSIZIONA, d, byte, 0); }
+
+static inline int info(const char *percorso, struct info_file *i) {
+    return chiamata3(SIS_INFO, (unsigned int)percorso, (unsigned int)i, 0);
+}
+
+static inline int crea_cartella(const char *percorso) { return chiamata1(SIS_CREA_CARTELLA, (unsigned int)percorso); }
+static inline int cancella(const char *percorso) { return chiamata1(SIS_CANCELLA, (unsigned int)percorso); }
+
+/* Rinomina o sposta. Un file gia' presente in 'a' si sostituisce. */
+static inline int rinomina(const char *da, const char *a) {
+    return chiamata3(SIS_RINOMINA, (unsigned int)da, (unsigned int)a, 0);
+}
+
 /* --- la memoria dinamica --- */
 
 /* Sposta il confine della zona dinamica (vedi chiamate.h); rottura(0) dice dov'e'.

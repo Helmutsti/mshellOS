@@ -15,9 +15,11 @@
 #include "fogli.h"
 #include "timer.h"
 #include "dinamica.h"
+#include "mfs.h"
+#include "file.h"
 #include "chiamate.h"
 
-#define MAX_SCRITTURA 1024
+#define MAX_SCRITTURA (1024 * 1024)   /* il pezzo piu' grande in una chiamata: 1 MB */
 
 /* NON SI CREDE AL PROGRAMMA. Un indirizzo che arriva dal ring 3 e' un numero
  * qualsiasi: potrebbe puntare alla memoria del kernel, e il kernel (ring 0) la
@@ -201,6 +203,42 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = pronti;
         break;
     }
+    case SIS_APRI:
+    case SIS_INFO:
+    case SIS_CREA_CARTELLA:
+    case SIS_CANCELLA: {
+        char percorso[MAX_PERCORSO] = {0};
+        unsigned int servizio = r->eax;
+        r->eax = -1;
+        if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) break;
+        if (servizio == SIS_APRI) {
+            r->eax = file_apri(percorso, r->ecx);
+        } else if (servizio == SIS_INFO) {
+            struct info_file *info = (struct info_file *)r->ecx;
+            int tipo;
+            unsigned int dimensione;
+            if (!del_programma((unsigned int)info, sizeof *info, SCRIVERE) ||
+                mfs_info(percorso, &tipo, &dimensione) < 0) break;
+            info->tipo = tipo;
+            info->dimensione = dimensione;
+            r->eax = 0;
+        } else {
+            int esito = servizio == SIS_CREA_CARTELLA ? mfs_mkdir(percorso) : mfs_rm(percorso);
+            r->eax = esito < 0 ? -1 : 0;
+        }
+        break;
+    }
+    case SIS_RINOMINA: {
+        char da[MAX_PERCORSO], a[MAX_PERCORSO];
+        r->eax = -1;
+        if (!copia_stringa(da, (const char *)r->ebx, MAX_PERCORSO) ||
+            !copia_stringa(a, (const char *)r->ecx, MAX_PERCORSO)) break;
+        r->eax = mfs_rinomina(da, a) < 0 ? -1 : 0;
+        break;
+    }
+    case SIS_POSIZIONA:
+        r->eax = file_posiziona(r->ebx, r->ecx);
+        break;
     case SIS_ROTTURA:
         r->eax = memoria_rottura(r->ebx);
         break;

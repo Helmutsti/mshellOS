@@ -39,6 +39,24 @@ int mfs_leggi(const char *percorso, unsigned int da, void *dove, unsigned int n)
 typedef void (*mfs_visita)(const char *nome, int tipo, unsigned int dimensione);
 int mfs_elenca(const char *percorso, mfs_visita f);
 
+/* Scrive 'n' byte a partire dal byte 'da' (non oltre la fine): sovrascrive, e allunga
+ * il file se serve. Restituisce quanti ne ha scritti. */
+int mfs_scrivi(const char *percorso, unsigned int da, const void *dati, unsigned int n);
+
+/* Il file torna vuoto (0 byte). */
+int mfs_svuota(const char *percorso);
+
+/* Tipo (MFS_FILE o MFS_CARTELLA) e dimensione in byte. */
+int mfs_info(const char *percorso, int *tipo, unsigned int *dimensione);
+
+/* La voce numero k della cartella (0, 1, 2...): nome (MFS_NOME_MAX + 1 byte), tipo e
+ * dimensione. 1 se c'e', 0 se le voci sono finite. */
+int mfs_voce(const char *percorso, unsigned int k, char *nome, int *tipo, unsigned int *dimensione);
+
+/* Rinomina o sposta (anche in un'altra cartella). Un file gia' presente all'arrivo si
+ * sostituisce; una cartella no. */
+int mfs_rinomina(const char *da, const char *a);
+
 /* Cancella un file o una cartella vuota. */
 int mfs_rm(const char *percorso);
 

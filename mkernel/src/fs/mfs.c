@@ -544,6 +544,147 @@ static int elenca_dentro(const char *percorso, mfs_visita f) {
     return r < 0 ? r : 0;
 }
 
+/* Scrive n byte a partire dal byte 'da': quello che c'era si sovrascrive, e se si va
+ * oltre la fine il file si allunga. Non si puo' cominciare oltre la fine (resterebbe un
+ * buco senza settori). */
+static int scrivi_dentro(const char *percorso, unsigned int da, const void *dati, unsigned int n) {
+    u32 num;
+    int r;
+    if (!montato) return MFS_ERR_NON_FORMATTATO;
+    if ((r = trova(percorso, &num)) < 0) return r;
+    struct scheda sc;
+    if ((r = leggi_scheda(num, &sc)) < 0) return r;
+    if (sc.tipo == MFS_CARTELLA) return MFS_ERR_E_CARTELLA;
+    if (da > sc.dimensione) return MFS_ERR_NOME;
+    if (da + n < da || da + n > MAX_SETTORI * SETTORE) return MFS_ERR_TROPPO_GRANDE;
+
+    const unsigned char *d = dati;
+    unsigned char buf[SETTORE];
+    u32 scritti = 0;
+    while (scritti < n) {
+        u32 pos = da + scritti;
+        int s = settore_del_blocco(&sc, pos / SETTORE, 1);   /* lo crea se non c'e' */
+        if (s <= 0) { r = s < 0 ? s : MFS_ERR_DISCO; break; }
+        u32 dentro = pos % SETTORE, pezzo = SETTORE - dentro;
+        if (pezzo > n - scritti) pezzo = n - scritti;
+        if (pezzo < SETTORE && (r = leggi(s, buf)) < 0) break;   /* un pezzo: si conserva il resto */
+        memcpy(buf + dentro, d + scritti, pezzo);
+        if ((r = scrivi(s, buf)) < 0) break;
+        scritti += pezzo;
+    }
+    if (da + scritti > sc.dimensione) sc.dimensione = da + scritti;
+    int w = scrivi_scheda(num, &sc);   /* settori nuovi e dimensione, anche se a meta' */
+    if (scritti < n) return r < 0 ? r : MFS_ERR_DISCO;
+    return w < 0 ? w : (int)scritti;
+}
+
+/* Il file torna vuoto: i suoi settori tornano liberi. */
+static int svuota_dentro(const char *percorso) {
+    u32 num;
+    int r;
+    if (!montato) return MFS_ERR_NON_FORMATTATO;
+    if ((r = trova(percorso, &num)) < 0) return r;
+    struct scheda sc;
+    if ((r = leggi_scheda(num, &sc)) < 0) return r;
+    if (sc.tipo == MFS_CARTELLA) return MFS_ERR_E_CARTELLA;
+    if ((r = libera_contenuto(&sc)) < 0) return r;
+    u32 tipo = sc.tipo;
+    memset(&sc, 0, sizeof sc);
+    sc.tipo = tipo;
+    return scrivi_scheda(num, &sc);
+}
+
+static int info_dentro(const char *percorso, int *tipo, unsigned int *dimensione) {
+    u32 num;
+    int r;
+    if (!montato) return MFS_ERR_NON_FORMATTATO;
+    if ((r = trova(percorso, &num)) < 0) return r;
+    struct scheda sc;
+    if ((r = leggi_scheda(num, &sc)) < 0) return r;
+    *tipo = sc.tipo;
+    *dimensione = sc.dimensione;
+    return 0;
+}
+
+/* La voce numero k di una cartella (contando solo quelle usate). */
+struct voce_cercata {
+    u32 k, visti;
+    char *nome;
+    int *tipo;
+    unsigned int *dimensione;
+    int trovata;
+};
+
+static int visita_voce_k(struct voce *v, void *ctx) {
+    struct voce_cercata *c = ctx;
+    if (!v->nome[0]) return CONTINUA;
+    if (c->visti++ != c->k) return CONTINUA;
+    struct scheda sc;
+    if (leggi_scheda(v->scheda, &sc) < 0) return CONTINUA;
+    copia_nome(c->nome, v->nome);
+    *c->tipo = sc.tipo;
+    *c->dimensione = sc.dimensione;
+    c->trovata = 1;
+    return FERMATI;
+}
+
+static int voce_dentro(const char *percorso, unsigned int k, char *nome, int *tipo,
+                       unsigned int *dimensione) {
+    u32 num;
+    int r;
+    if (!montato) return MFS_ERR_NON_FORMATTATO;
+    if ((r = trova(percorso, &num)) < 0) return r;
+    struct scheda dir;
+    if ((r = leggi_scheda(num, &dir)) < 0) return r;
+    if (dir.tipo != MFS_CARTELLA) return MFS_ERR_NON_CARTELLA;
+    struct voce_cercata c = { k, 0, nome, tipo, dimensione, 0 };
+    r = scorri_cartella(&dir, visita_voce_k, &c);
+    return r < 0 ? r : c.trovata;
+}
+
+/* RINOMINARE E SPOSTARE sono la stessa cosa: il contenuto non si tocca, cambia solo la
+ * VOCE che lo indica. Si toglie la voce dalla cartella di partenza e se ne aggiunge una,
+ * con il nome nuovo, in quella di arrivo. Come rename in Unix:
+ *   - se all'arrivo c'e' gia' un file, lo si sostituisce (e' il modo sicuro di salvare:
+ *     si scrive tutto in un file nuovo, poi lo si rinomina sopra quello vecchio);
+ *   - una cartella all'arrivo non si sostituisce;
+ *   - una cartella non si puo' spostare dentro se stessa (sparirebbe dall'albero). */
+static int rinomina_dentro(const char *da, const char *a) {
+    char cartella_da[128], nome_da[MFS_NOME_MAX + 1];
+    char cartella_a[128], nome_a[MFS_NOME_MAX + 1];
+    u32 genitore_da, genitore_a, num, vecchio;
+    int r;
+    if (!montato) return MFS_ERR_NON_FORMATTATO;
+    if ((r = separa(da, cartella_da, nome_da)) < 0) return r;
+    if ((r = separa(a, cartella_a, nome_a)) < 0) return r;
+    if ((r = trova(cartella_da, &genitore_da)) < 0) return r;
+    if ((r = cerca(genitore_da, nome_da, &num)) < 0) return r;
+    if ((r = trova(cartella_a, &genitore_a)) < 0) return r;
+
+    struct scheda sc;
+    if ((r = leggi_scheda(num, &sc)) < 0) return r;
+    if (sc.tipo == MFS_CARTELLA) {        /* "a" non deve cominciare con "da/" */
+        int i = 0;
+        while (da[i] && da[i] == a[i]) i++;
+        if (!da[i] && a[i] == '/') return MFS_ERR_NOME;
+    }
+
+    if (cerca(genitore_a, nome_a, &vecchio) == 0) {   /* all'arrivo c'e' gia' qualcosa */
+        if (vecchio == num) return 0;                  /* e' lo stesso: niente da fare */
+        struct scheda v;
+        if ((r = leggi_scheda(vecchio, &v)) < 0) return r;
+        if (v.tipo == MFS_CARTELLA || sc.tipo == MFS_CARTELLA) return MFS_ERR_ESISTE;
+        if ((r = togli_voce(genitore_a, nome_a)) < 0) return r;   /* si sostituisce */
+        if ((r = libera_contenuto(&v)) < 0) return r;
+        memset(&v, 0, sizeof v);
+        if ((r = scrivi_scheda(vecchio, &v)) < 0) return r;
+    }
+    /* prima il nome nuovo, poi si toglie il vecchio: se il disco si fermasse a meta', il
+     * file avrebbe due nomi, ma non andrebbe perso */
+    if ((r = aggiungi_voce(genitore_a, nome_a, num)) < 0) return r;
+    return togli_voce(genitore_da, nome_da);
+}
+
 static int rm_dentro(const char *percorso) {
     char cartella[128], nome[MFS_NOME_MAX + 1];
     u32 genitore, num;
@@ -624,6 +765,17 @@ int mfs_leggi(const char *p, unsigned int da, void *dove, unsigned int n) {
 }
 int mfs_elenca(const char *p, mfs_visita f) { CON_LUCCHETTO(elenca_dentro(p, f)); }
 int mfs_rm(const char *p)                   { CON_LUCCHETTO(rm_dentro(p)); }
+int mfs_scrivi(const char *p, unsigned int da, const void *dati, unsigned int n) {
+    CON_LUCCHETTO(scrivi_dentro(p, da, dati, n));
+}
+int mfs_svuota(const char *p)               { CON_LUCCHETTO(svuota_dentro(p)); }
+int mfs_rinomina(const char *da, const char *a) { CON_LUCCHETTO(rinomina_dentro(da, a)); }
+int mfs_info(const char *p, int *tipo, unsigned int *dimensione) {
+    CON_LUCCHETTO(info_dentro(p, tipo, dimensione));
+}
+int mfs_voce(const char *p, unsigned int k, char *nome, int *tipo, unsigned int *dimensione) {
+    CON_LUCCHETTO(voce_dentro(p, k, nome, tipo, dimensione));
+}
 int mfs_spazio(unsigned int *schede, unsigned int *settori) {
     CON_LUCCHETTO(spazio_dentro(schede, settori));
 }

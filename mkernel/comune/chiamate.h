@@ -85,6 +85,41 @@
                             * pagine sotto il confine arrivano la prima volta che si
                             * toccano. Di solito la usa solo malloc */
 
+/* I FILE E LE CARTELLE (sul disco, mfs). Un file aperto e' un descrittore come gli
+ * altri: si legge con ricevi e si scrive con manda, a partire dalla sua POSIZIONE, che
+ * va avanti da sola (come read e write in Unix). Una cartella aperta si legge una voce
+ * alla volta: ogni ricevi da' la prossima struct voce_cartella, 0 quando sono finite. */
+#define SIS_APRI          20   /* apri(percorso, modo): un descrittore, o -1. 'modo' e' una
+                                * somma di APRI_... */
+#define SIS_POSIZIONA     21   /* posiziona(d, byte): la prossima lettura o scrittura
+                                * comincia da li' (non oltre la fine). La posizione, o -1 */
+#define SIS_INFO          22   /* info(percorso, &info): che cos'e' e quanto e' grande */
+#define SIS_CREA_CARTELLA 23   /* crea_cartella(percorso) */
+#define SIS_CANCELLA      24   /* cancella(percorso): un file, o una cartella vuota */
+#define SIS_RINOMINA      25   /* rinomina(da, a): rinomina o sposta, anche in un'altra
+                                * cartella. Un file gia' presente in 'a' si sostituisce
+                                * (cosi' si salva in modo sicuro); una cartella no */
+
+#define APRI_LEGGERE   1
+#define APRI_SCRIVERE  2
+#define APRI_CREARE    4       /* se non c'e', lo si crea vuoto */
+#define APRI_SVUOTARE  8       /* lo si svuota prima di cominciare (serve anche SCRIVERE) */
+
+#define TIPO_FILE      1
+#define TIPO_CARTELLA  2
+#define MAX_NOME_FILE 28       /* lettere di un nome, compreso lo 0 finale */
+
+struct info_file {
+    unsigned int tipo;          /* TIPO_FILE o TIPO_CARTELLA */
+    unsigned int dimensione;    /* byte */
+};
+
+struct voce_cartella {
+    char nome[MAX_NOME_FILE];
+    unsigned int tipo;
+    unsigned int dimensione;
+};
+
 #define MANDA_SUBITO 1     /* il modo di manda che non aspetta mai */
 
 #define MAX_NOME       32  /* lettere di un nome di socket, compreso lo 0 finale */
