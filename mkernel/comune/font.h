@@ -1,4 +1,4 @@
-/* Il font della console: Spleen 8x16 di Frederic Cambus (https://github.com/fcambus/spleen).
+/* Il font: Spleen 8x16 di Frederic Cambus (https://github.com/fcambus/spleen).
  * Ogni carattere e' 8x16 pixel: 16 byte, uno per riga, il bit 7 e' il pixel a sinistra.
  * I 256 caratteri sono nell'ordine della code page 437, la tabella della vecchia
  * modalita' testo VGA: cosi' i codici che manda la tastiera (es. 0x85 = a accentata)
@@ -31,10 +31,17 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- */
-#include "font.h"
+ *
+ * Sta in comune/ perche' lo usano sia il kernel (la console) sia i programmi (la
+ * libreria di disegno). E' "static": chi lo include se ne prende una copia sua, perche'
+ * un programma non puo' leggere la memoria del kernel. */
+#ifndef FONT_H
+#define FONT_H
 
-const unsigned char font_8x16[256][16] = {
+#define FONT_LARGHEZZA 8
+#define FONT_ALTEZZA   16
+
+static const unsigned char font_8x16[256][16] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 0x00 */
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 0x01 */
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 0x02 */
@@ -292,3 +299,5 @@ const unsigned char font_8x16[256][16] = {
     { 0x00, 0x00, 0x00, 0x00, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x7c, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 0xfe */
     { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },  /* 0xff */
 };
+
+#endif
