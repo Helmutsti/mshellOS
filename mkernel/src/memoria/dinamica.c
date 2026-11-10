@@ -22,17 +22,18 @@
 #include "compiti.h"
 #include "dinamica.h"
 
-static unsigned int pagina_su(unsigned int x) { return (x + PAGINA - 1) & ~(PAGINA - 1); }
+static indirizzo_t pagina_su(indirizzo_t x) { return (x + PAGINA - 1) & ~(PAGINA - 1); }
 
-unsigned int memoria_rottura(unsigned int nuova) {
+indirizzo_t memoria_rottura(indirizzo_t nuova) {
     struct compito *c = compito_attuale();
     if (!c->mappa || !nuova) return c->rottura;
     if (nuova < c->dati_inizio || nuova > FOGLI_INIZIO) return c->rottura;   /* fuori zona */
 
     /* indietro: le pagine oltre il nuovo confine che erano gia' state toccate tornano
      * al magazziniere (quelle mai toccate non ci sono, non c'e' niente da rendere) */
-    for (unsigned int v = pagina_su(nuova); v < pagina_su(c->rottura); v += PAGINA) {
-        unsigned int fisico, permessi;
+    for (indirizzo_t v = pagina_su(nuova); v < pagina_su(c->rottura); v += PAGINA) {
+        indirizzo_t fisico;
+        unsigned int permessi;
         if (!pag_traduci(v, &fisico, &permessi)) continue;
         pag_togli_programma(c->mappa, v);
         pagina_restituisci(fisico & ~(PAGINA - 1));
@@ -41,12 +42,13 @@ unsigned int memoria_rottura(unsigned int nuova) {
     return nuova;
 }
 
-int memoria_promessa(unsigned int virt) {
+int memoria_promessa(indirizzo_t virt) {
     struct compito *c = compito_attuale();
     if (!c || !c->mappa || virt < c->dati_inizio || virt >= c->rottura) return 0;
-    unsigned int fisico, permessi;
+    indirizzo_t fisico;
+    unsigned int permessi;
     if (pag_traduci(virt, &fisico, &permessi)) return 0;   /* c'e' gia': l'errore e' un altro */
-    unsigned int pagina = pagina_chiedi();
+    indirizzo_t pagina = pagina_chiedi();
     if (!pagina) return 0;                                 /* memoria finita: errore vero */
     memset((void *)pagina, 0, PAGINA);   /* mai dare a un programma i resti di un altro */
     if (!pag_mappa_programma(c->mappa, virt & ~(PAGINA - 1), pagina, PAG_UTENTE | PAG_SCRITTURA)) {

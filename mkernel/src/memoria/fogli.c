@@ -25,7 +25,7 @@
 struct foglio {
     struct aperto aperto;      /* per primo: un foglio E' una cosa aperta */
     unsigned int pagine;
-    unsigned int fisiche[];    /* l'indirizzo fisico di ogni pagina */
+    indirizzo_t fisiche[];     /* l'indirizzo fisico di ogni pagina */
 };
 
 static unsigned int pagine_dei_fogli;   /* quante pagine usano tutti i fogli insieme */
@@ -69,7 +69,7 @@ int foglio_nuovo(unsigned int byte) {
     memset(f, 0, sizeof *f);
     f->aperto.op = &operazioni;
     for (; f->pagine < pagine; f->pagine++) {
-        unsigned int p = pagina_chiedi();
+        indirizzo_t p = pagina_chiedi();
         if (!p) { chiudi(&f->aperto); return -1; }   /* memoria finita: si rende quel che si e' preso */
         memset((void *)p, 0, PAGINA);   /* mai dare a un programma i resti di un altro */
         f->fisiche[f->pagine] = p;
@@ -80,9 +80,9 @@ int foglio_nuovo(unsigned int byte) {
     return d;
 }
 
-static unsigned int indirizzo_del_posto(int i) { return FOGLI_INIZIO + i * FOGLIO_MAX; }
+static indirizzo_t indirizzo_del_posto(int i) { return FOGLI_INIZIO + (indirizzo_t)i * FOGLIO_MAX; }
 
-unsigned int foglio_mappa(int d, unsigned int *byte) {
+indirizzo_t foglio_mappa(int d, unsigned int *byte) {
     struct aperto *a = descrittore(d);
     if (!a || !e_un_foglio(a)) return 0;
     struct foglio *f = (struct foglio *)a;
@@ -92,7 +92,7 @@ unsigned int foglio_mappa(int d, unsigned int *byte) {
     while (i < MAX_MAPPATI && c->mappati[i]) i++;
     if (i == MAX_MAPPATI) return 0;   /* la zona dei fogli e' piena */
 
-    unsigned int inizio = indirizzo_del_posto(i);
+    indirizzo_t inizio = indirizzo_del_posto(i);
     for (unsigned int p = 0; p < f->pagine; p++)
         if (!pag_mappa_programma(c->mappa, inizio + p * PAGINA, f->fisiche[p],
                                  PAG_UTENTE | PAG_SCRITTURA | PAG_PRESTATA)) {
@@ -108,16 +108,16 @@ unsigned int foglio_mappa(int d, unsigned int *byte) {
 /* Leva il posto i dalla mappa di c e lascia il foglio. */
 static void togli_posto(struct compito *c, int i) {
     struct foglio *f = (struct foglio *)c->mappati[i];
-    unsigned int inizio = indirizzo_del_posto(i);
+    indirizzo_t inizio = indirizzo_del_posto(i);
     for (unsigned int p = 0; p < f->pagine; p++) pag_togli_programma(c->mappa, inizio + p * PAGINA);
     c->mappati[i] = 0;
     aperto_lascia(&f->aperto);
 }
 
-int foglio_togli(unsigned int indirizzo) {
+int foglio_togli(indirizzo_t indirizzo) {
     struct compito *c = compito_attuale();
     if (indirizzo < FOGLI_INIZIO || (indirizzo - FOGLI_INIZIO) % FOGLIO_MAX) return -1;
-    unsigned int i = (indirizzo - FOGLI_INIZIO) / FOGLIO_MAX;
+    unsigned int i = (unsigned int)((indirizzo - FOGLI_INIZIO) / FOGLIO_MAX);
     if (i >= MAX_MAPPATI || !c->mappati[i]) return -1;
     togli_posto(c, i);
     return 0;

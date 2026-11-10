@@ -5,8 +5,8 @@
  * prossimo compito PRONTO: e' il "giro" (round robin).
  *
  * IL TRUCCO DEL CAMBIO DI CONTESTO
- * Quando arriva un'interruzione, isr_comune salva TUTTI i registri del compito
- * interrotto sulla SUA pila. Lo scheduler si annota quell'ESP nella scheda del
+ * Quando arriva un'interruzione, il kernel (su x86: isr_comune) salva TUTTI i registri
+ * del compito interrotto sulla SUA pila. Lo scheduler si annota quell'ESP nella scheda del
  * compito, e restituisce l'ESP di un altro compito: isr_comune ripesca i registri
  * da li' e con iret riparte... dentro l'altro compito, dove si era fermato.
  *
@@ -14,8 +14,6 @@
  * Un compito nuovo non e' mai stato interrotto: sulla sua pila prepariamo a mano
  * i registri "come se" lo fosse stato, con EIP = inizio del programma. */
 #include "kernel.h"
-#include "gdt.h"
-#include "idt.h"
 #include "kmalloc.h"
 #include "timer.h"
 #include "pagine.h"
@@ -30,8 +28,6 @@
 
 #define DIM_PILA 8192
 
-extern char stack_top[];   /* la cima della pila dell'avvio (kernel_head.s): e' dell'inattivo */
-#define EFLAGS_INTERRUZIONI_ACCESE 0x202   /* bit IF acceso (+ il bit 1, sempre a 1) */
 
 static struct compito *attuale;     /* chi sta girando */
 static struct compito *primo, *ultimo;
@@ -64,9 +60,9 @@ static void in_fila(struct compito *c) {
  * NON SI CREDE AL FILE: lo ha scritto chiunque. Ogni numero che contiene (dove sta un
  * pezzo, quanto e' grande, a che indirizzo va) si controlla prima di usarlo: un pezzo
  * fuori dal file, o fuori dalla zona dei programmi, e il file viene rifiutato. */
-static unsigned int carica_elf(unsigned int mappa, const char *percorso, const char **errore,
-                               unsigned int *fine) {
-    unsigned int inizio = 0;
+static indirizzo_t carica_elf(indirizzo_t mappa, const char *percorso, const char **errore,
+                              indirizzo_t *fine) {
+    indirizzo_t inizio = 0;
     unsigned char *file = kmalloc(MAX_PROGRAMMA);
     if (!file) { *errore = "memoria finita"; return 0; }
 
@@ -84,11 +80,11 @@ static unsigned int carica_elf(unsigned int mappa, const char *percorso, const c
 
     /* 2. i pezzi da caricare, in ordine di indirizzo, ognuno a pagina nuova */
     struct elf_pezzo *pezzi = (struct elf_pezzo *)(file + e->tabella_pezzi);
-    unsigned int fine_precedente = PROGRAMMI_INIZIO;
+    indirizzo_t fine_precedente = PROGRAMMI_INIZIO;
     for (int i = 0; i < e->numero_pezzi; i++) {
         struct elf_pezzo *p = &pezzi[i];
         if (p->tipo != PT_LOAD) continue;
-        unsigned int fine_pezzo = p->virtuale + p->byte_memoria;
+        indirizzo_t fine_pezzo = (indirizzo_t)p->virtuale + p->byte_memoria;
 
         *errore = "un pezzo del file e' fuori posto";
         if (p->virtuale % PAGINA || p->virtuale < fine_precedente ||
@@ -98,11 +94,11 @@ static unsigned int carica_elf(unsigned int mappa, const char *percorso, const c
             goto fine;
 
         unsigned int permessi = PAG_UTENTE | (p->permessi & PF_W ? PAG_SCRITTURA : 0);
-        for (unsigned int v = p->virtuale; v < fine_pezzo; v += PAGINA) {
-            unsigned int pagina = pagina_chiedi();
+        for (indirizzo_t v = p->virtuale; v < fine_pezzo; v += PAGINA) {
+            indirizzo_t pagina = pagina_chiedi();
             if (!pagina) { *errore = "memoria finita"; goto fine; }
             memset((void *)pagina, 0, PAGINA);   /* cio' che non sta nel file resta a zero */
-            unsigned int dentro = v - p->virtuale;
+            unsigned int dentro = (unsigned int)(v - p->virtuale);   /* dentro il pezzo: piccolo */
             if (dentro < p->byte_file) {
                 unsigned int n = p->byte_file - dentro < PAGINA ? p->byte_file - dentro : PAGINA;
                 memcpy((void *)pagina, file + p->nel_file + dentro, n);
@@ -139,14 +135,14 @@ static const char *nome_da_percorso(const char *percorso) {
 struct compito *compito_crea_programma(const char *percorso, unsigned int uid, const char **errore) {
     struct compito *c = kmalloc(sizeof *c);
     unsigned char *pila = kmalloc(DIM_PILA);    /* la pila del kernel per questo programma */
-    unsigned int mappa = pag_nuova_mappa();      /* la sua mappa: il kernel gia' dentro */
-    unsigned int pila_programma = 0;
+    indirizzo_t mappa = pag_nuova_mappa();       /* la sua mappa: il kernel gia' dentro */
+    indirizzo_t pila_programma = 0;
     *errore = "memoria finita";
     if (!c || !pila || !mappa) goto non_va;
 
     /* 1. le sue pagine: i pezzi del file ELF, ognuno al suo indirizzo virtuale */
-    unsigned int fine;
-    unsigned int inizio = carica_elf(mappa, percorso, errore, &fine);
+    indirizzo_t fine;
+    indirizzo_t inizio = carica_elf(mappa, percorso, errore, &fine);
     if (!inizio) goto non_va;
 
     /* 2. la sua pila: una pagina nuova, nella sua mappa appena sotto i 2 GB.
@@ -170,28 +166,10 @@ struct compito *compito_crea_programma(const char *percorso, unsigned int uid, c
     c->dati_inizio = c->rottura = fine;   /* la zona dinamica, vuota */
     c->uid = uid;
 
-    /* 3. LA PILA FINTA, sulla pila del kernel. Come per un compito normale, ma "come se"
-     *    fosse stato interrotto un programma in ring 3: in quel caso la CPU, oltre a
-     *    EFLAGS, CS, EIP, mette anche la pila del programma (ESP e SS). E' iret a vedere
-     *    che il ring di CS (3) e' diverso da quello attuale (0): allora riprende anche
-     *    ESP e SS e scende in ring 3. Tutti indirizzi VIRTUALI della sua mappa.
-     *
-     *   SS  = dati dei programmi (riga 4 della GDT, ring 3)
-     *   ESP = cima della pila del programma (sotto l'indirizzo di ritorno 0)
-     *   EFLAGS, CS = codice dei programmi (riga 3, ring 3), EIP = inizio
-     *   errore, numero, registri (pusha)
-     *   DS  = dati dei programmi            <- qui punta l'ESP salvato nella scheda */
-    unsigned int *cima = (unsigned int *)(pila + DIM_PILA);
-    cima[-1] = SEL_UTENTE_DATI;
-    cima[-2] = PILA_PROGRAMMA_CIMA - 4;
-
-    struct registri *r = (struct registri *)((unsigned char *)&cima[-2] - sizeof(struct registri));
-    memset(r, 0, sizeof *r);
-    r->ds = SEL_UTENTE_DATI;
-    r->eip = inizio;
-    r->cs = SEL_UTENTE_CODICE;
-    r->eflags = EFLAGS_INTERRUZIONI_ACCESE;   /* il timer deve poterlo fermare */
-    c->esp = (unsigned int)r;
+    /* 3. LA PILA FINTA, sulla pila del kernel: i registri "come se" fosse stato
+     *    interrotto mentre girava il programma, all'inizio. Com'e' fatta dipende dalla
+     *    CPU (arch: contesto.c). */
+    c->sp = programma_prepara_pila((indirizzo_t)pila + DIM_PILA, inizio, PILA_PROGRAMMA_CIMA);
 
     unsigned int s = interruzioni_spegni();
     c->numero = prossimo_numero++;
@@ -230,11 +208,11 @@ void compiti_prepara(void) {
 
 /* --- lo scheduler: gira dentro l'interruzione, a interruzioni spente --- */
 
-unsigned int scheduler(unsigned int esp) {
-    if (!acceso) return esp;
+indirizzo_t scheduler(indirizzo_t sp) {
+    if (!acceso) return sp;
 
     /* 1. il compito interrotto: ci si annota dove era arrivata la sua pila */
-    attuale->esp = esp;
+    attuale->sp = sp;
     if (attuale->stato == IN_ESECUZIONE) attuale->stato = PRONTO;
 
     /* 2. un giro della fila: si sveglia chi ha dormito abbastanza e si libera chi
@@ -246,7 +224,7 @@ unsigned int scheduler(unsigned int esp) {
         /* segnato da chiudere e fermo in ring 3 (i registri salvati dicono che e' stato
          * interrotto mentre girava il suo codice): si chiude adesso */
         if (c->da_terminare && c->stato == PRONTO && c != attuale &&
-            (((struct registri *)c->esp)->cs & 3) == 3)
+            era_un_programma((struct registri *)c->sp))
             c->stato = FINITO;
         if (c->stato == FINITO && c != attuale) {
             prec->prossimo = dopo;
@@ -279,18 +257,17 @@ unsigned int scheduler(unsigned int esp) {
      *    ring 3, la CPU salverebbe i registri sulla cima della SUA pila del kernel.
      *    Per i compiti del kernel (ring 0) la CPU non la legge, ma la si aggiorna lo
      *    stesso. L'inattivo usa la pila dell'avvio (kernel_head.s). */
-    tss_pila_kernel(scelto->pila ? (unsigned int)scelto->pila + DIM_PILA
-                                 : (unsigned int)stack_top);
+    pila_kernel_imposta(scelto->pila ? (indirizzo_t)scelto->pila + DIM_PILA : pila_avvio_cima());
 
     /* 5. la mappa: da qui la CPU traduce gli indirizzi con quella di chi parte
      *    (0 = la mappa del kernel, per i compiti del kernel). La pila del kernel su
      *    cui stiamo lavorando c'e' in tutte le mappe, quindi si puo' cambiare adesso. */
     pag_usa_mappa(scelto->mappa);
 
-    /* 6. si restituisce il SUO esp: isr_comune ripeschera' i suoi registri */
+    /* 6. si restituisce la SUA pila (sp): da li' si ripescano i suoi registri */
     scelto->stato = IN_ESECUZIONE;
     attuale = scelto;
-    return scelto->esp;
+    return scelto->sp;
 }
 
 int scheduler_sta_riposando(void) { return acceso && attuale == inattivo; }
@@ -298,9 +275,8 @@ int scheduler_sta_riposando(void) { return acceso && attuale == inattivo; }
 /* --- cedere, dormire, aspettare --- */
 
 void cedi(void) {
-    /* un'interruzione software: passa da isr_comune come un tick, quindi i registri
-     * vengono salvati e lo scheduler sceglie un altro compito */
-    __asm__ volatile("int %0" : : "i"(INT_CEDI) : "memory");
+    /* i registri si salvano e lo scheduler sceglie un altro compito (arch.h) */
+    cedi_turno();
 }
 
 void dormi(unsigned int ms) {

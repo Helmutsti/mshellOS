@@ -43,29 +43,24 @@ static void segna_libera(unsigned int p) {
 }
 
 /* Occupa tutte le pagine toccate dalla zona [inizio, fine), anche solo in parte. */
-static void proteggi(unsigned int inizio, unsigned int fine) {
-    for (unsigned int p = inizio / PAGINA; p < (fine + PAGINA - 1) / PAGINA; p++)
+void pagine_proteggi(indirizzo_t inizio, indirizzo_t fine) {
+    for (unsigned int p = (unsigned int)(inizio / PAGINA); p < (fine + PAGINA - 1) / PAGINA; p++)
         segna_occupata(p);
 }
 
 /* --- 1. Preparazione --- */
 
-void pagine_prepara(struct multiboot_info *info) {
+void pagine_prepara(const struct zona_ram *zone, int quante) {
     /* Mossa 1: tutto occupato. Le caselle partono a 0 (sono nel .bss), le mettiamo a 1. */
     for (unsigned int g = 0; g < MAX_PAGINE / BIT_GRUPPO; g++)
         registro[g] = TUTTO_PIENO;
     libere = 0;
     n_pagine = 0;
 
-    /* Mossa 2: libera solo le zone che la mappa dice libere. */
-    unsigned int a = info->mmap_addr, fine = info->mmap_addr + info->mmap_length;
-    while (a < fine) {
-        struct multiboot_mmap *r = (struct multiboot_mmap *)a;
-        a += r->size + 4;
-        if (r->type != MB_MMAP_LIBERA) continue;
-
-        unsigned long long inizio_z = r->base;
-        unsigned long long fine_z   = r->base + r->len;
+    /* Mossa 2: libera solo le zone che ci dicono libere. */
+    for (int z = 0; z < quante; z++) {
+        unsigned long long inizio_z = zone[z].inizio;
+        unsigned long long fine_z   = zone[z].fine;
         if (inizio_z >= 0x100000000ull) continue;          /* oltre 4 GB: non la vediamo */
         if (fine_z   >  0x100000000ull) fine_z = 0x100000000ull;
 
@@ -77,11 +72,9 @@ void pagine_prepara(struct multiboot_info *info) {
         if (ultima > n_pagine) n_pagine = ultima;
     }
 
-    /* Mossa 3: rioccupa cio' che e' gia' nostro o del BIOS. */
-    proteggi(0, 0x100000);                                        /* il primo MB */
-    proteggi((unsigned int)kernel_start, (unsigned int)kernel_end); /* il kernel, registro compreso */
-    proteggi((unsigned int)info, (unsigned int)info + sizeof *info);       /* le info del bootloader */
-    proteggi(info->mmap_addr, info->mmap_addr + info->mmap_length);        /* la mappa */
+    /* Mossa 3: rioccupa cio' che e' gia' nostro: il kernel, registro compreso. (Quello
+     * del BIOS e del bootloader lo protegge chi ci ha avviato: pagine_proteggi.) */
+    pagine_proteggi((indirizzo_t)kernel_start, (indirizzo_t)kernel_end);
 
     ripresa = 0;
 }
@@ -93,7 +86,7 @@ void pagine_prepara(struct multiboot_info *info) {
  * un'interruzione (quando libera la pila di un programma finito). Se un tick arrivasse
  * a meta' di una ricerca, la stessa pagina potrebbe finire a due. */
 
-static unsigned int pagina_chiedi_dentro(void) {
+static indirizzo_t pagina_chiedi_dentro(void) {
     unsigned int gruppi = (n_pagine + BIT_GRUPPO - 1) / BIT_GRUPPO;
 
     for (unsigned int g = ripresa; g < gruppi; g++) {
@@ -105,21 +98,21 @@ static unsigned int pagina_chiedi_dentro(void) {
 
         segna_occupata(p);
         ripresa = g;
-        return p * PAGINA;
+        return (indirizzo_t)p * PAGINA;
     }
     return 0;   /* memoria finita (la pagina 0 non viene mai consegnata) */
 }
 
-unsigned int pagina_chiedi(void) {
+indirizzo_t pagina_chiedi(void) {
     unsigned int s = interruzioni_spegni();
-    unsigned int pagina = pagina_chiedi_dentro();
+    indirizzo_t pagina = pagina_chiedi_dentro();
     interruzioni_ripristina(s);
     return pagina;
 }
 
 /* Cerca n caselle libere di fila: scorre il registro contando quante libere ha visto
  * una dopo l'altra; una occupata azzera il conto. Arrivato a n, le occupa tutte. */
-static unsigned int pagine_chiedi_consecutive_dentro(unsigned int n) {
+static indirizzo_t pagine_chiedi_consecutive_dentro(unsigned int n) {
     unsigned int di_fila = 0;
     for (unsigned int p = 0; p < n_pagine; p++) {
         if (e_occupata(p)) { di_fila = 0; continue; }
@@ -127,30 +120,30 @@ static unsigned int pagine_chiedi_consecutive_dentro(unsigned int n) {
             unsigned int prima = p - n + 1;
             for (unsigned int q = prima; q <= p; q++)
                 segna_occupata(q);
-            return prima * PAGINA;
+            return (indirizzo_t)prima * PAGINA;
         }
     }
     return 0;
 }
 
-unsigned int pagine_chiedi_consecutive(unsigned int n) {
+indirizzo_t pagine_chiedi_consecutive(unsigned int n) {
     unsigned int s = interruzioni_spegni();
-    unsigned int prima = pagine_chiedi_consecutive_dentro(n);
+    indirizzo_t prima = pagine_chiedi_consecutive_dentro(n);
     interruzioni_ripristina(s);
     return prima;
 }
 
 /* --- 3. Restituire una pagina --- */
 
-void pagina_restituisci(unsigned int indirizzo) {
-    unsigned int p = indirizzo / PAGINA;
+void pagina_restituisci(indirizzo_t indirizzo) {
+    unsigned int p = (unsigned int)(indirizzo / PAGINA);   /* il numero della pagina */
 
     if (indirizzo % PAGINA)
         panico("pagina_restituisci: %x non e' l'inizio di una pagina", indirizzo);
     if (p >= n_pagine)
         panico("pagina_restituisci: %x e' oltre la fine della RAM", indirizzo);
     if (indirizzo < 0x100000 ||
-        (indirizzo >= (unsigned int)kernel_start && indirizzo < (unsigned int)kernel_end))
+        (indirizzo >= (indirizzo_t)kernel_start && indirizzo < (indirizzo_t)kernel_end))
         panico("pagina_restituisci: %x e' una pagina protetta", indirizzo);
     if (!e_occupata(p))
         panico("pagina_restituisci: %x restituita due volte", indirizzo);
@@ -163,4 +156,4 @@ void pagina_restituisci(unsigned int indirizzo) {
 }
 
 unsigned int pagine_libere(void) { return libere; }
-unsigned int memoria_fine(void) { return n_pagine * PAGINA; }
+indirizzo_t memoria_fine(void) { return (indirizzo_t)n_pagine * PAGINA; }

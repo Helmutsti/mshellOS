@@ -54,7 +54,7 @@ static void collega(int n, unsigned int gestore, unsigned char tipo) {
 }
 
 extern void isr128(void), isr129(void);
-unsigned int chiamata_di_sistema(struct registri *r);   /* chiamate.c */
+indirizzo_t chiamata_di_sistema(struct registri *r);   /* chiamate.c */
 
 void idt_prepara(void) {
     for (int n = 0; n < INGRESSI; n++)

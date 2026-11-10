@@ -4,7 +4,6 @@
 
 #include "chiamate.h"   /* MAX_MAPPATI */
 
-#define INT_CEDI 0x81   /* l'interruzione software con cui un compito cede il turno */
 
 enum stato_compito {
     PRONTO,          /* puo' girare, aspetta il suo turno */
@@ -24,13 +23,13 @@ struct compito {
     char nome[16];
     char percorso[64];           /* il programma da cui e' nato (MAX_PERCORSO) */
     enum stato_compito stato;
-    unsigned int esp;            /* dove era arrivata la sua pila quando e' stato fermato */
+    indirizzo_t sp;              /* dove era arrivata la sua pila quando e' stato fermato */
     void *pila;                  /* la sua pila (0 per l'inattivo: usa quella dell'avvio).
                                   * Per un programma in ring 3 e' la sua pila DEL KERNEL */
-    unsigned int mappa;          /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
+    indirizzo_t mappa;           /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
     unsigned int uid;            /* chi e': 0 il sistema, 1000 le applicazioni (chiamate.h) */
-    unsigned int dati_inizio;    /* solo ring 3: dove comincia la zona dinamica (dinamica.c) */
-    unsigned int rottura;        /* ... e dove finisce adesso: il confine */
+    indirizzo_t dati_inizio;     /* solo ring 3: dove comincia la zona dinamica (dinamica.c) */
+    indirizzo_t rottura;         /* ... e dove finisce adesso: il confine */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
     unsigned int scadenza;       /* se in ATTESA: il tick a cui svegliarlo comunque (0 = mai) */
     int da_terminare;            /* qualcuno ha chiesto di chiuderlo (compito_termina) */
@@ -95,7 +94,7 @@ int compito_prossimo_numero(void);
 
 /* Chiamato da interruzione() a ogni tick e a ogni cedi(): riceve l'ESP del compito
  * interrotto (con i suoi registri salvati sopra) e restituisce l'ESP di chi deve girare. */
-unsigned int scheduler(unsigned int esp);
+indirizzo_t scheduler(indirizzo_t sp);
 int scheduler_sta_riposando(void);     /* sta girando il compito inattivo? */
 
 #endif

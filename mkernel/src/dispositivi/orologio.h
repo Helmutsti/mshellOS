@@ -1,4 +1,4 @@
-/* L'orologio del PC: data e ora (vedi orologio.c). */
+/* L'orologio: data e ora. Su x86 e' l'orologio CMOS (arch/x86/dispositivi/orologio.c). */
 #ifndef OROLOGIO_H
 #define OROLOGIO_H
 

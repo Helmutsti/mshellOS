@@ -56,7 +56,7 @@ static void fondi_col_successivo(struct blocco *b) {
 /* Aggiunge una zona nuova presa dal magazziniere, come un unico blocco libero. */
 static int aggiungi_zona(unsigned int byte) {
     unsigned int pagine = (byte + PAGINA - 1) / PAGINA;
-    unsigned int indirizzo = pagine_chiedi_consecutive(pagine);
+    indirizzo_t indirizzo = pagine_chiedi_consecutive(pagine);
     if (!indirizzo) return 0;
 
     struct blocco *nuovo = (struct blocco *)indirizzo;

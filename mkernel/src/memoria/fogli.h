@@ -12,10 +12,10 @@ int foglio_nuovo(unsigned int byte);
 
 /* Mette il foglio del descrittore 'd' nella memoria del compito attuale, nel primo
  * posto libero della zona dei fogli. L'indirizzo, o 0. In *byte quanto e' grande. */
-unsigned int foglio_mappa(int d, unsigned int *byte);
+indirizzo_t foglio_mappa(int d, unsigned int *byte);
 
 /* Leva il foglio messo a 'indirizzo'. 0, o -1 se li' non c'e' un foglio. */
-int foglio_togli(unsigned int indirizzo);
+int foglio_togli(indirizzo_t indirizzo);
 
 /* Lascia i fogli che erano nella memoria di 'c' (un compito finito). */
 void fogli_lascia_tutti(struct compito *c);

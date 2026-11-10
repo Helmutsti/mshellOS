@@ -4,9 +4,12 @@
 
 #include <stdarg.h>
 
+/* La CPU: indirizzo_t, le interruzioni (spegni, ripristina...) e il resto: arch.h. */
+#include "arch.h"
+
 /* Lo schermo a pixel, come ce lo descrive GRUB. */
 struct schermo {
-    unsigned int indirizzo;                /* dove sta la memoria dello schermo */
+    indirizzo_t indirizzo;                 /* dove sta la memoria dello schermo */
     unsigned int passo;                    /* byte da una riga di pixel alla successiva */
     unsigned int larghezza, altezza, bpp;  /* pixel, pixel, bit per pixel */
     unsigned int rosso, verde, blu;        /* dove sta ogni colore dentro il pixel (bit) */
@@ -36,26 +39,12 @@ int memcmp(const void *a, const void *b, unsigned int n);
 
 /* kernel.c: errore senza rimedio, scrive il messaggio in rosso e ferma la CPU */
 void panico(const char *fmt, ...) __attribute__((noreturn));
+void titolo(const char *t);   /* un titolo giallo sulla console, per le fasi dell'avvio */
 
-/* Le SEZIONI CRITICHE: pezzi di codice che devono girare tutti d'un fiato.
- * Con una sola CPU basta spegnere le interruzioni: niente tick, niente cambio di compito.
- *     unsigned int s = interruzioni_spegni();
- *     ... pezzo delicato, brevissimo ...
- *     interruzioni_ripristina(s);
- * Si rimette lo stato DI PRIMA (non si accende a prescindere): se erano gia' spente,
- * restano spente. Cosi' le sezioni critiche si possono annidare. */
-static inline unsigned int interruzioni_spegni(void) {
-    unsigned int eflags;
-    __asm__ volatile("pushf; pop %0; cli" : "=r"(eflags) : : "memory");
-    return eflags;
-}
+/* Il kernel neutro (avvio/kernel.c): lo chiama l'avvio della CPU quando ha acceso lo
+ * schermo, preparato le sue tabelle e dato la RAM al magazziniere. Non torna. */
+void kernel_avvia(const struct schermo *s) __attribute__((noreturn));
 
-static inline void interruzioni_ripristina(unsigned int eflags) {
-    if (eflags & 0x200)                   /* il bit IF: erano accese? */
-        __asm__ volatile("sti" : : : "memory");
-}
-
-/* colori VGA (primo piano) */
 #define NERO       0x0
 #define BLU        0x1
 #define VERDE      0x2

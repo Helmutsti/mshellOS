@@ -1,4 +1,6 @@
-/* Il disco ATA: una fila di settori da 512 byte, numerati da 0. */
+/* Il disco: una fila di settori da 512 byte, numerati da 0.
+ * L'interfaccia e' la stessa su ogni CPU; il driver no: su x86 e' il disco ATA
+ * (arch/x86/dispositivi/disco.c). */
 #ifndef DISCO_H
 #define DISCO_H
 
