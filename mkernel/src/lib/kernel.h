@@ -16,6 +16,13 @@ struct schermo {
 int console_prepara(const struct schermo *s);         /* pulisce, cursore in alto. 0 se non sa usarlo */
 unsigned char console_colore(unsigned char colore);   /* 0xSF: S sfondo, F primo piano. Restituisce il vecchio */
 void console_putc(char c);
+const struct schermo *console_schermo(void);          /* com'e' fatto lo schermo (0: non c'e') */
+/* Presta lo schermo a 'chi' (un compito): la console smette di disegnare.
+ * 0 se e' gia' prestato a qualcun altro. */
+int console_presta(const void *chi);
+/* Lo schermo torna alla console, che ridisegna tutto. Solo se e' prestato a 'chi';
+ * con chi = 0 se lo riprende comunque (il panico). */
+void console_riprendi(const void *chi);
 
 /* kprintf.c */
 void kprintf(const char *fmt, ...);

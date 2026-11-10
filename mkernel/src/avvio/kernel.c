@@ -21,6 +21,7 @@ void panico(const char *fmt, ...) {
     __asm__ volatile("cli");   /* niente piu' tick: nessun compito deve ripartire */
     va_list ap;
     va_start(ap, fmt);
+    console_riprendi(0);       /* se lo schermo era di un programma, torna nostro */
     console_colore(ROSSO);
     kprintf("\nPANICO: ");
     vkprintf(fmt, ap);

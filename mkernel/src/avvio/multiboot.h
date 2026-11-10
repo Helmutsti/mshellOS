@@ -29,6 +29,9 @@ struct multiboot_info {
     unsigned int framebuffer_width, framebuffer_height;
     unsigned char framebuffer_bpp;         /* bit per pixel */
     unsigned char framebuffer_type;        /* 1 = colori RGB diretti */
+    /* Due byte vuoti: in GRUB quello che segue e' un'unione che contiene un numero da
+     * 4 byte, quindi parte a un indirizzo multiplo di 4 (offset 112, non 110). */
+    unsigned char vuoto[2];
     unsigned char rosso_posizione, rosso_bit, verde_posizione, verde_bit, blu_posizione, blu_bit;
 } __attribute__((packed));
 

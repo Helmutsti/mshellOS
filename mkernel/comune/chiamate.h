@@ -21,12 +21,28 @@
 #define SIS_AVVIA  5       /* avvia(percorso): fa partire il programma del disco.
                             * Restituisce il suo numero di compito, o -1 */
 
+#define SIS_SCHERMO 6      /* prendi_schermo(&info): lo schermo diventa di questo programma.
+                            * Il kernel mette la memoria dello schermo nella sua mappa, a
+                            * SCHERMO_PROGRAMMA, riempie 'info' e smette di scriverci.
+                            * -1 se lo schermo e' gia' di un altro programma. Quando il
+                            * programma finisce, lo schermo torna alla console del kernel. */
+
 #define MAX_PERCORSO 64    /* lettere di un percorso passato al kernel, compreso lo 0 finale */
 
+/* Com'e' fatto lo schermo, per chi lo riceve con SIS_SCHERMO. Ogni pixel e' di 4 byte;
+ * rosso, verde e blu dicono a che bit sta ogni colore dentro il pixel. */
+struct info_schermo {
+    unsigned int passo;                /* byte da una riga di pixel alla successiva */
+    unsigned int larghezza, altezza;   /* in pixel */
+    unsigned int rosso, verde, blu;
+};
+
 /* Dove vivono i programmi nella loro mappa: tra 1 e 2 GB. Il codice e le variabili
- * dal basso, la pila appena sotto i 2 GB. Il resto della mappa e' del kernel
- * (invisibile al ring 3): la RAM sotto 1 GB, la memoria dello schermo sopra i 2 GB. */
+ * dal basso, lo schermo (se lo chiedono) a 1,75 GB, la pila appena sotto i 2 GB.
+ * Il resto della mappa e' del kernel (invisibile al ring 3): la RAM sotto 1 GB, la
+ * memoria dello schermo sopra i 2 GB. */
 #define PROGRAMMI_INIZIO    0x40000000u
+#define SCHERMO_PROGRAMMA   0x70000000u
 #define PROGRAMMI_FINE      0x80000000u
 #define PILA_PROGRAMMA_CIMA PROGRAMMI_FINE
 

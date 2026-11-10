@@ -1,7 +1,7 @@
 # Compila tutto con Docker e avvia mkernel in QEMU (Windows).
 #   build\mkernel.iso : l'immagine avviabile, come un CD: GRUB accende la modalita'
 #                       pixel (800x600) e carica il kernel
-#   build\disco.img   : il disco con il file system e i programmi (/init, /shell)
+#   build\disco.img   : il disco con il file system e i programmi (/init e gli altri)
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 

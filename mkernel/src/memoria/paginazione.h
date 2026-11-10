@@ -6,6 +6,10 @@
 #define PAG_PRESENTE  0x1   /* la pagina c'e' */
 #define PAG_SCRITTURA 0x2   /* si puo' scrivere (senza: sola lettura) */
 #define PAG_UTENTE    0x4   /* la puo' usare anche il ring 3 (senza: solo kernel) */
+/* Un bit che la CPU ignora e lascia al kernel (i bit 9-11 sono liberi): la pagina e'
+ * PRESTATA al programma, non e' del magazziniere (per esempio la memoria dello schermo).
+ * Quando la mappa si cancella, non va restituita. */
+#define PAG_PRESTATA  0x200
 
 /* Costruisce le tabelle del kernel (indirizzo virtuale = fisico per la RAM e per la
  * memoria dello schermo, pagina 0 assente, codice di sola lettura) e accende la paginazione. */
@@ -32,8 +36,8 @@ unsigned int pag_nuova_mappa(void);
  * 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' fuori da 1-2 GB. */
 int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis, unsigned int permessi);
 
-/* Restituisce al magazziniere tutte le pagine del programma, le sue tabelle e la
- * directory. Non si puo' fare sulla mappa che la CPU sta usando. */
+/* Restituisce al magazziniere tutte le pagine del programma (non quelle PRESTATE), le
+ * sue tabelle e la directory. Non si puo' fare sulla mappa che la CPU sta usando. */
 void pag_cancella_mappa(unsigned int mappa);
 
 /* Fa usare alla CPU questa mappa (0 = quella del kernel). */

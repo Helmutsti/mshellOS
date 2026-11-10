@@ -53,6 +53,17 @@ static inline int avvia(const char *percorso) {
     return risultato;
 }
 
+/* Chiede lo schermo al kernel. Se va bene (0) la sua memoria e' a SCHERMO_PROGRAMMA e
+ * 'info' dice com'e' fatto; -1 se e' gia' di un altro programma. */
+static inline int prendi_schermo(struct info_schermo *info) {
+    int risultato;
+    __asm__ volatile("int %1"
+                     : "=a"(risultato)
+                     : "i"(INT_SISTEMA), "a"(SIS_SCHERMO), "b"(info)
+                     : "memory");
+    return risultato;
+}
+
 /* --- funzioni comode, fatte con le chiamate qui sopra --- */
 
 /* Il kernel non c'e': anche contare i caratteri di una stringa va fatto da soli. */

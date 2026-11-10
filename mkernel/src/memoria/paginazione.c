@@ -128,7 +128,8 @@ void pag_cancella_mappa(unsigned int mappa) {
         if (!(dir[i] & PAG_PRESENTE)) continue;
         unsigned int *tab = (unsigned int *)INDIRIZZO(dir[i]);
         for (int j = 0; j < RIGHE_TABELLA; j++)
-            if (tab[j] & PAG_PRESENTE) pagina_restituisci(INDIRIZZO(tab[j]));   /* le sue pagine */
+            if ((tab[j] & PAG_PRESENTE) && !(tab[j] & PAG_PRESTATA))         /* le sue pagine */
+                pagina_restituisci(INDIRIZZO(tab[j]));
         pagina_restituisci((unsigned int)tab);                                   /* la tabella */
         tabelle--;
     }

@@ -67,6 +67,37 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = c ? (unsigned int)c->numero : (unsigned int)-1;
         break;
     }
+    case SIS_SCHERMO: {
+        /* Lo schermo diventa del programma: le pagine della memoria dello schermo (che
+         * non sono RAM del magazziniere) vanno nella SUA mappa, a SCHERMO_PROGRAMMA,
+         * con il bit utente. Segnate PRESTATE: quando il programma finisce, non si
+         * restituiscono al magazziniere. Come mmap di /dev/fb0 in Linux. */
+        struct info_schermo *info = (struct info_schermo *)r->ebx;
+        const struct schermo *s = console_schermo();
+        r->eax = -1;
+        if (!del_programma((unsigned int)info, sizeof *info) || !s) break;
+        unsigned int byte = s->passo * s->altezza;
+        if (s->indirizzo % PAGINA || byte > PILA_PROGRAMMA_CIMA - PAGINA - SCHERMO_PROGRAMMA)
+            break;                                 /* non ci sta nella zona dei programmi */
+        struct compito *chi = compito_attuale();
+        if (!console_presta(chi)) break;           /* e' gia' di qualcun altro */
+
+        unsigned int mappa = chi->mappa;
+        for (unsigned int p = 0; p < byte; p += PAGINA)
+            if (!pag_mappa_programma(mappa, SCHERMO_PROGRAMMA + p, s->indirizzo + p,
+                                     PAG_UTENTE | PAG_SCRITTURA | PAG_PRESTATA)) {
+                console_riprendi(chi);             /* memoria finita per le tabelle */
+                return (unsigned int)r;
+            }
+        info->passo = s->passo;
+        info->larghezza = s->larghezza;
+        info->altezza = s->altezza;
+        info->rosso = s->rosso;
+        info->verde = s->verde;
+        info->blu = s->blu;
+        r->eax = 0;
+        break;
+    }
     case SIS_ESCI:
         /* come un compito che sbaglia: si segna finito e si passa a un altro.
          * Lo scheduler liberera' pile e scheda. Al programma non si torna piu'. */

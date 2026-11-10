@@ -22,6 +22,12 @@
  * E' quello che scrive il comando clear di Linux: ESC [ H ESC [ 2 J.
  * Le sequenze che non conosce le ignora.
  *
+ * LO SCHERMO PRESTATO. Come in Linux, lo schermo si puo' dare a un programma (il
+ * compositore): da quel momento la console non disegna piu'. Continua pero' a tenere
+ * in memoria le caselle, come se scrivesse: quando il programma finisce lo schermo
+ * torna alla console, che ridisegna tutto. Anche un panico se lo riprende, per farsi
+ * vedere.
+ *
  * Con lo scheduler piu' compiti possono scrivere: riga, colonna e colore sono
  * CONDIVISI, quindi ogni funzione pubblica e' una sezione critica (interruzioni
  * spente): nessun tick puo' fermarla a meta'. */
@@ -31,6 +37,8 @@
 #define MAX_COLONNE 256
 #define MAX_RIGHE   128
 
+static struct schermo schermo;           /* com'e' fatto, come ce lo ha descritto GRUB */
+static const void *padrone;               /* a chi e' prestato lo schermo (0: e' nostro) */
 static unsigned char *memoria;            /* il framebuffer */
 static unsigned int passo;                /* byte da una riga di pixel alla successiva */
 static int colonne, righe;                /* quante caselle di testo ci stanno */
@@ -51,6 +59,7 @@ static const unsigned int colori_rgb[16] = {
 /* Ridisegna la casella (r, c) da quello che ricordiamo. Con cursore=1 aggiunge la
  * linea del cursore nelle ultime due righe di pixel. */
 static void disegna(int r, int c, int cursore) {
+    if (padrone) return;   /* lo schermo e' prestato: si ricorda soltanto */
     unsigned short casella = caselle[r * colonne + c];
     const unsigned char *lettera = font_8x16[casella & 0xFF];
     unsigned int davanti = tavolozza[(casella >> 8) & 0x0F];
@@ -86,7 +95,7 @@ static void svuota_testo(void) {
  * copia di memoria) e le caselle ricordate. */
 static void scorri(void) {
     unsigned int byte_riga = passo * FONT_ALTEZZA;
-    memmove(memoria, memoria + byte_riga, byte_riga * (righe - 1));
+    if (!padrone) memmove(memoria, memoria + byte_riga, byte_riga * (righe - 1));
     memmove(caselle, caselle + colonne, sizeof caselle[0] * colonne * (righe - 1));
     for (int c = 0; c < colonne; c++) metti_casella(righe - 1, c, ' ');
     riga = righe - 1;
@@ -101,6 +110,7 @@ static void a_capo(void) {
 
 int console_prepara(const struct schermo *s) {
     if (s->bpp != 32) return 0;   /* sappiamo disegnare solo pixel da 4 byte */
+    schermo = *s;
     memoria = (unsigned char *)s->indirizzo;
     passo = s->passo;
     colonne = s->larghezza / FONT_LARGHEZZA;
@@ -122,6 +132,28 @@ int console_prepara(const struct schermo *s) {
     mostra_cursore();
     interruzioni_ripristina(st);
     return 1;
+}
+
+const struct schermo *console_schermo(void) { return memoria ? &schermo : 0; }
+
+int console_presta(const void *chi) {
+    unsigned int s = interruzioni_spegni();
+    int libero = memoria && !padrone;
+    if (libero) padrone = chi;
+    interruzioni_ripristina(s);
+    return libero;
+}
+
+void console_riprendi(const void *chi) {
+    unsigned int s = interruzioni_spegni();
+    if (padrone && (!chi || chi == padrone)) {
+        padrone = 0;
+        for (int r = 0; r < righe; r++)       /* si ridisegna tutto da quello che si ricorda */
+            for (int c = 0; c < colonne; c++)
+                disegna(r, c, 0);
+        mostra_cursore();
+    }
+    interruzioni_ripristina(s);
 }
 
 unsigned char console_colore(unsigned char c) {

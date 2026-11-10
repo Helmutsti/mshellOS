@@ -89,7 +89,7 @@ void pagine_prepara(struct multiboot_info *info) {
 /* --- 2. Chiedere una pagina --- */
 
 /* Le funzioni per chiedere e restituire sono SEZIONI CRITICHE, come in kmalloc: le
- * chiamano sia i compiti (es. la shell che crea un programma) sia lo scheduler, dentro
+ * chiamano sia i compiti (es. avvia, che crea un programma) sia lo scheduler, dentro
  * un'interruzione (quando libera la pila di un programma finito). Se un tick arrivasse
  * a meta' di una ricerca, la stessa pagina potrebbe finire a due. */
 

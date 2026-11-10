@@ -17,6 +17,9 @@ SECTIONS {
 
     .text   : ALIGN(4K) { *(.text*) }
     .rodata : ALIGN(4K) { *(.rodata*) }
-    .data   : ALIGN(4K) { *(.data*) }
+    /* le variabili a pagina nuova con un ALIGN a parte: un programma senza .data
+     * (tutte variabili a zero) la perderebbe, e la .bss finirebbe a meta' pagina */
+    . = ALIGN(4K);
+    .data   : { *(.data*) }
     .bss    : { *(COMMON) *(.bss*) }
 }

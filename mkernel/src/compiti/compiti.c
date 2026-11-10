@@ -88,7 +88,7 @@ static unsigned int carica_elf(unsigned int mappa, const char *percorso, const c
 
         *errore = "un pezzo del file e' fuori posto";
         if (p->virtuale % PAGINA || p->virtuale < fine_precedente ||
-            fine_pezzo < p->virtuale || fine_pezzo > PILA_PROGRAMMA_CIMA - PAGINA ||
+            fine_pezzo < p->virtuale || fine_pezzo > SCHERMO_PROGRAMMA ||
             p->byte_file > p->byte_memoria || p->nel_file + p->byte_file > (unsigned int)byte ||
             p->nel_file + p->byte_file < p->nel_file)
             goto fine;
@@ -239,6 +239,7 @@ unsigned int scheduler(unsigned int esp) {
             if (c == primo) primo = dopo;
             if (c == ultimo) ultimo = prec;
             numero_compiti--;
+            console_riprendi(c);   /* se lo schermo era suo, torna alla console */
             if (c->mappa) pag_cancella_mappa(c->mappa);   /* pagine, tabelle, directory */
             kfree(c->pila);
             kfree(c);
