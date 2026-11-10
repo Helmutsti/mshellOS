@@ -196,15 +196,17 @@ int main(void) {
     altezza = schermo.altezza;
     px = larghezza / 2;
     py = altezza / 2;
+    int eventi = apri_eventi();   /* tastiera e mouse, come un descrittore */
+    if (eventi < 0) {
+        scrivi_testo("compositore: gli eventi sono gia' di un altro programma\n");
+        return 0;
+    }
     componi();
 
     /* Il ciclo di ogni sistema grafico: aspetta un evento, aggiorna, ridisegna. */
     for (;;) {
         struct evento e;
-        if (aspetta_evento(&e) < 0) {
-            scrivi_testo("compositore: gli eventi sono gia' di un altro programma\n");
-            return 0;
-        }
+        if (ricevi(eventi, &e, sizeof e) != sizeof e) return 0;
         if (e.tipo == EVENTO_MOUSE) al_mouse(&e);
         /* i tasti: andranno alla finestra in primo piano, quando ci saranno le applicazioni */
         componi();

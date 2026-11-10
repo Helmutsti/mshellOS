@@ -10,6 +10,8 @@
 #include "paginazione.h"
 #include "compiti.h"
 #include "eventi.h"
+#include "descrittori.h"
+#include "socket.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA 1024
@@ -32,6 +34,19 @@ static int del_programma(unsigned int inizio, unsigned int byte, unsigned int se
     return 1;
 }
 
+/* Una stringa dalla memoria del programma (un percorso, un nome) copiata nel kernel,
+ * una lettera alla volta, controllando ogni lettera, fino allo 0 finale. 0 se e' troppo
+ * lunga o esce dalla sua memoria. Si copia per non rileggerla dopo: il programma
+ * potrebbe cambiarla mentre il kernel la usa. */
+static int copia_stringa(char *dove, const char *da, int massimo) {
+    for (int i = 0; i < massimo; i++) {
+        if (!del_programma((unsigned int)(da + i), 1, LEGGERE)) return 0;
+        dove[i] = da[i];
+        if (!dove[i]) return 1;
+    }
+    return 0;
+}
+
 unsigned int chiamata_di_sistema(struct registri *r) {
     switch (r->eax) {
     case SIS_SCRIVI: {
@@ -48,30 +63,18 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         dormi(r->ebx);
         r->eax = 0;
         break;
-    case SIS_EVENTO: {
-        /* dorme finche' non arriva un evento, come dormi(): si riparte da qui. Al
-         * risveglio la mappa in uso e' di nuovo la sua, quindi si puo' scrivere in 'dove'. */
-        struct evento *dove = (struct evento *)r->ebx, e;
-        if (!del_programma((unsigned int)dove, sizeof *dove, SCRIVERE) || !eventi_aspetta(&e)) {
-            r->eax = -1;
-            break;
-        }
-        *dove = e;
-        r->eax = 0;
+    case SIS_APRI_EVENTI: {
+        struct aperto *a = eventi_apri();
+        r->eax = -1;
+        if (!a) break;                      /* gli eventi sono gia' di un altro */
+        int d = descrittore_nuovo(a);
+        if (d < 0) { a->op->chiudi(a); break; }
+        r->eax = d;
         break;
     }
     case SIS_AVVIA: {
-        /* il percorso sta nella memoria del programma: lo si copia nel kernel una
-         * lettera alla volta, controllando ogni lettera, fino allo 0 finale */
         char percorso[MAX_PERCORSO];
-        const char *da = (const char *)r->ebx;
-        int finito = 0;
-        for (int i = 0; i < MAX_PERCORSO && !finito; i++) {
-            if (!del_programma((unsigned int)(da + i), 1, LEGGERE)) break;   /* fuori dalla sua memoria */
-            percorso[i] = da[i];
-            finito = percorso[i] == 0;
-        }
-        if (!finito) { r->eax = -1; break; }   /* troppo lungo, o fuori dalla sua memoria */
+        if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) { r->eax = -1; break; }
 
         const char *errore;
         struct compito *c = compito_crea_programma(percorso, &errore);
@@ -107,6 +110,47 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         info->verde = s->verde;
         info->blu = s->blu;
         r->eax = 0;
+        break;
+    }
+    case SIS_ASCOLTA:
+    case SIS_COLLEGA: {
+        char nome[MAX_NOME] = {0};
+        if (!copia_stringa(nome, (const char *)r->ebx, MAX_NOME)) { r->eax = -1; break; }
+        r->eax = r->eax == SIS_ASCOLTA ? socket_ascolta(nome) : socket_collega(nome);
+        break;
+    }
+    case SIS_ACCETTA:
+        /* puo' dormire, come dormi(): si riparte da qui */
+        r->eax = socket_accetta(r->ebx);
+        break;
+    case SIS_MANDA:
+    case SIS_RICEVI: {
+        /* Si controlla che il pezzo stia nella sua memoria, poi lo si passa alla cosa
+         * aperta: se dorme, al risveglio la mappa e' di nuovo la sua, e il pezzo e'
+         * ancora li'. */
+        struct aperto *a = descrittore(r->ebx);
+        unsigned int dati = r->ecx, byte = r->edx;
+        int manda = r->eax == SIS_MANDA;
+        if (!a || !del_programma(dati, byte, manda ? LEGGERE : SCRIVERE)) { r->eax = -1; break; }
+        r->eax = manda ? a->op->manda(a, (const void *)dati, byte)
+                       : a->op->ricevi(a, (void *)dati, byte);
+        break;
+    }
+    case SIS_CHIUDI:
+        r->eax = descrittore_chiudi(r->ebx);
+        break;
+    case SIS_ASPETTA: {
+        /* l'elenco si copia nel kernel, si aspetta, e si ricopia con 'pronto' segnato */
+        struct da_guardare *elenco = (struct da_guardare *)r->ebx, copia[MAX_GUARDATI];
+        int quanti = r->ecx;
+        r->eax = -1;
+        if (quanti < 1 || quanti > MAX_GUARDATI ||
+            !del_programma((unsigned int)elenco, quanti * sizeof *elenco, SCRIVERE))
+            break;
+        memcpy(copia, elenco, quanti * sizeof *elenco);
+        int pronti = descrittori_aspetta(copia, quanti);
+        if (pronti >= 0) memcpy(elenco, copia, quanti * sizeof *elenco);
+        r->eax = pronti;
         break;
     }
     case SIS_ESCI:

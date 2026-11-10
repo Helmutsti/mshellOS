@@ -12,14 +12,14 @@
 
 #define INT_SISTEMA 0x80   /* la porta: come Linux */
 
-/* I servizi. Argomenti in EBX, ECX; risultato in EAX (-1 = errore). */
+/* I servizi. Argomenti in EBX, ECX, EDX; risultato in EAX (-1 = errore). */
 #define SIS_SCRIVI 1       /* scrivi(testo, byte): scrive sullo schermo */
 #define SIS_DORMI  2       /* dormi(millisecondi): non gira per quel tempo */
 #define SIS_ESCI   3       /* esci(): il programma finisce */
-#define SIS_EVENTO 4       /* aspetta_evento(&evento): dorme finche' non arriva un evento
-                            * (un tasto, il mouse) e lo mette in 'evento'. -1 se un altro
-                            * programma sta gia' aspettando: gli eventi vanno a uno solo,
-                            * il compositore, che li passera' alla finestra giusta */
+#define SIS_APRI_EVENTI 4  /* apri_eventi(): un descrittore da cui leggere gli eventi
+                            * (tasti, mouse) con ricevi. -1 se e' gia' aperto da un altro
+                            * programma: gli eventi vanno a uno solo, il compositore, che li
+                            * passera' alla finestra giusta. Come /dev/input in Linux */
 #define SIS_AVVIA  5       /* avvia(percorso): fa partire il programma del disco.
                             * Restituisce il suo numero di compito, o -1 */
 
@@ -28,6 +28,40 @@
                             * SCHERMO_PROGRAMMA, riempie 'info' e smette di scriverci.
                             * -1 se lo schermo e' gia' di un altro programma. Quando il
                             * programma finisce, lo schermo torna alla console del kernel. */
+
+/* I SOCKET: i tubi tra programmi, come i socket locali di Linux "a pacchetti"
+ * (SOCK_SEQPACKET). Ogni messaggio arriva intero e separato dagli altri.
+ * Chi offre un servizio si mette in ascolto con un nome; chi lo vuole si collega a quel
+ * nome. Per ogni collegamento accettato, chi ascolta riceve un descrittore suo: cosi' sa
+ * sempre da chi arriva un messaggio (il kernel non lascia fingere di essere un altro).
+ * Il nome vive solo nel kernel (come i nomi "astratti" di Linux): sparisce quando chi
+ * ascolta chiude. */
+#define SIS_ASCOLTA 7      /* ascolta(nome): un descrittore su cui arrivano i collegamenti.
+                            * -1 se il nome e' gia' preso */
+#define SIS_COLLEGA 8      /* collega(nome): un descrittore collegato a chi ascolta su
+                            * 'nome'. -1 se nessuno ascolta con quel nome */
+#define SIS_ACCETTA 9      /* accetta(d): il prossimo collegamento arrivato su d (dorme se
+                            * non ce n'e'). Un descrittore nuovo, per parlare con lui */
+#define SIS_MANDA   10     /* manda(d, dati, byte): un messaggio (al massimo MAX_MESSAGGIO
+                            * byte). Dorme se l'altro ha la casella piena. -1 se l'altro
+                            * ha chiuso */
+#define SIS_RICEVI  11     /* ricevi(d, dove, byte): il prossimo messaggio (dorme se non ce
+                            * n'e'). Quanti byte, o 0 se l'altro ha chiuso. Se il messaggio
+                            * e' piu' lungo di 'byte', il resto si perde */
+#define SIS_CHIUDI  12     /* chiudi(d): il descrittore non serve piu' */
+#define SIS_ASPETTA 13     /* aspetta(elenco, quanti): dorme finche' almeno uno dei
+                            * descrittori dell'elenco ha qualcosa da ricevere (un messaggio,
+                            * un collegamento, un evento, o l'altro che ha chiuso). Segna
+                            * 'pronto' in ognuno e restituisce quanti sono pronti. Come poll */
+
+#define MAX_NOME       32  /* lettere di un nome di socket, compreso lo 0 finale */
+#define MAX_MESSAGGIO 512  /* byte di un messaggio */
+#define MAX_GUARDATI   16  /* descrittori in un elenco di aspetta */
+
+struct da_guardare {
+    int descrittore;
+    int pronto;            /* lo scrive il kernel: 1 se c'e' qualcosa da ricevere */
+};
 
 #define MAX_PERCORSO 64    /* lettere di un percorso passato al kernel, compreso lo 0 finale */
 
@@ -40,7 +74,8 @@ struct info_schermo {
 };
 
 /* Un evento: qualcosa che e' successo alla tastiera o al mouse. Come gli eventi di
- * Linux, il kernel dice solo COSA e' successo, non a quale finestra va. */
+ * Linux, il kernel dice solo COSA e' successo, non a quale finestra va. Si legge con
+ * ricevi dal descrittore di apri_eventi, un evento per volta. */
 #define EVENTO_TASTO 1     /* e' stato premuto un tasto: il carattere e' in 'tasto' */
 #define EVENTO_MOUSE 2     /* il mouse si e' spostato di dx, dy, o un pulsante e' cambiato */
 

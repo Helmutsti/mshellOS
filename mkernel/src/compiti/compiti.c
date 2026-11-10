@@ -24,6 +24,7 @@
 #include "elf.h"
 #include "chiamate.h"
 #include "compiti.h"
+#include "descrittori.h"
 
 #define DIM_PILA 8192
 
@@ -240,6 +241,7 @@ unsigned int scheduler(unsigned int esp) {
             if (c == ultimo) ultimo = prec;
             numero_compiti--;
             console_riprendi(c);   /* se lo schermo era suo, torna alla console */
+            descrittori_chiudi_tutti(c);   /* i suoi socket: chi era collegato lo sapra' */
             if (c->mappa) pag_cancella_mappa(c->mappa);   /* pagine, tabelle, directory */
             kfree(c->pila);
             kfree(c);

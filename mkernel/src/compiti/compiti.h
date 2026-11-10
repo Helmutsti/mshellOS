@@ -8,9 +8,13 @@ enum stato_compito {
     PRONTO,          /* puo' girare, aspetta il suo turno */
     IN_ESECUZIONE,   /* sta girando adesso */
     DORME,           /* aspetta un certo tick (dormi) */
-    ATTESA,          /* aspetta che qualcuno lo svegli (es. un tasto) */
+    ATTESA,          /* aspetta che qualcuno lo svegli (un messaggio, un evento) */
     FINITO,          /* ha finito: lo scheduler liberera' scheda e pila */
 };
+
+#define MAX_APERTI 16   /* cose aperte (descrittori) per compito */
+
+struct aperto;
 
 /* La scheda di un compito. */
 struct compito {
@@ -23,6 +27,7 @@ struct compito {
     unsigned int mappa;          /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
     struct compito *prossimo;    /* il successivo nella fila (circolare) */
+    struct aperto *aperti[MAX_APERTI];   /* le sue cose aperte: il descrittore e' il posto */
 
     /* i lucchetti (lucchetto.c) */
     int lucchetti;                    /* quanti ne tiene adesso */
@@ -44,7 +49,7 @@ void cedi(void);                       /* passa il turno al prossimo */
 void dormi(unsigned int millisecondi); /* non girare per almeno questo tempo */
 
 /* Si mette in ATTESA finche' compito_sveglia non lo rimette pronto.
- * Va chiamata con le interruzioni SPENTE (vedi eventi_aspetta). */
+ * Va chiamata con le interruzioni SPENTE (vedi aperto_aspetta). */
 void compito_aspetta(void);
 void compito_sveglia(struct compito *c);
 
