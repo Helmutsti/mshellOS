@@ -28,6 +28,10 @@ struct foglio {
     unsigned int fisiche[];    /* l'indirizzo fisico di ogni pagina */
 };
 
+static unsigned int pagine_dei_fogli;   /* quante pagine usano tutti i fogli insieme */
+
+unsigned int fogli_pagine(void) { return pagine_dei_fogli; }
+
 /* --- le operazioni: un foglio non si riceve e non si manda, si mappa --- */
 
 static int ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato) {
@@ -47,6 +51,7 @@ static int pronto(struct aperto *a) { (void)a; return 0; }
 static void chiudi(struct aperto *a) {   /* nessuno lo tiene piu': le pagine tornano libere */
     struct foglio *f = (struct foglio *)a;
     for (unsigned int i = 0; i < f->pagine; i++) pagina_restituisci(f->fisiche[i]);
+    pagine_dei_fogli -= f->pagine;
     kfree(f);
 }
 
@@ -68,6 +73,7 @@ int foglio_nuovo(unsigned int byte) {
         if (!p) { chiudi(&f->aperto); return -1; }   /* memoria finita: si rende quel che si e' preso */
         memset((void *)p, 0, PAGINA);   /* mai dare a un programma i resti di un altro */
         f->fisiche[f->pagine] = p;
+        pagine_dei_fogli++;
     }
     int d = descrittore_nuovo(&f->aperto);
     if (d < 0) chiudi(&f->aperto);

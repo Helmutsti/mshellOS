@@ -342,6 +342,31 @@ void compito_fine_se_terminato(void) {
 
 struct compito *compito_attuale(void) { return attuale; }
 
+struct compito *compito_numero(int numero) {
+    struct compito *c = primo;
+    for (int i = 0; i < numero_compiti; i++, c = c->prossimo)
+        if (c->numero == numero) return c;
+    return 0;
+}
+
+int compiti_elenco(struct info_processo *v, int max) {
+    unsigned int s = interruzioni_spegni();
+    struct compito *c = primo;
+    int n = 0;
+    for (int i = 0; i < numero_compiti && n < max; i++, c = c->prossimo) {
+        struct info_processo *p = &v[n++];
+        memset(p, 0, sizeof *p);
+        p->numero = c->numero;
+        p->uid = c->uid;
+        p->stato = c->stato;   /* l'enum ha gli stessi numeri di STATO_... */
+        /* le sue pagine, piu' la sua pila del kernel */
+        p->memoria = c->mappa ? pag_conta_programma(c->mappa) * PAGINA + DIM_PILA : 0;
+        copia_nome(p->nome, c->nome);
+    }
+    interruzioni_ripristina(s);
+    return n;
+}
+
 int compito_esiste(int numero) {
     struct compito *c = primo;
     for (int i = 0; i < numero_compiti; i++, c = c->prossimo)

@@ -229,6 +229,35 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = 0;
         break;
     }
+    case SIS_ELENCO_PROCESSI: {
+        struct info_processo *v = (struct info_processo *)r->ebx;
+        int max = r->ecx;
+        r->eax = -1;
+        if (max < 0 || max > 256 || !del_programma((unsigned int)v, max * sizeof *v, SCRIVERE)) break;
+        r->eax = compiti_elenco(v, max);
+        break;
+    }
+    case SIS_TERMINA_PROCESSO: {
+        /* la regola di Unix: il sistema termina chiunque, gli altri solo i loro processi.
+         * L'inattivo (0) e init (1) mai */
+        struct compito *c = compito_numero(r->ebx), *io = compito_attuale();
+        r->eax = -1;
+        if (!c || c->numero <= 1 || c->stato == FINITO) break;
+        if (io->uid != UID_SISTEMA && c->uid != io->uid) break;
+        compito_termina(c);
+        r->eax = 0;
+        break;
+    }
+    case SIS_MEMORIA: {
+        struct info_memoria *m = (struct info_memoria *)r->ebx;
+        r->eax = -1;
+        if (!del_programma((unsigned int)m, sizeof *m, SCRIVERE)) break;
+        m->totale = memoria_fine();
+        m->libera = pagine_libere() * PAGINA;
+        m->condivisa = fogli_pagine() * PAGINA;
+        r->eax = 0;
+        break;
+    }
     case SIS_PROCESSO:
         r->eax = processo_apri(r->ebx);
         break;

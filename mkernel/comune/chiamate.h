@@ -168,6 +168,35 @@ struct voce_cartella {
                               * "/Applicazioni/Contatore/Contatore"), in 'dove' (MAX_PERCORSO
                               * byte). Come chi, il kernel lo sa e non si puo' fingere. 0, o -1 */
 
+/* I PROCESSI E LA MEMORIA, per chi vuole guardarli (il task manager): come /proc in
+ * Linux. Chiunque puo' vedere l'elenco; terminare un processo invece segue la regola di
+ * Unix: il sistema (uid 0) puo' terminare tutti, gli altri solo i processi del loro uid.
+ * Init (il numero 1) non si termina: senza di lui non c'e' sistema. */
+#define SIS_ELENCO_PROCESSI  34   /* elenco_processi(v, max): i processi in v (al massimo
+                                   * max). Quanti sono */
+#define SIS_TERMINA_PROCESSO 35   /* termina_processo(numero): 0, o -1 se non si puo' */
+#define SIS_MEMORIA          36   /* stato_memoria(&m): com'e' usata la RAM */
+
+#define STATO_PRONTO        0     /* aspetta il suo turno */
+#define STATO_IN_ESECUZIONE 1     /* sta girando adesso */
+#define STATO_DORME         2     /* dorme per un po' (dormi) */
+#define STATO_IN_ATTESA     3     /* aspetta qualcosa: un messaggio, un evento */
+#define STATO_FINITO        4
+
+struct info_processo {
+    int numero;
+    unsigned int uid;
+    unsigned int stato;            /* STATO_... */
+    unsigned int memoria;          /* byte: le pagine che sono sue (non quelle condivise) */
+    char nome[16];
+};
+
+struct info_memoria {
+    unsigned int totale;           /* byte di RAM */
+    unsigned int libera;           /* byte che nessuno usa */
+    unsigned int condivisa;        /* byte dei fogli condivisi: le immagini delle finestre */
+};
+
 struct data_ora {
     unsigned int anno, mese, giorno;   /* mese da 1 a 12 */
     unsigned int giorno_settimana;     /* 0 domenica, 1 lunedi'... */

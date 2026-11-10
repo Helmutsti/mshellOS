@@ -44,6 +44,14 @@
  * quando succede qualcosa che le interessa ("quando premono questo pulsante, chiama
  * questa funzione": in GTK i segnali, in AppKit target-action).
  *
+ * IL TEMPO. Un'applicazione che deve aggiornarsi da sola (un orologio, il task manager)
+ * chiede al toolkit di chiamarla ogni tanto: finestra_tk_ogni(&finestra, 1000, f, dati).
+ * Il ciclo allora non dorme senza limite: aspetta le notizie fino alla prossima scadenza.
+ *
+ * I WIDGET NASCOSTI non si misurano, non si disegnano e non sentono niente: e' cosi' che
+ * si fanno le pagine (piu' contenuti nello stesso posto, se ne vede uno). Dopo averne
+ * mostrato o nascosto uno, toolkit_ridisponi rifa' l'impaginazione.
+ *
  * I WIDGET LI DICHIARA L'APPLICAZIONE, come variabili sue. Una finestra per
  * applicazione, che non cambia misura. Il pulsante "riduci" la nasconde: torna con un
  * clic sulla sua icona nell'isola della scrivania. */
@@ -84,6 +92,7 @@ struct widget {
     int disabilitato;                  /* si vede al 40% e non sente niente */
     int elastico;                      /* prende lo spazio in piu' nel suo contenitore */
     int largo;                         /* nell'altra direzione si allarga a tutto lo spazio */
+    int nascosto;                      /* non c'e': non si misura, non si vede, non sente */
 };
 
 static inline void widget_aggiungi(struct widget *genitore, struct widget *figlio) {
@@ -103,6 +112,7 @@ static inline void widget_disponi(struct widget *w) {
 }
 
 static inline void widget_disegna(struct widget *w, struct pennello *p) {
+    if (w->nascosto) return;
     pennello_salva(p);
     pennello_ritaglia(p, w->x - 4, w->y - 4, w->l + 8, w->a + 8);   /* anelli e ombre sbordano un po' */
     if (w->disabilitato) pennello_opacita(p, OPACITA_DISABILITATO);
@@ -118,7 +128,7 @@ static inline int widget_contiene(const struct widget *w, int x, int y) {
 /* Il widget piu' interno sotto (x, y) che vuole sentire il puntatore, o 0. I widget
  * disabilitati (e quello che c'e' dentro) non si trovano. */
 static inline struct widget *widget_sotto(struct widget *w, int x, int y) {
-    if (w->disabilitato || !widget_contiene(w, x, y)) return 0;
+    if (w->disabilitato || w->nascosto || !widget_contiene(w, x, y)) return 0;
     for (int i = w->quanti_figli - 1; i >= 0; i--) {
         struct widget *trovato = widget_sotto(w->figli[i], x, y);
         if (trovato) return trovato;
@@ -132,6 +142,12 @@ static inline void widget_cambiato(struct widget *w);
 
 static inline void widget_disabilita(struct widget *w, int disabilitato) {
     w->disabilitato = disabilitato;
+    widget_cambiato(w);
+}
+
+/* Mostra o nasconde un widget. Lo spazio si ridistribuisce con toolkit_ridisponi. */
+static inline void widget_nascondi(struct widget *w, int nascosto) {
+    w->nascosto = nascosto;
     widget_cambiato(w);
 }
 
@@ -161,12 +177,14 @@ struct contenitore {
 /* Si somma lungo la direzione del contenitore, si prende il piu' grande nell'altra. */
 static inline void contenitore_misura(struct widget *w, int *l, int *a) {
     struct contenitore *c = (struct contenitore *)w;
+    int visti = 0;
     for (int i = 0; i < w->quanti_figli; i++) {
+        if (w->figli[i]->nascosto) continue;
         int fl, fa;
         widget_misura(w->figli[i], &fl, &fa);
         int lungo = c->in_riga ? fl : fa, largo = c->in_riga ? fa : fl;
         int *somma = c->in_riga ? l : a, *massimo = c->in_riga ? a : l;
-        *somma += lungo + (i ? c->spazio : 0);
+        *somma += lungo + (visti++ ? c->spazio : 0);
         if (largo > *massimo) *massimo = largo;
     }
 }
@@ -178,12 +196,14 @@ static inline void contenitore_disponi(struct widget *w) {
     struct contenitore *c = (struct contenitore *)w;
     int l = 0, a = 0, elastici = 0;
     contenitore_misura(w, &l, &a);
-    for (int i = 0; i < w->quanti_figli; i++) elastici += w->figli[i]->elastico;
+    for (int i = 0; i < w->quanti_figli; i++)
+        if (!w->figli[i]->nascosto) elastici += w->figli[i]->elastico;
     int in_piu = c->in_riga ? w->l - l : w->a - a;
     if (in_piu < 0) in_piu = 0;
     int pos = c->in_riga ? w->x : w->y;
     for (int i = 0; i < w->quanti_figli; i++) {
         struct widget *f = w->figli[i];
+        if (f->nascosto) continue;
         int fl, fa;
         widget_misura(f, &fl, &fa);
         int lungo = (c->in_riga ? fl : fa) + (f->elastico ? in_piu / elastici : 0);
@@ -599,6 +619,10 @@ struct finestra_tk {
     int riduci_premuto;
     int da_chiudere;
     unsigned int pulsanti_prima;
+    void (*ogni_funzione)(struct finestra_tk *f, void *dati);   /* il "chiamami ogni tanto" */
+    void *ogni_dati;
+    unsigned int ogni_ms;              /* 0: nessuno */
+    unsigned int scadenza;             /* quando chiamarla, in tempo() */
 };
 
 static inline void widget_cambiato(struct widget *w) {
@@ -701,6 +725,22 @@ static inline void finestra_tk_dimensione(struct finestra_tk *f, int l, int a) {
     f->a_fissa = a;
 }
 
+/* Chiama 'funzione' ogni 'ms' millisecondi, finche' la finestra e' aperta (0: smette).
+ * La prima volta dopo 'ms'. */
+static inline void finestra_tk_ogni(struct finestra_tk *f, unsigned int ms,
+                                    void (*funzione)(struct finestra_tk *f, void *dati), void *dati) {
+    f->ogni_funzione = funzione;
+    f->ogni_dati = dati;
+    f->ogni_ms = ms;
+    f->scadenza = tempo() + ms;
+}
+
+/* Rifa' l'impaginazione dentro la finestra (dopo aver mostrato o nascosto dei widget). */
+static inline void toolkit_ridisponi(struct finestra_tk *f) {
+    widget_disponi(&f->base);
+    f->da_ridisegnare = 1;
+}
+
 /* --- il ciclo degli eventi --- */
 
 static inline int toolkit_ridisegna(struct finestra_tk *f) {
@@ -781,7 +821,24 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
     if (!toolkit_ridisegna(f)) return 1;
 
     struct notizia n;
-    while (finestra_notizia(&f->finestra, &n)) {
+    for (;;) {
+        /* Con il "chiamami ogni tanto": se non c'e' niente da parte si aspetta il
+         * compositore solo fino alla scadenza. Scaduta, si chiama l'applicazione. */
+        if (f->ogni_ms && !f->finestra.quante) {
+            int resta = (int)(f->scadenza - tempo());
+            struct da_guardare g = { .descrittore = f->finestra.collegamento };
+            if (resta <= 0 || aspetta(&g, 1, resta) == 0) {
+                f->scadenza = tempo() + f->ogni_ms;
+                f->ogni_funzione(f, f->ogni_dati);
+                if (f->da_chiudere) return 0;
+                if (f->da_ridisegnare && !toolkit_ridisegna(f)) return 1;
+                continue;
+            }
+            if (!finestra_ricevi(&f->finestra, &n)) return 1;
+            if (finestra_di_servizio(&n)) continue;
+        } else if (!finestra_notizia(&f->finestra, &n)) {
+            return 1;
+        }
         if (n.tipo == PUNTATORE) {
             toolkit_puntatore(f, n.x, n.y, n.pulsanti);
         } else if (n.tipo == USCITO) {
@@ -802,7 +859,6 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
         if (f->da_chiudere) return 0;
         if (f->da_ridisegnare && !toolkit_ridisegna(f)) return 1;
     }
-    return 1;
 }
 
 #endif

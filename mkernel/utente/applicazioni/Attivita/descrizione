@@ -1,0 +1,6 @@
+# La descrizione di Attività: il task manager (i processi e la memoria).
+# Una riga "chiave = valore" per voce; le righe che cominciano con # sono commenti.
+nome = Attività
+programma = Attivita
+icona = activity
+colore = verde

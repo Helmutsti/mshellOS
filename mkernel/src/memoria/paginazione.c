@@ -128,6 +128,17 @@ void pag_togli_programma(unsigned int mappa, unsigned int virt) {
     if ((unsigned int *)mappa == attuale()) dimentica(virt);
 }
 
+unsigned int pag_conta_programma(unsigned int mappa) {
+    unsigned int *dir = (unsigned int *)mappa, n = 0;
+    for (unsigned int i = INDICE_DIR(PROGRAMMI_INIZIO); i < INDICE_DIR(PROGRAMMI_FINE); i++) {
+        if (!(dir[i] & PAG_PRESENTE)) continue;
+        unsigned int *tab = (unsigned int *)INDIRIZZO(dir[i]);
+        for (int j = 0; j < RIGHE_TABELLA; j++)
+            if ((tab[j] & PAG_PRESENTE) && !(tab[j] & PAG_PRESTATA)) n++;
+    }
+    return n;
+}
+
 void pag_cancella_mappa(unsigned int mappa) {
     unsigned int *dir = (unsigned int *)mappa;
     if (dir == attuale()) panico("paginazione: cancello la mappa che sto usando");

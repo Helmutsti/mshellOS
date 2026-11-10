@@ -81,6 +81,13 @@ void compito_fine_se_terminato(void);
 
 struct compito *compito_attuale(void);
 
+/* L'elenco dei compiti per chi lo chiede (vedi chiamate.h): quanti ne ha scritti. */
+struct info_processo;
+int compiti_elenco(struct info_processo *v, int max);
+
+/* Il compito con quel numero, o 0. */
+struct compito *compito_numero(int numero);
+
 /* Il compito 'numero' c'e' ancora (non e' stato liberato)? */
 int compito_esiste(int numero);
 /* Il numero che avra' il prossimo compito: quelli sotto sono gia' stati dati. */

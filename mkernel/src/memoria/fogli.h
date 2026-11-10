@@ -22,4 +22,7 @@ void fogli_lascia_tutti(struct compito *c);
 
 int e_un_foglio(struct aperto *a);
 
+/* Quante pagine usano, in tutto, i fogli che esistono adesso. */
+unsigned int fogli_pagine(void);
+
 #endif

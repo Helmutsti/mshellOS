@@ -37,7 +37,7 @@ FONT_USATI = [
 CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á'}
 CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
 
-ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square']
+ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity']
 LATI = [12, 14, 16, 20, 24]
 
 def svg_in_png(file, l, a):

@@ -47,7 +47,7 @@ static const struct { const char *nome; int icona; } nomi_icone[] = {
     { "save", ICONA_SAVE }, { "check", ICONA_CHECK }, { "minus", ICONA_MINUS },
     { "plus", ICONA_PLUS }, { "x", ICONA_X }, { "user", ICONA_USER },
     { "triangle-alert", ICONA_TRIANGLE_ALERT }, { "layout-grid", ICONA_LAYOUT_GRID },
-    { "settings", ICONA_SETTINGS }, { "square", ICONA_SQUARE },
+    { "settings", ICONA_SETTINGS }, { "square", ICONA_SQUARE }, { "activity", ICONA_ACTIVITY },
 };
 static const struct { const char *nome; unsigned int colore; } nomi_colori[] = {
     { "neutro", 0 }, { "blu", BLU_NORMALE }, { "verde", VERDE_NORMALE },

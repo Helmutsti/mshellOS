@@ -207,6 +207,17 @@ static inline int avvia_con(const char *percorso, const int *descrittori, int qu
 /* Un descrittore del programma 'numero': ricevi aspetta che finisca. -1 se non c'e'. */
 static inline int processo(int numero) { return chiamata1(SIS_PROCESSO, numero); }
 
+/* I processi che ci sono (al massimo 'max'): quanti sono, o -1. */
+static inline int elenco_processi(struct info_processo *v, int max) {
+    return chiamata3(SIS_ELENCO_PROCESSI, (unsigned int)v, max, 0);
+}
+
+/* Termina il processo 'numero' (vedi chiamate.h per chi si puo'). 0, o -1. */
+static inline int termina_processo(int numero) { return chiamata1(SIS_TERMINA_PROCESSO, numero); }
+
+/* Com'e' usata la RAM. */
+static inline int stato_memoria(struct info_memoria *m) { return chiamata1(SIS_MEMORIA, (unsigned int)m); }
+
 /* La data e l'ora, dall'orologio del PC. */
 static inline int data_ora(struct data_ora *d) { return chiamata1(SIS_DATA_ORA, (unsigned int)d); }
 
