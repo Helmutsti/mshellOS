@@ -1,0 +1,6 @@
+# La descrizione di Contatore: la legge la scrivania per il menu delle applicazioni.
+# Una riga "chiave = valore" per voce; le righe che cominciano con # sono commenti.
+nome = Contatore
+programma = Contatore
+icona = plus
+colore = blu

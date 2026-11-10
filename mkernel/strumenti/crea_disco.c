@@ -55,7 +55,7 @@ static void crea_cartelle(const char *percorso) {
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "uso: crea_disco IMMAGINE SETTORI /percorso=file ...\n");
+        fprintf(stderr, "uso: crea_disco IMMAGINE SETTORI /percorso=file[:permessi] ...\n");
         return 1;
     }
     settori = (unsigned int)strtoul(argv[2], 0, 10);
@@ -74,6 +74,13 @@ int main(int argc, char **argv) {
         if (!uguale) errore(argv[i], "serve /percorso=file");
         *uguale = 0;
         const char *percorso = argv[i], *sorgente = uguale + 1;
+        /* i permessi in fondo, in ottale (":644"); se non ci sono, 755: un programma */
+        unsigned int permessi = 0755;
+        char *due_punti = strrchr(uguale + 1, ':');
+        if (due_punti && due_punti[1] >= '0' && due_punti[1] <= '7') {
+            *due_punti = 0;
+            permessi = (unsigned int)strtoul(due_punti + 1, 0, 8);
+        }
 
         FILE *f = fopen(sorgente, "rb");
         if (!f) errore(sorgente, "non riesco a leggerlo");
@@ -82,9 +89,9 @@ int main(int argc, char **argv) {
         fclose(f);
 
         crea_cartelle(percorso);
-        r = mfs_crea(percorso, dati, (unsigned int)byte, 0, 0755);   /* del sistema, eseguibili da tutti */
+        r = mfs_crea(percorso, dati, (unsigned int)byte, 0, permessi);   /* tutto del sistema */
         if (r < 0) errore(percorso, mfs_messaggio(r));
-        printf("  %-32s %7zu byte\n", percorso, byte);
+        printf("  %-40s %7zu byte  %03o\n", percorso, byte, permessi);
     }
 
     fclose(immagine);

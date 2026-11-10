@@ -13,9 +13,9 @@ int main(void) {
         scrivi_testo("init: non riesco ad avviare /Sistema/Servizi/compositore\n");
     /* le applicazioni non sono del sistema: partono come UID_APPLICAZIONI (1000) e
      * aspettano da sole che il compositore sia pronto */
-    avvia_come("/esempio", UID_APPLICAZIONI);
-    avvia_come("/contatore", UID_APPLICAZIONI);
-    avvia_come("/impostazioni", UID_APPLICAZIONI);
+    avvia_come("/Applicazioni/Esempio/Esempio", UID_APPLICAZIONI);
+    avvia_come("/Applicazioni/Contatore/Contatore", UID_APPLICAZIONI);
+    avvia_come("/Applicazioni/Impostazioni/Impostazioni", UID_APPLICAZIONI);
     for (;;)
         dormi(60 * 1000);   /* in attesa: dorme, un minuto alla volta, senza usare CPU */
 }

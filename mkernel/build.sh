@@ -36,7 +36,7 @@ done
 ld.lld -T src/avvio/linker.ld -o build/kernel build/kernel.o/*.o
 echo "build/kernel pronto"
 
-# --- 2. l'area utente: ogni programma e' un file ELF a se' ---
+# --- 2. l'area utente: i programmi del sistema e le applicazioni, ognuno un ELF a se' ---
 # Ognuno e' legato con i pezzi della libreria che non sono negli header: avvio.o (che
 # contiene _start: chiama main, poi esci), stringhe.o (le funzioni sulla memoria che il
 # compilatore puo' chiamare da solo) e memoria.o (malloc e free); e con programma.ld (che
@@ -47,18 +47,41 @@ for f in utente/libreria/*.c; do
     clang $NUDO $UTENTE -c "$f" -o "build/utente/libreria/$(basename "$f" .c).o"
 done
 SUL_DISCO=""
+
+# I programmi del sistema (utente/programmi): init in /Sistema, i servizi in
+# /Sistema/Servizi.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     clang $NUDO $UTENTE -c "$f" -o "build/utente/$nome.o"
     ld.lld -T utente/libreria/programma.ld -o "build/utente/$nome" \
         build/utente/libreria/*.o "build/utente/$nome.o"
-    # dove va sul disco: init e i servizi in /Sistema, il resto (per ora) nella radice
     case "$nome" in
-        init)        posto=/Sistema/init ;;
-        compositore) posto=/Sistema/Servizi/$nome ;;
-        *)           posto=/$nome ;;
+        init) posto=/Sistema/init ;;
+        *)    posto=/Sistema/Servizi/$nome ;;
     esac
     SUL_DISCO="$SUL_DISCO $posto=build/utente/$nome"
+done
+
+# Le applicazioni (utente/applicazioni/<Nome>/): ognuna diventa una cartella
+# /Applicazioni/<Nome>/ con dentro il programma, chiamato come la cartella (i suoi .c
+# legati insieme), e tutto il resto che c'e' nella cartella dei sorgenti: la
+# descrizione e le risorse, da leggere (644).
+for cartella in utente/applicazioni/*/; do
+    nome=$(basename "$cartella")
+    mkdir -p "build/utente/applicazioni/$nome"
+    oggetti=""
+    for f in "$cartella"*.c; do
+        o="build/utente/applicazioni/$nome/$(basename "$f" .c).o"
+        clang $NUDO $UTENTE -I"$cartella" -c "$f" -o "$o"
+        oggetti="$oggetti $o"
+    done
+    ld.lld -T utente/libreria/programma.ld -o "build/utente/applicazioni/$nome/$nome" \
+        build/utente/libreria/*.o $oggetti
+    SUL_DISCO="$SUL_DISCO /Applicazioni/$nome/$nome=build/utente/applicazioni/$nome/$nome"
+    for r in "$cartella"*; do
+        case "$r" in *.c|*.h) continue ;; esac
+        [ -f "$r" ] && SUL_DISCO="$SUL_DISCO /Applicazioni/$nome/$(basename "$r")=$r:644"
+    done
 done
 echo "build/utente pronto"
 
