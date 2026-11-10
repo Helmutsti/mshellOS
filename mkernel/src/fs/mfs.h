@@ -14,7 +14,7 @@
 #define MFS_ERR_NON_VUOTA      -8   /* la cartella non e' vuota */
 #define MFS_ERR_PIENO          -9   /* niente settori liberi */
 #define MFS_ERR_SCHEDE        -10   /* niente schede libere */
-#define MFS_ERR_TROPPO_GRANDE -11   /* oltre i 140 settori di un file */
+#define MFS_ERR_TROPPO_GRANDE -11   /* oltre i 16524 settori (circa 8 MB) di un file */
 
 #define MFS_FILE     1
 #define MFS_CARTELLA 2

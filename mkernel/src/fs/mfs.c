@@ -8,7 +8,9 @@
  *   settori 25-...   DATI         il contenuto di file e cartelle
  *
  * Una SCHEDA descrive un file o una cartella: tipo, dimensione, e in quali settori
- * sta il contenuto (12 settori diretti + 1 indiretto che elenca altri 128 settori).
+ * sta il contenuto: 12 settori DIRETTI, poi un settore INDIRETTO che elenca altri 128
+ * settori, poi un DOPPIO indiretto: un settore che elenca 128 settori-elenco, ognuno
+ * con 128 settori (come ext2 di Linux). In tutto 12 + 128 + 16384 settori, circa 8 MB.
  * Il NOME non sta nella scheda: sta nella cartella che la contiene.
  *
  * Una CARTELLA e' una scheda il cui contenuto e' un elenco di voci da 32 byte:
@@ -32,7 +34,8 @@ typedef unsigned int u32;
 #define NUMERO_SCHEDE 128
 #define DIRETTI       12
 #define PER_INDIRETTO (SETTORE / 4)            /* 128 numeri di settore in un settore */
-#define MAX_SETTORI   (DIRETTI + PER_INDIRETTO) /* 140 settori per file */
+#define PER_DOPPIO    (PER_INDIRETTO * PER_INDIRETTO)            /* 16384 */
+#define MAX_SETTORI   (DIRETTI + PER_INDIRETTO + PER_DOPPIO)     /* 16524 settori per file */
 #define BIT_PER_SETTORE (SETTORE * 8)           /* 4096 bit di registro in un settore */
 #define RADICE        0
 #define LIBERA        0                         /* tipo di una scheda non usata */
@@ -50,7 +53,7 @@ struct scheda {
     u32 dimensione;         /* byte di contenuto */
     u32 diretti[DIRETTI];   /* i primi 12 settori del contenuto (0 = nessuno) */
     u32 indiretto;          /* un settore con altri 128 numeri di settore (0 = nessuno) */
-    u32 riempimento;        /* per arrivare a 64 byte */
+    u32 doppio;             /* un settore con 128 numeri di settori-elenco (0 = nessuno) */
 };
 _Static_assert(sizeof(struct scheda) == 64, "una scheda deve essere di 64 byte");
 #define SCHEDE_PER_SETTORE (SETTORE / sizeof(struct scheda))   /* 8 */
@@ -141,6 +144,26 @@ static int scheda_libera(void) {
 
 /* ======================= il contenuto di una scheda ======================= */
 
+/* Un settore-elenco: 128 numeri di settore. Il numero alla posizione 'i'. Se l'elenco
+ * non c'e' ancora (*elenco == 0) o la posizione e' vuota, con crea=1 si allocano (un
+ * settore nuovo e' gia' pieno di zeri: un elenco vuoto). 0 se non c'e', o un errore. */
+static int nell_elenco(u32 *elenco, u32 i, int crea) {
+    int r;
+    if (!*elenco) {
+        if (!crea) return 0;
+        if ((r = alloca_settore()) < 0) return r;
+        *elenco = r;
+    }
+    u32 numeri[PER_INDIRETTO];
+    if ((r = leggi(*elenco, numeri)) < 0) return r;
+    if (!numeri[i] && crea) {
+        if ((r = alloca_settore()) < 0) return r;
+        numeri[i] = r;
+        if ((r = scrivi(*elenco, numeri)) < 0) return r;
+    }
+    return numeri[i];
+}
+
 /* Il settore che contiene il blocco numero 'i' del contenuto (byte i*512 ... i*512+511).
  * Con crea=1, se il settore non c'e' lo alloca (e allora la scheda va riscritta dopo).
  * Restituisce il numero del settore, 0 se non c'e', o un errore. */
@@ -154,36 +177,39 @@ static int settore_del_blocco(struct scheda *sc, u32 i, int crea) {
         return sc->diretti[i];
     }
 
-    i -= DIRETTI;                                        /* altrimenti: nell'indiretto */
-    if (i >= PER_INDIRETTO) return MFS_ERR_TROPPO_GRANDE;
-    if (!sc->indiretto) {
-        if (!crea) return 0;
-        if ((r = alloca_settore()) < 0) return r;
-        sc->indiretto = r;
-    }
-    u32 elenco[PER_INDIRETTO];
-    if ((r = leggi(sc->indiretto, elenco)) < 0) return r;
-    if (!elenco[i] && crea) {
-        if ((r = alloca_settore()) < 0) return r;
-        elenco[i] = r;
-        if ((r = scrivi(sc->indiretto, elenco)) < 0) return r;
-    }
-    return elenco[i];
+    i -= DIRETTI;                                        /* poi: nell'indiretto */
+    if (i < PER_INDIRETTO) return nell_elenco(&sc->indiretto, i, crea);
+
+    i -= PER_INDIRETTO;                                  /* poi: nel doppio indiretto */
+    if (i >= PER_DOPPIO) return MFS_ERR_TROPPO_GRANDE;
+    r = nell_elenco(&sc->doppio, i / PER_INDIRETTO, crea);   /* quale settore-elenco */
+    if (r <= 0) return r;
+    u32 elenco = r;      /* esiste gia' nel doppio: nell_elenco non lo dovra' riscrivere */
+    return nell_elenco(&elenco, i % PER_INDIRETTO, crea);
 }
 
-/* Libera tutti i settori del contenuto, indiretto compreso. */
+/* Libera un settore-elenco e i settori che elenca (con 'livelli' = 2, quelli elencati
+ * sono a loro volta elenchi: il doppio indiretto). */
+static int libera_elenco(u32 elenco, int livelli) {
+    if (!elenco) return 0;
+    int r;
+    u32 numeri[PER_INDIRETTO];
+    if ((r = leggi(elenco, numeri)) < 0) return r;
+    for (int i = 0; i < PER_INDIRETTO; i++) {
+        if (!numeri[i]) continue;
+        r = livelli > 1 ? libera_elenco(numeri[i], livelli - 1) : segna(numeri[i], 0);
+        if (r < 0) return r;
+    }
+    return segna(elenco, 0);
+}
+
+/* Libera tutti i settori del contenuto, elenchi compresi. */
 static int libera_contenuto(struct scheda *sc) {
     int r;
     for (int i = 0; i < DIRETTI; i++)
         if (sc->diretti[i] && (r = segna(sc->diretti[i], 0)) < 0) return r;
-    if (sc->indiretto) {
-        u32 elenco[PER_INDIRETTO];
-        if ((r = leggi(sc->indiretto, elenco)) < 0) return r;
-        for (int i = 0; i < PER_INDIRETTO; i++)
-            if (elenco[i] && (r = segna(elenco[i], 0)) < 0) return r;
-        if ((r = segna(sc->indiretto, 0)) < 0) return r;
-    }
-    return 0;
+    if ((r = libera_elenco(sc->indiretto, 1)) < 0) return r;
+    return libera_elenco(sc->doppio, 2);
 }
 
 /* ======================= le cartelle ======================= */
@@ -572,7 +598,7 @@ const char *mfs_messaggio(int errore) {
     case MFS_ERR_NON_VUOTA:      return "la cartella non e' vuota";
     case MFS_ERR_PIENO:          return "disco pieno";
     case MFS_ERR_SCHEDE:         return "schede finite (massimo 128 tra file e cartelle)";
-    case MFS_ERR_TROPPO_GRANDE:  return "file troppo grande (massimo 70 KB)";
+    case MFS_ERR_TROPPO_GRANDE:  return "file troppo grande (massimo 8 MB circa)";
     default:                     return "errore sconosciuto";
     }
 }

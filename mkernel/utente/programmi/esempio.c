@@ -1,7 +1,7 @@
 /* esempio: la prima applicazione con una finestra vera.
  *
  * Disegna da sola TUTTA la sua finestra, con la libreria di disegno, nella tela che le
- * da' la libreria delle finestre: il bordo, la barra con il titolo (blu quando ha il
+ * da' la libreria delle finestre: la barra con il titolo (blu quando ha il
  * fuoco, grigia quando no) e il contenuto. Non usa un toolkit, quindi si fa tutto da
  * sola: anche accorgersi che si e' premuto sulla barra e chiedere al compositore di
  * trascinarla.
@@ -14,9 +14,9 @@
 #include "finestra.h"
 #include "disegno.h"
 
-#define LARGHEZZA 322
-#define ALTEZZA   223
-#define BARRA     23      /* altezza della barra, bordo di sopra compreso */
+#define LARGHEZZA 320
+#define ALTEZZA   220
+#define BARRA     30      /* altezza della barra */
 #define LATO      10
 #define MAX_QUADRETTI 64
 #define TITOLO    "esempio"
@@ -25,24 +25,28 @@ static const unsigned int sfondi[] = { 0xF4E8C8, 0xC8E8F4, 0xD8F4C8, 0xF4C8D8 };
 static int sfondo, fuoco;
 static int qx[MAX_QUADRETTI], qy[MAX_QUADRETTI], quadretti;
 
+/* Il suo aspetto lo decide lei, e non e' quello del sistema: carta opaca, barra
+ * colorata, titolo a sinistra. (Gli angoli arrotondati come quelli del sistema, perche'
+ * l'ombra intorno la disegna il compositore con quella forma.) */
 static void disegna(unsigned int *pixel) {
     struct tela t = { pixel, LARGHEZZA, ALTEZZA };
     struct pennello p;
     pennello_prepara(&p, &t);
+    pulisci(&p);
 
-    pennello_colore(&p, 0x202020);                         /* il bordo */
-    contorna_rettangolo(&p, 0, 0, LARGHEZZA, ALTEZZA);
-    pennello_colore(&p, fuoco ? 0x3A6EA5 : 0x707880);      /* la barra, con il titolo al centro */
-    riempi_rettangolo(&p, 1, 1, LARGHEZZA - 2, BARRA - 1);
-    pennello_colore(&p, 0xFFFFFF);
-    testo(&p, (LARGHEZZA - larghezza_testo(TITOLO)) / 2, 1 + (BARRA - 1 - altezza_testo()) / 2, TITOLO);
+    struct tondo tutta = tondo(0, 0, LARGHEZZA, ALTEZZA, 12);
+    struct tondo barra = { 0, 0, LARGHEZZA, BARRA, { 12, 12, 0, 0 } };
+    pennello_colore(&p, OPACO(sfondi[sfondo]));
+    riempi_forma(&p, &tutta);
+    pennello_colore(&p, OPACO(fuoco ? 0x3A6EA5 : 0x707880));
+    riempi_forma(&p, &barra);
+    pennello_colore(&p, OPACO(0xFFFFFF));
+    testo(&p, &inter_semigrassetto_13, 14, (BARRA - inter_semigrassetto_13.altezza) / 2, TITOLO);
 
     /* il contenuto: ritagliato, cosi' i quadretti vicino al bordo non lo coprono */
-    pennello_ritaglia(&p, 1, BARRA, LARGHEZZA - 2, ALTEZZA - BARRA - 1);
-    pennello_colore(&p, sfondi[sfondo]);
-    riempi_rettangolo(&p, 1, BARRA, LARGHEZZA - 2, ALTEZZA - BARRA - 1);
-    pennello_colore(&p, 0x803030);
-    for (int q = 0; q < quadretti; q++) riempi_rettangolo(&p, qx[q], qy[q], LATO, LATO);
+    pennello_ritaglia(&p, 0, BARRA, LARGHEZZA, ALTEZZA - BARRA);
+    pennello_colore(&p, OPACO(0x803030));
+    for (int q = 0; q < quadretti; q++) riempi_tondo(&p, qx[q], qy[q], LATO, LATO, 3);
 }
 
 static int ridisegna(struct finestra *f) {

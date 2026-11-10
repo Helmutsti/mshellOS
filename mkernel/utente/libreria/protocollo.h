@@ -30,8 +30,11 @@
 #define NOME_COMPOSITORE "compositore"   /* il nome su cui ascolta */
 #define MAX_TITOLO 32
 
-/* I pixel nelle immagini: 4 byte ciascuno, 0x00RRGGBB, riga dopo riga, senza spazi
- * tra una riga e l'altra. L'immagine k sta nel foglio a k * larghezza * altezza * 4. */
+/* I pixel nelle immagini: 4 byte ciascuno, 0xAARRGGBB PREMOLTIPLICATI (AA e' l'opacita',
+ * e i colori sono gia' moltiplicati per lei: vedi disegno.h), come ARGB8888 di Wayland.
+ * Riga dopo riga, senza spazi tra una riga e l'altra. Il compositore mescola ogni pixel
+ * con quello che c'e' sotto: una finestra puo' essere di vetro, e i suoi angoli
+ * arrotondati sono trasparenti. L'immagine k sta nel foglio a k * larghezza * altezza * 4. */
 
 /* --- dall'applicazione al compositore --- */
 

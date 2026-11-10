@@ -54,7 +54,7 @@ static void in_fila(struct compito *c) {
 
 /* --- creare un programma in ring 3, da un file ELF sul disco --- */
 
-#define MAX_PROGRAMMA (140 * 512)   /* il file piu' grande che mfs sa tenere (70 KB) */
+#define MAX_PROGRAMMA (1024 * 1024)   /* il programma piu' grande che si carica: 1 MB */
 
 /* Legge il file ELF 'percorso' dal disco e mette i suoi pezzi nella mappa, ognuno in
  * pagine nuove al suo indirizzo virtuale. Restituisce l'indirizzo da cui il programma

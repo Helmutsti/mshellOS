@@ -5,8 +5,8 @@
  * 4 byte, cioe' rosso, verde, blu e un byte vuoto. GRUB ha acceso la modalita' pixel
  * e ci ha detto dove sta, quanto e' grande e in che ordine stanno i colori.
  * La scheda non sa piu' disegnare le lettere: lo facciamo noi, con il font 8x16
- * (font.c). Ogni carattere e' una CASELLA di 8x16 pixel: a 800x600 sono 100 colonne
- * per 37 righe. Ci teniamo in memoria cosa c'e' in ogni casella (carattere e colore),
+ * (font.h). Ogni carattere e' una CASELLA di 8x16 pixel: a 1280x800 sono 160 colonne
+ * per 50 righe. Ci teniamo in memoria cosa c'e' in ogni casella (carattere e colore),
  * cosi' possiamo ridisegnarla, per esempio per togliere il cursore.
  *
  * Il CURSORE non lo disegna piu' la scheda: e' una linea sotto la casella dove si

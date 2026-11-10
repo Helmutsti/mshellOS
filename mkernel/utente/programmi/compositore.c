@@ -5,9 +5,11 @@
  * collegano al socket "compositore" e parlano con il protocollo delle finestre
  * (protocollo.h): ognuna disegna da sola la sua finestra in un foglio di memoria
  * condivisa, e dice "mostra". Il compositore:
- *   - COMPONE: sfondo, poi le immagini delle finestre dal fondo al primo piano, poi il
- *     puntatore. Dentro le finestre non disegna niente, neanche la barra del titolo:
- *     ogni applicazione si disegna da sola, tutta;
+ * COMPONE: lo sfondo, poi le finestre dal fondo al primo piano, ognuna con la sua
+ *     ombra morbida intorno, poi il puntatore. Le finestre sono di "vetro": i loro
+ *     pixel hanno un'opacita', e si mescolano con quello che c'e' sotto. Dentro le
+ *     finestre non disegna niente, neanche la barra del titolo: ogni applicazione si
+ *     disegna da sola, tutta;
  *   - SMISTA L'INPUT: il puntatore alla finestra che ci sta sotto (in coordinate sue),
  *     i tasti a quella che ha il fuoco;
  *   - SPOSTA le finestre quando un'applicazione chiede TRASCINAMI, e porta davanti
@@ -29,62 +31,67 @@
  *
  * LE APPLICAZIONI BLOCCATE. Ogni secondo il compositore chiede a ogni applicazione
  * "ci sei?" (PING). Se non risponde entro 3 secondi, o se la sua casella e' cosi' piena
- * che non le si puo' piu' scrivere, e' bloccata: la sua finestra si oscura e ci compare
- * sopra un pulsante rosso di chiusura d'emergenza, che chiude il programma (termina).
- * Se invece ricomincia a rispondere, torna normale. Come GNOME e il Mac. */
+ * che non le si puo' piu' scrivere, e' bloccata. Lei non puo' piu' ridisegnarsi, quindi
+ * la sua barra la disegna il compositore, rossa, con "... non risponde" e il pulsante
+ * "chiudi" rosso, che chiude il programma (termina). Se invece ricomincia a rispondere,
+ * torna normale. Come GNOME e il Mac.
+ *
+ * LO STILE (colori, misure, font) e' quello del sistema, in stile.h: lo stesso del
+ * toolkit, cosi' la barra di emergenza e' uguale a quella delle applicazioni. */
 #include "libreria.h"
 #include "protocollo.h"
+#include "stile.h"
 
-#define MAX_LARGHEZZA 800   /* quanto chiede il kernel a GRUB (kernel_head.s) */
-#define MAX_ALTEZZA   600
+#define MAX_LARGHEZZA 1280  /* quanto chiede il kernel a GRUB (kernel_head.s) */
+#define MAX_ALTEZZA   800
 
 static struct info_schermo schermo;
 static unsigned char *memoria = (unsigned char *)SCHERMO_PROGRAMMA;
-static unsigned int disegno[MAX_LARGHEZZA * MAX_ALTEZZA];   /* la scena, prima dello schermo */
 static int larghezza, altezza;
 
-/* --- disegnare nella scena --- */
+/* La scena, prima dello schermo: pixel premoltiplicati, come quelli delle finestre.
+ * Ci si disegna con la libreria di disegno, come in una finestra. */
+static unsigned int disegno[MAX_LARGHEZZA * MAX_ALTEZZA];
+static struct tela scena;
+static struct pennello pennello;
 
-/* Un colore scritto come 0xRRGGBB, messo nell'ordine che vuole lo schermo. */
-static unsigned int colore(unsigned int rgb) {
-    return ((rgb >> 16) & 0xFF) << schermo.rosso
-         | ((rgb >> 8) & 0xFF) << schermo.verde
-         | (rgb & 0xFF) << schermo.blu;
+/* LO SFONDO, ingrandito una volta sola all'avvio da quello piccolo (320x200) di
+ * grafica_dati.h. E' una sfumatura morbida: ingrandendolo "a mescolanza" (ogni pixel
+ * nuovo e' una media pesata dei quattro vicini di quello piccolo) non si perde niente. */
+static unsigned int sfondo[MAX_LARGHEZZA * MAX_ALTEZZA];
+
+static void prepara_sfondo(void) {
+    for (int y = 0; y < altezza; y++) {
+        int fy = y * ((SFONDO_A - 1) << 8) / (altezza - 1);   /* in 256esimi di pixel piccolo */
+        int iy = fy >> 8, ty = fy & 255, iy2 = iy + 1 < SFONDO_A ? iy + 1 : iy;
+        for (int x = 0; x < larghezza; x++) {
+            int fx = x * ((SFONDO_L - 1) << 8) / (larghezza - 1);
+            int ix = fx >> 8, tx = fx & 255, ix2 = ix + 1 < SFONDO_L ? ix + 1 : ix;
+            unsigned int a = sfondo_piccolo[iy * SFONDO_L + ix], b = sfondo_piccolo[iy * SFONDO_L + ix2];
+            unsigned int c = sfondo_piccolo[iy2 * SFONDO_L + ix], d = sfondo_piccolo[iy2 * SFONDO_L + ix2];
+            unsigned int px = 0xFF000000u;
+            for (int k = 0; k < 24; k += 8) {
+                int sopra = ((a >> k) & 0xFF) * (256 - tx) + ((b >> k) & 0xFF) * tx;
+                int sotto = ((c >> k) & 0xFF) * (256 - tx) + ((d >> k) & 0xFF) * tx;
+                px |= (unsigned int)((sopra * (256 - ty) + sotto * ty) >> 16) << k;
+            }
+            sfondo[y * larghezza + x] = px;
+        }
+    }
 }
 
-/* Un rettangolo pieno. Quello che esce dallo schermo si taglia. */
-static void rettangolo(int x, int y, int l, int a, unsigned int rgb) {
-    int x2 = x + l, y2 = y + a;
-    if (x < 0) x = 0;
-    if (y < 0) y = 0;
-    if (x2 > larghezza) x2 = larghezza;
-    if (y2 > altezza) y2 = altezza;
-    unsigned int c = colore(rgb);
-    for (int r = y; r < y2; r++)
-        for (int k = x; k < x2; k++)
-            disegno[r * larghezza + k] = c;
-}
-
-/* Un'immagine di un'applicazione (0xRRGGBB) a x, y; 'scura' la mostra a meta' luce.
- * Quello che esce si taglia. */
-static void immagine(int x, int y, int l, int a, const unsigned int *pixel, int scura) {
-    for (int r = 0; r < a; r++) {
+/* Un'immagine di un'applicazione (premoltiplicata) a x, y, mescolata con quello che c'e'
+ * sotto; le prime 'salta' righe no. Quello che esce dallo schermo si taglia. */
+static void immagine(int x, int y, int l, int a, const unsigned int *pixel, int salta) {
+    for (int r = salta; r < a; r++) {
         int sy = y + r;
         if (sy < 0 || sy >= altezza) continue;
         for (int k = 0; k < l; k++) {
             int sx = x + k;
             if (sx < 0 || sx >= larghezza) continue;
-            unsigned int p = pixel[r * l + k];
-            if (scura) p = (p >> 1) & 0x7F7F7F;   /* ogni colore a meta' */
-            disegno[sy * larghezza + sx] = colore(p);
+            unsigned int *d = &disegno[sy * larghezza + sx];
+            *d = sopra_a(pixel[r * l + k], *d);
         }
-    }
-}
-
-static void sfondo(void) {   /* una sfumatura dall'alto in basso, una riga alla volta */
-    for (int y = 0; y < altezza; y++) {
-        unsigned int t = y * 255 / altezza;
-        rettangolo(0, y, larghezza, 1, (0x20 + t / 8) << 16 | (0x40 + t / 4) << 8 | (0x70 + t / 3));
     }
 }
 
@@ -105,7 +112,7 @@ struct finestra {
     unsigned int ultimo_ping;   /* quando si e' chiesto l'ultima volta (ms) */
     unsigned int ping_numero;   /* il numero dell'ultimo PING */
     int ping_atteso;            /* aspettiamo ancora la sua risposta */
-    int non_risponde;           /* bloccata: oscurata, con il pulsante d'emergenza */
+    int non_risponde;           /* bloccata: la barra la disegna il compositore */
     int da_rilasciare;          /* un'immagine da restituire che non le si e' potuto
                                  * dire (casella piena): glielo si dice quando risponde */
 };
@@ -126,26 +133,92 @@ static int presa_x, presa_y;
 static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto si muove */
 static unsigned int prossimo_ping = 1;
 
-/* Il pulsante d'emergenza: un quadrato rosso con una X, in alto a destra. */
-#define EMERGENZA 22
-static int emergenza_x(const struct finestra *f) { return f->x + f->l - EMERGENZA - 4; }
-static int emergenza_y(const struct finestra *f) { return f->y + 4; }
+/* L'OMBRA di una finestra: morbida, spostata in giu' e larga quanto la sfocatura, come
+ * nel disegno. Calcolarla costa (le distanze dal bordo arrotondato), e dipende solo
+ * dalla misura della finestra: la si calcola una volta, quando la finestra nasce, come
+ * una tabella di coperture, e a ogni composizione la si "versa" con il suo colore. */
+#define OMBRA_MARGINE FINESTRA_OMBRA_SFOCATA
+#define OMBRA_L(f) ((f)->l + 2 * OMBRA_MARGINE)
+#define OMBRA_A(f) ((f)->a + 2 * OMBRA_MARGINE + FINESTRA_OMBRA_GIU)
+static unsigned char ombre[MAX_FINESTRE][(MAX_LARGHEZZA + 2 * OMBRA_MARGINE) *
+                                         (MAX_ALTEZZA + 2 * OMBRA_MARGINE + FINESTRA_OMBRA_GIU)];
 
-static int sul_pulsante(const struct finestra *f, int x, int y) {
-    return x >= emergenza_x(f) && x < emergenza_x(f) + EMERGENZA &&
-           y >= emergenza_y(f) && y < emergenza_y(f) + EMERGENZA;
+static void prepara_ombra(int i) {
+    const struct finestra *f = &finestre[i];
+    struct tondo forma = tondo(0, 0, f->l, f->a, RAGGIO_FINESTRA);
+    struct tondo giu = tondo(0, FINESTRA_OMBRA_GIU, f->l, f->a, RAGGIO_FINESTRA);
+    int s = FINESTRA_OMBRA_SFOCATA * 256;
+    for (int y = 0; y < OMBRA_A(f); y++)
+        for (int x = 0; x < OMBRA_L(f); x++) {
+            int wx = x - OMBRA_MARGINE, wy = y - OMBRA_MARGINE;
+            int fuori = 256 - coperto(distanza(&forma, wx, wy));   /* sotto la finestra no */
+            int v = fuori ? (s - distanza(&giu, wx, wy)) * 128 / s : 0;
+            if (v < 0) v = 0;
+            if (v > 256) v = 256;
+            int dolce = v * v * (768 - 2 * v) >> 16;            /* smoothstep */
+            ombre[i][y * OMBRA_L(f) + x] = (dolce * fuori >> 8) * 255 >> 8;
+        }
+}
+
+static void disegna_ombra(int i) {
+    const struct finestra *f = &finestre[i];
+    pennello_colore(&pennello, i == fuoco ? FINESTRA_OMBRA : FINESTRA_OMBRA_SFONDO);
+    for (int y = 0; y < OMBRA_A(f); y++)
+        for (int x = 0; x < OMBRA_L(f); x++) {
+            int v = ombre[i][y * OMBRA_L(f) + x];
+            if (v) copri(&pennello, f->x - OMBRA_MARGINE + x, f->y - OMBRA_MARGINE + y, v + (v >> 7));
+        }
+}
+
+/* I due comandi della barra, come li mette il toolkit: riduci e chiudi, a destra. */
+static int comando_x(const struct finestra *f, int chiudi) {
+    return f->x + f->l - BARRA_MARGINE - BARRA_COMANDO - (chiudi ? 0 : BARRA_COMANDO + 6);
+}
+static int comando_y(const struct finestra *f) { return f->y + (BARRA_ALTEZZA - BARRA_COMANDO) / 2; }
+
+static int sul_chiudi(const struct finestra *f, int x, int y) {
+    return x >= comando_x(f, 1) && x < comando_x(f, 1) + BARRA_COMANDO &&
+           y >= comando_y(f) && y < comando_y(f) + BARRA_COMANDO;
+}
+
+/* La barra di una finestra che non risponde, al posto di quella dell'applicazione:
+ * rossa, con l'avviso e il titolo al centro e il "chiudi" rosso. Come nel disegno. */
+static void barra_non_risponde(const struct finestra *f) {
+    struct pennello *p = &pennello;
+    struct tondo barra = { f->x, f->y, f->l, BARRA_ALTEZZA, { RAGGIO_FINESTRA, RAGGIO_FINESTRA, 0, 0 } };
+    pennello_colore(p, STATO_ERRORE_VELO);
+    riempi_forma(p, &barra);
+
+    char avviso[MAX_TITOLO + 16];
+    int n = 0;
+    for (const char *c = f->titolo; *c; c++) avviso[n++] = *c;
+    for (const char *c = " non risponde"; *c; c++) avviso[n++] = *c;
+    avviso[n] = 0;
+    int largo = 14 + 6 + larghezza_testo(FONT_BARRA, avviso);
+    int x = f->x + (f->l - largo) / 2;
+    pennello_salva(p);
+    pennello_ritaglia(p, f->x, f->y, f->l, BARRA_ALTEZZA);
+    pennello_colore(p, CONTENUTO_PRINCIPALE);
+    icona(p, ICONA_TRIANGLE_ALERT, 14, x, f->y + (BARRA_ALTEZZA - 14) / 2);
+    testo(p, FONT_BARRA, x + 14 + 6, f->y + (BARRA_ALTEZZA - FONT_BARRA->altezza) / 2, avviso);
+    pennello_ripristina(p);
+
+    for (int chiudi = 0; chiudi < 2; chiudi++) {
+        pennello_colore(p, chiudi ? STATO_ERRORE : VETRO_SUPERFICIE);
+        riempi_tondo(p, comando_x(f, chiudi), comando_y(f), BARRA_COMANDO, BARRA_COMANDO, BARRA_COMANDO / 2);
+        pennello_colore(p, CONTENUTO_PRINCIPALE);
+        icona(p, chiudi ? ICONA_X : ICONA_MINUS, 12, comando_x(f, chiudi) + 5, comando_y(f) + 5);
+    }
+    struct tondo tutta = tondo(f->x, f->y, f->l, f->a, RAGGIO_FINESTRA);
+    pennello_colore(p, STATO_ERRORE);
+    contorna_forma(p, &tutta, 256);
 }
 
 static void disegna_finestra(int i) {
     const struct finestra *f = &finestre[i];
-    immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde);
-    if (!f->non_risponde) return;
-    int bx = emergenza_x(f), by = emergenza_y(f);
-    rettangolo(bx, by, EMERGENZA, EMERGENZA, 0xC03030);
-    for (int k = 5; k < EMERGENZA - 5; k++) {          /* la X: le due diagonali, spesse 2 */
-        rettangolo(bx + k, by + k, 2, 2, 0xFFFFFF);
-        rettangolo(bx + EMERGENZA - 2 - k, by + k, 2, 2, 0xFFFFFF);
-    }
+    disegna_ombra(i);
+    immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? BARRA_ALTEZZA : 0);
+    if (f->non_risponde) barra_non_risponde(f);
 }
 
 /* Un messaggio a un'applicazione, senza aspettare. Se non si puo', la sua casella e'
@@ -237,8 +310,9 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     f->a = a;
     for (int k = 0; k < MAX_TITOLO; k++) f->titolo[k] = m->titolo[k];
     f->titolo[MAX_TITOLO - 1] = 0;
-    f->x = 40 + i * 40;   /* a cascata */
-    f->y = 30 + i * 40;
+    f->x = 60 + i * 40;   /* a cascata */
+    f->y = 50 + i * 40;
+    prepara_ombra(i);
 }
 
 static void mostra(int i, const struct mostra *m) {
@@ -347,27 +421,35 @@ static const char *const freccia[] = {
 };
 
 static void disegna_puntatore(void) {
-    unsigned int nero = colore(0x000000), bianco = colore(0xFFFFFF);
     for (int r = 0; r < (int)(sizeof freccia / sizeof freccia[0]); r++)
         for (int k = 0; freccia[r][k]; k++) {
-            int x = px + k, y = py + r;
-            if (freccia[r][k] == ' ' || x >= larghezza || y >= altezza) continue;
-            disegno[y * larghezza + x] = freccia[r][k] == 'X' ? nero : bianco;
+            if (freccia[r][k] == ' ') continue;
+            pennello_colore(&pennello, OPACO(freccia[r][k] == 'X' ? 0x000000 : 0xFFFFFF));
+            copri(&pennello, px + k, py + r, 256);
         }
 }
 
 /* --- la scena intera, poi sullo schermo --- */
 
 static void componi(void) {
-    sfondo();
+    for (int i = 0; i < larghezza * altezza; i++) disegno[i] = sfondo[i];
     for (int k = 0; k < quante; k++)
         if (finestre[ordine[k]].mostrata >= 0) disegna_finestra(ordine[k]);
     disegna_puntatore();
 
-    for (int y = 0; y < altezza; y++) {   /* la copia, riga per riga */
+    /* la copia, riga per riga. La scena e' tutta opaca: i colori sono gia' quelli veri.
+     * Se lo schermo li vuole in un altro ordine, si spostano. */
+    int stesso_ordine = schermo.rosso == 16 && schermo.verde == 8 && schermo.blu == 0;
+    for (int y = 0; y < altezza; y++) {
         unsigned int *da = &disegno[y * larghezza];
         unsigned int *a = (unsigned int *)(memoria + y * schermo.passo);
-        for (int x = 0; x < larghezza; x++) a[x] = da[x];
+        if (stesso_ordine) {
+            for (int x = 0; x < larghezza; x++) a[x] = da[x] & 0xFFFFFF;
+        } else {
+            for (int x = 0; x < larghezza; x++)
+                a[x] = ((da[x] >> 16) & 0xFF) << schermo.rosso | ((da[x] >> 8) & 0xFF) << schermo.verde |
+                       (da[x] & 0xFF) << schermo.blu;
+        }
     }
 }
 
@@ -389,8 +471,8 @@ static void al_mouse(const struct evento *e) {
 
     if (appena_premuto) {   /* un clic: la finestra sotto va davanti e prende il fuoco */
         int i = finestra_sotto(px, py);
-        if (i >= 0 && finestre[i].non_risponde && sul_pulsante(&finestre[i], px, py)) {
-            /* il pulsante d'emergenza: si chiude il programma. La finestra sparira'
+        if (i >= 0 && finestre[i].non_risponde && sul_chiudi(&finestre[i], px, py)) {
+            /* il "chiudi" rosso di emergenza: si chiude il programma. La finestra sparira'
              * quando il suo collegamento si chiude (lo chiude il kernel). */
             termina(finestre[i].collegamento);
             return;
@@ -441,6 +523,9 @@ int main(void) {
     altezza = schermo.altezza;
     px = larghezza / 2;
     py = altezza / 2;
+    scena = (struct tela){ disegno, larghezza, altezza };
+    pennello_prepara(&pennello, &scena);
+    prepara_sfondo();
     int eventi = apri_eventi();   /* tastiera e mouse, come un descrittore */
     int ascolto = ascolta(NOME_COMPOSITORE);
     if (eventi < 0 || ascolto < 0) {

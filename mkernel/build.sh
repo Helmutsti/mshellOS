@@ -66,7 +66,7 @@ echo "build/disco.img pronto"
 
 # --- 4. l'immagine avviabile: GRUB, che accende la modalita' pixel e carica il kernel ---
 # Come un CD: GRUB si avvia per primo, legge grub.cfg, trova la firma Multiboot nel
-# kernel (con la richiesta 800x600 a 32 bit), accende lo schermo e salta a _start.
+# kernel (con la richiesta 1280x800 a 32 bit), accende lo schermo e salta a _start.
 mkdir -p build/iso/boot/grub
 cp build/kernel build/iso/boot/kernel
 cat > build/iso/boot/grub/grub.cfg <<'FINE'

@@ -2,7 +2,7 @@
 # Compila tutto con Docker e avvia mkernel in QEMU (macOS / Linux).
 #   ./run.sh
 #   build/mkernel.iso : l'immagine avviabile, come un CD: GRUB accende la modalita'
-#                       pixel (800x600) e carica il kernel
+#                       pixel (1280x800) e carica il kernel
 #   build/disco.img   : il disco con il file system e i programmi (/init e gli altri)
 set -e
 qui="$(cd "$(dirname "$0")" && pwd)"

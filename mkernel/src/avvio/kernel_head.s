@@ -14,7 +14,7 @@
 .long CHECKSUM
 .long 0, 0, 0, 0, 0                # indirizzi di caricamento: non servono (il bit 16 e' spento)
 .long 0                            # modalita' video: 0 = pixel (1 sarebbe testo)
-.long 800, 600, 32                 # larghezza, altezza, bit per pixel
+.long 1280, 800, 32                # larghezza, altezza, bit per pixel
 
 # Lo stack: 16 KB riservati, il C ne ha bisogno per funzionare.
 .section .bss
