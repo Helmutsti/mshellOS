@@ -5,11 +5,12 @@
  * collegano al socket "compositore" e parlano con il protocollo delle finestre
  * (protocollo.h): ognuna disegna da sola la sua finestra in un foglio di memoria
  * condivisa, e dice "mostra". Il compositore:
- * COMPONE: lo sfondo, poi le finestre dal fondo al primo piano, ognuna con la sua
- *     ombra morbida intorno, poi il puntatore. Le finestre sono di "vetro": i loro
- *     pixel hanno un'opacita', e si mescolano con quello che c'e' sotto. Dentro le
- *     finestre non disegna niente, neanche la barra del titolo: ogni applicazione si
- *     disegna da sola, tutta;
+ *   - COMPONE: lo sfondo, poi le finestre dal fondo al primo piano, ognuna con la sua
+ *     ombra morbida intorno, poi il puntatore. Le finestre sono di VETRO SMERIGLIATO:
+ *     sotto ognuna il compositore sfoca quello che c'e' dietro, e ci mescola sopra
+ *     l'immagine dell'applicazione (i suoi pixel hanno un'opacita'). Dentro le finestre
+ *     non disegna niente, neanche la barra del titolo: ogni applicazione si disegna da
+ *     sola, tutta;
  *   - SMISTA L'INPUT: il puntatore alla finestra che ci sta sotto (in coordinate sue),
  *     i tasti a quella che ha il fuoco;
  *   - SPOSTA le finestre quando un'applicazione chiede TRASCINAMI, e porta davanti
@@ -115,6 +116,7 @@ struct finestra {
     int non_risponde;           /* bloccata: la barra la disegna il compositore */
     int da_rilasciare;          /* un'immagine da restituire che non le si e' potuto
                                  * dire (casella piena): glielo si dice quando risponde */
+    unsigned int generazione;   /* cresce a ogni MOSTRA: l'immagine e' cambiata */
 };
 
 static struct finestra finestre[MAX_FINESTRE];
@@ -170,6 +172,121 @@ static void disegna_ombra(int i) {
         }
 }
 
+/* IL VETRO SMERIGLIATO. Sotto ogni finestra si sfoca quello che c'e' dietro: ogni pixel
+ * diventa la media di quelli che ha intorno, e i dettagli spariscono. I trucchi per farlo
+ * senza scheda video, gli stessi di KDE e dei giochi:
+ *   1. si lavora su una copia RIMPICCIOLITA a un quarto (16 volte meno pixel): quello
+ *      che e' sfocato non ha dettagli da perdere;
+ *   2. la media si fa in due passate, prima in orizzontale e poi in verticale, con una
+ *      SOMMA CHE SCORRE (si aggiunge il pixel che entra, si toglie quello che esce): il
+ *      costo non dipende da quanto e' larga la sfocatura;
+ *   3. tre medie una dopo l'altra danno una sfocatura morbida quasi uguale a quella
+ *      "vera" (gaussiana) del disegno: qui, circa 20 pixel;
+ *   4. la si rifa' solo quando cambia qualcosa sotto (vedi componi): se si muove solo
+ *      il mouse, si riusa quella gia' fatta.
+ * Poi, a ogni composizione, la si ingrandisce di nuovo (ogni pixel e' la media pesata
+ * dei quattro vicini di quella piccola) dentro la forma arrotondata della finestra. */
+#define SCALA          4    /* la copia rimpicciolita: un pixel ogni 4x4 */
+#define RAGGIO_MEDIA   5    /* in pixel rimpiccioliti: medie di 11, tre volte */
+#define BORDO_PICCOLO 16    /* quanto si prende intorno alla finestra, in pixel rimpiccioliti */
+#define PICCOLA_L (MAX_LARGHEZZA / SCALA + 2 * BORDO_PICCOLO + 2)
+#define PICCOLA_A (MAX_ALTEZZA / SCALA + 2 * BORDO_PICCOLO + 2)
+
+struct sfocata {
+    int x, y, l, a;         /* dove sta, in pixel rimpiccioliti (x * SCALA = pixel veri) */
+    unsigned int pixel[PICCOLA_L * PICCOLA_A];
+};
+static struct sfocata sfocate[MAX_FINESTRE];
+static unsigned int riga_media[PICCOLA_L > PICCOLA_A ? PICCOLA_L : PICCOLA_A];
+
+/* La media scorrevole su una fila di n pixel (passo 'salto' tra uno e l'altro), fatta
+ * tre volte. Ai bordi si ripete il pixel del bordo. */
+static void media_fila(unsigned int *fila, int n, int salto) {
+    for (int volta = 0; volta < 3; volta++) {
+        for (int k = 0; k < 24; k += 8) {
+            int somma = 0;
+            for (int i = -RAGGIO_MEDIA; i <= RAGGIO_MEDIA; i++) {
+                int j = i < 0 ? 0 : i >= n ? n - 1 : i;
+                somma += (fila[j * salto] >> k) & 0xFF;
+            }
+            for (int i = 0; i < n; i++) {
+                riga_media[i] = (riga_media[i] & ~(0xFFu << k)) |
+                                (unsigned int)(somma / (2 * RAGGIO_MEDIA + 1)) << k;
+                int esce = i - RAGGIO_MEDIA, entra = i + RAGGIO_MEDIA + 1;
+                somma -= (fila[(esce < 0 ? 0 : esce) * salto] >> k) & 0xFF;
+                somma += (fila[(entra >= n ? n - 1 : entra) * salto] >> k) & 0xFF;
+            }
+        }
+        for (int i = 0; i < n; i++) fila[i * salto] = riga_media[i];
+    }
+}
+
+/* Sfoca quello che c'e' adesso nella scena dietro la finestra i (e un po' intorno). */
+static void prepara_sfocatura(int i) {
+    const struct finestra *f = &finestre[i];
+    struct sfocata *s = &sfocate[i];
+    s->x = (f->x < 0 ? f->x - SCALA + 1 : f->x) / SCALA - BORDO_PICCOLO;
+    s->y = (f->y < 0 ? f->y - SCALA + 1 : f->y) / SCALA - BORDO_PICCOLO;
+    s->l = f->l / SCALA + 2 * BORDO_PICCOLO + 2;
+    s->a = f->a / SCALA + 2 * BORDO_PICCOLO + 2;
+    /* 1. rimpicciolire: ogni pixel piccolo e' la media di 4x4 pixel della scena */
+    for (int v = 0; v < s->a; v++)
+        for (int u = 0; u < s->l; u++) {
+            unsigned int r = 0, g = 0, b = 0;
+            for (int dy = 0; dy < SCALA; dy++)
+                for (int dx = 0; dx < SCALA; dx++) {
+                    int x = (s->x + u) * SCALA + dx, y = (s->y + v) * SCALA + dy;
+                    x = x < 0 ? 0 : x >= larghezza ? larghezza - 1 : x;   /* fuori: il bordo */
+                    y = y < 0 ? 0 : y >= altezza ? altezza - 1 : y;
+                    unsigned int px = disegno[y * larghezza + x];
+                    r += (px >> 16) & 0xFF; g += (px >> 8) & 0xFF; b += px & 0xFF;
+                }
+            s->pixel[v * s->l + u] = (r / (SCALA * SCALA)) << 16 | (g / (SCALA * SCALA)) << 8 |
+                                     b / (SCALA * SCALA);
+        }
+    /* 2. e 3. le medie: tutte le righe, poi tutte le colonne */
+    for (int v = 0; v < s->a; v++) media_fila(&s->pixel[v * s->l], s->l, 1);
+    for (int u = 0; u < s->l; u++) media_fila(&s->pixel[u], s->a, s->l);
+}
+
+/* Mette la sfocatura dentro la forma della finestra, ingrandendola di nuovo. */
+static void metti_sfocatura(int i) {
+    const struct finestra *f = &finestre[i];
+    const struct sfocata *s = &sfocate[i];
+    struct tondo forma = tondo(f->x, f->y, f->l, f->a, RAGGIO_FINESTRA);
+    for (int y = f->y; y < f->y + f->a; y++) {
+        if (y < 0 || y >= altezza) continue;
+        int vicino_sopra_sotto = y < f->y + RAGGIO_FINESTRA || y >= f->y + f->a - RAGGIO_FINESTRA;
+        /* dove cade il pixel nella copia piccola, in 256esimi (centro su centro) */
+        int fy = (y * 256 + 128) / SCALA - 128 - s->y * 256;
+        int vy = fy >> 8, ty = fy & 255;
+        if (vy < 0) { vy = 0; ty = 0; }
+        if (vy >= s->a - 1) { vy = s->a - 2; ty = 255; }
+        for (int x = f->x; x < f->x + f->l; x++) {
+            if (x < 0 || x >= larghezza) continue;
+            int c = 256;
+            if (vicino_sopra_sotto && (x < f->x + RAGGIO_FINESTRA || x >= f->x + f->l - RAGGIO_FINESTRA))
+                c = coperto(distanza(&forma, x, y));        /* gli angoli arrotondati */
+            if (!c) continue;
+            int fx = (x * 256 + 128) / SCALA - 128 - s->x * 256;
+            int ux = fx >> 8, tx = fx & 255;
+            if (ux < 0) { ux = 0; tx = 0; }
+            if (ux >= s->l - 1) { ux = s->l - 2; tx = 255; }
+            const unsigned int *q = &s->pixel[vy * s->l + ux];
+            unsigned int a = q[0], b = q[1], cc = q[s->l], d = q[s->l + 1];
+            unsigned int *dst = &disegno[y * larghezza + x], px = 0xFF000000u;
+            for (int k = 0; k < 24; k += 8) {
+                int su = ((a >> k) & 0xFF) * (256 - tx) + ((b >> k) & 0xFF) * tx;
+                int giu = ((cc >> k) & 0xFF) * (256 - tx) + ((d >> k) & 0xFF) * tx;
+                int sfoc = (su * (256 - ty) + giu * ty) >> 16;
+                int prima = (*dst >> k) & 0xFF;
+                px |= (unsigned int)((sfoc * c + prima * (256 - c)) >> 8) << k;
+            }
+            *dst = px;
+        }
+    }
+}
+
 /* I due comandi della barra, come li mette il toolkit: riduci e chiudi, a destra. */
 static int comando_x(const struct finestra *f, int chiudi) {
     return f->x + f->l - BARRA_MARGINE - BARRA_COMANDO - (chiudi ? 0 : BARRA_COMANDO + 6);
@@ -186,6 +303,8 @@ static int sul_chiudi(const struct finestra *f, int x, int y) {
 static void barra_non_risponde(const struct finestra *f) {
     struct pennello *p = &pennello;
     struct tondo barra = { f->x, f->y, f->l, BARRA_ALTEZZA, { RAGGIO_FINESTRA, RAGGIO_FINESTRA, 0, 0 } };
+    pennello_colore(p, VETRO_FONDO);
+    riempi_forma(p, &barra);
     pennello_colore(p, STATO_ERRORE_VELO);
     riempi_forma(p, &barra);
 
@@ -214,9 +333,11 @@ static void barra_non_risponde(const struct finestra *f) {
     contorna_forma(p, &tutta, 256);
 }
 
-static void disegna_finestra(int i) {
+static void disegna_finestra(int i, int ricalcola) {
     const struct finestra *f = &finestre[i];
     disegna_ombra(i);
+    if (ricalcola) prepara_sfocatura(i);
+    metti_sfocatura(i);
     immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? BARRA_ALTEZZA : 0);
     if (f->non_risponde) barra_non_risponde(f);
 }
@@ -320,6 +441,7 @@ static void mostra(int i, const struct mostra *m) {
     if (!f->immagini[0] || m->immagine > 1) { scollega(i); return; }
     int prima = f->mostrata;
     f->mostrata = m->immagine;
+    f->generazione++;
     if (prima < 0) {                 /* la prima volta: davanti e con il fuoco */
         in_primo_piano(i);
         dai_fuoco(i);
@@ -431,10 +553,33 @@ static void disegna_puntatore(void) {
 
 /* --- la scena intera, poi sullo schermo --- */
 
+/* COSA C'E' SULLO SCHERMO, puntatore escluso: l'ordine delle finestre, dove sono, quale
+ * immagine mostrano, chi ha il fuoco (cambia l'ombra), chi non risponde. Se non e'
+ * cambiato niente, le sfocature fatte l'ultima volta vanno ancora bene. */
+#define MAX_FIRMA (1 + 8 * MAX_FINESTRE)
+static unsigned int firma_prima[MAX_FIRMA];
+
+static int scena_cambiata(void) {
+    unsigned int firma[MAX_FIRMA] = { quante };
+    int n = 1, cambiata = 0;
+    for (int k = 0; k < quante; k++) {
+        const struct finestra *f = &finestre[ordine[k]];
+        unsigned int valori[] = { ordine[k], f->x, f->y, f->l, f->mostrata, f->generazione,
+                                  f->non_risponde, ordine[k] == fuoco };
+        for (int v = 0; v < 8; v++) firma[n++] = valori[v];
+    }
+    for (int k = 0; k < MAX_FIRMA; k++) {
+        if (firma[k] != firma_prima[k]) cambiata = 1;
+        firma_prima[k] = firma[k];
+    }
+    return cambiata;
+}
+
 static void componi(void) {
+    int ricalcola = scena_cambiata();
     for (int i = 0; i < larghezza * altezza; i++) disegno[i] = sfondo[i];
     for (int k = 0; k < quante; k++)
-        if (finestre[ordine[k]].mostrata >= 0) disegna_finestra(ordine[k]);
+        if (finestre[ordine[k]].mostrata >= 0) disegna_finestra(ordine[k], ricalcola);
     disegna_puntatore();
 
     /* la copia, riga per riga. La scena e' tutta opaca: i colori sono gia' quelli veri.

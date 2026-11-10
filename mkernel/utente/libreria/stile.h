@@ -34,6 +34,10 @@
 #define ANELLO_SOPRA            VELATO(0x3B82F6, 89)     /* 35%, l'anello di 3 pixel intorno */
 
 /* --- la finestra --- */
+/* Il fondo scuro sotto il vetro: senza, sopra lo sfondo colorato il testo bianco non si
+ * legge. (Non c'e' nel disegno, che conta sulla sfocatura da sola: e' la variante
+ * "vetro scuro".) */
+#define VETRO_FONDO             VELATO(0x0F172A, 128)    /* 50% */
 #define BARRA_ATTIVA            VELATO(0xFFFFFF, 46)     /* 18% */
 #define BARRA_INATTIVA          VELATO(0xFFFFFF, 20)     /*  8% */
 #define BARRA_BORDO_ATTIVA      VELATO(0xFFFFFF, 77)     /* 30% */

@@ -647,12 +647,14 @@ static inline void finestra_tk_disegna(struct widget *w, struct pennello *p) {
     struct tondo barra = { 0, 0, w->l, BARRA_ALTEZZA, { RAGGIO_FINESTRA, RAGGIO_FINESTRA, 0, 0 } };
     struct tondo corpo = { 0, BARRA_ALTEZZA, w->l, w->a - BARRA_ALTEZZA,
                            { 0, 0, RAGGIO_FINESTRA, RAGGIO_FINESTRA } };
+    struct tondo tutta = tondo(0, 0, w->l, w->a, RAGGIO_FINESTRA);
+    pennello_colore(p, VETRO_FONDO);          /* sotto il vetro, il fondo scuro */
+    riempi_forma(p, &tutta);
     pennello_colore(p, f->attiva ? BARRA_ATTIVA : BARRA_INATTIVA);
     riempi_forma(p, &barra);
     pennello_colore(p, CAMPO_SFONDO);
     riempi_forma(p, &corpo);
     if (f->attiva) {
-        struct tondo tutta = tondo(0, 0, w->l, w->a, RAGGIO_FINESTRA);
         pennello_colore(p, BARRA_BORDO_ATTIVA);
         contorna_forma(p, &tutta, 256);
     }
