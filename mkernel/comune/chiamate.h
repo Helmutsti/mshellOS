@@ -20,7 +20,8 @@
                             * (tasti, mouse) con ricevi. -1 se e' gia' aperto da un altro
                             * programma: gli eventi vanno a uno solo, il compositore, che li
                             * passera' alla finestra giusta. Come /dev/input in Linux */
-#define SIS_AVVIA  5       /* avvia(percorso): fa partire il programma del disco.
+#define SIS_AVVIA  5       /* avvia(percorso): fa partire il programma del disco, con lo
+                            * stesso uid di chi lo chiede (serve il permesso di eseguirlo).
                             * Restituisce il suo numero di compito, o -1 */
 
 #define SIS_SCHERMO 6      /* prendi_schermo(&info): lo schermo diventa di questo programma.
@@ -112,7 +113,33 @@
 struct info_file {
     unsigned int tipo;          /* TIPO_FILE o TIPO_CARTELLA */
     unsigned int dimensione;    /* byte */
+    unsigned int proprietario;  /* l'uid di chi l'ha creato */
+    unsigned int permessi;      /* come in Unix, in ottale: 0755, 0644... */
 };
+
+/* GLI UTENTI E I PERMESSI, come in Unix. Ogni programma ha un uid: 0 e' il SISTEMA (puo'
+ * tutto: il kernel non gli controlla niente), 1000 le APPLICAZIONI. Un programma nuovo
+ * prende l'uid di chi lo fa partire; solo il sistema puo' farne partire uno con un uid
+ * diverso (avvia_come), e nessuno puo' salire a 0.
+ * Ogni file ha un proprietario e i permessi: tre cifre ottali, ognuna la somma di
+ * PERMESSO_LEGGERE, _SCRIVERE, _ESEGUIRE; la prima per il proprietario, l'ultima per
+ * tutti gli altri (quella di mezzo, il gruppo, per ora non si usa). Per creare,
+ * cancellare o rinominare qualcosa bisogna poter scrivere nella cartella che lo contiene.
+ * Un file nuovo e' di chi lo crea, con 0644; una cartella nuova con 0755. */
+#define UID_SISTEMA       0
+#define UID_APPLICAZIONI  1000
+#define PERMESSO_LEGGERE  4
+#define PERMESSO_SCRIVERE 2
+#define PERMESSO_ESEGUIRE 1
+
+#define SIS_PERMESSI      26   /* permessi(percorso, proprietario, permessi): li cambia. Il
+                                * sistema puo' tutto; gli altri solo i permessi dei loro
+                                * file (il proprietario lo cambia solo il sistema) */
+#define SIS_AVVIA_COME    27   /* avvia_come(percorso, uid): come avvia, ma il programma
+                                * nuovo ha quell'uid. Solo per il sistema */
+#define SIS_CHI           28   /* chi(d): l'uid del programma all'altro capo del
+                                * collegamento d, o -1. Il kernel lo sa, non si puo'
+                                * fingere: cosi' un servizio sa se parla con il sistema */
 
 struct voce_cartella {
     char nome[MAX_NOME_FILE];

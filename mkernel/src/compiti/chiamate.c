@@ -85,9 +85,28 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         char percorso[MAX_PERCORSO];
         if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) { r->eax = -1; break; }
 
+        /* serve il permesso di eseguirlo; il programma nuovo e' "di" chi lo fa partire */
         const char *errore;
-        struct compito *c = compito_crea_programma(percorso, &errore);
+        struct compito *c = file_puo(percorso, PERMESSO_ESEGUIRE)
+                          ? compito_crea_programma(percorso, compito_attuale()->uid, &errore) : 0;
         r->eax = c ? (unsigned int)c->numero : (unsigned int)-1;
+        break;
+    }
+    case SIS_AVVIA_COME: {
+        /* far partire un programma come un altro: solo il sistema (si puo' solo scendere) */
+        char percorso[MAX_PERCORSO];
+        unsigned int uid = r->ecx;
+        r->eax = -1;
+        if (compito_attuale()->uid != UID_SISTEMA ||
+            !copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) break;
+        const char *errore;
+        struct compito *c = compito_crea_programma(percorso, uid, &errore);
+        if (c) r->eax = c->numero;
+        break;
+    }
+    case SIS_CHI: {
+        struct compito *c = socket_altro(r->ebx);
+        r->eax = c ? c->uid : (unsigned int)-1;
         break;
     }
     case SIS_SCHERMO: {
@@ -216,14 +235,19 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         } else if (servizio == SIS_INFO) {
             struct info_file *info = (struct info_file *)r->ecx;
             int tipo;
-            unsigned int dimensione;
+            unsigned int dimensione, proprietario, permessi;
             if (!del_programma((unsigned int)info, sizeof *info, SCRIVERE) ||
-                mfs_info(percorso, &tipo, &dimensione) < 0) break;
+                mfs_info(percorso, &tipo, &dimensione, &proprietario, &permessi) < 0) break;
             info->tipo = tipo;
             info->dimensione = dimensione;
+            info->proprietario = proprietario;
+            info->permessi = permessi;
             r->eax = 0;
         } else {
-            int esito = servizio == SIS_CREA_CARTELLA ? mfs_mkdir(percorso) : mfs_rm(percorso);
+            /* creare e cancellare: bisogna poter scrivere nella cartella che lo contiene */
+            if (!file_puo_nella_cartella(percorso, PERMESSO_SCRIVERE)) break;
+            int esito = servizio == SIS_CREA_CARTELLA
+                      ? mfs_mkdir(percorso, compito_attuale()->uid, 0755) : mfs_rm(percorso);
             r->eax = esito < 0 ? -1 : 0;
         }
         break;
@@ -233,7 +257,24 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = -1;
         if (!copia_stringa(da, (const char *)r->ebx, MAX_PERCORSO) ||
             !copia_stringa(a, (const char *)r->ecx, MAX_PERCORSO)) break;
+        /* si toglie da una cartella e si mette in un'altra: si deve poter scrivere in tutte e due */
+        if (!file_puo_nella_cartella(da, PERMESSO_SCRIVERE) ||
+            !file_puo_nella_cartella(a, PERMESSO_SCRIVERE)) break;
         r->eax = mfs_rinomina(da, a) < 0 ? -1 : 0;
+        break;
+    }
+    case SIS_PERMESSI: {
+        char percorso[MAX_PERCORSO];
+        unsigned int nuovo_proprietario = r->ecx, nuovi_permessi = r->edx;
+        r->eax = -1;
+        if (!copia_stringa(percorso, (const char *)r->ebx, MAX_PERCORSO)) break;
+        int tipo;
+        unsigned int dimensione, proprietario;
+        if (mfs_info(percorso, &tipo, &dimensione, &proprietario, 0) < 0) break;
+        unsigned int uid = compito_attuale()->uid;
+        /* il sistema puo' tutto; il proprietario solo i permessi, e il file resta suo */
+        if (uid != UID_SISTEMA && (uid != proprietario || nuovo_proprietario != proprietario)) break;
+        r->eax = mfs_permessi(percorso, nuovo_proprietario, nuovi_permessi) < 0 ? -1 : 0;
         break;
     }
     case SIS_POSIZIONA:

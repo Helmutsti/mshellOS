@@ -9,6 +9,9 @@
  * Una CARTELLA aperta si legge una voce alla volta: ogni ricevi da' la prossima
  * (struct voce_cartella), 0 quando sono finite. In Linux e' getdents.
  *
+ * I PERMESSI si controllano qui, una volta, quando si apre (come in Unix): chi ha
+ * aperto un file per leggerlo puo' poi leggerlo finche' lo tiene aperto.
+ *
  * Il file aperto si ricorda il suo percorso, e ogni lettura o scrittura lo ritrova su
  * mfs. (Un kernel vero tiene in mano la scheda del file, l'inode, per non ricercarlo
  * ogni volta.) */
@@ -17,6 +20,7 @@
 #include "descrittori.h"
 #include "mfs.h"
 #include "file.h"
+#include "compiti.h"
 
 struct file_aperto {
     struct aperto aperto;            /* per primo: un file aperto E' una cosa aperta */
@@ -66,15 +70,39 @@ static void chiudi(struct aperto *a) { kfree(a); }
 
 static const struct operazioni operazioni = { ricevi, manda, pronto, chiudi };
 
+int file_puo(const char *percorso, unsigned int cosa) {
+    int tipo;
+    unsigned int dimensione, proprietario, permessi;
+    if (mfs_info(percorso, &tipo, &dimensione, &proprietario, &permessi) < 0) return 0;
+    unsigned int uid = compito_attuale()->uid;
+    if (uid == UID_SISTEMA) return 1;
+    unsigned int miei = uid == proprietario ? permessi >> 6 : permessi;   /* la cifra giusta */
+    return (miei & cosa) == cosa;
+}
+
+int file_puo_nella_cartella(const char *percorso, unsigned int cosa) {
+    char cartella[MAX_PERCORSO];
+    int ultima = 0;
+    for (int i = 0; percorso[i] && i < MAX_PERCORSO; i++) if (percorso[i] == '/') ultima = i;
+    if (ultima == 0) { cartella[0] = '/'; cartella[1] = 0; }   /* nella radice */
+    else { memcpy(cartella, percorso, ultima); cartella[ultima] = 0; }
+    return file_puo(cartella, cosa);
+}
+
 int file_apri(const char *percorso, unsigned int modo) {
     int tipo;
     unsigned int dimensione;
-    if (mfs_info(percorso, &tipo, &dimensione) < 0) {
-        /* non c'e': lo si crea vuoto, se e' stato chiesto */
-        if (!(modo & APRI_CREARE) || mfs_crea(percorso, 0, 0) < 0) return -1;
+    if (mfs_info(percorso, &tipo, &dimensione, 0, 0) < 0) {
+        /* non c'e': lo si crea vuoto, se e' stato chiesto e si puo' scrivere nella cartella.
+         * E' di chi lo crea: lui legge e scrive, gli altri solo leggono */
+        if (!(modo & APRI_CREARE) || !file_puo_nella_cartella(percorso, PERMESSO_SCRIVERE) ||
+            mfs_crea(percorso, 0, 0, compito_attuale()->uid, 0644) < 0) return -1;
         tipo = MFS_FILE;
     }
     int cartella = tipo == MFS_CARTELLA;
+    /* i permessi: per leggere (anche una cartella) e per scrivere o svuotare */
+    if ((modo & APRI_LEGGERE || cartella) && !file_puo(percorso, PERMESSO_LEGGERE)) return -1;
+    if (modo & (APRI_SCRIVERE | APRI_SVUOTARE) && !file_puo(percorso, PERMESSO_SCRIVERE)) return -1;
     if (cartella && (modo & (APRI_SCRIVERE | APRI_SVUOTARE))) return -1;   /* le cartelle si leggono */
     if (!cartella && (modo & APRI_SVUOTARE)) {
         if (!(modo & APRI_SCRIVERE) || mfs_svuota(percorso) < 0) return -1;
@@ -99,7 +127,7 @@ int file_posiziona(int d, unsigned int posizione) {
     int tipo;
     unsigned int dimensione;
     if (f->cartella) { f->posizione = posizione; return posizione; }   /* la voce numero ... */
-    if (mfs_info(f->percorso, &tipo, &dimensione) < 0 || posizione > dimensione) return -1;
+    if (mfs_info(f->percorso, &tipo, &dimensione, 0, 0) < 0 || posizione > dimensione) return -1;
     f->posizione = posizione;
     return posizione;
 }

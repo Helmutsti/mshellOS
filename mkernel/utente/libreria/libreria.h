@@ -186,6 +186,19 @@ static inline int info(const char *percorso, struct info_file *i) {
 static inline int crea_cartella(const char *percorso) { return chiamata1(SIS_CREA_CARTELLA, (unsigned int)percorso); }
 static inline int cancella(const char *percorso) { return chiamata1(SIS_CANCELLA, (unsigned int)percorso); }
 
+/* Cambia proprietario e permessi (vedi chiamate.h: il proprietario lo cambia solo il sistema). */
+static inline int cambia_permessi(const char *percorso, unsigned int proprietario, unsigned int permessi) {
+    return chiamata3(SIS_PERMESSI, (unsigned int)percorso, proprietario, permessi);
+}
+
+/* Fa partire un programma con un altro uid: solo il sistema. Il numero del compito, o -1. */
+static inline int avvia_come(const char *percorso, unsigned int uid) {
+    return chiamata3(SIS_AVVIA_COME, (unsigned int)percorso, uid, 0);
+}
+
+/* L'uid del programma all'altro capo del collegamento 'd', o -1. */
+static inline int chi(int d) { return chiamata1(SIS_CHI, d); }
+
 /* Rinomina o sposta. Un file gia' presente in 'a' si sostituisce. */
 static inline int rinomina(const char *da, const char *a) {
     return chiamata3(SIS_RINOMINA, (unsigned int)da, (unsigned int)a, 0);

@@ -14,8 +14,12 @@
 #define MFS_ERR_NON_VUOTA      -8   /* la cartella non e' vuota */
 #define MFS_ERR_PIENO          -9   /* niente settori liberi */
 #define MFS_ERR_SCHEDE        -10   /* niente schede libere */
-#define MFS_ERR_TROPPO_GRANDE -11   /* oltre i 16524 settori (circa 8 MB) di un file */
+#define MFS_ERR_TROPPO_GRANDE -11   /* oltre i 16522 settori (circa 8 MB) di un file */
 
+/* I PERMESSI, come in Unix, scritti in ottale: tre cifre, ognuna la somma di
+ * 4 leggere, 2 scrivere, 1 eseguire (per una cartella: entrarci). La prima cifra vale
+ * per il proprietario, l'ultima per tutti gli altri; quella di mezzo (il gruppo) per ora
+ * non si usa. 0755: il proprietario fa tutto, gli altri leggono ed eseguono. */
 #define MFS_FILE     1
 #define MFS_CARTELLA 2
 #define MFS_NOME_MAX 27             /* lettere in un nome */
@@ -26,11 +30,12 @@ int mfs_monta(void);
 /* Scrive un mfs vuoto sul disco. CANCELLA TUTTO. */
 int mfs_formatta(void);
 
-/* Crea una cartella vuota. */
-int mfs_mkdir(const char *percorso);
+/* Crea una cartella vuota, di 'proprietario' (un uid) con 'permessi'. */
+int mfs_mkdir(const char *percorso, unsigned int proprietario, unsigned int permessi);
 
-/* Crea un file con dentro 'byte' byte presi da 'dati'. */
-int mfs_crea(const char *percorso, const void *dati, unsigned int byte);
+/* Crea un file con dentro 'byte' byte presi da 'dati', di 'proprietario' con 'permessi'. */
+int mfs_crea(const char *percorso, const void *dati, unsigned int byte,
+             unsigned int proprietario, unsigned int permessi);
 
 /* Legge fino a 'n' byte del file, a partire dal byte 'da'. Restituisce quanti ne ha letti. */
 int mfs_leggi(const char *percorso, unsigned int da, void *dove, unsigned int n);
@@ -46,8 +51,13 @@ int mfs_scrivi(const char *percorso, unsigned int da, const void *dati, unsigned
 /* Il file torna vuoto (0 byte). */
 int mfs_svuota(const char *percorso);
 
-/* Tipo (MFS_FILE o MFS_CARTELLA) e dimensione in byte. */
-int mfs_info(const char *percorso, int *tipo, unsigned int *dimensione);
+/* Tipo (MFS_FILE o MFS_CARTELLA), dimensione in byte, proprietario e permessi (questi
+ * due si possono non chiedere, passando 0). */
+int mfs_info(const char *percorso, int *tipo, unsigned int *dimensione,
+             unsigned int *proprietario, unsigned int *permessi);
+
+/* Cambia proprietario e permessi. */
+int mfs_permessi(const char *percorso, unsigned int proprietario, unsigned int permessi);
 
 /* La voce numero k della cartella (0, 1, 2...): nome (MFS_NOME_MAX + 1 byte), tipo e
  * dimensione. 1 se c'e', 0 se le voci sono finite. */

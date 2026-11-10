@@ -8,9 +8,10 @@
  *   settori 25-...   DATI         il contenuto di file e cartelle
  *
  * Una SCHEDA descrive un file o una cartella: tipo, dimensione, e in quali settori
- * sta il contenuto: 12 settori DIRETTI, poi un settore INDIRETTO che elenca altri 128
+ * sta il contenuto: 10 settori DIRETTI, poi un settore INDIRETTO che elenca altri 128
  * settori, poi un DOPPIO indiretto: un settore che elenca 128 settori-elenco, ognuno
- * con 128 settori (come ext2 di Linux). In tutto 12 + 128 + 16384 settori, circa 8 MB.
+ * con 128 settori (come ext2 di Linux). In tutto 10 + 128 + 16384 settori, circa 8 MB.
+ * E di chi e': il PROPRIETARIO (un uid) e i PERMESSI, come in Unix (vedi mfs.h).
  * Il NOME non sta nella scheda: sta nella cartella che la contiene.
  *
  * Una CARTELLA e' una scheda il cui contenuto e' un elenco di voci da 32 byte:
@@ -32,10 +33,10 @@ typedef unsigned int u32;
 
 #define MAGICO        "MFS1"
 #define NUMERO_SCHEDE 128
-#define DIRETTI       12
+#define DIRETTI       10
 #define PER_INDIRETTO (SETTORE / 4)            /* 128 numeri di settore in un settore */
 #define PER_DOPPIO    (PER_INDIRETTO * PER_INDIRETTO)            /* 16384 */
-#define MAX_SETTORI   (DIRETTI + PER_INDIRETTO + PER_DOPPIO)     /* 16524 settori per file */
+#define MAX_SETTORI   (DIRETTI + PER_INDIRETTO + PER_DOPPIO)     /* 16522 settori per file */
 #define BIT_PER_SETTORE (SETTORE * 8)           /* 4096 bit di registro in un settore */
 #define RADICE        0
 #define LIBERA        0                         /* tipo di una scheda non usata */
@@ -51,9 +52,11 @@ struct superblocco {
 struct scheda {
     u32 tipo;               /* LIBERA, MFS_FILE o MFS_CARTELLA */
     u32 dimensione;         /* byte di contenuto */
-    u32 diretti[DIRETTI];   /* i primi 12 settori del contenuto (0 = nessuno) */
+    u32 diretti[DIRETTI];   /* i primi 10 settori del contenuto (0 = nessuno) */
     u32 indiretto;          /* un settore con altri 128 numeri di settore (0 = nessuno) */
     u32 doppio;             /* un settore con 128 numeri di settori-elenco (0 = nessuno) */
+    u32 proprietario;       /* l'uid di chi l'ha creato */
+    u32 permessi;           /* come in Unix: 0755, 0644... (vedi mfs.h) */
 };
 _Static_assert(sizeof(struct scheda) == 64, "una scheda deve essere di 64 byte");
 #define SCHEDE_PER_SETTORE (SETTORE / sizeof(struct scheda))   /* 8 */
@@ -169,7 +172,7 @@ static int nell_elenco(u32 *elenco, u32 i, int crea) {
  * Restituisce il numero del settore, 0 se non c'e', o un errore. */
 static int settore_del_blocco(struct scheda *sc, u32 i, int crea) {
     int r;
-    if (i < DIRETTI) {                                   /* uno dei 12 diretti */
+    if (i < DIRETTI) {                                   /* uno dei 10 diretti */
         if (!sc->diretti[i] && crea) {
             if ((r = alloca_settore()) < 0) return r;
             sc->diretti[i] = r;
@@ -428,6 +431,8 @@ static int formatta_dentro(void) {
     struct scheda radice;
     memset(&radice, 0, sizeof radice);
     radice.tipo = MFS_CARTELLA;
+    radice.proprietario = 0;          /* del sistema: gli altri leggono, non scrivono */
+    radice.permessi = 0755;
     return scrivi_scheda(RADICE, &radice);
 }
 
@@ -445,7 +450,7 @@ static int nuova_scheda(const char *percorso, u32 *genitore, char *nome) {
     return scheda_libera();
 }
 
-static int mkdir_dentro(const char *percorso) {
+static int mkdir_dentro(const char *percorso, unsigned int proprietario, unsigned int permessi) {
     u32 genitore;
     char nome[MFS_NOME_MAX + 1];
     int n = nuova_scheda(percorso, &genitore, nome);
@@ -454,12 +459,15 @@ static int mkdir_dentro(const char *percorso) {
     struct scheda sc;
     memset(&sc, 0, sizeof sc);
     sc.tipo = MFS_CARTELLA;
+    sc.proprietario = proprietario;
+    sc.permessi = permessi;
     int r = scrivi_scheda(n, &sc);
     if (r < 0) return r;
     return aggiungi_voce(genitore, nome, n);
 }
 
-static int crea_dentro(const char *percorso, const void *dati, unsigned int byte) {
+static int crea_dentro(const char *percorso, const void *dati, unsigned int byte,
+                       unsigned int proprietario, unsigned int permessi) {
     if (byte > MAX_SETTORI * SETTORE) return MFS_ERR_TROPPO_GRANDE;
     u32 genitore;
     char nome[MFS_NOME_MAX + 1];
@@ -470,6 +478,8 @@ static int crea_dentro(const char *percorso, const void *dati, unsigned int byte
     memset(&sc, 0, sizeof sc);
     sc.tipo = MFS_FILE;
     sc.dimensione = byte;
+    sc.proprietario = proprietario;
+    sc.permessi = permessi;
 
     /* il contenuto, un settore alla volta: l'ultimo pezzo si completa con zeri */
     const unsigned char *d = dati;
@@ -588,13 +598,16 @@ static int svuota_dentro(const char *percorso) {
     if ((r = leggi_scheda(num, &sc)) < 0) return r;
     if (sc.tipo == MFS_CARTELLA) return MFS_ERR_E_CARTELLA;
     if ((r = libera_contenuto(&sc)) < 0) return r;
-    u32 tipo = sc.tipo;
+    u32 tipo = sc.tipo, proprietario = sc.proprietario, permessi = sc.permessi;
     memset(&sc, 0, sizeof sc);
     sc.tipo = tipo;
+    sc.proprietario = proprietario;   /* svuotato, ma resta di chi era */
+    sc.permessi = permessi;
     return scrivi_scheda(num, &sc);
 }
 
-static int info_dentro(const char *percorso, int *tipo, unsigned int *dimensione) {
+static int info_dentro(const char *percorso, int *tipo, unsigned int *dimensione,
+                       unsigned int *proprietario, unsigned int *permessi) {
     u32 num;
     int r;
     if (!montato) return MFS_ERR_NON_FORMATTATO;
@@ -603,7 +616,22 @@ static int info_dentro(const char *percorso, int *tipo, unsigned int *dimensione
     if ((r = leggi_scheda(num, &sc)) < 0) return r;
     *tipo = sc.tipo;
     *dimensione = sc.dimensione;
+    if (proprietario) *proprietario = sc.proprietario;
+    if (permessi) *permessi = sc.permessi;
     return 0;
+}
+
+/* Cambia proprietario e permessi. */
+static int permessi_dentro(const char *percorso, unsigned int proprietario, unsigned int permessi) {
+    u32 num;
+    int r;
+    if (!montato) return MFS_ERR_NON_FORMATTATO;
+    if ((r = trova(percorso, &num)) < 0) return r;
+    struct scheda sc;
+    if ((r = leggi_scheda(num, &sc)) < 0) return r;
+    sc.proprietario = proprietario;
+    sc.permessi = permessi & 0777;
+    return scrivi_scheda(num, &sc);
 }
 
 /* La voce numero k di una cartella (contando solo quelle usate). */
@@ -758,8 +786,13 @@ static struct lucchetto lucchetto_mfs = LUCCHETTO("mfs");
 
 int mfs_monta(void)                         { CON_LUCCHETTO(monta_dentro()); }
 int mfs_formatta(void)                      { CON_LUCCHETTO(formatta_dentro()); }
-int mfs_mkdir(const char *p)                { CON_LUCCHETTO(mkdir_dentro(p)); }
-int mfs_crea(const char *p, const void *d, unsigned int b) { CON_LUCCHETTO(crea_dentro(p, d, b)); }
+int mfs_mkdir(const char *p, unsigned int proprietario, unsigned int permessi) {
+    CON_LUCCHETTO(mkdir_dentro(p, proprietario, permessi));
+}
+int mfs_crea(const char *p, const void *d, unsigned int b, unsigned int proprietario,
+             unsigned int permessi) {
+    CON_LUCCHETTO(crea_dentro(p, d, b, proprietario, permessi));
+}
 int mfs_leggi(const char *p, unsigned int da, void *dove, unsigned int n) {
     CON_LUCCHETTO(leggi_dentro(p, da, dove, n));
 }
@@ -770,8 +803,12 @@ int mfs_scrivi(const char *p, unsigned int da, const void *dati, unsigned int n)
 }
 int mfs_svuota(const char *p)               { CON_LUCCHETTO(svuota_dentro(p)); }
 int mfs_rinomina(const char *da, const char *a) { CON_LUCCHETTO(rinomina_dentro(da, a)); }
-int mfs_info(const char *p, int *tipo, unsigned int *dimensione) {
-    CON_LUCCHETTO(info_dentro(p, tipo, dimensione));
+int mfs_info(const char *p, int *tipo, unsigned int *dimensione, unsigned int *proprietario,
+             unsigned int *permessi) {
+    CON_LUCCHETTO(info_dentro(p, tipo, dimensione, proprietario, permessi));
+}
+int mfs_permessi(const char *p, unsigned int proprietario, unsigned int permessi) {
+    CON_LUCCHETTO(permessi_dentro(p, proprietario, permessi));
 }
 int mfs_voce(const char *p, unsigned int k, char *nome, int *tipo, unsigned int *dimensione) {
     CON_LUCCHETTO(voce_dentro(p, k, nome, tipo, dimensione));

@@ -135,7 +135,7 @@ static const char *nome_da_percorso(const char *percorso) {
     return nome;
 }
 
-struct compito *compito_crea_programma(const char *percorso, const char **errore) {
+struct compito *compito_crea_programma(const char *percorso, unsigned int uid, const char **errore) {
     struct compito *c = kmalloc(sizeof *c);
     unsigned char *pila = kmalloc(DIM_PILA);    /* la pila del kernel per questo programma */
     unsigned int mappa = pag_nuova_mappa();      /* la sua mappa: il kernel gia' dentro */
@@ -166,6 +166,7 @@ struct compito *compito_crea_programma(const char *percorso, const char **errore
     c->pila = pila;
     c->mappa = mappa;
     c->dati_inizio = c->rottura = fine;   /* la zona dinamica, vuota */
+    c->uid = uid;
 
     /* 3. LA PILA FINTA, sulla pila del kernel. Come per un compito normale, ma "come se"
      *    fosse stato interrotto un programma in ring 3: in quel caso la CPU, oltre a

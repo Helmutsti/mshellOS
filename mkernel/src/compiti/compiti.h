@@ -27,6 +27,7 @@ struct compito {
     void *pila;                  /* la sua pila (0 per l'inattivo: usa quella dell'avvio).
                                   * Per un programma in ring 3 e' la sua pila DEL KERNEL */
     unsigned int mappa;          /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
+    unsigned int uid;            /* chi e': 0 il sistema, 1000 le applicazioni (chiamate.h) */
     unsigned int dati_inizio;    /* solo ring 3: dove comincia la zona dinamica (dinamica.c) */
     unsigned int rottura;        /* ... e dove finisce adesso: il confine */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
@@ -47,11 +48,11 @@ struct compito {
  * e accende lo scheduler. */
 void compiti_prepara(void);
 
-/* Crea un compito in RING 3 dal file eseguibile (ELF) 'percorso' sul disco.
+/* Crea un compito in RING 3 dal file eseguibile (ELF) 'percorso' sul disco, con 'uid'.
  * Ha una mappa sua (le sue pagine piu' il kernel, condiviso) e due pile: una pagina per
  * il programma e una pila del kernel. Restituisce la scheda, oppure 0 e in *errore il
  * perche' (file che non c'e', non e' un eseguibile, memoria finita...). */
-struct compito *compito_crea_programma(const char *percorso, const char **errore);
+struct compito *compito_crea_programma(const char *percorso, unsigned int uid, const char **errore);
 
 void cedi(void);                       /* passa il turno al prossimo */
 void dormi(unsigned int millisecondi); /* non girare per almeno questo tempo */

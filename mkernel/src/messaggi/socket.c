@@ -50,6 +50,7 @@ struct ascolto {
     struct capo *in_arrivo;          /* i collegamenti da accettare, il piu' vecchio primo */
     int quanti;
     struct ascolto *dopo;            /* nell'elenco dei nomi */
+    struct compito *padrone;         /* chi ascolta */
 };
 
 static struct ascolto *nomi;         /* tutti quelli in ascolto */
@@ -178,6 +179,7 @@ int socket_ascolta(const char *nome) {
     if (!s) return -1;
     memset(s, 0, sizeof *s);
     s->aperto.op = &operazioni_ascolto;
+    s->padrone = compito_attuale();
     memcpy(s->nome, nome, MAX_NOME);
     int d = descrittore_nuovo(&s->aperto);
     if (d < 0) { kfree(s); return -1; }
@@ -195,6 +197,7 @@ int socket_collega(const char *nome) {
     mio->altro = suo;
     suo->altro = mio;
     mio->padrone = compito_attuale();
+    suo->padrone = s->padrone;   /* finche' non lo accetta, dall'altra parte c'e' chi ascolta */
 
     struct capo **fondo = &s->in_arrivo;   /* in fondo alla fila di chi ascolta */
     while (*fondo) fondo = &(*fondo)->dopo;
@@ -220,8 +223,8 @@ int socket_accetta(int d) {
 }
 
 /* Il padrone dell'altro capo e' vivo finche' l'altro capo esiste: quando un compito
- * finisce si chiudono i suoi capi, e il nostro 'altro' torna 0. Un collegamento non
- * ancora accettato non ha padrone dall'altra parte. */
+ * finisce si chiudono i suoi capi (e il suo ascolto, con i collegamenti non ancora
+ * accettati), e il nostro 'altro' torna 0. */
 struct compito *socket_altro(int d) {
     struct aperto *a = descrittore(d);
     if (!a || a->op != &operazioni_capo) return 0;

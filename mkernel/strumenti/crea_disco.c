@@ -68,7 +68,7 @@ int main(int argc, char **argv) {
         size_t byte = fread(dati, 1, sizeof dati, f);
         fclose(f);
 
-        r = mfs_crea(percorso, dati, (unsigned int)byte);
+        r = mfs_crea(percorso, dati, (unsigned int)byte, 0, 0755);   /* del sistema, eseguibili da tutti */
         if (r < 0) errore(percorso, mfs_messaggio(r));
         printf("  %-20s %6zu byte\n", percorso, byte);
     }

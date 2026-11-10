@@ -198,7 +198,7 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     /* IL PRIMO PROGRAMMA. Come in Linux, il kernel lancia un solo programma, /init, e
      * sara' lui a far nascere tutto il resto. Senza init non c'e' sistema: panico. */
     const char *errore;
-    struct compito *init = compito_crea_programma("/init", &errore);
+    struct compito *init = compito_crea_programma("/init", UID_SISTEMA, &errore);
     if (!init) panico("non posso avviare /init: %s", errore);
 
     kprintf("Compiti : scheduler acceso (inattivo, init)\n\n");
