@@ -36,6 +36,10 @@ unsigned int pag_nuova_mappa(void);
  * 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' fuori da 1-2 GB. */
 int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis, unsigned int permessi);
 
+/* Toglie 'virt' dalla mappa di un programma (la pagina non si restituisce: e' di chi
+ * l'ha prestata). */
+void pag_togli_programma(unsigned int mappa, unsigned int virt);
+
 /* Restituisce al magazziniere tutte le pagine del programma (non quelle PRESTATE), le
  * sue tabelle e la directory. Non si puo' fare sulla mappa che la CPU sta usando. */
 void pag_cancella_mappa(unsigned int mappa);

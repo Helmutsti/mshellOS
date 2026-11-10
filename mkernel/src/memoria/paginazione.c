@@ -120,6 +120,14 @@ int pag_mappa_programma(unsigned int mappa, unsigned int virt, unsigned int fis,
     return mappa_in((unsigned int *)mappa, virt, fis, permessi);
 }
 
+void pag_togli_programma(unsigned int mappa, unsigned int virt) {
+    if (virt < PROGRAMMI_INIZIO || virt >= PROGRAMMI_FINE) return;
+    unsigned int *tab = tabella_di((unsigned int *)mappa, virt, 0);
+    if (!tab) return;
+    tab[INDICE_TAB(virt)] = 0;
+    if ((unsigned int *)mappa == attuale()) dimentica(virt);
+}
+
 void pag_cancella_mappa(unsigned int mappa) {
     unsigned int *dir = (unsigned int *)mappa;
     if (dir == attuale()) panico("paginazione: cancello la mappa che sto usando");

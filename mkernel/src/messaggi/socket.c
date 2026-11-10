@@ -24,12 +24,14 @@
 #include "kmalloc.h"
 #include "descrittori.h"
 #include "socket.h"
+#include "fogli.h"
 
 #define POSTI 16             /* messaggi in una casella */
 #define MAX_IN_ARRIVO 8      /* collegamenti in fila da accettare */
 
 struct messaggio {
     unsigned int byte;
+    struct aperto *allegato;         /* un foglio che viaggia col messaggio (un uso suo), o 0 */
     unsigned char dati[MAX_MESSAGGIO];
 };
 
@@ -67,7 +69,7 @@ static struct ascolto *cerca(const char *nome) {
 static int vuota(struct capo *c) { return c->testa == c->coda; }
 static int piena(struct capo *c) { return (c->testa + 1) % POSTI == c->coda; }
 
-static int capo_ricevi(struct aperto *a, void *dove, unsigned int byte) {
+static int capo_ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato) {
     struct capo *c = (struct capo *)a;
     while (vuota(c)) {
         if (!c->altro) return 0;     /* niente in casella e l'altro ha chiuso: finito */
@@ -76,14 +78,18 @@ static int capo_ricevi(struct aperto *a, void *dove, unsigned int byte) {
     struct messaggio *m = &c->casella[c->coda];
     unsigned int n = m->byte < byte ? m->byte : byte;   /* il resto si perde */
     memcpy(dove, m->dati, n);
+    *allegato = m->allegato;         /* il suo uso passa a chi riceve */
     c->coda = (c->coda + 1) % POSTI;
     if (c->altro) aperto_sveglia(&c->altro->aperto);   /* c'e' un posto libero */
     return n;
 }
 
-static int capo_manda(struct aperto *a, const void *da, unsigned int byte) {
+/* SI ALLEGANO SOLO FOGLI. Un socket allegato a un messaggio che viaggia dentro se'
+ * stesso non si chiuderebbe mai (si terrebbe in vita da solo): Linux per questo ha un
+ * raccoglitore apposta. A noi per ora servono solo i fogli. */
+static int capo_manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
     struct capo *c = (struct capo *)a;
-    if (byte > MAX_MESSAGGIO) return -1;
+    if (byte > MAX_MESSAGGIO || (allegato && !e_un_foglio(allegato))) return -1;
     for (;;) {
         if (!c->altro) return -1;    /* l'altro ha chiuso: non c'e' a chi mandare */
         if (!piena(c->altro)) break;
@@ -93,6 +99,8 @@ static int capo_manda(struct aperto *a, const void *da, unsigned int byte) {
     struct messaggio *m = &d->casella[d->testa];
     m->byte = byte;
     memcpy(m->dati, da, byte);
+    m->allegato = allegato;
+    if (allegato) aperto_tieni(allegato);   /* finche' viaggia, lo tiene il messaggio */
     d->testa = (d->testa + 1) % POSTI;
     aperto_sveglia(&d->aperto);
     return byte;
@@ -105,6 +113,8 @@ static int capo_pronto(struct aperto *a) {
 
 static void capo_chiudi(struct aperto *a) {
     struct capo *c = (struct capo *)a;
+    for (; !vuota(c); c->coda = (c->coda + 1) % POSTI)   /* messaggi mai ricevuti */
+        if (c->casella[c->coda].allegato) aperto_lascia(c->casella[c->coda].allegato);
     if (c->altro) {                  /* l'altro lo deve sapere: ricevi gli dara' 0 */
         c->altro->altro = 0;
         aperto_sveglia(&c->altro->aperto);
@@ -126,13 +136,14 @@ static struct capo *capo_nuovo(void) {
 
 /* --- chi ascolta --- */
 
-static int ascolto_ricevi(struct aperto *a, void *dove, unsigned int byte) {
+static int ascolto_ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato) {
     (void)a; (void)dove; (void)byte;
+    *allegato = 0;
     return -1;                       /* qui arrivano collegamenti, non messaggi: accetta */
 }
 
-static int ascolto_manda(struct aperto *a, const void *da, unsigned int byte) {
-    (void)a; (void)da; (void)byte;
+static int ascolto_manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
+    (void)a; (void)da; (void)byte; (void)allegato;
     return -1;
 }
 

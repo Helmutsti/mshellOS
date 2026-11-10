@@ -12,6 +12,7 @@
 #include "eventi.h"
 #include "descrittori.h"
 #include "socket.h"
+#include "fogli.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA 1024
@@ -130,12 +131,47 @@ unsigned int chiamata_di_sistema(struct registri *r) {
          * ancora li'. */
         struct aperto *a = descrittore(r->ebx);
         unsigned int dati = r->ecx, byte = r->edx;
-        int manda = r->eax == SIS_MANDA;
-        if (!a || !del_programma(dati, byte, manda ? LEGGERE : SCRIVERE)) { r->eax = -1; break; }
-        r->eax = manda ? a->op->manda(a, (const void *)dati, byte)
-                       : a->op->ricevi(a, (void *)dati, byte);
+        if (!a || !del_programma(dati, byte, r->eax == SIS_MANDA ? LEGGERE : SCRIVERE)) {
+            r->eax = -1;
+            break;
+        }
+        if (r->eax == SIS_MANDA) {
+            /* l'allegato: un descrittore del mittente, o -1 per niente */
+            struct aperto *allegato = (int)r->esi == -1 ? 0 : descrittore(r->esi);
+            if ((int)r->esi != -1 && !allegato) { r->eax = -1; break; }
+            r->eax = a->op->manda(a, (const void *)dati, byte, allegato);
+            break;
+        }
+        /* dove scrivere il descrittore dell'allegato (0 = non interessa): si controlla
+         * PRIMA di ricevere, per non perdere un messaggio gia' preso dalla casella */
+        int *dove_allegato = (int *)r->esi;
+        if (dove_allegato && !del_programma((unsigned int)dove_allegato, sizeof(int), SCRIVERE)) {
+            r->eax = -1;
+            break;
+        }
+        struct aperto *allegato;
+        r->eax = a->op->ricevi(a, (void *)dati, byte, &allegato);
+        int d = -1;
+        if (allegato) {
+            /* l'uso del messaggio diventa un descrittore in questo programma. Se non lo
+             * vuole, o la sua tabella e' piena, il foglio si lascia. */
+            if (dove_allegato) d = descrittore_nuovo(allegato);
+            aperto_lascia(allegato);
+        }
+        if (dove_allegato) *dove_allegato = d;
         break;
     }
+    case SIS_FOGLIO:
+        r->eax = foglio_nuovo(r->ebx);
+        break;
+    case SIS_MAPPA: {
+        unsigned int indirizzo = foglio_mappa(r->ebx);
+        r->eax = indirizzo ? indirizzo : (unsigned int)-1;
+        break;
+    }
+    case SIS_TOGLI:
+        r->eax = foglio_togli(r->ebx);
+        break;
     case SIS_CHIUDI:
         r->eax = descrittore_chiudi(r->ebx);
         break;

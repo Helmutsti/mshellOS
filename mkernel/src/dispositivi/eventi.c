@@ -41,7 +41,8 @@ void eventi_metti(const struct evento *e) {
 
 /* --- le operazioni della fila come cosa aperta --- */
 
-static int ricevi(struct aperto *a, void *dove, unsigned int byte) {
+static int ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato) {
+    *allegato = 0;
     if (byte < sizeof(struct evento)) return -1;   /* un evento non si spezza */
     while (testa == coda) aperto_aspetta(a);
     *(struct evento *)dove = fila[coda];
@@ -49,8 +50,8 @@ static int ricevi(struct aperto *a, void *dove, unsigned int byte) {
     return sizeof(struct evento);
 }
 
-static int manda(struct aperto *a, const void *da, unsigned int byte) {
-    (void)a; (void)da; (void)byte;
+static int manda(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato) {
+    (void)a; (void)da; (void)byte; (void)allegato;
     return -1;   /* gli eventi li mette solo il kernel */
 }
 

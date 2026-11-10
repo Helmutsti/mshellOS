@@ -25,6 +25,7 @@
 #include "chiamate.h"
 #include "compiti.h"
 #include "descrittori.h"
+#include "fogli.h"
 
 #define DIM_PILA 8192
 
@@ -89,7 +90,7 @@ static unsigned int carica_elf(unsigned int mappa, const char *percorso, const c
 
         *errore = "un pezzo del file e' fuori posto";
         if (p->virtuale % PAGINA || p->virtuale < fine_precedente ||
-            fine_pezzo < p->virtuale || fine_pezzo > SCHERMO_PROGRAMMA ||
+            fine_pezzo < p->virtuale || fine_pezzo > FOGLI_INIZIO ||
             p->byte_file > p->byte_memoria || p->nel_file + p->byte_file > (unsigned int)byte ||
             p->nel_file + p->byte_file < p->nel_file)
             goto fine;
@@ -242,6 +243,7 @@ unsigned int scheduler(unsigned int esp) {
             numero_compiti--;
             console_riprendi(c);   /* se lo schermo era suo, torna alla console */
             descrittori_chiudi_tutti(c);   /* i suoi socket: chi era collegato lo sapra' */
+            fogli_lascia_tutti(c);         /* i fogli nella sua memoria */
             if (c->mappa) pag_cancella_mappa(c->mappa);   /* pagine, tabelle, directory */
             kfree(c->pila);
             kfree(c);

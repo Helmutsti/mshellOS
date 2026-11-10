@@ -91,16 +91,50 @@ static inline int collega(const char *nome) { return chiamata1(SIS_COLLEGA, (uns
 /* Il prossimo collegamento arrivato su 'd' (dorme se non ce n'e'): un descrittore nuovo. */
 static inline int accetta(int d) { return chiamata1(SIS_ACCETTA, d); }
 
+static inline int chiamata4(int servizio, unsigned int a, unsigned int b, unsigned int c,
+                            unsigned int d) {
+    int risultato;
+    __asm__ volatile("int %1"
+                     : "=a"(risultato)
+                     : "i"(INT_SISTEMA), "a"(servizio), "b"(a), "c"(b), "d"(c), "S"(d)
+                     : "memory");
+    return risultato;
+}
+
 /* Manda un messaggio: i byte mandati, o -1 se l'altro ha chiuso. */
 static inline int manda(int d, const void *dati, unsigned int byte) {
-    return chiamata3(SIS_MANDA, d, (unsigned int)dati, byte);
+    return chiamata4(SIS_MANDA, d, (unsigned int)dati, byte, -1);
+}
+
+/* Come manda, con allegato il foglio del descrittore 'foglio'. */
+static inline int manda_foglio(int d, const void *dati, unsigned int byte, int foglio) {
+    return chiamata4(SIS_MANDA, d, (unsigned int)dati, byte, foglio);
 }
 
 /* Riceve il prossimo messaggio (dorme se non ce n'e'): i byte ricevuti, 0 se l'altro
- * ha chiuso, -1 se errore. */
+ * ha chiuso, -1 se errore. Un foglio allegato, se c'e', si lascia. */
 static inline int ricevi(int d, void *dove, unsigned int byte) {
-    return chiamata3(SIS_RICEVI, d, (unsigned int)dove, byte);
+    return chiamata4(SIS_RICEVI, d, (unsigned int)dove, byte, 0);
 }
+
+/* Come ricevi; in *foglio il descrittore del foglio allegato, o -1 se non c'era. */
+static inline int ricevi_foglio(int d, void *dove, unsigned int byte, int *foglio) {
+    return chiamata4(SIS_RICEVI, d, (unsigned int)dove, byte, (unsigned int)foglio);
+}
+
+/* --- i fogli: memoria condivisa con gli altri programmi (vedi chiamate.h) --- */
+
+/* Un foglio nuovo di 'byte' byte: il descrittore, o -1. */
+static inline int foglio(unsigned int byte) { return chiamata1(SIS_FOGLIO, byte); }
+
+/* Mette il foglio nella memoria del programma: dove sta, o 0. */
+static inline void *mappa(int d) {
+    int r = chiamata1(SIS_MAPPA, d);
+    return r == -1 ? 0 : (void *)r;
+}
+
+/* Lo leva dalla memoria. */
+static inline int togli(void *indirizzo) { return chiamata1(SIS_TOGLI, (unsigned int)indirizzo); }
 
 static inline int chiudi(int d) { return chiamata1(SIS_CHIUDI, d); }
 

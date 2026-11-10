@@ -26,20 +26,29 @@ struct aperto;
 
 struct operazioni {
     /* Riceve in 'dove' (al massimo 'byte'); dorme se non c'e' niente. Byte ricevuti,
-     * 0 se dall'altra parte hanno chiuso, -1 se qui non si riceve. */
-    int (*ricevi)(struct aperto *a, void *dove, unsigned int byte);
-    /* Manda 'byte' da 'da'; puo' dormire. Byte mandati, o -1. */
-    int (*manda)(struct aperto *a, const void *da, unsigned int byte);
+     * 0 se dall'altra parte hanno chiuso, -1 se qui non si riceve. Se col messaggio
+     * arriva una cosa aperta, va in *allegato (con un uso gia' contato), se no 0. */
+    int (*ricevi)(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato);
+    /* Manda 'byte' da 'da', con 'allegato' (o 0); puo' dormire. Byte mandati, o -1. */
+    int (*manda)(struct aperto *a, const void *da, unsigned int byte, struct aperto *allegato);
     /* C'e' qualcosa da ricevere adesso (o la fine)? Non dorme: serve ad aspetta. */
     int (*pronto)(struct aperto *a);
-    /* Il descrittore e' stato chiuso: si libera tutto. */
+    /* Nessuno la tiene piu': si libera tutto. */
     void (*chiudi)(struct aperto *a);
 };
 
+/* GLI USI. La stessa cosa aperta puo' stare in piu' tabelle (un foglio passato a un
+ * altro programma), in un messaggio non ancora ricevuto, o nella memoria di un
+ * programma (un foglio mappato). Ognuno di questi e' un USO; quando l'ultimo la lascia,
+ * si chiude davvero. Come il "conteggio dei riferimenti" della struct file di Linux. */
 struct aperto {
     const struct operazioni *op;
     struct attesa *attese;     /* chi dorme aspettando che succeda qualcosa qui */
+    int usi;
 };
+
+void aperto_tieni(struct aperto *a);   /* un uso in piu' */
+void aperto_lascia(struct aperto *a);  /* un uso in meno: all'ultimo, op->chiudi */
 
 /* Dorme finche' qualcuno non chiama aperto_sveglia su 'a'. Al risveglio non e' detto
  * che ci sia davvero qualcosa: chi la chiama ricontrolla, in un ciclo.
@@ -48,8 +57,8 @@ void aperto_aspetta(struct aperto *a);
 /* Sveglia tutti quelli che dormono su 'a'. */
 void aperto_sveglia(struct aperto *a);
 
-/* Mette 'a' nel primo posto libero della tabella del compito attuale: il descrittore,
- * o -1 se la tabella e' piena. */
+/* Mette 'a' nel primo posto libero della tabella del compito attuale (e' un uso in
+ * piu'): il descrittore, o -1 se la tabella e' piena. */
 int descrittore_nuovo(struct aperto *a);
 /* La cosa aperta al posto 'd' del compito attuale, o 0. */
 struct aperto *descrittore(int d);

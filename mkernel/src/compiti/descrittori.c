@@ -30,12 +30,20 @@ void aperto_sveglia(struct aperto *a) {
     for (struct attesa *n = a->attese; n; n = n->dopo) compito_sveglia(n->chi);
 }
 
+/* --- gli usi --- */
+
+void aperto_tieni(struct aperto *a) { a->usi++; }
+
+void aperto_lascia(struct aperto *a) {
+    if (--a->usi == 0) a->op->chiudi(a);
+}
+
 /* --- la tabella delle cose aperte, una per compito --- */
 
 int descrittore_nuovo(struct aperto *a) {
     struct compito *c = compito_attuale();
     for (int d = 0; d < MAX_APERTI; d++)
-        if (!c->aperti[d]) { c->aperti[d] = a; return d; }
+        if (!c->aperti[d]) { c->aperti[d] = a; aperto_tieni(a); return d; }
     return -1;
 }
 
@@ -48,7 +56,7 @@ int descrittore_chiudi(int d) {
     struct aperto *a = descrittore(d);
     if (!a) return -1;
     compito_attuale()->aperti[d] = 0;
-    a->op->chiudi(a);
+    aperto_lascia(a);
     return 0;
 }
 
@@ -57,7 +65,7 @@ void descrittori_chiudi_tutti(struct compito *c) {
         if (c->aperti[d]) {
             struct aperto *a = c->aperti[d];
             c->aperti[d] = 0;
-            a->op->chiudi(a);
+            aperto_lascia(a);
         }
 }
 

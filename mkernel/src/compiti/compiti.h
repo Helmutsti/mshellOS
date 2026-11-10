@@ -2,6 +2,8 @@
 #ifndef COMPITI_H
 #define COMPITI_H
 
+#include "chiamate.h"   /* MAX_MAPPATI */
+
 #define INT_CEDI 0x81   /* l'interruzione software con cui un compito cede il turno */
 
 enum stato_compito {
@@ -28,6 +30,8 @@ struct compito {
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
     struct compito *prossimo;    /* il successivo nella fila (circolare) */
     struct aperto *aperti[MAX_APERTI];   /* le sue cose aperte: il descrittore e' il posto */
+    struct aperto *mappati[MAX_MAPPATI]; /* i fogli nella sua memoria: il posto i sta a
+                                          * FOGLI_INIZIO + i * FOGLIO_MAX */
 
     /* i lucchetti (lucchetto.c) */
     int lucchetti;                    /* quanti ne tiene adesso */
