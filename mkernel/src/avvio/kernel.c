@@ -8,6 +8,7 @@
 #include "pic.h"
 #include "timer.h"
 #include "tastiera.h"
+#include "mouse.h"
 #include "pagine.h"
 #include "kmalloc.h"
 #include "paginazione.h"
@@ -171,10 +172,11 @@ void kernel_main(unsigned int magic, struct multiboot_info *info) {
     titolo("Interruzioni");
     pic_prepara();
     timer_prepara(100);
+    int c_e_il_mouse = mouse_prepara();   /* prima della tastiera: lei poi svuota la porta */
     tastiera_prepara();
     __asm__ volatile("sti");   /* accende il flag delle interruzioni: da qui la CPU ascolta */
-    kprintf("PIC sulle righe %d-%d, timer a 100 Hz, tastiera, interruzioni accese\n",
-            IRQ_BASE, IRQ_BASE + 15);
+    kprintf("PIC sulle righe %d-%d, timer a 100 Hz, tastiera, %s, interruzioni accese\n",
+            IRQ_BASE, IRQ_BASE + 15, c_e_il_mouse ? "mouse" : "nessun mouse");
 
     /* Il disco: si chiede al controller "chi sei?". Con polling, quindi non servono interruzioni. */
     int c_e_il_disco = disco_prepara();

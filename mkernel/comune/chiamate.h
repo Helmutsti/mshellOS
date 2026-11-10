@@ -16,8 +16,10 @@
 #define SIS_SCRIVI 1       /* scrivi(testo, byte): scrive sullo schermo */
 #define SIS_DORMI  2       /* dormi(millisecondi): non gira per quel tempo */
 #define SIS_ESCI   3       /* esci(): il programma finisce */
-#define SIS_LEGGI  4       /* leggi(): aspetta un tasto e lo restituisce (-1: la tastiera
-                            * e' gia' di un altro programma che sta aspettando) */
+#define SIS_EVENTO 4       /* aspetta_evento(&evento): dorme finche' non arriva un evento
+                            * (un tasto, il mouse) e lo mette in 'evento'. -1 se un altro
+                            * programma sta gia' aspettando: gli eventi vanno a uno solo,
+                            * il compositore, che li passera' alla finestra giusta */
 #define SIS_AVVIA  5       /* avvia(percorso): fa partire il programma del disco.
                             * Restituisce il suo numero di compito, o -1 */
 
@@ -35,6 +37,22 @@ struct info_schermo {
     unsigned int passo;                /* byte da una riga di pixel alla successiva */
     unsigned int larghezza, altezza;   /* in pixel */
     unsigned int rosso, verde, blu;
+};
+
+/* Un evento: qualcosa che e' successo alla tastiera o al mouse. Come gli eventi di
+ * Linux, il kernel dice solo COSA e' successo, non a quale finestra va. */
+#define EVENTO_TASTO 1     /* e' stato premuto un tasto: il carattere e' in 'tasto' */
+#define EVENTO_MOUSE 2     /* il mouse si e' spostato di dx, dy, o un pulsante e' cambiato */
+
+#define PULSANTE_SINISTRO 1   /* i bit di 'pulsanti': quelli tenuti premuti adesso */
+#define PULSANTE_DESTRO   2
+#define PULSANTE_CENTRALE 4
+
+struct evento {
+    unsigned int tipo;
+    unsigned int tasto;      /* EVENTO_TASTO: il carattere (code page 437) */
+    int dx, dy;              /* EVENTO_MOUSE: lo spostamento in pixel; dy positivo = in basso */
+    unsigned int pulsanti;   /* EVENTO_MOUSE: PULSANTE_... tenuti premuti */
 };
 
 /* Dove vivono i programmi nella loro mappa: tra 1 e 2 GB. Il codice e le variabili

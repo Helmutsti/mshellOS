@@ -44,7 +44,7 @@ void cedi(void);                       /* passa il turno al prossimo */
 void dormi(unsigned int millisecondi); /* non girare per almeno questo tempo */
 
 /* Si mette in ATTESA finche' compito_sveglia non lo rimette pronto.
- * Va chiamata con le interruzioni SPENTE (vedi tastiera_aspetta). */
+ * Va chiamata con le interruzioni SPENTE (vedi eventi_aspetta). */
 void compito_aspetta(void);
 void compito_sveglia(struct compito *c);
 

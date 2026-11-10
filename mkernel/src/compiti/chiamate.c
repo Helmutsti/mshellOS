@@ -9,7 +9,7 @@
 #include "pagine.h"
 #include "paginazione.h"
 #include "compiti.h"
-#include "tastiera.h"
+#include "eventi.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA 1024
@@ -17,12 +17,17 @@
 /* NON SI CREDE AL PROGRAMMA. Un indirizzo che arriva dal ring 3 e' un numero
  * qualsiasi: potrebbe puntare alla memoria del kernel, e il kernel (ring 0) la
  * leggerebbe senza problemi, stampando i suoi segreti. Quindi si controlla, pagina
- * per pagina, che tutto il pezzo stia in memoria che il programma puo' toccare. */
-static int del_programma(unsigned int inizio, unsigned int byte) {
+ * per pagina, che tutto il pezzo stia in memoria che il programma puo' toccare.
+ * E se il kernel ci deve SCRIVERE (una risposta per il programma), che il programma
+ * stesso ci possa scrivere: se no il kernel scriverebbe nel suo codice, o farebbe page
+ * fault in ring 0 (panico) su una pagina di sola lettura. */
+#define LEGGERE  PAG_UTENTE
+#define SCRIVERE (PAG_UTENTE | PAG_SCRITTURA)
+static int del_programma(unsigned int inizio, unsigned int byte, unsigned int serve) {
     if (byte > MAX_SCRITTURA || inizio + byte < inizio) return 0;   /* troppo, o fa il giro */
     for (unsigned int p = inizio & ~(PAGINA - 1); p < inizio + byte; p += PAGINA) {
         unsigned int fisico, permessi;
-        if (!pag_traduci(p, &fisico, &permessi) || !(permessi & PAG_UTENTE)) return 0;
+        if (!pag_traduci(p, &fisico, &permessi) || (permessi & serve) != serve) return 0;
     }
     return 1;
 }
@@ -32,7 +37,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
     case SIS_SCRIVI: {
         const char *testo = (const char *)r->ebx;
         unsigned int byte = r->ecx;
-        if (!del_programma((unsigned int)testo, byte)) { r->eax = -1; break; }
+        if (!del_programma((unsigned int)testo, byte, LEGGERE)) { r->eax = -1; break; }
         for (unsigned int i = 0; i < byte; i++) console_putc(testo[i]);
         r->eax = byte;
         break;
@@ -43,10 +48,16 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         dormi(r->ebx);
         r->eax = 0;
         break;
-    case SIS_LEGGI: {
-        /* dorme finche' non arriva un tasto, come dormi(): si riparte da qui */
-        char c = tastiera_aspetta();
-        r->eax = c ? (unsigned char)c : (unsigned int)-1;
+    case SIS_EVENTO: {
+        /* dorme finche' non arriva un evento, come dormi(): si riparte da qui. Al
+         * risveglio la mappa in uso e' di nuovo la sua, quindi si puo' scrivere in 'dove'. */
+        struct evento *dove = (struct evento *)r->ebx, e;
+        if (!del_programma((unsigned int)dove, sizeof *dove, SCRIVERE) || !eventi_aspetta(&e)) {
+            r->eax = -1;
+            break;
+        }
+        *dove = e;
+        r->eax = 0;
         break;
     }
     case SIS_AVVIA: {
@@ -56,7 +67,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         const char *da = (const char *)r->ebx;
         int finito = 0;
         for (int i = 0; i < MAX_PERCORSO && !finito; i++) {
-            if (!del_programma((unsigned int)(da + i), 1)) break;   /* fuori dalla sua memoria */
+            if (!del_programma((unsigned int)(da + i), 1, LEGGERE)) break;   /* fuori dalla sua memoria */
             percorso[i] = da[i];
             finito = percorso[i] == 0;
         }
@@ -75,7 +86,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         struct info_schermo *info = (struct info_schermo *)r->ebx;
         const struct schermo *s = console_schermo();
         r->eax = -1;
-        if (!del_programma((unsigned int)info, sizeof *info) || !s) break;
+        if (!del_programma((unsigned int)info, sizeof *info, SCRIVERE) || !s) break;
         unsigned int byte = s->passo * s->altezza;
         if (s->indirizzo % PAGINA || byte > PILA_PROGRAMMA_CIMA - PAGINA - SCHERMO_PROGRAMMA)
             break;                                 /* non ci sta nella zona dei programmi */

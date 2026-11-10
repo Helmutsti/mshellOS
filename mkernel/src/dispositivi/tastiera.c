@@ -7,8 +7,8 @@
  * Alcuni tasti aggiunti dopo (AltGr, frecce...) arrivano preceduti dal byte 0xE0.
  *
  * Qui: si tiene traccia di Shift, AltGr e Caps Lock, si traduce con la tabella della
- * tastiera italiana e si mette il carattere in un buffer. Il resto del kernel lo prende
- * da li' con tastiera_leggi(), con calma, fuori dall'interruzione.
+ * tastiera italiana e si mette il carattere nella fila degli eventi (eventi.c), dove
+ * lo prendera' il compositore.
  *
  * Le lettere accentate usano i codici della tabella di caratteri della scheda video
  * (code page 437): e' quella che sa disegnare. */
@@ -17,13 +17,9 @@
 #include "idt.h"
 #include "tastiera.h"
 #include "kernel.h"
-#include "compiti.h"
+#include "eventi.h"
 
 #define PORTA_DATI 0x60
-
-/* Il compito che dorme aspettando un tasto. UNO SOLO: se due aspettassero insieme, ogni
- * tasto andrebbe a uno a caso. Chi arriva mentre un altro aspetta viene rifiutato. */
-static struct compito *in_attesa;
 
 /* codici della code page 437 */
 #define A_GRAVE 0x85   /* à */
@@ -61,47 +57,6 @@ static const unsigned char maiuscolo[0x59] = {
 #define ESTESO    0xE0
 
 static int shift, altgr, caps, esteso;
-
-/* --- il buffer: un anello di caratteri ---
- * Il gestore scrive in 'testa', tastiera_leggi legge da 'coda'. Quando arrivano in fondo
- * ricominciano dall'inizio. Se testa raggiunge coda il buffer e' pieno e i tasti in piu'
- * si perdono (servirebbe scrivere 128 caratteri senza che nessuno li legga). */
-#define DIM_BUFFER 128
-static volatile char buffer[DIM_BUFFER];
-static volatile unsigned int testa, coda;
-
-static void metti_nel_buffer(char c) {
-    unsigned int prossima = (testa + 1) % DIM_BUFFER;
-    if (prossima == coda) return;   /* pieno */
-    buffer[testa] = c;
-    testa = prossima;
-}
-
-char tastiera_leggi(void) {
-    if (coda == testa) return 0;    /* vuoto */
-    char c = buffer[coda];
-    coda = (coda + 1) % DIM_BUFFER;
-    return c;
-}
-
-/* Aspetta un tasto DORMENDO: il compito non consuma CPU finche' il gestore della
- * tastiera non lo sveglia. Restituisce il carattere, o 0 se c'e' gia' un altro compito
- * che aspetta (la tastiera e' sua).
- * Perche' le interruzioni spente: tra "il buffer e' vuoto" e "mi metto in attesa"
- * potrebbe arrivare proprio il tasto. Il gestore non vedrebbe nessuno da svegliare,
- * e noi ci addormenteremmo con un tasto gia' nel buffer (la "sveglia persa").
- * A interruzioni spente il tasto puo' arrivare solo prima o dopo, mai in mezzo. */
-char tastiera_aspetta(void) {
-    for (;;) {
-        unsigned int s = interruzioni_spegni();
-        char c = tastiera_leggi();
-        if (c) { interruzioni_ripristina(s); return c; }
-        if (in_attesa && in_attesa != compito_attuale()) { interruzioni_ripristina(s); return 0; }
-        in_attesa = compito_attuale();
-        compito_aspetta();          /* dorme qui; al risveglio si ricontrolla il buffer */
-        interruzioni_ripristina(s);
-    }
-}
 
 /* Combinazioni con AltGr sulla tastiera italiana. */
 static char con_altgr(unsigned char sc) {
@@ -145,11 +100,8 @@ static void al_tasto(struct registri *r) {
         else if (caps && c >= 'A' && c <= 'Z') c += 'a' - 'A';
     }
     if (c) {
-        metti_nel_buffer(c);
-        if (in_attesa) {            /* qualcuno aspettava un tasto: si sveglia */
-            compito_sveglia(in_attesa);
-            in_attesa = 0;
-        }
+        struct evento e = { .tipo = EVENTO_TASTO, .tasto = (unsigned char)c };
+        eventi_metti(&e);
     }
 }
 

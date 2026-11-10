@@ -6,6 +6,7 @@
 
 #define IRQ_TIMER    0
 #define IRQ_TASTIERA 1
+#define IRQ_MOUSE    12
 
 /* Riprogramma i due PIC per usare le righe 32-47 e chiude tutte le linee. */
 void pic_prepara(void);
