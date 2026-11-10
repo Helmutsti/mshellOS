@@ -71,7 +71,9 @@ int descrittore_chiudi(int d);
 void descrittori_chiudi_tutti(struct compito *c);
 
 /* La chiamata aspetta: dorme finche' almeno uno dei descrittori ha qualcosa da
- * ricevere. Segna 'pronto' in ognuno; quanti sono pronti, o -1 se uno non esiste. */
-int descrittori_aspetta(struct da_guardare *elenco, int quanti);
+ * ricevere, o finche' non passano 'ms' millisecondi (-1: senza limite; 0: guarda e
+ * torna subito). Segna 'pronto' in ognuno; quanti sono pronti (0 se e' passato il
+ * tempo), o -1 se uno non esiste. */
+int descrittori_aspetta(struct da_guardare *elenco, int quanti, int ms);
 
 #endif

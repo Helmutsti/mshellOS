@@ -24,9 +24,14 @@
  * schermo in un colpo.
  *
  * NON SI ASPETTA MAI UN'APPLICAZIONE. Il compositore manda i suoi messaggi senza
- * aspettare (manda_subito): se un'applicazione non legge, la sua casella si riempie e
- * lui la scollega, invece di restare bloccato con tutto lo schermo. E non si fida di
- * quello che riceve: misure, immagini e foglio si controllano. */
+ * aspettare (manda_subito), e non si fida di quello che riceve: misure, immagini e
+ * foglio si controllano.
+ *
+ * LE APPLICAZIONI BLOCCATE. Ogni secondo il compositore chiede a ogni applicazione
+ * "ci sei?" (PING). Se non risponde entro 3 secondi, o se la sua casella e' cosi' piena
+ * che non le si puo' piu' scrivere, e' bloccata: la sua finestra si oscura e ci compare
+ * sopra un pulsante rosso di chiusura d'emergenza, che chiude il programma (termina).
+ * Se invece ricomincia a rispondere, torna normale. Come GNOME e il Mac. */
 #include "libreria.h"
 #include "protocollo.h"
 
@@ -60,14 +65,18 @@ static void rettangolo(int x, int y, int l, int a, unsigned int rgb) {
             disegno[r * larghezza + k] = c;
 }
 
-/* Un'immagine di un'applicazione (0xRRGGBB) a x, y. Quello che esce si taglia. */
-static void immagine(int x, int y, int l, int a, const unsigned int *pixel) {
+/* Un'immagine di un'applicazione (0xRRGGBB) a x, y; 'scura' la mostra a meta' luce.
+ * Quello che esce si taglia. */
+static void immagine(int x, int y, int l, int a, const unsigned int *pixel, int scura) {
     for (int r = 0; r < a; r++) {
         int sy = y + r;
         if (sy < 0 || sy >= altezza) continue;
         for (int k = 0; k < l; k++) {
             int sx = x + k;
-            if (sx >= 0 && sx < larghezza) disegno[sy * larghezza + sx] = colore(pixel[r * l + k]);
+            if (sx < 0 || sx >= larghezza) continue;
+            unsigned int p = pixel[r * l + k];
+            if (scura) p = (p >> 1) & 0x7F7F7F;   /* ogni colore a meta' */
+            disegno[sy * larghezza + sx] = colore(p);
         }
     }
 }
@@ -91,6 +100,14 @@ struct finestra {
     int x, y;              /* l'angolo in alto a sinistra sullo schermo */
     int l, a;
     char titolo[MAX_TITOLO];
+
+    /* "ci sei?" */
+    unsigned int ultimo_ping;   /* quando si e' chiesto l'ultima volta (ms) */
+    unsigned int ping_numero;   /* il numero dell'ultimo PING */
+    int ping_atteso;            /* aspettiamo ancora la sua risposta */
+    int non_risponde;           /* bloccata: oscurata, con il pulsante d'emergenza */
+    int da_rilasciare;          /* un'immagine da restituire che non le si e' potuto
+                                 * dire (casella piena): glielo si dice quando risponde */
 };
 
 static struct finestra finestre[MAX_FINESTRE];
@@ -107,17 +124,37 @@ static int presa = -1;      /* quella su cui si e' premuto il pulsante: finche' 
 static int trascinata = -1; /* quella che si sta spostando (TRASCINAMI) */
 static int presa_x, presa_y;
 static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto si muove */
+static unsigned int prossimo_ping = 1;
+
+/* Il pulsante d'emergenza: un quadrato rosso con una X, in alto a destra. */
+#define EMERGENZA 22
+static int emergenza_x(const struct finestra *f) { return f->x + f->l - EMERGENZA - 4; }
+static int emergenza_y(const struct finestra *f) { return f->y + 4; }
+
+static int sul_pulsante(const struct finestra *f, int x, int y) {
+    return x >= emergenza_x(f) && x < emergenza_x(f) + EMERGENZA &&
+           y >= emergenza_y(f) && y < emergenza_y(f) + EMERGENZA;
+}
 
 static void disegna_finestra(int i) {
     const struct finestra *f = &finestre[i];
-    immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata]);
+    immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde);
+    if (!f->non_risponde) return;
+    int bx = emergenza_x(f), by = emergenza_y(f);
+    rettangolo(bx, by, EMERGENZA, EMERGENZA, 0xC03030);
+    for (int k = 5; k < EMERGENZA - 5; k++) {          /* la X: le due diagonali, spesse 2 */
+        rettangolo(bx + k, by + k, 2, 2, 0xFFFFFF);
+        rettangolo(bx + EMERGENZA - 2 - k, by + k, 2, 2, 0xFFFFFF);
+    }
 }
 
-static void scollega(int i);
-
-/* Un messaggio a un'applicazione, senza aspettare. Se non si puo', la si scollega. */
-static void avvisa(int i, struct notizia n) {
-    if (manda_subito(finestre[i].collegamento, &n, sizeof n) != sizeof n) scollega(i);
+/* Un messaggio a un'applicazione, senza aspettare. Se non si puo', la sua casella e'
+ * piena: non legge piu', quindi e' bloccata. 1 se e' partito, 0 se no. (Se invece ha
+ * chiuso, ce ne accorgeremo leggendo dal suo collegamento.) */
+static int avvisa(int i, struct notizia n) {
+    if (manda_subito(finestre[i].collegamento, &n, sizeof n) == sizeof n) return 1;
+    finestre[i].non_risponde = 1;
+    return 0;
 }
 
 static void dai_fuoco(int i) {
@@ -125,11 +162,10 @@ static void dai_fuoco(int i) {
     int prima = fuoco;
     fuoco = i;
     if (prima >= 0) avvisa(prima, (struct notizia){ .tipo = FUOCO, .fuoco = 0 });
-    if (i >= 0 && finestre[i].usata) avvisa(i, (struct notizia){ .tipo = FUOCO, .fuoco = 1 });
+    if (i >= 0) avvisa(i, (struct notizia){ .tipo = FUOCO, .fuoco = 1 });
 }
 
 static void in_primo_piano(int i) {
-    if (!finestre[i].usata) return;   /* scollegata intanto (avvisa non e' riuscita) */
     int k = 0;
     while (k < quante && ordine[k] != i) k++;
     for (; k < quante - 1; k++) ordine[k] = ordine[k + 1];
@@ -173,7 +209,8 @@ static void nuovo_collegamento(int ascolto) {
     while (i < MAX_FINESTRE && finestre[i].usata) i++;
     if (i == MAX_FINESTRE) { chiudi(d); return; }   /* troppe finestre */
     struct finestra *f = &finestre[i];
-    *f = (struct finestra){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1 };
+    *f = (struct finestra){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1,
+                            .da_rilasciare = -1, .ultimo_ping = tempo() };
     ordine[quante++] = i;
 }
 
@@ -213,7 +250,39 @@ static void mostra(int i, const struct mostra *m) {
         in_primo_piano(i);
         dai_fuoco(i);
     } else if (prima != f->mostrata) {
-        avvisa(i, (struct notizia){ .tipo = RILASCIATA, .immagine = prima });
+        if (!avvisa(i, (struct notizia){ .tipo = RILASCIATA, .immagine = prima }))
+            f->da_rilasciare = prima;
+    }
+}
+
+/* PONG: ha risposto. Se era bloccata, torna normale, e le si dice quello che si era
+ * perso: l'immagine da restituire e se ha il fuoco. */
+static void pong(int i, const struct pong *m) {
+    struct finestra *f = &finestre[i];
+    if (!f->ping_atteso || m->numero != f->ping_numero) return;   /* una risposta vecchia */
+    f->ping_atteso = 0;
+    if (!f->non_risponde) return;
+    f->non_risponde = 0;
+    if (f->da_rilasciare >= 0 &&
+        avvisa(i, (struct notizia){ .tipo = RILASCIATA, .immagine = f->da_rilasciare }))
+        f->da_rilasciare = -1;
+    avvisa(i, (struct notizia){ .tipo = FUOCO, .fuoco = i == fuoco });
+}
+
+/* Ogni secondo un "ci sei?" a chi ha una finestra; senza risposta in 3 secondi, e'
+ * bloccata. */
+static void controlla_risposte(void) {
+    unsigned int adesso = tempo();
+    for (int i = 0; i < MAX_FINESTRE; i++) {
+        struct finestra *f = &finestre[i];
+        if (!f->usata || !f->immagini[0]) continue;
+        if (f->ping_atteso && adesso - f->ultimo_ping >= 3000) f->non_risponde = 1;
+        if (!f->ping_atteso && adesso - f->ultimo_ping >= 1000) {
+            f->ultimo_ping = adesso;
+            f->ping_numero = prossimo_ping++;
+            if (avvisa(i, (struct notizia){ .tipo = PING, .numero = f->ping_numero }))
+                f->ping_atteso = 1;
+        }
     }
 }
 
@@ -233,7 +302,13 @@ static void trascinami(int i) {
 
 /* Un messaggio da un'applicazione. */
 static void da_applicazione(int i) {
-    union { unsigned int tipo; struct voglio_finestra v; struct mostra m; struct trascinami t; } m;
+    union {
+        unsigned int tipo;
+        struct voglio_finestra v;
+        struct mostra m;
+        struct trascinami t;
+        struct pong p;
+    } m;
     int foglio = -1;
     int n = ricevi_foglio(finestre[i].collegamento, &m, sizeof m, &foglio);
     if (n <= 0) { if (foglio >= 0) chiudi(foglio); scollega(i); return; }   /* ha chiuso */
@@ -241,6 +316,7 @@ static void da_applicazione(int i) {
     if (foglio >= 0) chiudi(foglio);   /* un foglio va solo col primo messaggio */
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
+    if (m.tipo == PONG && n == sizeof m.p) { pong(i, &m.p); return; }
     scollega(i);                       /* messaggio sbagliato */
 }
 
@@ -313,8 +389,14 @@ static void al_mouse(const struct evento *e) {
 
     if (appena_premuto) {   /* un clic: la finestra sotto va davanti e prende il fuoco */
         int i = finestra_sotto(px, py);
+        if (i >= 0 && finestre[i].non_risponde && sul_pulsante(&finestre[i], px, py)) {
+            /* il pulsante d'emergenza: si chiude il programma. La finestra sparira'
+             * quando il suo collegamento si chiude (lo chiude il kernel). */
+            termina(finestre[i].collegamento);
+            return;
+        }
         dai_fuoco(i);
-        if (i >= 0 && finestre[i].usata) {
+        if (i >= 0) {
             in_primo_piano(i);
             presa = i;
         }
@@ -372,7 +454,9 @@ int main(void) {
         g[n].descrittore = ascolto; chi[n++] = -1;
         for (int i = 0; i < MAX_FINESTRE; i++)
             if (finestre[i].usata) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
-        if (aspetta(g, n) < 0) return 0;
+        /* al massimo mezzo secondo: anche se non succede niente, bisogna controllare
+         * chi non risponde */
+        if (aspetta(g, n, 500) < 0) return 0;
 
         if (g[0].pronto) {
             struct evento e;
@@ -386,6 +470,7 @@ int main(void) {
             if (g[k].pronto && finestre[chi[k]].usata && finestre[chi[k]].collegamento == g[k].descrittore)
                 da_applicazione(chi[k]);
         if (g[1].pronto) nuovo_collegamento(ascolto);
+        controlla_risposte();
         componi();
     }
 }

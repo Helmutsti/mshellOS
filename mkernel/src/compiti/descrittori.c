@@ -6,6 +6,7 @@
  * andrebbe persa e si dormirebbe con un evento gia' arrivato. */
 #include "kernel.h"
 #include "descrittori.h"
+#include "timer.h"
 
 /* --- dormire e svegliarsi su una cosa aperta --- */
 
@@ -24,6 +25,7 @@ void aperto_aspetta(struct aperto *a) {
     aggiungi(a, &n);
     compito_aspetta();   /* dorme qui; al risveglio il nodo si toglie */
     togli(a, &n);
+    compito_fine_se_terminato();
 }
 
 void aperto_sveglia(struct aperto *a) {
@@ -73,12 +75,16 @@ void descrittori_chiudi_tutti(struct compito *c) {
  *
  * Si guarda se qualcuno e' gia' pronto. Se no, ci si mette in attesa su TUTTI, e il
  * primo che si sveglia ci sveglia. Al risveglio ci si toglie da tutti e si riguarda. */
-int descrittori_aspetta(struct da_guardare *elenco, int quanti) {
+int descrittori_aspetta(struct da_guardare *elenco, int quanti, int ms) {
     struct aperto *cose[MAX_GUARDATI];
     struct attesa nodi[MAX_GUARDATI];
     if (quanti < 1 || quanti > MAX_GUARDATI) return -1;
     for (int i = 0; i < quanti; i++)
         if (!(cose[i] = descrittore(elenco[i].descrittore))) return -1;
+
+    /* il tick a cui smettere di aspettare (1 tick = 10 ms, arrotondato in su) */
+    unsigned int scadenza = 0;
+    if (ms >= 0) scadenza = timer_tick() + (ms + 9) / 10;
 
     for (;;) {
         int pronti = 0;
@@ -86,13 +92,14 @@ int descrittori_aspetta(struct da_guardare *elenco, int quanti) {
             elenco[i].pronto = cose[i]->op->pronto(cose[i]);
             pronti += elenco[i].pronto;
         }
-        if (pronti) return pronti;
+        if (pronti || (ms >= 0 && timer_tick() >= scadenza)) return pronti;
 
         for (int i = 0; i < quanti; i++) {
             nodi[i].chi = compito_attuale();
             aggiungi(cose[i], &nodi[i]);
         }
-        compito_aspetta();
+        compito_aspetta_fino(scadenza ? scadenza : 0);
         for (int i = 0; i < quanti; i++) togli(cose[i], &nodi[i]);
+        compito_fine_se_terminato();
     }
 }

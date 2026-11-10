@@ -8,4 +8,9 @@ int socket_ascolta(const char *nome);
 int socket_collega(const char *nome);
 int socket_accetta(int d);   /* dorme finche' non arriva un collegamento */
 
+struct compito;
+/* Il compito che sta dall'altro capo del collegamento 'd' (del compito attuale),
+ * o 0 se 'd' non e' un collegamento o l'altro ha chiuso. */
+struct compito *socket_altro(int d);
+
 #endif

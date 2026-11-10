@@ -59,12 +59,24 @@ static inline int finestra_apri(struct finestra *f, int larghezza, int altezza, 
     return manda_foglio(f->collegamento, &m, sizeof m, f->foglio) < 0 ? -1 : 0;
 }
 
-/* Riceve un messaggio dal compositore; le immagini restituite si segnano qui.
+/* Riceve un messaggio dal compositore. Le immagini restituite si segnano qui, e al
+ * "ci sei?" si risponde qui: l'applicazione non lo vede nemmeno. Finche' lei torna ad
+ * aspettare le sue notizie, la risposta parte; se resta bloccata altrove, no, ed e'
+ * proprio cosi' che il compositore se ne accorge.
  * 1 se e' arrivato qualcosa, 0 se il compositore ha chiuso. */
 static inline int finestra_ricevi(struct finestra *f, struct notizia *n) {
     if (ricevi(f->collegamento, n, sizeof *n) != sizeof *n) return 0;
     if (n->tipo == RILASCIATA && n->immagine < 2) f->libera[n->immagine] = 1;
+    if (n->tipo == PING) {
+        struct pong p = { .tipo = PONG, .numero = n->numero };
+        if (manda(f->collegamento, &p, sizeof p) < 0) return 0;
+    }
     return 1;
+}
+
+/* I messaggi che la libreria sbriga da sola, senza passarli all'applicazione. */
+static inline int finestra_di_servizio(const struct notizia *n) {
+    return n->tipo == RILASCIATA || n->tipo == PING;
 }
 
 /* Un'immagine libera, su cui disegnare. 0 se il compositore ha chiuso. */
@@ -72,7 +84,7 @@ static inline unsigned int *finestra_tela(struct finestra *f) {
     while (!f->libera[0] && !f->libera[1]) {
         struct notizia n;
         if (!finestra_ricevi(f, &n)) return 0;
-        if (n.tipo != RILASCIATA && f->quante < DA_PARTE) f->messe_da_parte[f->quante++] = n;
+        if (!finestra_di_servizio(&n) && f->quante < DA_PARTE) f->messe_da_parte[f->quante++] = n;
     }
     f->in_uso = f->libera[0] ? 0 : 1;
     return f->immagini[f->in_uso];
@@ -103,7 +115,7 @@ static inline int finestra_notizia(struct finestra *f, struct notizia *n) {
     }
     do {
         if (!finestra_ricevi(f, n)) return 0;
-    } while (n->tipo == RILASCIATA);
+    } while (finestra_di_servizio(n));
     return 1;
 }
 

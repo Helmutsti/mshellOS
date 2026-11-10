@@ -28,6 +28,8 @@ struct compito {
                                   * Per un programma in ring 3 e' la sua pila DEL KERNEL */
     unsigned int mappa;          /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
+    unsigned int scadenza;       /* se in ATTESA: il tick a cui svegliarlo comunque (0 = mai) */
+    int da_terminare;            /* qualcuno ha chiesto di chiuderlo (compito_termina) */
     struct compito *prossimo;    /* il successivo nella fila (circolare) */
     struct aperto *aperti[MAX_APERTI];   /* le sue cose aperte: il descrittore e' il posto */
     struct aperto *mappati[MAX_MAPPATI]; /* i fogli nella sua memoria: il posto i sta a
@@ -55,7 +57,23 @@ void dormi(unsigned int millisecondi); /* non girare per almeno questo tempo */
 /* Si mette in ATTESA finche' compito_sveglia non lo rimette pronto.
  * Va chiamata con le interruzioni SPENTE (vedi aperto_aspetta). */
 void compito_aspetta(void);
+/* Come compito_aspetta, ma si sveglia comunque al tick 'scadenza'. */
+void compito_aspetta_fino(unsigned int scadenza);
 void compito_sveglia(struct compito *c);
+
+/* CHIUDERE UN PROGRAMMA DA FUORI. Non lo si puo' cancellare subito: potrebbe dormire
+ * dentro il kernel, con i suoi segnalini nelle file d'attesa delle cose aperte, che
+ * resterebbero a puntare a una pila liberata. Allora lo si SEGNA e lo si sveglia:
+ *   - se era fermo in ring 3 (stava girando il suo codice), lo scheduler lo chiude
+ *     al suo turno: li' non ha niente di lasciato a meta' nel kernel;
+ *   - se dormiva nel kernel, si sveglia, si toglie dalle file e si chiude da solo
+ *     (compito_fine_se_terminato, nei punti in cui si dorme).
+ * Chi aspetta un lucchetto non si sveglia: quando lo avra' avuto e lasciato, tornera'
+ * in ring 3 e lo scheduler lo chiudera' li'. */
+void compito_termina(struct compito *c);
+/* Se il compito attuale e' segnato da chiudere, si chiude qui e non torna. Va chiamata
+ * dopo un'attesa, quando non si tiene niente (segnalini tolti, nessun lucchetto). */
+void compito_fine_se_terminato(void);
 
 struct compito *compito_attuale(void);
 

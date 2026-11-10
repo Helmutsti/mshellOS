@@ -13,6 +13,7 @@
 #include "descrittori.h"
 #include "socket.h"
 #include "fogli.h"
+#include "timer.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA 1024
@@ -149,7 +150,7 @@ unsigned int chiamata_di_sistema(struct registri *r) {
             r->eax = -1;
             break;
         }
-        struct aperto *allegato;
+        struct aperto *allegato = 0;
         r->eax = a->op->ricevi(a, (void *)dati, byte, &allegato);
         int d = -1;
         if (allegato) {
@@ -190,9 +191,20 @@ unsigned int chiamata_di_sistema(struct registri *r) {
             !del_programma((unsigned int)elenco, quanti * sizeof *elenco, SCRIVERE))
             break;
         memcpy(copia, elenco, quanti * sizeof *elenco);
-        int pronti = descrittori_aspetta(copia, quanti);
+        int pronti = descrittori_aspetta(copia, quanti, (int)r->edx);
         if (pronti >= 0) memcpy(elenco, copia, quanti * sizeof *elenco);
         r->eax = pronti;
+        break;
+    }
+    case SIS_TEMPO:
+        r->eax = timer_tick() * 10;   /* il timer va a 100 Hz: un tick ogni 10 ms */
+        break;
+    case SIS_TERMINA: {
+        struct compito *c = socket_altro(r->ebx);
+        r->eax = -1;
+        if (!c || c == compito_attuale()) break;
+        compito_termina(c);
+        r->eax = 0;
         break;
     }
     case SIS_ESCI:

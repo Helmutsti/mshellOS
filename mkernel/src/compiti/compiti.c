@@ -236,6 +236,11 @@ unsigned int scheduler(unsigned int esp) {
     struct compito *prec = ultimo, *c = primo;
     for (int giri = numero_compiti; giri > 0; giri--) {
         struct compito *dopo = c->prossimo;
+        /* segnato da chiudere e fermo in ring 3 (i registri salvati dicono che e' stato
+         * interrotto mentre girava il suo codice): si chiude adesso */
+        if (c->da_terminare && c->stato == PRONTO && c != attuale &&
+            (((struct registri *)c->esp)->cs & 3) == 3)
+            c->stato = FINITO;
         if (c->stato == FINITO && c != attuale) {
             prec->prossimo = dopo;
             if (c == primo) primo = dopo;
@@ -249,6 +254,7 @@ unsigned int scheduler(unsigned int esp) {
             kfree(c);
         } else {
             if (c->stato == DORME && adesso >= c->sveglia) c->stato = PRONTO;
+            if (c->stato == ATTESA && c->scadenza && adesso >= c->scadenza) c->stato = PRONTO;
             prec = c;
         }
         c = dopo;
@@ -296,16 +302,35 @@ void dormi(unsigned int ms) {
     attuale->sveglia = timer_tick() + (tick ? tick : 1);
     attuale->stato = DORME;
     cedi();                                        /* si riparte da qui al risveglio */
+    compito_fine_se_terminato();
     interruzioni_ripristina(s);
 }
 
-void compito_aspetta(void) {
+void compito_aspetta(void) { compito_aspetta_fino(0); }
+
+void compito_aspetta_fino(unsigned int scadenza) {
+    attuale->scadenza = scadenza;
     attuale->stato = ATTESA;
     cedi();
+    attuale->scadenza = 0;
 }
 
 void compito_sveglia(struct compito *c) {
     if (c && c->stato == ATTESA) c->stato = PRONTO;
+}
+
+void compito_termina(struct compito *c) {
+    unsigned int s = interruzioni_spegni();
+    c->da_terminare = 1;
+    if (c->stato == DORME || (c->stato == ATTESA && !c->aspetta)) c->stato = PRONTO;
+    interruzioni_ripristina(s);
+}
+
+void compito_fine_se_terminato(void) {
+    if (!attuale->da_terminare) return;
+    attuale->stato = FINITO;
+    cedi();                                  /* lo scheduler non lo fara' piu' ripartire */
+    panico("un compito chiuso e' ripartito");
 }
 
 struct compito *compito_attuale(void) { return attuale; }

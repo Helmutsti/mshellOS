@@ -145,11 +145,22 @@ static inline int togli(void *indirizzo) { return chiamata1(SIS_TOGLI, (unsigned
 
 static inline int chiudi(int d) { return chiamata1(SIS_CHIUDI, d); }
 
-/* Dorme finche' almeno uno dei descrittori dell'elenco ha qualcosa da ricevere.
- * Segna 'pronto' in ognuno; quanti sono pronti, o -1. */
-static inline int aspetta(struct da_guardare *elenco, int quanti) {
-    return chiamata3(SIS_ASPETTA, (unsigned int)elenco, quanti, 0);
+/* Dorme finche' almeno uno dei descrittori dell'elenco ha qualcosa da ricevere, o
+ * finche' non passano 'ms' millisecondi (-1: senza limite). Segna 'pronto' in ognuno;
+ * quanti sono pronti (0: tempo scaduto), o -1. */
+static inline int aspetta(struct da_guardare *elenco, int quanti, int ms) {
+    return chiamata3(SIS_ASPETTA, (unsigned int)elenco, quanti, ms);
 }
+
+/* I millisecondi passati dall'avvio. */
+static inline unsigned int tempo(void) {
+    int risultato;
+    __asm__ volatile("int %1" : "=a"(risultato) : "i"(INT_SISTEMA), "a"(SIS_TEMPO) : "memory");
+    return risultato;
+}
+
+/* Chiude il programma all'altro capo del collegamento 'd'. 0 se fatto, o -1. */
+static inline int termina(int d) { return chiamata1(SIS_TERMINA, d); }
 
 /* --- funzioni comode, fatte con le chiamate qui sopra --- */
 

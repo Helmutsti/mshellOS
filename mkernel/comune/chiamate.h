@@ -53,10 +53,12 @@
                             * un foglio allegato, in 'allegato' il descrittore NUOVO con cui
                             * questo programma lo tiene in mano; se no -1 */
 #define SIS_CHIUDI  12     /* chiudi(d): il descrittore non serve piu' */
-#define SIS_ASPETTA 13     /* aspetta(elenco, quanti): dorme finche' almeno uno dei
+#define SIS_ASPETTA 13     /* aspetta(elenco, quanti, ms): dorme finche' almeno uno dei
                             * descrittori dell'elenco ha qualcosa da ricevere (un messaggio,
-                            * un collegamento, un evento, o l'altro che ha chiuso). Segna
-                            * 'pronto' in ognuno e restituisce quanti sono pronti. Come poll */
+                            * un collegamento, un evento, o l'altro che ha chiuso), o finche'
+                            * non passano ms millisecondi (-1: senza limite). Segna 'pronto'
+                            * in ognuno e restituisce quanti sono pronti (0: tempo scaduto).
+                            * Come poll */
 
 /* I FOGLI: memoria condivisa tra programmi, come memfd di Linux. Un foglio e' un gruppo
  * di pagine che il kernel tiene per conto di chi l'ha creato. Si tiene in mano con un
@@ -70,6 +72,11 @@
                             * 0) quanto e' grande: chi riceve un foglio da un altro lo deve
                             * sapere, per non leggere oltre la fine */
 #define SIS_TOGLI   16     /* togli(indirizzo): leva il foglio messo li' da mappa */
+
+#define SIS_TEMPO   17     /* tempo(): i millisecondi passati dall'avvio */
+#define SIS_TERMINA 18     /* termina(d): chiude il programma che sta all'altro capo del
+                            * collegamento d. Si puo' chiudere solo chi e' collegato a noi:
+                            * il compositore le sue applicazioni, non un programma a caso */
 
 #define MANDA_SUBITO 1     /* il modo di manda che non aspetta mai */
 

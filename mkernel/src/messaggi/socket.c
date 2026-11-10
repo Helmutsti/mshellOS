@@ -41,6 +41,7 @@ struct capo {
     struct messaggio casella[POSTI]; /* un anello: si scrive in 'testa', si prende da 'coda' */
     unsigned int testa, coda;
     struct capo *dopo;               /* nella fila di chi ascolta, finche' non e' accettato */
+    struct compito *padrone;         /* chi lo tiene (un capo non si passa ad altri) */
 };
 
 struct ascolto {
@@ -71,6 +72,7 @@ static int piena(struct capo *c) { return (c->testa + 1) % POSTI == c->coda; }
 
 static int capo_ricevi(struct aperto *a, void *dove, unsigned int byte, struct aperto **allegato) {
     struct capo *c = (struct capo *)a;
+    *allegato = 0;
     while (vuota(c)) {
         if (!c->altro) return 0;     /* niente in casella e l'altro ha chiuso: finito */
         aperto_aspetta(a);
@@ -192,6 +194,7 @@ int socket_collega(const char *nome) {
     if (d < 0) { kfree(mio); kfree(suo); return -1; }
     mio->altro = suo;
     suo->altro = mio;
+    mio->padrone = compito_attuale();
 
     struct capo **fondo = &s->in_arrivo;   /* in fondo alla fila di chi ascolta */
     while (*fondo) fondo = &(*fondo)->dopo;
@@ -212,5 +215,16 @@ int socket_accetta(int d) {
     s->in_arrivo = c->dopo;
     s->quanti--;
     c->dopo = 0;
+    c->padrone = compito_attuale();
     return nuovo;
+}
+
+/* Il padrone dell'altro capo e' vivo finche' l'altro capo esiste: quando un compito
+ * finisce si chiudono i suoi capi, e il nostro 'altro' torna 0. Un collegamento non
+ * ancora accettato non ha padrone dall'altra parte. */
+struct compito *socket_altro(int d) {
+    struct aperto *a = descrittore(d);
+    if (!a || a->op != &operazioni_capo) return 0;
+    struct capo *c = (struct capo *)a;
+    return c->altro ? c->altro->padrone : 0;
 }
