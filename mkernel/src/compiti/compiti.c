@@ -63,7 +63,8 @@ static void in_fila(struct compito *c) {
  * NON SI CREDE AL FILE: lo ha scritto chiunque. Ogni numero che contiene (dove sta un
  * pezzo, quanto e' grande, a che indirizzo va) si controlla prima di usarlo: un pezzo
  * fuori dal file, o fuori dalla zona dei programmi, e il file viene rifiutato. */
-static unsigned int carica_elf(unsigned int mappa, const char *percorso, const char **errore) {
+static unsigned int carica_elf(unsigned int mappa, const char *percorso, const char **errore,
+                               unsigned int *fine) {
     unsigned int inizio = 0;
     unsigned char *file = kmalloc(MAX_PROGRAMMA);
     if (!file) { *errore = "memoria finita"; return 0; }
@@ -118,6 +119,7 @@ static unsigned int carica_elf(unsigned int mappa, const char *percorso, const c
     *errore = "l'indirizzo di partenza e' fuori dal programma";
     if (e->inizio < PROGRAMMI_INIZIO || e->inizio >= fine_precedente) goto fine;
     inizio = e->inizio;
+    *fine = fine_precedente;   /* la prima pagina dopo il programma: li' parte la zona dinamica */
     *errore = 0;
 
 fine:
@@ -142,7 +144,8 @@ struct compito *compito_crea_programma(const char *percorso, const char **errore
     if (!c || !pila || !mappa) goto non_va;
 
     /* 1. le sue pagine: i pezzi del file ELF, ognuno al suo indirizzo virtuale */
-    unsigned int inizio = carica_elf(mappa, percorso, errore);
+    unsigned int fine;
+    unsigned int inizio = carica_elf(mappa, percorso, errore, &fine);
     if (!inizio) goto non_va;
 
     /* 2. la sua pila: una pagina nuova, nella sua mappa appena sotto i 2 GB.
@@ -162,6 +165,7 @@ struct compito *compito_crea_programma(const char *percorso, const char **errore
     copia_nome(c->nome, nome_da_percorso(percorso));
     c->pila = pila;
     c->mappa = mappa;
+    c->dati_inizio = c->rottura = fine;   /* la zona dinamica, vuota */
 
     /* 3. LA PILA FINTA, sulla pila del kernel. Come per un compito normale, ma "come se"
      *    fosse stato interrotto un programma in ring 3: in quel caso la CPU, oltre a

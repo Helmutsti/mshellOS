@@ -27,6 +27,8 @@ struct compito {
     void *pila;                  /* la sua pila (0 per l'inattivo: usa quella dell'avvio).
                                   * Per un programma in ring 3 e' la sua pila DEL KERNEL */
     unsigned int mappa;          /* solo ring 3: la sua directory (0 = usa la mappa del kernel) */
+    unsigned int dati_inizio;    /* solo ring 3: dove comincia la zona dinamica (dinamica.c) */
+    unsigned int rottura;        /* ... e dove finisce adesso: il confine */
     unsigned int sveglia;        /* se DORME: il tick a cui svegliarlo */
     unsigned int scadenza;       /* se in ATTESA: il tick a cui svegliarlo comunque (0 = mai) */
     int da_terminare;            /* qualcuno ha chiesto di chiuderlo (compito_termina) */

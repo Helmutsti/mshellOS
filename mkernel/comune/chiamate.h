@@ -78,6 +78,13 @@
                             * collegamento d. Si puo' chiudere solo chi e' collegato a noi:
                             * il compositore le sue applicazioni, non un programma a caso */
 
+#define SIS_ROTTURA 19     /* rottura(indirizzo): sposta il confine della memoria dinamica
+                            * del programma (il "break" di Unix). Restituisce il confine
+                            * dopo la chiamata: quello nuovo, o quello di prima se
+                            * l'indirizzo non va bene; rottura(0) dice solo dov'e'. Le
+                            * pagine sotto il confine arrivano la prima volta che si
+                            * toccano. Di solito la usa solo malloc */
+
 #define MANDA_SUBITO 1     /* il modo di manda che non aspetta mai */
 
 #define MAX_NOME       32  /* lettere di un nome di socket, compreso lo 0 finale */

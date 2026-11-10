@@ -14,6 +14,7 @@
 #include "socket.h"
 #include "fogli.h"
 #include "timer.h"
+#include "dinamica.h"
 #include "chiamate.h"
 
 #define MAX_SCRITTURA 1024
@@ -31,7 +32,11 @@ static int del_programma(unsigned int inizio, unsigned int byte, unsigned int se
     if (byte > MAX_SCRITTURA || inizio + byte < inizio) return 0;   /* troppo, o fa il giro */
     for (unsigned int p = inizio & ~(PAGINA - 1); p < inizio + byte; p += PAGINA) {
         unsigned int fisico, permessi;
-        if (!pag_traduci(p, &fisico, &permessi) || (permessi & serve) != serve) return 0;
+        if (!pag_traduci(p, &fisico, &permessi)) {
+            /* non c'e': forse e' una pagina promessa della memoria dinamica, mai toccata */
+            if (!memoria_promessa(p) || !pag_traduci(p, &fisico, &permessi)) return 0;
+        }
+        if ((permessi & serve) != serve) return 0;
     }
     return 1;
 }
@@ -196,6 +201,9 @@ unsigned int chiamata_di_sistema(struct registri *r) {
         r->eax = pronti;
         break;
     }
+    case SIS_ROTTURA:
+        r->eax = memoria_rottura(r->ebx);
+        break;
     case SIS_TEMPO:
         r->eax = timer_tick() * 10;   /* il timer va a 100 Hz: un tick ogni 10 ms */
         break;

@@ -162,6 +162,21 @@ static inline unsigned int tempo(void) {
 /* Chiude il programma all'altro capo del collegamento 'd'. 0 se fatto, o -1. */
 static inline int termina(int d) { return chiamata1(SIS_TERMINA, d); }
 
+/* --- la memoria dinamica --- */
+
+/* Sposta il confine della zona dinamica (vedi chiamate.h); rottura(0) dice dov'e'.
+ * Di solito non serve: c'e' malloc. */
+static inline unsigned int rottura(unsigned int indirizzo) {
+    return (unsigned int)chiamata1(SIS_ROTTURA, indirizzo);
+}
+
+/* Un pezzo di almeno 'byte' byte, allineato a 8, o 0 se la memoria e' finita. Il
+ * contenuto e' pieno di zeri solo la prima volta che quella memoria viene usata.
+ * (memoria.c) */
+void *malloc(unsigned int byte);
+/* Restituisce un pezzo avuto da malloc. free(0) non fa niente. */
+void free(void *p);
+
 /* --- funzioni comode, fatte con le chiamate qui sopra --- */
 
 /* Il kernel non c'e': anche contare i caratteri di una stringa va fatto da soli. */

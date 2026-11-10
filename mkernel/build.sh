@@ -38,9 +38,9 @@ echo "build/kernel pronto"
 
 # --- 2. l'area utente: ogni programma e' un file ELF a se' ---
 # Ognuno e' legato con i pezzi della libreria che non sono negli header: avvio.o (che
-# contiene _start: chiama main, poi esci) e stringhe.o (le funzioni sulla memoria che il
-# compilatore puo' chiamare da solo); e con programma.ld (che lo mette a 1 GB, dove
-# vivono i programmi nella loro mappa).
+# contiene _start: chiama main, poi esci), stringhe.o (le funzioni sulla memoria che il
+# compilatore puo' chiamare da solo) e memoria.o (malloc e free); e con programma.ld (che
+# lo mette a 1 GB, dove vivono i programmi nella loro mappa).
 UTENTE="-Iutente/libreria -Icomune"
 mkdir -p build/utente/libreria
 for f in utente/libreria/*.c; do

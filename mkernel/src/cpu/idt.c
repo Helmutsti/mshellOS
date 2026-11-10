@@ -12,6 +12,7 @@
 #include "idt.h"
 #include "pic.h"
 #include "compiti.h"
+#include "dinamica.h"
 #include "chiamate.h"
 
 struct riga_idt {
@@ -141,6 +142,17 @@ static void spiega_page_fault(unsigned int errore) {
 }
 
 static unsigned int eccezione(struct registri *r) {
+    /* Un page fault su una pagina che non c'e' (bit 0 a zero) potrebbe non essere un
+     * errore: se l'indirizzo e' nella zona dinamica, sotto il confine, la pagina era
+     * solo promessa. La si da' adesso, e si torna all'istruzione che aveva fallito:
+     * stavolta la pagina c'e'. Vale anche per il kernel che tocca la memoria di un
+     * programma durante una chiamata di sistema. */
+    if (r->numero == 14 && !(r->errore & 1)) {
+        unsigned int cr2;
+        __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
+        if (memoria_promessa(cr2)) return (unsigned int)r;
+    }
+
     console_colore(ROSSO);
     kprintf("\nECCEZIONE %u: %s\n", r->numero, nomi[r->numero]);
     console_colore(GRIGIO);
