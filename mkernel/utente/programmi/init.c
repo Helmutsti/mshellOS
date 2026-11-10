@@ -1,12 +1,11 @@
 /* init: il primo programma, come in Linux.
  *
  * Il kernel, finito di prepararsi, lo legge dal disco (/Sistema/init) e lo fa partire in
- * ring 3, come sistema (uid 0). E' lui a far nascere gli altri programmi: i servizi del
- * sistema (il compositore e la scrivania) e, finche' non c'e' il launcher, tre
- * applicazioni: esempio, che si disegna tutto a mano, contatore e impostazioni, fatte con
- * il toolkit.
+ * ring 3, come sistema (uid 0). E' lui a far nascere i servizi del sistema: il
+ * compositore, il launcher (che fa partire le applicazioni) e la scrivania. Le
+ * applicazioni non le fa partire lui: le apre il launcher, quando la scrivania lo chiede.
  *
- * INIT TIENE LE RISORSE DEL COMPOSITORE, e gliele presta. E' lui ad aprire lo schermo,
+ * INIT TIENE LE RISORSE DEI SERVIZI, e gliele presta (al launcher, il suo nome). E' lui ad aprire lo schermo,
  * la tastiera e il mouse, e a mettersi in ascolto con il nome "compositore"; poi fa
  * partire il compositore passandogli queste tre cose gia' aperte (avvia_con), come
  * launchd sul Mac e systemd su Linux. Init non le usa: le tiene soltanto in mano.
@@ -18,6 +17,7 @@
  * in quel momento aspettano in fila, invece di trovare la porta chiusa. */
 #include "libreria.h"
 #include "protocollo.h"
+#include "launcher.h"
 
 /* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Il compositore
  * riceve in prestito schermo, tastiera e il suo nome; la scrivania niente (si collega al
@@ -30,8 +30,10 @@ struct servizio {
 };
 
 static int risorse_compositore[3];
+static int risorse_launcher[1];
 static struct servizio servizi[] = {
     { "/Sistema/Servizi/compositore", risorse_compositore, 3, -1 },
+    { "/Sistema/Servizi/launcher", risorse_launcher, 1, -1 },
     { "/Sistema/Servizi/scrivania", 0, 0, -1 },
 };
 #define QUANTI_SERVIZI ((int)(sizeof servizi / sizeof servizi[0]))
@@ -54,19 +56,17 @@ int main(void) {
     risorse_compositore[0] = apri_schermo();
     risorse_compositore[1] = apri_eventi();
     risorse_compositore[2] = ascolta(NOME_COMPOSITORE);
-    if (risorse_compositore[0] < 0 || risorse_compositore[1] < 0 || risorse_compositore[2] < 0) {
-        scrivi_testo("init: non riesco a prendere schermo, tastiera o il nome del compositore\n");
+    risorse_launcher[0] = ascolta(NOME_LAUNCHER);
+    if (risorse_compositore[0] < 0 || risorse_compositore[1] < 0 || risorse_compositore[2] < 0 ||
+        risorse_launcher[0] < 0) {
+        scrivi_testo("init: non riesco a prendere schermo, tastiera o i nomi dei servizi\n");
         for (;;) dormi(60 * 1000);
     }
 
     for (int i = 0; i < QUANTI_SERVIZI; i++) avvia_servizio(&servizi[i]);
 
-    /* le applicazioni non sono del sistema: partono come UID_APPLICAZIONI (1000). Il nome
-     * "compositore" c'e' gia' (lo tiene init): si collegano subito. (Finche' non c'e' il
-     * launcher, le fa partire init, una volta.) */
-    avvia_come("/Applicazioni/Esempio/Esempio", UID_APPLICAZIONI);
-    avvia_come("/Applicazioni/Contatore/Contatore", UID_APPLICAZIONI);
-    avvia_come("/Applicazioni/Impostazioni/Impostazioni", UID_APPLICAZIONI);
+    /* Le applicazioni non le fa partire init: le apre il launcher, quando la scrivania
+     * glielo chiede (un clic sull'isola). */
 
     /* LA SORVEGLIANZA: si aspetta che uno dei servizi finisca, e lo si fa ripartire. Se
      * non si e' riusciti ad avviarlo, si riprova ogni 5 secondi. */

@@ -12,20 +12,23 @@
  * il compositore, che a un pannello racconta ogni finestra che compare o sparisce, con il
  * programma a cui appartiene.
  *
- * NON FA PARTIRE NIENTE: per ora mostra soltanto. Far partire le applicazioni sara' il
- * compito di un servizio a parte, il launcher, a cui la scrivania chiedera' "apri questa".
+ * NON FA PARTIRE NIENTE DA SOLA: quando si clicca un'applicazione nell'isola, chiede al
+ * launcher (il servizio che fa partire le applicazioni) "apri questa". E' lui a farla
+ * partire, come applicazione; la scrivania mostra e basta.
  *
  * Disegna con la libreria di disegno e lo stile del sistema, come il disegno Figma
  * "mshell - interfaccia" (Isola, Voce dell'isola, Pulsante applicazioni, Orologio). */
 #include "finestra.h"
 #include "stile.h"
+#include "descrizione.h"
+#include "launcher.h"
 
 /* --- le applicazioni installate --- */
 
 #define MAX_APP 16
 
 struct app {
-    char nome[32];
+    char cartella[MAX_NOME_FILE];   /* il suo nome in /Applicazioni: lo si chiede al launcher */
     char programma[MAX_PERCORSO];   /* il percorso completo del programma */
     int icona;
     unsigned int colore;            /* 0: neutra (di vetro) */
@@ -45,80 +48,26 @@ static const struct { const char *nome; unsigned int colore; } nomi_colori[] = {
     { "rosso", ROSSO_NORMALE }, { "arancio", ARANCIO_NORMALE },
 };
 
-static int uguali(const char *a, const char *b) {
-    while (*a && *a == *b) { a++; b++; }
-    return *a == *b;
-}
+static int uguali(const char *a, const char *b) { return descrizione_uguali(a, b); }
 
-static void copia(char *dove, const char *da, int massimo) {
-    int i = 0;
-    for (; i < massimo - 1 && da[i]; i++) dove[i] = da[i];
-    dove[i] = 0;
-}
+static void copia(char *dove, const char *da, int massimo) { descrizione_copia(dove, da, massimo); }
+static void aggiungi(char *dove, const char *da, int massimo) { descrizione_aggiungi(dove, da, massimo); }
 
-static void aggiungi(char *dove, const char *da, int massimo) {
-    int n = lunghezza(dove);
-    copia(dove + n, da, massimo - n);
-}
-
-/* Una riga "chiave = valore" della descrizione: si tolgono gli spazi intorno. */
-static void leggi_riga(struct app *a, const char *cartella, char *riga) {
-    while (*riga == ' ' || *riga == '\t') riga++;
-    if (!*riga || *riga == '#') return;           /* vuota, o un commento */
-    char *uguale = riga;
-    while (*uguale && *uguale != '=') uguale++;
-    if (!*uguale) return;
-    char *fine = uguale;
-    *uguale = 0;
-    while (fine > riga && (fine[-1] == ' ' || fine[-1] == '\t')) *--fine = 0;
-    char *valore = uguale + 1;
-    while (*valore == ' ' || *valore == '\t') valore++;
-    for (int n = lunghezza(valore); n > 0 && (valore[n - 1] == ' ' || valore[n - 1] == '\r'); n--)
-        valore[n - 1] = 0;
-
-    if (uguali(riga, "nome")) copia(a->nome, valore, sizeof a->nome);
-    else if (uguali(riga, "programma")) {
-        copia(a->programma, "/Applicazioni/", MAX_PERCORSO);
-        aggiungi(a->programma, cartella, MAX_PERCORSO);
-        aggiungi(a->programma, "/", MAX_PERCORSO);
-        aggiungi(a->programma, valore, MAX_PERCORSO);
-    } else if (uguali(riga, "icona")) {
-        for (unsigned int i = 0; i < sizeof nomi_icone / sizeof nomi_icone[0]; i++)
-            if (uguali(valore, nomi_icone[i].nome)) a->icona = nomi_icone[i].icona;
-    } else if (uguali(riga, "colore")) {
-        for (unsigned int i = 0; i < sizeof nomi_colori / sizeof nomi_colori[0]; i++)
-            if (uguali(valore, nomi_colori[i].nome)) a->colore = nomi_colori[i].colore;
-    }
-}
-
+/* Le applicazioni installate: le cartelle di /Applicazioni che hanno una descrizione. */
 static void leggi_applicazioni(void) {
     int d = apri("/Applicazioni", APRI_LEGGERE);
     struct voce_cartella v;
     while (d >= 0 && quante_app < MAX_APP && leggi(d, &v, sizeof v) == sizeof v) {
-        if (v.tipo != TIPO_CARTELLA) continue;
-        char percorso[MAX_PERCORSO] = "/Applicazioni/";
-        aggiungi(percorso, v.nome, MAX_PERCORSO);
-        aggiungi(percorso, "/descrizione", MAX_PERCORSO);
-        char testo[512];
-        int f = apri(percorso, APRI_LEGGERE);
-        int n = f >= 0 ? leggi(f, testo, sizeof testo - 1) : -1;
-        if (f >= 0) chiudi(f);
-        if (n <= 0) continue;                     /* senza descrizione non e' un'applicazione */
-        testo[n] = 0;
-
-        struct app *a = &app[quante_app];
+        struct descrizione desc;
+        if (v.tipo != TIPO_CARTELLA || leggi_descrizione(v.nome, &desc) < 0) continue;
+        struct app *a = &app[quante_app++];
         *a = (struct app){ .icona = ICONA_SQUARE };
-        copia(a->nome, v.nome, sizeof a->nome);
-        for (char *riga = testo; *riga;) {        /* riga per riga */
-            char *dopo = riga;
-            while (*dopo && *dopo != '\n') dopo++;
-            int ultima = !*dopo;
-            *dopo = 0;
-            leggi_riga(a, v.nome, riga);
-            if (ultima) break;
-            riga = dopo + 1;
-        }
-        if (a->programma[0]) quante_app++;
+        copia(a->cartella, v.nome, sizeof a->cartella);
+        copia(a->programma, desc.programma, sizeof a->programma);
+        for (unsigned int i = 0; i < sizeof nomi_icone / sizeof nomi_icone[0]; i++)
+            if (uguali(desc.icona, nomi_icone[i].nome)) a->icona = nomi_icone[i].icona;
+        for (unsigned int i = 0; i < sizeof nomi_colori / sizeof nomi_colori[0]; i++)
+            if (uguali(desc.colore, nomi_colori[i].nome)) a->colore = nomi_colori[i].colore;
     }
     if (d >= 0) chiudi(d);
 }
@@ -285,6 +234,31 @@ static int disegna_isola(void) {
     return finestra_mostra(&isola) >= 0;
 }
 
+/* Quale applicazione c'e' nel punto (x, y) dell'isola: il suo indice, o -1. */
+static int app_sotto(int x, int y) {
+    if (y < ISOLA_MARGINE || y >= ISOLA_MARGINE + VOCE_LATO) return -1;
+    int inizio = ISOLA_MARGINE + VOCE_LATO + ISOLA_SPAZIO;
+    for (int i = 0; i < quante_app; i++) {
+        int vx = inizio + i * (VOCE_LATO + VOCI_SPAZIO);
+        if (x >= vx && x < vx + VOCE_LATO) return i;
+    }
+    return -1;
+}
+
+/* Il puntatore sull'isola. Come un pulsante: scatta quando si LASCIA, sulla stessa voce
+ * su cui si era premuto. Allora si chiede al launcher di aprire quell'applicazione. */
+static void puntatore(const struct notizia *n) {
+    static unsigned int pulsanti_prima;
+    static int premuta = -1;
+    int giu = n->pulsanti & PULSANTE_SINISTRO, prima = pulsanti_prima & PULSANTE_SINISTRO;
+    pulsanti_prima = n->pulsanti;
+    if (giu && !prima) premuta = app_sotto(n->x, n->y);
+    if (!giu && prima) {
+        if (premuta >= 0 && app_sotto(n->x, n->y) == premuta) apri_applicazione(app[premuta].cartella);
+        premuta = -1;
+    }
+}
+
 /* --- lo sfondo --- */
 
 static struct finestra sfondo;
@@ -347,12 +321,17 @@ int main(void) {
         if (g[0].pronto && !finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
         if (g[1].pronto) {
             if (!finestra_ricevi(&isola, &n)) return 1;
+            if (n.tipo == PUNTATORE) puntatore(&n);
+            else if (n.tipo == USCITO) puntatore(&(struct notizia){ .tipo = PUNTATORE, .x = -1, .y = -1 });
             ridisegna |= notizia(&n);
         }
         if (ridisegna) {
             if (!disegna_isola()) return 1;
             /* mentre aspettava una tela libera, la libreria ha messo da parte le notizie */
-            for (int i = 0; i < isola.quante; i++) notizia(&isola.messe_da_parte[i]);
+            for (int i = 0; i < isola.quante; i++) {
+                if (isola.messe_da_parte[i].tipo == PUNTATORE) puntatore(&isola.messe_da_parte[i]);
+                notizia(&isola.messe_da_parte[i]);
+            }
             if (isola.quante) { isola.quante = 0; if (!disegna_isola()) return 1; }
         }
     }
