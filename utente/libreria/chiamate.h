@@ -112,9 +112,12 @@ struct info_file {
  * cancellare o rinominare qualcosa bisogna poter scrivere nella cartella che lo contiene.
  * Un file nuovo e' di chi lo crea, con 0644; una cartella nuova con 0755.
  *
- * /home e' la casa di chi chiede: per un programma con uid U e' /Utenti/U (la libreria
- * traduce il percorso). Le applicazioni ci trovano Apps/<Nome>, per i loro dati, e
- * Scrivania. */
+ * I POSTI DEL DISCO (build.sh). "/" e' la partizione system, in sola lettura: dentro,
+ * /system con i programmi del sistema e le applicazioni (/system/apps/<app>). /data e' la
+ * partizione data, che si scrive: per la persona con uid U c'e' /data/users/U, sua (700),
+ * con dentro home (i suoi file), bin, appsdata/<app> (i dati di ogni applicazione) e
+ * preferences. /home e' la casa di chi chiede: per un programma con uid U e'
+ * /data/users/U/home (la libreria traduce il percorso); dentro c'e' Scrivania. */
 #define UID_SISTEMA       0
 #define UID_APPLICAZIONI  1000
 #define PERMESSO_LEGGERE  4

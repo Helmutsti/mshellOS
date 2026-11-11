@@ -37,10 +37,10 @@ static int risorse_eventi[1];
 static int risorse_compositore[3];
 static int risorse_launcher[1];
 static struct servizio servizi[] = {
-    { "/Sistema/Servizi/eventi", risorse_eventi, 1, -1 },
-    { "/Sistema/Servizi/compositore", risorse_compositore, 3, -1 },
-    { "/Sistema/Servizi/launcher", risorse_launcher, 1, -1 },
-    { "/Sistema/Servizi/scrivania", 0, 0, -1 },
+    { "/system/services/eventi", risorse_eventi, 1, -1 },
+    { "/system/services/compositore", risorse_compositore, 3, -1 },
+    { "/system/services/launcher", risorse_launcher, 1, -1 },
+    { "/system/services/scrivania", 0, 0, -1 },
 };
 #define QUANTI_SERVIZI ((int)(sizeof servizi / sizeof servizi[0]))
 

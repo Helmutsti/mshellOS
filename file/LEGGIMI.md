@@ -1,11 +1,13 @@
 # file/
 
-Quello che metti in questa cartella finisce nel disco del sistema, nella cartella `/File`.
+Quello che metti in questa cartella finisce nel disco, nella casa della persona:
+`/data/users/1000/home`, che i programmi vedono come `/home`.
 
-`build.sh` la copia a ogni compilazione, sottocartelle comprese, per tutte e due le CPU.
-Nel sistema i file sono del sistema e tutti li possono leggere (cartelle 755, file 644).
-Questo `LEGGIMI.md` resta qui: non viene copiato.
+`build.sh` la copia a ogni compilazione, sottocartelle comprese, per tutte e due le CPU,
+nella partizione `data` del disco (quella che si puo' scrivere). Nel sistema i file sono
+della persona (uid 1000): cartelle 755, file 644, dentro la sua casa, che e' sua e di
+nessun altro (700). Questo `LEGGIMI.md` resta qui: non viene copiato.
 
-Il disco del sistema si puo' scrivere (Linux scrive ext4), ma solo il sistema puo'
-cambiare `/File`. Il disco si rifa' a ogni compilazione: per cambiare questi file per
-sempre, cambiali qui e ricompila.
+Mentre il sistema gira la persona (e le applicazioni, che hanno il suo uid) puo' cambiare
+questi file. Il disco pero' si rifa' a ogni compilazione: per cambiarli per sempre,
+cambiali qui e ricompila.

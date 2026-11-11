@@ -8,7 +8,8 @@ cercano le righe:
     Memory: 1970416K/2090760K available ...                   (la RAM: quella che il
                                                                kernel vede / il totale)
     avvio: 26 moduli del kernel caricati                      (l'archivio di avvio)
-    avvio: / montato (ext4 su /dev/vda)                       (il disco)
+    avvio: / montato (ext4 su /dev/vda2, sola lettura)        (la partizione system)
+    avvio: /data montato (ext4 su /dev/vda3)                  (la partizione data)
     eventi: tastiera "QEMU QEMU USB Keyboard" (/dev/input/event1)
     eventi: tavoletta "QEMU QEMU USB Tablet" (/dev/input/event2)
 Il totale della RAM deve essere poco meno di quella data a QEMU (2048 MB sul PC se non si
@@ -22,7 +23,7 @@ from qemu import isola_visibile
 
 NOME = "avvio"
 ORDINE = 10
-DESCRIZIONE = "seriale dell'avvio: Linux, RAM, moduli, disco, tastiera e tavoletta USB; la scrivania compare"
+DESCRIZIONE = "seriale dell'avvio: Linux, RAM, moduli, partizioni, tastiera e tavoletta USB; la scrivania compare"
 
 
 def esegui(p):
@@ -35,7 +36,10 @@ def esegui(p):
         p.controlla(re.search(r"efi: EFI v\d", s), "il PC non e' partito da UEFI (manca 'efi: EFI v...')")
     moduli = re.search(r"avvio: (\d+) moduli del kernel caricati", s)
     p.controlla(moduli and int(moduli.group(1)) > 0, "avvio non ha caricato i moduli del kernel")
-    p.controlla("avvio: / montato (ext4 su /dev/vd" in s, "il disco del sistema (ext4) non e' montato")
+    p.controlla(re.search(r"avvio: / montato \(ext4 su /dev/vd\w+, sola lettura\)", s),
+                "la partizione system (ext4) non e' montata come / in sola lettura")
+    p.controlla(re.search(r"avvio: /data montato \(ext4 su /dev/vd\w+\)", s),
+                "la partizione data (ext4) non e' montata in /data")
 
     memoria = re.search(r"Memory: (\d+)K/(\d+)K available", s)
     p.controlla(memoria, "manca la riga 'Memory: ...K/...K available'")

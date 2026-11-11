@@ -5,13 +5,13 @@ E' il pezzo su cui stanno tutte le prove. Fa tre cose:
   1. ACCENDE QEMU come run.sh / run.ps1 (stessi dispositivi: USB con tastiera e tavoletta,
      il disco, la scheda video virtio-gpu), ma con "-display none": lo schermo non si
      vede, si fotografa.
-     Il disco si COPIA prima in una cartella di lavoro: il sistema ci scrive, e le prove
-     non devono cambiare build/ (ne' litigare con un QEMU aperto che lo tiene).
+     Il disco (uno solo: la tabella GPT con le partizioni avvio, system e data) si COPIA
+     prima in una cartella di lavoro: il sistema ci scrive (in data), e le prove non
+     devono cambiare build/ (ne' litigare con un QEMU aperto che lo tiene).
      Sul PC (x86_64) parte prima il firmware UEFI (OVMF, il file edk2-x86_64-code.fd che
-     viene con QEMU), che lancia la UKI (kernel Linux + archivio di avvio) dal disco di
-     avvio esp.img; quel disco si apre con "snapshot=on": QEMU lo legge, e se qualcuno ci
-     scrive lo fa in una copia temporanea, non in build/. Su ARM64 QEMU carica da solo il
-     kernel e l'archivio di avvio (-kernel, -initrd).
+     viene con QEMU), che lancia la UKI (kernel Linux + archivio di avvio) dalla
+     partizione avvio del disco. Su ARM64 QEMU carica da solo il kernel e l'archivio di
+     avvio (-kernel, -initrd).
 
   2. PARLA CON QEMU attraverso QMP, il "monitor per i programmi" di QEMU: una presa TCP
      dove si mandano comandi in JSON, una riga per comando, e QEMU risponde con una riga.
@@ -206,11 +206,10 @@ class Macchina:
             firmware = trova_firmware(programma)
             argomenti = [programma, "-machine", "pc", "-m", str(self.ram),
                          "-drive", f"if=pflash,format=raw,readonly=on,file={firmware}",
-                         "-drive", f"file={self.build / 'esp.img'},format=raw,if=ide,index=2,"
-                                   "snapshot=on",
                          "-vga", "none", "-device", "virtio-vga,xres=1280,yres=800"]
+        # bootindex=1: il firmware UEFI del PC parte da questo disco (su ARM non conta)
         argomenti += ["-drive", f"if=none,id=disco,file={disco},format=raw",
-                      "-device", "virtio-blk-pci,drive=disco"]
+                      "-device", "virtio-blk-pci,drive=disco,bootindex=1"]
         # Un'ora fissa (clock=vm: corre solo quando corre la macchina): l'orologio
         # dell'isola segna sempre piu' o meno la stessa ora, prova dopo prova.
         return argomenti + [
@@ -225,7 +224,7 @@ class Macchina:
     def accendi(self):
         self.lavoro.mkdir(parents=True, exist_ok=True)
         origine = self.build / "disco.img"
-        avvio = ["linux", "avvio.img", "riga_kernel.txt"] if self.cpu == "arm64" else ["esp.img"]
+        avvio = ["linux", "avvio.img", "riga_kernel.txt"] if self.cpu == "arm64" else []
         for f in [origine] + [self.build / n for n in avvio]:
             if not f.exists():
                 raise ErroreProva(f"manca {f}: compila prima (--compila)")
@@ -323,14 +322,14 @@ class Macchina:
             time.sleep(pausa)
 
     def aspetta_scrivania(self, attesa=120.0):
-        """Aspetta il desktop: il disco montato e la tavoletta USB presa dal servizio
+        """Aspetta il desktop: le partizioni montate e la tavoletta USB presa dal servizio
         eventi (le righe nella seriale), poi l'isola disegnata in alto e lo schermo fermo.
         Il puntatore va in un angolo, dove non copre niente. Sul PC l'attesa comprende il
         firmware UEFI, che parte prima del kernel.
         La tavoletta si aspetta perche' Linux prepara l'USB mentre il sistema parte: un
         movimento mandato prima che la tavoletta sia pronta si perde (QEMU svuota la sua
         coda quando Linux la "resetta", come fa con ogni dispositivo USB nuovo)."""
-        self.aspetta_seriale("avvio: / montato", attesa)
+        self.aspetta_seriale("avvio: /data montato", attesa)
         self.aspetta_seriale('eventi: tavoletta', attesa)
         self.muovi(*PUNTO_VUOTO)
         self.aspetta_che(isola_visibile, attesa, 0.5, "l'isola della scrivania")

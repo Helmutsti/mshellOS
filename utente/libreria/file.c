@@ -1,6 +1,7 @@
 /* La libreria dei programmi, sopra Linux: i file e le cartelle.
  *
- * Il disco del sistema e' un ext4, che Linux legge e scrive: le funzioni qui sono quasi
+ * Le partizioni del disco sono ext4 (system, "/", in sola lettura; data, /data, che si
+ * scrive: vedi chiamate.h), che Linux legge e scrive: le funzioni qui sono quasi
  * sempre una chiamata di Linux sola (open, read, write, stat, mkdir, unlink, rename,
  * chmod, chown), con i percorsi controllati da percorso_vero e gli errori tradotti da
  * errore_file (libreria.c).

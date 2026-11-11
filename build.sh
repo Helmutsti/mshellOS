@@ -14,19 +14,55 @@
 #   utente/libreria/   la libreria dei programmi (libreria.h): le nostre funzioni, fatte
 #                      con le chiamate di sistema di Linux e la libreria C musl
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
-#                      moduli del kernel, monta il disco, fa partire init
+#                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
-#   utente/applicazioni/  le applicazioni, una cartella ciascuna
-#   file/              quello che si mette qui finisce nel disco, in /File
+#   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c e il manifest)
+#   file/              quello che si mette qui finisce nel disco, nella casa della persona
+#                      (/data/users/1000/home, che i programmi vedono come /home)
 #   strumenti/         programmi che girano qui, sul computer che compila (la grafica)
 #   build/<cpu>/       il compilato (si puo' cancellare, viene rifatto):
 #       linux          il kernel (per il PC: bzImage; per ARM: Image)
 #       avvio.img      l'archivio di avvio (initramfs: cpio compresso con gzip)
-#       disco.img      il disco del sistema (ext4, etichetta "mshell")
-#       esp.img        (solo PC) il disco di avvio UEFI: dentro \EFI\BOOT\BOOTX64.EFI,
-#                      kernel + archivio + riga di comando in un solo programma UEFI
-#                      (una "UKI", Unified Kernel Image)
+#       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
+#                      UEFI (una "UKI", Unified Kernel Image)
+#       riga_kernel.txt (solo ARM) la riga di comando del kernel, per QEMU -append
+#       disco.img      IL DISCO, uno solo, con una tabella delle partizioni GPT e tre
+#                      partizioni (vedi IL DISCO qui sotto)
 #   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
+#
+# IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
+# nome nella tabella (il "PARTLABEL", che avvio usa per trovarle):
+#   1. avvio   64 MB  la partizione EFI (FAT32): sul PC dentro \EFI\BOOT\BOOTX64.EFI, la
+#                     UKI; su ARM e' vuota (QEMU carica kernel e archivio con -kernel e
+#                     -initrd), ma c'e', perche' il disco sia fatto allo stesso modo
+#   2. system  64 MB  ext4, montata da avvio in SOLA LETTURA come "/": il sistema
+#   3. data    64 MB  ext4, montata da avvio in lettura e scrittura in /data: i dati
+# Com'e' fatto il sistema che ne viene fuori:
+#   /system                      (sola lettura) i programmi del sistema
+#       init                     il primo programma (il processo 1)
+#       services/<servizio>      i servizi: eventi, compositore, launcher, scrivania
+#       apps/<app>/              le applicazioni del sistema: code (il programma),
+#                                manifest (nome, icona, colore) e resources/
+#       bin/                     i comandi (per ora nessuno)
+#       lib/                     per le librerie condivise (per ora nessuna: vedi sotto)
+#       resources/fonts, icons, wallpapers   le risorse del sistema (per ora i caratteri e
+#                                le icone sono dentro i programmi: le cartelle sono pronte)
+#       firmware/                il firmware dei dispositivi (firmware_class.path)
+#       modules/                 i moduli del kernel da caricare dal disco (per ora tutti
+#                                quelli che servono stanno nell'archivio di avvio)
+#   /data                        (lettura e scrittura)
+#       apps/<app>/              le applicazioni installate dalla persona (per ora nessuna)
+#       users/<uid>/home         la casa della persona: i suoi file (/home per i programmi)
+#       users/<uid>/bin          i comandi della persona, cercati DOPO /system/bin (l'elenco
+#                                dei posti dove cercarli, come il PATH, e' della shell:
+#                                quando ci sara')
+#       users/<uid>/appsdata/<app>   i dati di ogni applicazione
+#       users/<uid>/preferences  le preferenze della persona
+#       system/                  identita', utenti, permessi, applicazioni installate: solo
+#                                del sistema (0, 700)
+#       services/<servizio>      lo stato e i registri di ogni servizio, suoi
+#   /dev /proc /sys              di Linux (li monta avvio)
+#   /run /tmp                    in memoria (tmpfs): i nomi dei socket stanno in /run/mshell
 #
 # LE VARIABILI D'AMBIENTE (tutte facoltative):
 #   USCITA   un'altra cartella dove scrivere, per compilare in parallelo senza pestarsi i
@@ -53,8 +89,8 @@ x86_64)
     ARCH=x86_64
     B=${USCITA:-build/x86_64}
     CONSOLE="console=ttyS0,115200"
-    # mtools: il disco di avvio (FAT); efi-mkuki e systemd-efistub: la UKI
-    ATTREZZI_CPU="mtools efi-mkuki systemd-efistub"
+    # efi-mkuki e systemd-efistub: la UKI
+    ATTREZZI_CPU="efi-mkuki systemd-efistub"
     ;;
 arm64)
     ARCH=aarch64
@@ -75,12 +111,13 @@ esac
 [ -n "$VERSIONE_LINUX" ] && PACCHETTI_KERNEL="linux-$NUCLEO=$VERSIONE_LINUX ${PACCHETTI_KERNEL#linux-$NUCLEO}"
 
 # La riga di comando del kernel. vt.global_cursor_default=0: niente cursore che lampeggia
-# sullo schermo prima che arrivi il compositore.
-RIGA_KERNEL="$CONSOLE vt.global_cursor_default=0"
+# sullo schermo prima che arrivi il compositore. firmware_class.path: dove il kernel cerca
+# il firmware dei dispositivi che lo chiedono (/system/firmware, nella partizione system).
+RIGA_KERNEL="$CONSOLE vt.global_cursor_default=0 firmware_class.path=/system/firmware"
 
 # I MODULI del kernel che servono (con quelli da cui dipendono, che si trovano da soli):
 #   virtio_pci             il "bus" delle schede virtuali di QEMU (spesso gia' nel kernel)
-#   virtio_blk, ext4       il disco del sistema e il suo formato
+#   virtio_blk, ext4       il disco e il formato delle partizioni system e data
 #   virtio-gpu             la scheda video virtuale (lo schermo, con il DRM)
 #   xhci-pci, usbhid,      il controllore USB 3, e tastiera e mouse USB ("HID")
 #   hid-generic
@@ -90,7 +127,9 @@ MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev"
 # --- 0. gli attrezzi e i pacchetti di Alpine ---
 SCARICO=/w/build/scarico
 mkdir -p "$SCARICO/host" "$SCARICO/$ARCH"
-apk add --cache-dir "$SCARICO/host" clang lld e2fsprogs $ATTREZZI_CPU >/dev/null
+# e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
+# FAT della partizione di avvio, scritta senza montarla
+apk add --cache-dir "$SCARICO/host" clang lld e2fsprogs sfdisk mtools $ATTREZZI_CPU >/dev/null
 
 # LA RADICE DI ALPINE PER LA CPU: un albero con i pacchetti di Alpine PER QUELLA CPU
 # (apk --arch, anche se il container e' x86_64), da cui si prendono:
@@ -135,72 +174,112 @@ for f in utente/libreria/*.c; do
 done
 LIBRERIA="$B/oggetti/libreria/*.o"
 
-# Mentre si compilano, i programmi si mettono nell'ALBERO DEL DISCO: una cartella che e'
-# gia' come sara' il disco, con proprietari e permessi giusti (mkfs.ext4 la copia tale e
-# quale, al passo 4). Sta dentro il container, non in /w: la cartella condivisa con il
-# computer che compila (Windows, macOS) non sa tenere i proprietari Unix. Il build gira
-# come root (l'utente del container), quindi puo' dare ogni file a chi vuole.
-ALBERO=/tmp/albero-disco
-rm -rf "$ALBERO"
-mkdir -p "$ALBERO"
-chown 0:0 "$ALBERO"
-chmod 755 "$ALBERO"
+# Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
+# che sono gia' come saranno le partizioni system e data, con proprietari e permessi
+# giusti (mkfs.ext4 le copia tali e quali, al passo 6). Stanno dentro il container, non in
+# /w: la cartella condivisa con il computer che compila (Windows, macOS) non sa tenere i
+# proprietari Unix. Il build gira come root (l'utente del container), quindi puo' dare
+# ogni file a chi vuole.
+# Le funzioni qui sotto parlano con i percorsi come li vedra' il sistema acceso: quelli
+# sotto /data vanno nell'albero di data, tutti gli altri in quello di system (che e' "/").
+ALBERO_SISTEMA=/tmp/albero-system
+ALBERO_DATI=/tmp/albero-data
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+for a in "$ALBERO_SISTEMA" "$ALBERO_DATI"; do
+    mkdir -p "$a"
+    chown 0:0 "$a"
+    chmod 755 "$a"
+done
 
+# vero /percorso: dove sta, adesso, nell'albero della sua partizione
+vero() {
+    case "$1" in
+        /data)   echo "$ALBERO_DATI" ;;
+        /data/*) echo "$ALBERO_DATI/${1#/data/}" ;;
+        *)       echo "$ALBERO_SISTEMA$1" ;;
+    esac
+}
 # cartelle_per /a/b/c: crea le cartelle che mancano lungo il percorso (/a, /a/b), del
 # sistema (uid 0), con 755
 cartelle_per() {
     _parziale=""
     for _pezzo in $(echo "${1%/*}" | tr / ' '); do
         _parziale="$_parziale/$_pezzo"
-        if [ ! -d "$ALBERO$_parziale" ]; then
-            mkdir "$ALBERO$_parziale"
-            chown 0:0 "$ALBERO$_parziale"
-            chmod 755 "$ALBERO$_parziale"
+        _qui=$(vero "$_parziale")
+        if [ ! -d "$_qui" ]; then
+            mkdir "$_qui"
+            chown 0:0 "$_qui"
+            chmod 755 "$_qui"
         fi
     done
 }
 # metti_file FILE /percorso PERMESSI: un file del sistema (uid 0)
 metti_file() {
     cartelle_per "$2"
-    cp "$1" "$ALBERO$2"
-    chown 0:0 "$ALBERO$2"
-    chmod "$3" "$ALBERO$2"
+    cp "$1" "$(vero "$2")"
+    chown 0:0 "$(vero "$2")"
+    chmod "$3" "$(vero "$2")"
     printf '  %-40s %7s byte  %s\n' "$2" "$(wc -c < "$1")" "$3"
 }
 # metti_cartella /percorso UID PERMESSI: una cartella di qualcuno
 metti_cartella() {
     cartelle_per "$1/"
-    chown "$2:$2" "$ALBERO$1"
-    chmod "$3" "$ALBERO$1"
+    chown "$2:$2" "$(vero "$1")"
+    chmod "$3" "$(vero "$1")"
     printf '  %-40s cartella  di %s, %s\n' "$1" "$2" "$3"
 }
 
-# I posti dove Linux monta i suoi file system speciali (li monta avvio): /dev (i
-# dispositivi), /proc (i processi), /sys (il kernel e i driver), /run (in memoria: i
-# nomi dei socket, in /run/mshell).
-for c in /dev /proc /sys /run; do metti_cartella "$c" 0 755; done
+# --- la partizione system: "/", in sola lettura ---
 
+# I posti dove si montano gli altri file system (li monta avvio): /dev (i dispositivi),
+# /proc (i processi), /sys (il kernel e i driver), /run e /tmp (in memoria: in /run/mshell
+# i nomi dei socket) e /data (la partizione data). Siccome "/" non si puo' scrivere, tutto
+# quello che si scrive mentre il sistema gira finisce in uno di questi.
+for c in /dev /proc /sys /run /tmp; do metti_cartella "$c" 0 755; done
+mkdir "$ALBERO_SISTEMA/data"
+chown 0:0 "$ALBERO_SISTEMA/data"
+chmod 755 "$ALBERO_SISTEMA/data"
+
+# Le cartelle del sistema che oggi sono vuote, ma hanno gia' il loro posto:
+#   /system/bin        i comandi
+#   /system/lib        le librerie condivise. Oggi non ce ne sono: i programmi sono
+#                      statici (passo 1) e si portano dentro tutto. Quando ci saranno
+#                      librerie condivise, qui andranno loro e il "caricatore" (ld.so)
+#   /system/resources  le risorse del sistema: caratteri, icone, sfondi. Oggi i caratteri
+#                      e le icone sono dentro i programmi (grafica_dati.h, fatto da
+#                      strumenti/), e lo sfondo lo disegna la scrivania
+#   /system/firmware   il firmware dei dispositivi (firmware_class.path, RIGA_KERNEL)
+#   /system/modules    i moduli del kernel da caricare dal disco (oggi tutti quelli che
+#                      servono stanno nell'archivio di avvio, passo 3)
+for c in /system/bin /system/lib /system/resources/fonts /system/resources/icons \
+         /system/resources/wallpapers /system/firmware /system/modules; do
+    metti_cartella "$c" 0 755
+done
+
+SERVIZI=""
 APPS=""
 
-# I programmi del sistema (utente/programmi): init in /Sistema, i servizi in
-# /Sistema/Servizi. Sono programmi: 755.
+# I programmi del sistema (utente/programmi): init in /system, i servizi in
+# /system/services/<servizio> (il programma si chiama come il servizio: cosi' lo si
+# riconosce nell'elenco dei processi). Sono programmi: 755.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
     lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o"
     case "$nome" in
-        init) posto=/Sistema/init ;;
-        *)    posto=/Sistema/Servizi/$nome ;;
+        init) posto=/system/init ;;
+        *)    posto=/system/services/$nome; SERVIZI="$SERVIZI $nome" ;;
     esac
     metti_file "$B/oggetti/$nome" "$posto" 755
 done
 
 # Le applicazioni (utente/applicazioni/<Nome>/): ognuna diventa una cartella
-# /Applicazioni/<Nome>/ con dentro il programma, chiamato come la cartella (i suoi .c
-# legati insieme), e tutto il resto che c'e' nella cartella dei sorgenti: la
-# descrizione e le risorse, da leggere (644).
+# /system/apps/<nome>/ (il nome della cartella dei sorgenti, in minuscolo) con dentro:
+#   code        il programma (i suoi .c legati insieme), 755
+#   manifest    il manifest (nome, programma = code, icona, colore), 644
+#   resources/  tutto il resto che c'e' nella cartella dei sorgenti, da leggere (644)
 for cartella in utente/applicazioni/*/; do
-    nome=$(basename "$cartella")
+    nome=$(basename "$cartella" | tr A-Z a-z)
     mkdir -p "$B/oggetti/applicazioni/$nome"
     oggetti=""
     for f in "$cartella"*.c; do
@@ -208,36 +287,62 @@ for cartella in utente/applicazioni/*/; do
         $CC $UTENTE -I"$cartella" -c "$f" -o "$o"
         oggetti="$oggetti $o"
     done
-    lega "$B/oggetti/applicazioni/$nome/$nome" $LIBRERIA $oggetti
-    metti_file "$B/oggetti/applicazioni/$nome/$nome" "/Applicazioni/$nome/$nome" 755
+    lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti
+    metti_file "$B/oggetti/applicazioni/$nome/code" "/system/apps/$nome/code" 755
+    [ -f "${cartella}manifest" ] || { echo "build.sh: manca ${cartella}manifest"; exit 1; }
+    metti_file "${cartella}manifest" "/system/apps/$nome/manifest" 644
+    metti_cartella "/system/apps/$nome/resources" 0 755
     for r in "$cartella"*; do
-        case "$r" in *.c|*.h) continue ;; esac
-        [ -f "$r" ] && metti_file "$r" "/Applicazioni/$nome/$(basename "$r")" 644
+        case "$r" in *.c|*.h|*/manifest) continue ;; esac
+        [ -f "$r" ] && metti_file "$r" "/system/apps/$nome/resources/$(basename "$r")" 644
     done
     APPS="$APPS $nome"
 done
 
-# L'utente (per ora uno solo, 1000): la sua cartella e' sua e di nessun altro (700). Le
-# applicazioni la vedono come /home: dentro, Apps/<Nome> per i dati di ognuna e Scrivania.
-UTENTE_UID=1000
-metti_cartella /Utenti 0 755
-metti_cartella /Utenti/$UTENTE_UID $UTENTE_UID 700
-metti_cartella /Utenti/$UTENTE_UID/Apps $UTENTE_UID 700
-metti_cartella /Utenti/$UTENTE_UID/Scrivania $UTENTE_UID 700
-for nome in $APPS; do
-    metti_cartella /Utenti/$UTENTE_UID/Apps/$nome $UTENTE_UID 700
-done
+# --- la partizione data: /data, in lettura e scrittura ---
 
-# La cartella file/ del repository diventa /File: quello che ci si mette dentro si
-# ritrova nel sistema (tranne il suo LEGGIMI.md, che parla della cartella). Del sistema,
-# da leggere per tutti: cartelle 755, file 644.
-metti_cartella /File 0 755
-for r in file/* file/.[!.]*; do
-    if [ -e "$r" ] && [ "$r" != file/LEGGIMI.md ]; then cp -R "$r" "$ALBERO/File/"; fi
+# Le applicazioni installate dalla persona: per ora nessuna. Le installera' il sistema
+# (come quelle di /system/apps: di 0, 755); il launcher e la scrivania le cercano qui
+# dopo /system/apps.
+metti_cartella /data/apps 0 755
+
+# Le cose del solo sistema: chi sono gli utenti, i loro permessi, le applicazioni
+# installate. Per ora vuota (gli utenti sono fissi: chiamate.h), ma nessun altro ci entra.
+metti_cartella /data/system 0 700
+
+# Lo stato e i registri dei servizi: una cartella ciascuno, sua. I servizi girano come
+# sistema (uid 0: li fa partire init), quindi sono del sistema, e solo sue (700).
+metti_cartella /data/services 0 755
+for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
+
+# La persona (per ora una sola, 1000: le applicazioni girano con il suo uid). La sua
+# cartella e' sua e di nessun altro (700), e dentro:
+#   home              i suoi file; i programmi la vedono come /home (libreria.c). Dentro
+#                     c'e' Scrivania, e quello che c'e' in file/ nel repository
+#   bin               i suoi comandi, cercati dopo /system/bin (quando ci sara' una shell)
+#   appsdata/<app>    i dati di ogni applicazione
+#   preferences       le sue preferenze
+UTENTE_UID=1000
+CASA=/data/users/$UTENTE_UID
+metti_cartella /data/users 0 755
+for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences"; do
+    metti_cartella "$c" $UTENTE_UID 700
 done
-chown -R 0:0 "$ALBERO/File"
-find "$ALBERO/File" -type d -exec chmod 755 {} +
-find "$ALBERO/File" -type f -exec chmod 644 {} +
+for nome in $APPS; do metti_cartella "$CASA/appsdata/$nome" $UTENTE_UID 700; done
+
+# La cartella file/ del repository va nella casa: quello che ci si mette dentro si
+# ritrova nel sistema (tranne il suo LEGGIMI.md, che parla della cartella). E' della
+# persona: cartelle 755, file 644 (dentro la sua casa, che e' 700).
+CASA_VERA=$(vero "$CASA/home")
+for r in file/* file/.[!.]*; do
+    if [ -e "$r" ] && [ "$r" != file/LEGGIMI.md ]; then
+        cp -R "$r" "$CASA_VERA/"
+        chown -R $UTENTE_UID:$UTENTE_UID "$CASA_VERA/$(basename "$r")"
+        find "$CASA_VERA/$(basename "$r")" -type d -exec chmod 755 {} +
+        find "$CASA_VERA/$(basename "$r")" -type f -exec chmod 644 {} +
+        printf '  %-40s da file/\n' "$CASA/home/$(basename "$r")"
+    fi
+done
 echo "programmi pronti"
 
 # --- 3. l'archivio di avvio (initramfs) ---
@@ -288,22 +393,7 @@ for m in $MODULI; do metti_modulo "$m"; done
 echo "$B/avvio.img pronto: $(wc -l < "$ARCHIVIO/moduli/elenco") moduli ($(tr '\n' ' ' < "$ARCHIVIO/moduli/elenco"))"
 rm -rf "$ARCHIVIO"
 
-# --- 4. il disco: ext4, fatto con l'albero del disco ---
-# mkfs.ext4 (di e2fsprogs, gli attrezzi di Linux per ext2/3/4) scrive un ext4 vuoto nel
-# file e, con -d, ci copia dentro l'albero, con proprietari, permessi e date. Il formato
-# del disco e' lo stesso per tutte le CPU; cambiano i programmi dentro.
-# 64 MB: tanti per i programmi di oggi, pochi da copiare (il collaudo copia il disco a
-# ogni prova). Il file e' "sparso": i pezzi mai scritti non occupano posto, dove il file
-# system del computer che compila lo sa fare.
-# -L mshell: il nome del disco, con cui lo trova avvio. Il formato occupa tutto il
-# disco, senza tabella delle partizioni.
-rm -f "$B/disco.img"
-truncate -s 64M "$B/disco.img"
-mkfs.ext4 -q -F -b 4096 -L mshell -d "$ALBERO" "$B/disco.img"
-rm -rf "$ALBERO"
-echo "$B/disco.img pronto"
-
-# --- 5. il kernel ---
+# --- 4. il kernel ---
 # Sul PC vmlinuz e' un "bzImage", che sa anche partire da UEFI da solo (l'"EFI stub").
 # Su ARM64 Alpine lo da' compresso dentro un piccolo programma UEFI ("zboot": "MZ", poi
 # "zimg", da dove a dove sta il kernel compresso, e "gzip"): per partire senza UEFI
@@ -317,29 +407,69 @@ else
 fi
 echo "$B/linux pronto: Linux $VERSIONE_K"
 
-# --- 6. (solo PC) il disco di avvio UEFI ---
-# All'accensione il firmware UEFI cerca un disco con una partizione FAT e dentro il file
-# \EFI\BOOT\BOOTX64.EFI. Ci mettiamo una UKI: un solo programma UEFI con dentro il
+# --- 5. (solo PC) il programma UEFI che avvia tutto ---
+# All'accensione il firmware UEFI cerca un disco con una partizione EFI (FAT) e dentro il
+# file \EFI\BOOT\BOOTX64.EFI. Ci mettiamo una UKI: un solo programma UEFI con dentro il
 # kernel, l'archivio di avvio e la riga di comando. La fa efi-mkuki, che li attacca
 # come "sezioni" al programmino UEFI di systemd che sa far partire Linux (systemd-stub).
-# Su un PC vero basta copiarlo su una chiavetta con una partizione FAT, allo stesso posto
-# (vedi DA IMPLEMENTARE).
-# L'immagine e' la sola partizione, senza tabella delle partizioni ("superfloppy"): il
-# firmware la riconosce lo stesso, e per QEMU basta. mtools scrive nella FAT senza
-# montarla (mformat la crea, mmd fa le cartelle, mcopy copia i file).
+# Su ARM QEMU carica il kernel e l'archivio da se' (-kernel, -initrd): la riga di comando
+# gliela passa run.sh (-append), da riga_kernel.txt.
 if [ "$CPU" = x86_64 ]; then
     printf 'NAME="mshell"\nID=mshell\nPRETTY_NAME="mshell (Linux %s)"\n' "$VERSIONE_K" > /tmp/os-release
     efi-mkuki -c "$RIGA_KERNEL" -k "$VERSIONE_K" -r /tmp/os-release \
         -S /usr/lib/systemd/boot/efi/linuxx64.efi.stub -o "$B/BOOTX64.EFI" "$B/linux" "$B/avvio.img"
-    rm -f "$B/esp.img"
-    truncate -s 64M "$B/esp.img"
-    mformat -i "$B/esp.img" -F -v MSHELL ::
-    mmd -i "$B/esp.img" ::/EFI ::/EFI/BOOT
-    mcopy -i "$B/esp.img" "$B/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
-    echo "$B/esp.img pronto"
+    echo "$B/BOOTX64.EFI pronto"
 else
-    echo "$RIGA_KERNEL" > "$B/riga_kernel.txt"   # QEMU la passa con -append (run.sh)
+    echo "$RIGA_KERNEL" > "$B/riga_kernel.txt"
 fi
+
+# --- 6. il disco: GPT con tre partizioni ---
+# Un file grande come il disco, con dentro:
+#   - la TABELLA DELLE PARTIZIONI GPT, all'inizio (e una copia in fondo). La scrive
+#     sfdisk (di util-linux, gli attrezzi di Linux per le partizioni) da un piccolo
+#     "copione": dove comincia ogni partizione e quanto e' grande (in settori da 512
+#     byte), il tipo (U: partizione EFI; L: file system di Linux) e il NOME, che avvio
+#     usa per trovarle (Linux lo mette in /sys/class/block/<partizione>/uevent, PARTNAME).
+#   - le tre partizioni, ognuna formattata al suo posto: si dice a mkfs.ext4 e a mtools
+#     da quale byte del file cominciare (offset), e non si tocca il resto.
+# Ogni partizione comincia a un MB tondo (i dischi veri lo preferiscono). 64 MB ciascuna:
+# tanti per i programmi e i file di oggi, pochi da copiare (il collaudo copia il disco a
+# ogni prova). Il file e' "sparso": i pezzi mai scritti non occupano posto, dove il file
+# system del computer che compila lo sa fare.
+# Il formato del disco e' lo stesso per tutte le CPU; cambiano i programmi dentro.
+MB=1048576
+SETTORI_MB=2048                 # settori da 512 byte in un MB
+INIZIO_AVVIO=1;    MISURA_AVVIO=64       # in MB
+INIZIO_SISTEMA=65; MISURA_SISTEMA=64
+INIZIO_DATI=129;   MISURA_DATI=64
+TOTALE=194                      # l'ultimo MB tiene la copia della tabella
+rm -f "$B/disco.img"
+truncate -s ${TOTALE}M "$B/disco.img"
+sfdisk -q "$B/disco.img" <<FINE
+label: gpt
+start=$((INIZIO_AVVIO * SETTORI_MB)), size=$((MISURA_AVVIO * SETTORI_MB)), type=U, name="avvio"
+start=$((INIZIO_SISTEMA * SETTORI_MB)), size=$((MISURA_SISTEMA * SETTORI_MB)), type=L, name="system"
+start=$((INIZIO_DATI * SETTORI_MB)), size=$((MISURA_DATI * SETTORI_MB)), type=L, name="data"
+FINE
+
+# 1. avvio: FAT32 (-F), come la vuole UEFI. mtools scrive nella FAT senza montarla
+#    (mformat la crea, mmd fa le cartelle, mcopy copia i file); "disco.img@@<byte>" vuol
+#    dire "la FAT che comincia a quel byte". -T: quanti settori.
+AVVIO="$B/disco.img@@$((INIZIO_AVVIO * MB))"
+mformat -i "$AVVIO" -F -T $((MISURA_AVVIO * SETTORI_MB)) -v AVVIO ::
+mmd -i "$AVVIO" ::/EFI ::/EFI/BOOT
+[ "$CPU" = x86_64 ] && mcopy -i "$AVVIO" "$B/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+
+# 2. system e 3. data: ext4. mkfs.ext4 (di e2fsprogs, gli attrezzi di Linux per ext2/3/4)
+#    scrive un ext4 vuoto e, con -d, ci copia dentro l'albero, con proprietari, permessi e
+#    date. -E offset: da quale byte del file; l'ultimo numero: quanti blocchi da 4096 byte.
+#    -L: il nome del file system (lo stesso della partizione: si vede anche da li').
+mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$ALBERO_SISTEMA" \
+    "$B/disco.img" $((MISURA_SISTEMA * MB / 4096))
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco.img" $((MISURA_DATI * MB / 4096))
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+echo "$B/disco.img pronto: GPT con avvio ($MISURA_AVVIO MB, FAT32), system ($MISURA_SISTEMA MB, ext4) e data ($MISURA_DATI MB, ext4)"
 
 rm -rf "$B/oggetti"
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"
@@ -350,9 +480,9 @@ echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|m
 #     macchina: invece di un elenco fisso (MODULI), avvio dovrebbe caricare i moduli
 #     dei dispositivi che trova (i "modalias" in /sys, confrontati con modules.alias,
 #     come fa udev). Anche il firmware (linux-firmware: centinaia di MB) andrebbe messo
-#     nel disco, solo quello che serve, in una cartella da dire al kernel con
-#     firmware_class.path=. Qui si installa linux-firmware-none (niente firmware).
-#   - Un disco unico per un PC vero: una tabella delle partizioni (GPT) con la partizione
-#     EFI (la UKI) e quella del sistema (l'ext4 "mshell"), da scrivere su una chiavetta.
-#     Oggi sono due immagini separate (esp.img e disco.img).
+#     nel disco, solo quello che serve, in /system/firmware (gia' detto al kernel con
+#     firmware_class.path). Qui si installa linux-firmware-none (niente firmware).
+#   - Un PC vero: disco.img si scrive cosi' com'e' su una chiavetta (o un disco); il
+#     firmware UEFI trova la partizione avvio e la UKI. La partizione data andrebbe
+#     allargata fino alla fine del disco, la prima volta che parte.
 #   - Secure Boot: la UKI non e' firmata; su un PC vero va spento, o la UKI firmata.

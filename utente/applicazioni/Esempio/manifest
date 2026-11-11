@@ -1,6 +1,6 @@
-# La descrizione di Esempio: la legge la scrivania per il menu delle applicazioni.
+# Il manifest di Esempio: lo leggono la scrivania (per l'isola) e il launcher.
 # Una riga "chiave = valore" per voce; le righe che cominciano con # sono commenti.
 nome = Esempio
-programma = Esempio
+programma = code
 icona = square
 colore = arancio

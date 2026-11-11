@@ -1,6 +1,6 @@
-# La descrizione di Contatore: la legge la scrivania per il menu delle applicazioni.
+# Il manifest di Contatore: lo leggono la scrivania (per l'isola) e il launcher.
 # Una riga "chiave = valore" per voce; le righe che cominciano con # sono commenti.
 nome = Contatore
-programma = Contatore
+programma = code
 icona = plus
 colore = blu

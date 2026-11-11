@@ -3,9 +3,9 @@
  * Il launcher e' il servizio del sistema che fa partire le applicazioni (come
  * LaunchServices sul Mac, o systemd per GNOME). Non ha finestre: chi vuole aprire
  * un'applicazione (la scrivania, domani un'altra applicazione) si collega al nome
- * "launcher" e gli manda APRI_APPLICAZIONE con il nome della sua cartella in
- * /Applicazioni. Il launcher controlla, legge la descrizione, la fa partire come
- * applicazione (uid 1000) e risponde. */
+ * "launcher" e gli manda APRI_APPLICAZIONE con il nome della sua cartella (in
+ * /system/apps o /data/apps). Il launcher controlla, legge il manifest, la fa partire
+ * come applicazione (uid 1000) e risponde. */
 #ifndef LAUNCHER_H
 #define LAUNCHER_H
 
@@ -17,7 +17,7 @@
 
 struct richiesta_launcher {
     unsigned int tipo;
-    char applicazione[MAX_NOME_FILE];   /* la cartella in /Applicazioni, per esempio "Contatore" */
+    char applicazione[MAX_NOME_FILE];   /* il nome della sua cartella, per esempio "contatore" */
 };
 
 struct risposta_launcher {

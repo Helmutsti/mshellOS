@@ -15,10 +15,19 @@
  * Il kernel fa partire /init come processo numero 1. Lui:
  *   1. monta /dev (devtmpfs: i dispositivi li crea il kernel), /proc e /sys;
  *   2. carica i moduli (finit_module): da qui il kernel vede il disco, lo schermo, l'USB;
- *   3. cerca il DISCO DEL SISTEMA: il primo con un ext4 che si chiama "mshell";
- *   4. lo monta, e ci sposta /dev, /proc e /sys; monta /run (in memoria: tmpfs);
- *   5. lo fa diventare "/" al posto dell'archivio (come switch_root), e
- *   6. diventa /Sistema/init con execve: stesso processo, stesso numero 1, programma
+ *   3. cerca le PARTIZIONI del disco per NOME. Il disco ha una tabella delle partizioni
+ *      GPT (build.sh), e ogni partizione ha un nome scritto nella tabella (il
+ *      "PARTLABEL"): "avvio", "system" e "data". Il kernel legge la tabella da solo e
+ *      dice il nome di ogni partizione in /sys/class/block/<partizione>/uevent
+ *      (PARTNAME=...): cosi' non conta come si chiama il disco (vda, sda, nvme0n1...);
+ *   4. monta system come "/", in SOLA LETTURA: mentre il sistema gira nessun programma,
+ *      nemmeno del sistema, lo puo' cambiare. Monta data in /data, in lettura e
+ *      scrittura: li' vanno i file della persona e lo stato dei servizi. Ci sposta /dev,
+ *      /proc e /sys; monta /run e /tmp (in memoria: tmpfs).
+ *      /data lo monta avvio, non init, perche' e' avvio che cerca le partizioni: init
+ *      trova tutto gia' al suo posto, come prima;
+ *   5. fa diventare system "/" al posto dell'archivio (come switch_root), e
+ *   6. diventa /system/init con execve: stesso processo, stesso numero 1, programma
  *      nuovo. Init non sa niente di tutto questo: si trova gia' nel sistema vero.
  *
  * Il processo 1 non deve mai finire (Linux si fermerebbe con un "Kernel panic"): se
@@ -33,7 +42,8 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#define NOME_DISCO "mshell"    /* l'etichetta dell'ext4 del sistema (mkfs.ext4 -L) */
+#define PARTIZIONE_SISTEMA "system"   /* i nomi delle partizioni nella tabella GPT */
+#define PARTIZIONE_DATI "data"
 #define REGISTRO 8             /* dove i programmi trovano la console (libreria/interno.h) */
 #define ATTESA_DISCO 100       /* volte da 100 ms: 10 secondi al massimo */
 
@@ -90,27 +100,37 @@ static int carica_moduli(void) {
     return caricati;
 }
 
-/* --- 3. il disco del sistema --- */
+/* --- 3. le partizioni --- */
 
-/* Vero se /dev/<nome> contiene un ext4 con l'etichetta NOME_DISCO. Il "superblocco" di
- * ext4 sta a 1024 byte dall'inizio: a +0x38 il numero magico 0xEF53, a +0x78 il nome. */
-static int e_il_disco(const char *nome, char *dev) {
-    strcpy(dev, "/dev/");
-    strncat(dev, nome, 48);
-    unsigned char sb[256];
-    int f = open(dev, O_RDONLY | O_CLOEXEC);
+/* Vero se la partizione /sys/class/block/<voce> si chiama 'nome' nella tabella GPT: nel
+ * suo file uevent c'e' la riga "PARTNAME=<nome>". Allora in dev mette /dev/<voce>. */
+static int si_chiama(const char *voce, const char *nome, char *dev) {
+    char percorso[128] = "/sys/class/block/";
+    strncat(percorso, voce, 64);
+    strcat(percorso, "/uevent");
+    char testo[512];
+    int f = open(percorso, O_RDONLY | O_CLOEXEC);
     if (f < 0) return 0;
-    ssize_t n = pread(f, sb, sizeof sb, 1024);
+    ssize_t n = read(f, testo, sizeof testo - 1);
     close(f);
-    return n == sizeof sb && sb[0x38] == 0x53 && sb[0x39] == 0xEF &&
-           !strncmp((const char *)sb + 0x78, NOME_DISCO, 16);
+    if (n <= 0) return 0;
+    testo[n] = 0;
+    for (char *riga = strtok(testo, "\n"); riga; riga = strtok(0, "\n"))
+        if (!strncmp(riga, "PARTNAME=", 9) && !strcmp(riga + 9, nome)) {
+            strcpy(dev, "/dev/");
+            strncat(dev, voce, 48);
+            return 1;
+        }
+    return 0;
 }
 
-static int trova_disco(char *dev) {
+/* Cerca la partizione 'nome' fra quelle di tutti i dischi che il kernel vede: 1 se c'e'
+ * (e in dev il suo dispositivo), 0 se dopo ATTESA_DISCO volte non e' ancora arrivata. */
+static int trova_partizione(const char *nome, char *dev) {
     for (int volta = 0; volta < ATTESA_DISCO; volta++) {
         DIR *c = opendir("/sys/class/block");
         for (struct dirent *v; c && (v = readdir(c));)
-            if (v->d_name[0] != '.' && e_il_disco(v->d_name, dev)) { closedir(c); return 1; }
+            if (v->d_name[0] != '.' && si_chiama(v->d_name, nome, dev)) { closedir(c); return 1; }
         if (c) closedir(c);
         usleep(100 * 1000);             /* un disco USB puo' arrivare dopo: si riprova */
     }
@@ -141,23 +161,34 @@ int main(void) {
     di(" moduli del kernel caricati\n");
 
     /* 3. */
-    char dev[64];
-    if (!trova_disco(dev)) {
-        di("avvio: non riesco a trovare il disco del sistema (ext4 \"" NOME_DISCO "\")\n");
+    char sistema[64], dati[64];
+    if (!trova_partizione(PARTIZIONE_SISTEMA, sistema)) {
+        di("avvio: non riesco a trovare la partizione \"" PARTIZIONE_SISTEMA "\"\n");
+        ferma();
+    }
+    if (!trova_partizione(PARTIZIONE_DATI, dati)) {
+        di("avvio: non riesco a trovare la partizione \"" PARTIZIONE_DATI "\"\n");
         ferma();
     }
 
-    /* 4. */
+    /* 4. "/" in sola lettura (MS_RDONLY): il kernel rifiuta ogni scrittura (EROFS) */
     mkdir("/nuova", 0755);
-    if (mount(dev, "/nuova", "ext4", 0, 0) < 0) { errore("montare", dev); ferma(); }
+    if (mount(sistema, "/nuova", "ext4", MS_RDONLY, 0) < 0) { errore("montare", sistema); ferma(); }
+    di("avvio: / montato (ext4 su ");
+    di(sistema);
+    di(", sola lettura)\n");
+    if (mount(dati, "/nuova/data", "ext4", MS_NOSUID | MS_NODEV, 0) < 0) { errore("montare", dati); ferma(); }
+    di("avvio: /data montato (ext4 su ");
+    di(dati);
+    di(")\n");
     sposta("/dev", "/nuova/dev");
     sposta("/proc", "/nuova/proc");
     sposta("/sys", "/nuova/sys");
     if (mount("run", "/nuova/run", "tmpfs", MS_NOSUID | MS_NODEV, "mode=0755") < 0)
         errore("montare", "/run");
-    di("avvio: / montato (ext4 su ");
-    di(dev);
-    di(")\n");
+    /* /tmp: tutti ci possono scrivere, ma ognuno cancella solo le sue cose (1777) */
+    if (mount("tmp", "/nuova/tmp", "tmpfs", MS_NOSUID | MS_NODEV, "mode=1777") < 0)
+        errore("montare", "/tmp");
 
     /* 5. "/" diventa il disco: ci si sposta dentro, lo si mette al posto della radice e
      * da qui in poi "/" e' lui. L'archivio resta in memoria, ma vuoto: /init lo si
@@ -170,7 +201,7 @@ int main(void) {
 
     /* 6. il registro: la console, per tutti i programmi (libreria/interno.h) */
     dup2(1, REGISTRO);
-    char *argomenti[] = { "/Sistema/init", 0 };
+    char *argomenti[] = { "/system/init", 0 };
     char *ambiente[] = { 0 };
     execve(argomenti[0], argomenti, ambiente);
     errore("far partire", argomenti[0]);

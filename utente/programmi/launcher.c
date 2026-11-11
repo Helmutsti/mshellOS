@@ -2,9 +2,10 @@
  *
  * Non ha finestre, come LaunchServices sul Mac o systemd per GNOME: l'interfaccia (le
  * icone da cliccare) e' della scrivania, che gli chiede "apri Contatore". Lui:
- *   1. controlla che sia un'applicazione installata: una cartella in /Applicazioni con
- *      la sua descrizione;
- *   2. dalla descrizione prende quale programma far partire;
+ *   1. controlla che sia un'applicazione installata: una cartella con il suo manifest
+ *      in /system/apps (quelle del sistema) o, se li' non c'e', in /data/apps (quelle
+ *      installate dalla persona: descrizione.h);
+ *   2. dal manifest prende quale programma far partire (code, nella stessa cartella);
  *   3. lo fa partire come APPLICAZIONE (uid 1000), non come sistema: e' per questo che
  *      il launcher e' del sistema (uid 0), perche' solo il sistema puo' far partire un
  *      programma con un altro uid;

@@ -10,8 +10,9 @@
 #define REGISTRO 8
 
 /* Un percorso dei programmi come lo vuole Linux: controlla che sia assoluto e non troppo
- * lungo, e traduce /home nella casa di chi chiede (/Utenti/<uid>). 0, o ERRORE_NOME. */
-#define MAX_VERO (MAX_PERCORSO + 16)
+ * lungo, e traduce /home nella casa di chi chiede (/data/users/<uid>/home). 0, o
+ * ERRORE_NOME. */
+#define MAX_VERO (MAX_PERCORSO + 32)
 int percorso_vero(const char *percorso, char *vero);
 
 /* Da un errore di Linux (errno) a un ERRORE_... */

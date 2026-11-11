@@ -3,14 +3,14 @@
 `test/collaudo.py` accende mshell (il kernel Linux con i nostri programmi) in QEMU **senza finestra**, lo usa come farebbe una
 persona (mouse, tastiera, fotografie dello schermo) e controlla che faccia quello che deve.
 Ogni prova gira sia sul PC (`x86_64`, avviato dal firmware UEFI) sia su ARM64, e ogni volta
-su un sistema appena acceso. Il disco viene copiato e il disco di avvio si apre in sola
-lettura (`snapshot=on`): `build/` non si tocca.
+su un sistema appena acceso. Il disco (uno solo, con le partizioni avvio, system e data)
+viene copiato prima di ogni prova: `build/` non si tocca.
 
 ## Cosa si prova
 
 | prova          | cosa controlla |
 |----------------|----------------|
-| `avvio`        | la seriale dell'avvio: Linux partito (da UEFI sul PC), la RAM, i moduli caricati, il disco montato, tastiera e tavoletta USB prese dal servizio eventi; la scrivania compare |
+| `avvio`        | la seriale dell'avvio: Linux partito (da UEFI sul PC), la RAM, i moduli caricati, le partizioni montate (system come `/` in sola lettura, data in `/data`), tastiera e tavoletta USB prese dal servizio eventi; la scrivania compare |
 | `applicazioni` | ogni applicazione si apre dall'isola (finestra al suo posto, puntino sotto l'icona); il pulsante del menu non rompe niente |
 | `mouse`        | il puntatore gira in tondo per 8 s (e 4 s sopra una finestra): segue, non si blocca, arriva preciso |
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |

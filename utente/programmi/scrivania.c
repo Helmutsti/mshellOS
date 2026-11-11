@@ -7,8 +7,9 @@
  *   - l'ISOLA, un PANNELLO in alto al centro, sopra tutte le finestre: il pulsante del
  *     menu, le applicazioni installate (con un puntino sotto quelle aperte) e l'ora.
  *
- * LE APPLICAZIONI INSTALLATE le legge da /Applicazioni: una cartella per applicazione,
- * con la sua descrizione (nome, programma, icona, colore). QUALI SONO APERTE glielo dice
+ * LE APPLICAZIONI INSTALLATE le legge da /system/apps (quelle del sistema) e poi da
+ * /data/apps (quelle installate dalla persona): una cartella per applicazione, con il suo
+ * manifest (nome, programma, icona, colore: descrizione.h). QUALI SONO APERTE glielo dice
  * il compositore, che a un pannello racconta ogni finestra che compare o sparisce, con il
  * programma a cui appartiene.
  *
@@ -34,7 +35,7 @@
 #define MAX_APP 16
 
 struct app {
-    char cartella[MAX_NOME_FILE];   /* il suo nome in /Applicazioni: lo si chiede al launcher */
+    char cartella[MAX_NOME_FILE];   /* il nome della sua cartella: lo si chiede al launcher */
     char programma[MAX_PERCORSO];   /* il percorso completo del programma */
     int icona;
     unsigned int colore;            /* 0: neutra (di vetro) */
@@ -59,13 +60,24 @@ static int uguali(const char *a, const char *b) { return descrizione_uguali(a, b
 static void copia(char *dove, const char *da, int massimo) { descrizione_copia(dove, da, massimo); }
 static void aggiungi(char *dove, const char *da, int massimo) { descrizione_aggiungi(dove, da, massimo); }
 
-/* Le applicazioni installate: le cartelle di /Applicazioni che hanno una descrizione. */
-static void leggi_applicazioni(void) {
-    int d = apri("/Applicazioni", APRI_LEGGERE);
+/* Gia' nell'elenco? (un'applicazione di /data/apps con lo stesso nome di una del sistema
+ * e' la stessa: vale quella del sistema, come per il launcher) */
+static int gia_letta(const char *cartella) {
+    for (int i = 0; i < quante_app; i++)
+        if (uguali(app[i].cartella, cartella)) return 1;
+    return 0;
+}
+
+/* Le applicazioni installate di una delle cartelle delle applicazioni: le sue cartelle
+ * che hanno un manifest. Prima quelle del sistema, poi quelle della persona, ognuna in
+ * ordine alfabetico. */
+static void leggi_applicazioni_in(const char *cartelle) {
+    int d = apri(cartelle, APRI_LEGGERE);
     struct voce_cartella v;
     while (d >= 0 && quante_app < MAX_APP && leggi(d, &v, sizeof v) == sizeof v) {
         struct descrizione desc;
-        if (v.tipo != TIPO_CARTELLA || leggi_descrizione(v.nome, &desc) < 0) continue;
+        if (v.tipo != TIPO_CARTELLA || gia_letta(v.nome) || leggi_descrizione(v.nome, &desc) < 0)
+            continue;
         struct app *a = &app[quante_app++];
         *a = (struct app){ .icona = ICONA_SQUARE };
         copia(a->cartella, v.nome, sizeof a->cartella);
@@ -76,6 +88,11 @@ static void leggi_applicazioni(void) {
             if (uguali(desc.colore, nomi_colori[i].nome)) a->colore = nomi_colori[i].colore;
     }
     if (d >= 0) chiudi(d);
+}
+
+static void leggi_applicazioni(void) {
+    for (int i = 0; i < QUANTE_CARTELLE_APPLICAZIONI; i++)
+        leggi_applicazioni_in(cartelle_applicazioni[i]);
 }
 
 /* --- le finestre aperte: le racconta il compositore --- */

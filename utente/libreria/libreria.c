@@ -217,6 +217,27 @@ static unsigned long long valore_di(const char *testo, const char *chiave) {
     return 0;
 }
 
+/* IL NOME DI UN'APPLICAZIONE. Linux chiama un processo come il file del suo programma; il
+ * programma di ogni applicazione pero' si chiama "code" (/system/apps/<app>/code, o in
+ * /data/apps). Allora, per un processo che si chiama "code", il nome e' quello della
+ * cartella dell'applicazione, preso dal percorso del programma: e' il primo argomento
+ * (avvia lo passa sempre), in /proc/<numero>/cmdline, che tutti possono leggere. */
+static void nome_applicazione(int numero, char *nome, int massimo) {
+    if (strcmp(nome, "code")) return;
+    char percorso[48], testo[MAX_PERCORSO];
+    percorso_proc(percorso, numero, "/cmdline");
+    if (leggi_proc(percorso, testo, sizeof testo) <= 0) return;   /* fino al primo 0 */
+    char *fine = strrchr(testo, '/');
+    if (!fine || strcmp(fine, "/code")) return;
+    *fine = 0;
+    char *inizio = strrchr(testo, '/');
+    if (!inizio || !inizio[1]) return;
+    int l = (int)strlen(inizio + 1);
+    if (l > massimo - 1) l = massimo - 1;
+    memcpy(nome, inizio + 1, (size_t)l);
+    nome[l] = 0;
+}
+
 #define PF_KTHREAD 0x00200000   /* in /proc/<n>/stat: e' un lavoro del kernel, non un programma */
 
 /* Un processo, da /proc/<numero>: 1 se e' un programma (e lo scrive in p), 0 se no. */
@@ -238,6 +259,7 @@ static int leggi_processo(int numero, struct info_processo *p) {
     if (l > (int)sizeof p->nome - 1) l = (int)sizeof p->nome - 1;
     memcpy(p->nome, apre + 1, (size_t)l);
     p->nome[l] = 0;
+    nome_applicazione(numero, p->nome, (int)sizeof p->nome);
     /* R: gira o aspetta il suo turno; S e D: aspetta qualcosa; Z e X: e' finito */
     p->stato = stato == 'R' ? (numero == getpid() ? STATO_IN_ESECUZIONE : STATO_PRONTO)
              : stato == 'Z' || stato == 'X' ? STATO_FINITO : STATO_IN_ATTESA;
@@ -303,7 +325,8 @@ int percorso_vero(const char *percorso, char *vero) {
     int l = (int)strnlen(percorso, MAX_PERCORSO);
     if (l == 0 || l >= MAX_PERCORSO || percorso[0] != '/') return ERRORE_NOME;
     if (!strncmp(percorso, "/home", 5) && (percorso[5] == 0 || percorso[5] == '/')) {
-        metti_testo(metti_numero(metti_testo(vero, "/Utenti/"), getuid()), percorso + 5);
+        char *d = metti_numero(metti_testo(vero, "/data/users/"), getuid());
+        metti_testo(metti_testo(d, "/home"), percorso + 5);
         return 0;
     }
     memcpy(vero, percorso, (size_t)l + 1);

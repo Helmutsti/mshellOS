@@ -1,8 +1,9 @@
 # Compila tutto con Docker e avvia mshell in QEMU (Windows), sul PC a 64 bit.
-#   build\x86_64\esp.img   : il disco di avvio (FAT, come la "partizione EFI" di un PC):
-#                            dentro \EFI\BOOT\BOOTX64.EFI, il kernel Linux con l'archivio di
-#                            avvio e la riga di comando (una UKI)
-#   build\x86_64\disco.img : il disco del sistema (ext4 "mshell": /Sistema/init e gli altri)
+#   build\x86_64\disco.img : il disco, uno solo, con una tabella delle partizioni GPT e tre
+#                            partizioni (vedi build.sh): avvio (la partizione EFI, FAT32: dentro
+#                            \EFI\BOOT\BOOTX64.EFI, il kernel Linux con l'archivio di avvio e la
+#                            riga di comando, una UKI), system (ext4: "/", in sola lettura) e
+#                            data (ext4: /data, i file della persona e lo stato dei servizi)
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 
@@ -11,10 +12,10 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # -machine pc -m 2048 : un PC con 2 GB di RAM (si puo' dare di piu': -m 8192)
 # -drive if=pflash ... edk2-x86_64-code.fd : il firmware UEFI (OVMF, del progetto EDK2),
-#   che viene con QEMU. Parte, trova il disco di avvio e lancia \EFI\BOOT\BOOTX64.EFI
-# -drive esp.img ... index=2 : il disco di avvio, sul secondo canale IDE
-# -drive disco.img + virtio-blk-pci : il disco del sistema (virtio: fatto per le macchine
-#   virtuali, con il suo driver in Linux)
+#   che viene con QEMU. Parte, trova nel disco la partizione EFI (avvio) e lancia
+#   \EFI\BOOT\BOOTX64.EFI
+# -drive disco.img + virtio-blk-pci : il disco (virtio: fatto per le macchine virtuali, con
+#   il suo driver in Linux); bootindex=1: il primo (l'unico) da cui il firmware prova a partire
 # -vga none -device virtio-vga : la scheda video virtio, a 1280x800
 # -rtc base=localtime : l'orologio del PC virtuale segna l'ora di casa (non quella di Greenwich)
 # qemu-xhci, usb-kbd, usb-tablet : il controllore USB 3, con tastiera e tavoletta USB. La
@@ -22,8 +23,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 #   sempre sotto quello di Windows
 & "C:\Program Files\qemu\qemu-system-x86_64.exe" -machine pc -m 2048 -rtc base=localtime `
     -drive "if=pflash,format=raw,readonly=on,file=C:\Program Files\qemu\share\edk2-x86_64-code.fd" `
-    -drive "file=$qui\build\x86_64\esp.img,format=raw,if=ide,index=2" `
     -drive "if=none,id=disco,file=$qui\build\x86_64\disco.img,format=raw" `
-    -device virtio-blk-pci,drive=disco `
+    -device "virtio-blk-pci,drive=disco,bootindex=1" `
     -vga none -device "virtio-vga,xres=1280,yres=800" `
     -device qemu-xhci -device usb-kbd -device usb-tablet
