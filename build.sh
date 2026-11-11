@@ -146,7 +146,7 @@ RADICE=/tmp/radice-$ARCH
 rm -rf "$RADICE"
 apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \
     --repositories-file /etc/apk/repositories --keys-dir "/usr/share/apk/keys/$ARCH" \
-    --cache-dir "$SCARICO/$ARCH" add musl-dev linux-headers $PACCHETTI_KERNEL >/dev/null
+    --cache-dir "$SCARICO/$ARCH" add musl-dev linux-headers compiler-rt $PACCHETTI_KERNEL >/dev/null
 VERSIONE_K=$(ls "$RADICE/lib/modules")
 MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
 
@@ -168,7 +168,10 @@ LIBC="$RADICE/usr/lib"
 lega() {   # lega USCITA OGGETTI...
     _uscita=$1
     shift
-    ld.lld -static --gc-sections -s -o "$_uscita" "$LIBC/crt1.o" "$LIBC/crti.o" "$@" -L"$LIBC" -lc "$LIBC/crtn.o"
+    # compiler-rt: le funzioni del compilatore (es. i long double a 128 bit su ARM, che
+    # printf e scanf di musl usano): senza, legare un programma che usa printf non riesce
+    _rt=$(ls "$RADICE"/usr/lib/llvm*/lib/clang/*/lib/*/libclang_rt.builtins-*.a 2>/dev/null | head -1)
+    ld.lld -static --gc-sections -s -o "$_uscita" "$LIBC/crt1.o" "$LIBC/crti.o" "$@" -L"$LIBC" -lc $_rt "$LIBC/crtn.o"
 }
 
 # --- 2. i programmi: la libreria, i programmi del sistema e le applicazioni ---

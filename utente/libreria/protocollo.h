@@ -68,6 +68,8 @@
 #define CHIEDI_SCHERMO  5   /* "quanto e' grande lo schermo?": risponde SCHERMO. Si puo'
                              * chiedere anche prima di VOGLIO_FINESTRA */
 #define RIDUCIMI        6   /* "nascondimi": hanno premuto il mio pulsante riduci */
+#define VOGLIO_TASTI_FISICI 8  /* "mandami anche TASTO_FISICO": si chiede una volta (facoltativo,
+                             * il toolkit non lo fa; serve ai giochi) */
 #define PORTA_DAVANTI   7   /* (solo un PANNELLO) la finestra 'numero' torna visibile,
                              * davanti a tutte, con il fuoco */
 
@@ -87,6 +89,10 @@ struct voglio_finestra {
 };
 
 struct chiedi_schermo {
+    unsigned int tipo;
+};
+
+struct voglio_tasti_fisici {
     unsigned int tipo;
 };
 
@@ -133,6 +139,9 @@ struct pong {
                         * (positivo: a destra), con il puntatore in x, y. Va alla finestra
                         * sotto il puntatore, anche se non ha il fuoco: come sul Mac e in
                         * Wayland, si scorre quello che si guarda */
+#define TASTO_FISICO 12  /* (solo a chi l'ha chiesto con VOGLIO_TASTI_FISICI) il tasto
+                          * Linux 'tasto' (KEY_...) e' stato premuto ('premuto' = 1) o
+                          * lasciato (0). Senza ripetizioni. Arriva in piu' di TASTO. */
 
 struct notizia {
     unsigned int tipo;
@@ -144,6 +153,7 @@ struct notizia {
     unsigned int numero;     /* PING, FINESTRA_APERTA, FINESTRA_CHIUSA */
     char testo[MAX_PERCORSO];   /* FINESTRA_APERTA */
     int scatti_x, scatti_y;  /* ROTELLA */
+    unsigned int premuto;    /* TASTO_FISICO (il codice e' in 'tasto') */
 };
 
 #endif

@@ -607,13 +607,13 @@ static inline void campo_disegna(struct widget *w, struct pennello *p) {
          * quindi basta guardare la fine del testo: scrivendo il testo va a sinistra,
          * cancellando torna a destra. Senza fuoco si vede l'inizio, come sul Mac. */
         int destra = w->x + w->l - m->margine;
-        int fine = larghezza_testo(m->font, c->testo) + 8 + 2;   /* il cursore compreso */
+        int fine = larghezza_testo(m->font, c->testo) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
         int scorrimento = w->fuoco && x + fine > destra ? x + fine - destra : 0;
         pennello_ritaglia(p, x - 2, w->y, destra - (x - 2), w->a);  /* 2: le lettere che sbordano */
         x = testo_centrato(p, m->font, x - scorrimento, w->y, w->a, c->testo);
         if (w->fuoco) {                    /* il cursore: una barretta alta quanto la riga */
             int alto = m->font->altezza;
-            struct tondo cursore = tondo(x + 8, w->y + (w->a - alto) / 2, 2, alto, 0);
+            struct tondo cursore = tondo(x + CAMPO_CURSORE_SPAZIO, w->y + (w->a - alto) / 2, 2, alto, 0);
             riempi_forma(p, &cursore);
         }
     } else {

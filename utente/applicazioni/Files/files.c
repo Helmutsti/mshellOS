@@ -627,7 +627,7 @@ static void contenuto_disponi(struct widget *w) {
  * centrato se 'centrato'. */
 static void campo_nome(struct pennello *p, const struct font *f, int x, int y, int l,
                        const char *testo_nome, int centrato) {
-    int largo = larghezza_testo(f, testo_nome) + 3;     /* il cursore compreso */
+    int largo = larghezza_testo(f, testo_nome) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
     if (!l) l = largo + 2 * CAMPO_NOME_DENTRO + 2;
     int alto = f->altezza + 2 * 2 + 2;
     struct tondo t = tondo(x, y, l, alto, RAGGIO_CONTROLLO);
@@ -643,7 +643,7 @@ static void campo_nome(struct pennello *p, const struct font *f, int x, int y, i
     if (largo > l - 2 - 2 * CAMPO_NOME_DENTRO) tx = x + l - 1 - CAMPO_NOME_DENTRO - largo;
     pennello_colore(p, CONTENUTO_PRINCIPALE);
     int fine = testo(p, f, tx, y + 3, testo_nome);
-    riempi_rettangolo(p, fine + 1, y + 3, 2, f->altezza);
+    riempi_rettangolo(p, fine + CAMPO_CURSORE_SPAZIO, y + 3, 2, f->altezza);
     pennello_ripristina(p);
 }
 

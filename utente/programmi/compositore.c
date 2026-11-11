@@ -128,6 +128,7 @@ struct finestra {
     unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
     char programma[MAX_PERCORSO];   /* di quale programma e': lo dice il kernel */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
+    int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
 };
 
@@ -682,6 +683,7 @@ static void da_applicazione(int i) {
         unsigned int tipo;
         struct chiedi_schermo c;
         struct riducimi r;
+        struct voglio_tasti_fisici k;
         struct porta_davanti d;
         struct voglio_finestra v;
         struct mostra m;
@@ -696,6 +698,7 @@ static void da_applicazione(int i) {
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
     if (m.tipo == PONG && n == sizeof m.p) { pong(i, &m.p); return; }
+    if (m.tipo == VOGLIO_TASTI_FISICI && n == sizeof m.k) { finestre[i].tasti_fisici = 1; return; }
     if (m.tipo == RIDUCIMI && n == sizeof m.r) { riducimi(i); return; }
     if (m.tipo == PORTA_DAVANTI && n == sizeof m.d) { porta_davanti(i, m.d.numero); return; }
     if (m.tipo == CHIEDI_SCHERMO && n == sizeof m.c) {
@@ -1100,6 +1103,11 @@ static void alla_rotella(const struct evento *e) {
                                 .scatti_x = e->dx, .scatti_y = e->dy });
 }
 
+static void al_tasto_fisico(const struct evento *e) {
+    if (fuoco >= 0 && finestre[fuoco].tasti_fisici)
+        avvisa(fuoco, (struct notizia){ .tipo = TASTO_FISICO, .tasto = e->tasto, .premuto = e->pulsanti != 0 });
+}
+
 static void al_tasto(const struct evento *e) {
     if (fuoco >= 0) avvisa(fuoco, (struct notizia){ .tipo = TASTO, .tasto = e->tasto });
 }
@@ -1126,6 +1134,7 @@ static int servi(int ms) {
         if (e.tipo == EVENTO_MOUSE || e.tipo == EVENTO_PUNTATORE) al_mouse(&e);
         else if (e.tipo == EVENTO_ROTELLA) alla_rotella(&e);
         else if (e.tipo == EVENTO_TASTO) al_tasto(&e);
+        else if (e.tipo == EVENTO_TASTO_FISICO) al_tasto_fisico(&e);
     }
     /* prima i messaggi, poi i collegamenti nuovi: un collegamento nuovo potrebbe
      * riusare il numero di uno appena scollegato, e prendersi il suo 'pronto' */

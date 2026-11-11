@@ -90,6 +90,10 @@ static unsigned char con_altgr(unsigned int codice) {
 
 /* Un tasto: premuto (1), ripetuto (2) o lasciato (0). */
 static void tasto(unsigned int codice, int valore) {
+    /* il tasto "fisico", per chi lo vuole (i giochi): premuto o lasciato, senza ripetizioni */
+    if (valore != 2)
+        manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_FISICO, .tasto = codice,
+                                       .pulsanti = valore != 0 });
     /* i tasti che cambiano lo stato, sia quando si premono sia quando si lasciano */
     if (codice == KEY_LEFTSHIFT || codice == KEY_RIGHTSHIFT) { shift = valore != 0; return; }
     if (codice == KEY_RIGHTALT)                              { altgr = valore != 0; return; }

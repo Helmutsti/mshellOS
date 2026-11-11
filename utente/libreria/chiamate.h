@@ -204,6 +204,10 @@ struct zona_schermo { int x0, y0, x1, y1; };   /* x0 <= x < x1, y0 <= y < y1 */
 #define EVENTO_MOUSE 2     /* il mouse si e' spostato di dx, dy, o un pulsante e' cambiato */
 #define EVENTO_PUNTATORE 3 /* una tavoletta: il puntatore e' in (dx, dy), da 0 a PUNTATORE_MAX
                             * su ogni asse (lo schermo intero), e questi sono i pulsanti */
+#define EVENTO_TASTO_FISICO 5 /* un tasto della tastiera e' stato premuto o lasciato, senza
+                            * tradurlo in un carattere: 'tasto' e' il codice di Linux (KEY_...,
+                            * linux/input-event-codes.h), 'pulsanti' vale 1 (premuto) o 0
+                            * (lasciato). Le ripetizioni automatiche non si mandano. */
 #define PUNTATORE_MAX 32767
 #define EVENTO_ROTELLA 4   /* la rotella del mouse ha girato di dy "scatti" (dx per quella
                             * orizzontale, se c'e'). Come gli spostamenti, dy positivo = verso

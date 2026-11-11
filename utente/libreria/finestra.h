@@ -137,6 +137,13 @@ static inline int finestra_trascinami(struct finestra *f) {
     return manda(f->collegamento, &m, sizeof m);
 }
 
+/* Chiede di ricevere anche le notizie TASTO_FISICO (tasto premuto/lasciato, codici KEY_ di
+ * Linux): per i giochi. Le notizie TASTO continuano ad arrivare. */
+static inline int finestra_tasti_fisici(struct finestra *f) {
+    struct voglio_tasti_fisici m = { .tipo = VOGLIO_TASTI_FISICI };
+    return manda(f->collegamento, &m, sizeof m);
+}
+
 /* Chiede al compositore di nascondere la finestra (il pulsante "riduci"). Tornera'
  * quando la scrivania la fa tornare. */
 static inline int finestra_riducimi(struct finestra *f) {

@@ -111,6 +111,7 @@
 #define SPAZIO_TRA        14    /* tra un widget e l'altro, in colonna */
 #define CONTROLLO_LATO    18    /* il quadratino della casella, il tondo della scelta */
 #define CAMPO_ALTEZZA     36
+#define CAMPO_CURSORE_SPAZIO  1   /* tra l'ultima lettera scritta e il cursore */
 #define SCORRIMENTO_LARGHEZZA  14   /* la striscia della barra di scorrimento, sopra il contenuto */
 #define SCORRIMENTO_SOTTILE     6   /* il cursore mentre si scorre, a 4 pixel dal bordo */
 #define SCORRIMENTO_SPESSO     10   /* il cursore sotto il puntatore o trascinato, a 2 */
