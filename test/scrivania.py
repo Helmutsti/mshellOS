@@ -1,4 +1,4 @@
-"""scrivania.py: quello che le prove sanno della scrivania di mkernel (dove sono le cose).
+"""scrivania.py: quello che le prove sanno della scrivania di mshell (dove sono le cose).
 
 Sono numeri presi dallo schermo vero (1280x800). Se la scrivania o il compositore
 cambiano disegno (l'isola, dove si aprono le finestre), si cambiano QUI e basta.

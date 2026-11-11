@@ -1,26 +1,26 @@
-# Le prove automatiche di mkernel
+# Le prove automatiche di mshell
 
-`test/collaudo.py` accende mkernel in QEMU **senza finestra**, lo usa come farebbe una
+`test/collaudo.py` accende mshell (il kernel Linux con i nostri programmi) in QEMU **senza finestra**, lo usa come farebbe una
 persona (mouse, tastiera, fotografie dello schermo) e controlla che faccia quello che deve.
 Ogni prova gira sia sul PC (`x86_64`, avviato dal firmware UEFI) sia su ARM64, e ogni volta
-su un mkernel appena acceso. Il disco viene copiato e il disco di avvio si apre in sola
+su un sistema appena acceso. Il disco viene copiato e il disco di avvio si apre in sola
 lettura (`snapshot=on`): `build/` non si tocca.
 
 ## Cosa si prova
 
 | prova          | cosa controlla |
 |----------------|----------------|
-| `avvio`        | la seriale dell'avvio: il caricatore UEFI (PC), tastiera e tavoletta USB viste, RAM, disco montato; la scrivania compare |
+| `avvio`        | la seriale dell'avvio: Linux partito (da UEFI sul PC), la RAM, i moduli caricati, il disco montato, tastiera e tavoletta USB prese dal servizio eventi; la scrivania compare |
 | `applicazioni` | ogni applicazione si apre dall'isola (finestra al suo posto, puntino sotto l'icona); il pulsante del menu non rompe niente |
 | `mouse`        | il puntatore gira in tondo per 8 s (e 4 s sopra una finestra): segue, non si blocca, arriva preciso |
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
-| `attivita`     | la pagina Memoria di Attività dice 2041 MB (PC con 2 GB; 8185 con 8 GB) o 512 MB (ARM64); "Termina processo" chiude Contatore |
+| `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Contatore |
 | `scorrimento`  | con 4 applicazioni aperte la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
-Dopo ogni prova si controlla anche che nella seriale non ci siano `PANICO`, `ERRORE` o
-`non riesco`.
+Dopo ogni prova si controlla anche che nella seriale non ci siano `Kernel panic`, `PANICO`,
+`ERRORE` o `non riesco`.
 
 ## Come si lancia
 
@@ -63,7 +63,7 @@ disco e porte loro. Se le porte sono occupate, se ne scelgono altre con `--porte
 
 L'orologio del PC virtuale è fisso (`-rtc base=2026-01-01T10:00:00,clock=vm`): l'isola
 segna sempre "gio 1 gen 10:00" o poco più, prova dopo prova. Sul PC l'accensione dura un po'
-di più: prima parte il firmware UEFI, poi il caricatore, poi il kernel.
+di più: prima parte il firmware UEFI, poi Linux.
 
 ## Aggiungere una prova
 
@@ -103,4 +103,5 @@ uv run test/collaudo.py --riferimenti --cpu x86_64 --ram 8192 --solo attivita  #
 ```
 
 Prima di salvarle nel repo, guardarle: devono mostrare la cosa giusta (per
-`memoria_totale_<MB>.png`, le cifre 2041 sul PC a 2 GB, 8185 a 8 GB e 512 su ARM64).
+`memoria_totale_<MB>.png`, le cifre 1972 sul PC a 2 GB e 7946 a 8 GB; su ARM64 il MemTotal
+di Linux con 512 MB).

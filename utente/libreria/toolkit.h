@@ -1160,12 +1160,16 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
     struct notizia n;
     for (;;) {
         /* Con i "chiamami ogni tanto": se non c'e' niente da parte si aspetta il
-         * compositore solo fino alla prima scadenza. Scaduta, si chiama chi l'ha chiesto. */
+         * compositore solo fino alla prima scadenza. Scaduta, si chiama chi l'ha chiesto.
+         * Ma prima le notizie gia' arrivate: se mentre si ridisegnava e' arrivato un clic o
+         * uno scatto della rotella, si serve prima lui e poi l'animazione (come in GTK, dove
+         * l'input passa davanti ai ridisegni). Cosi' due scatti veloci restano una raffica
+         * anche quando ridisegnare costa. */
         struct chiamata_tk *prima = toolkit_prima_chiamata(f);
         if (prima && !f->finestra.quante) {
             int resta = (int)(prima->scadenza - tempo());
             struct da_guardare g = { .descrittore = f->finestra.collegamento };
-            if (resta <= 0 || aspetta(&g, 1, resta) == 0) {
+            if (aspetta(&g, 1, resta > 0 ? resta : 0) == 0) {
                 toolkit_chiamate_scadute(f);
                 if (f->da_chiudere) return 0;
                 if (f->da_ridisegnare && !toolkit_ridisegna(f)) return 1;

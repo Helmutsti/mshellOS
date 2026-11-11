@@ -1,15 +1,17 @@
-"""qemu.py: accendere mkernel in QEMU senza finestra e "toccarlo" da fuori.
+"""qemu.py: accendere mshell in QEMU senza finestra e "toccarlo" da fuori.
 
 E' il pezzo su cui stanno tutte le prove. Fa tre cose:
 
   1. ACCENDE QEMU come run.sh / run.ps1 (stessi dispositivi: USB con tastiera e tavoletta,
-     il disco), ma con "-display none": lo schermo non si vede, si fotografa.
-     Il disco si COPIA prima in una cartella di lavoro: mkernel ci puo' scrivere, e le
-     prove non devono cambiare build/ (ne' litigare con un QEMU aperto che lo tiene).
+     il disco, la scheda video virtio-gpu), ma con "-display none": lo schermo non si
+     vede, si fotografa.
+     Il disco si COPIA prima in una cartella di lavoro: il sistema ci scrive, e le prove
+     non devono cambiare build/ (ne' litigare con un QEMU aperto che lo tiene).
      Sul PC (x86_64) parte prima il firmware UEFI (OVMF, il file edk2-x86_64-code.fd che
-     viene con QEMU), che lancia il caricatore dal disco di avvio esp.img; quel disco si
-     apre con "snapshot=on": QEMU lo legge, e se qualcuno ci scrive lo fa in una copia
-     temporanea, non in build/.
+     viene con QEMU), che lancia la UKI (kernel Linux + archivio di avvio) dal disco di
+     avvio esp.img; quel disco si apre con "snapshot=on": QEMU lo legge, e se qualcuno ci
+     scrive lo fa in una copia temporanea, non in build/. Su ARM64 QEMU carica da solo il
+     kernel e l'archivio di avvio (-kernel, -initrd).
 
   2. PARLA CON QEMU attraverso QMP, il "monitor per i programmi" di QEMU: una presa TCP
      dove si mandano comandi in JSON, una riga per comando, e QEMU risponde con una riga.
@@ -21,13 +23,13 @@ E' il pezzo su cui stanno tutte le prove. Fa tre cose:
      esempio "info usb". Si apre anche il monitor HMP su una seconda porta: non lo usa
      nessuna prova, serve a chi vuole guardare dentro QEMU mentre una prova gira.
 
-  3. LEGGE LA SERIALE: quello che il kernel scrive sulla seriale va in un file. Le prove
-     ci cercano le righe dell'avvio ("USB : ... tastiera") e controllano che non ci sia un
-     PANICO. Per sapere quando il sistema e' pronto si ASPETTA UNA CONDIZIONE (una riga
-     nella seriale, lo schermo fermo) invece di dormire un tempo fisso: su un computer
-     lento si aspetta di piu', su uno veloce di meno.
+  3. LEGGE LA SERIALE: quello che il kernel Linux e i nostri programmi scrivono sulla
+     seriale va in un file. Le prove ci cercano le righe dell'avvio ("eventi: tastiera
+     ...") e controllano che non ci sia un "Kernel panic". Per sapere quando il sistema e'
+     pronto si ASPETTA UNA CONDIZIONE (una riga nella seriale, lo schermo fermo) invece di
+     dormire un tempo fisso: su un computer lento si aspetta di piu', su uno veloce di meno.
 
-Lo schermo di mkernel e' 1280x800. La tavoletta USB dice DOVE e' il puntatore con due
+Lo schermo di mshell e' 1280x800. La tavoletta USB dice DOVE e' il puntatore con due
 numeri da 0 a 32767 (tutto a sinistra .. tutto a destra): per andare al pixel x si manda
 x * 32767 / 1280.
 """
@@ -158,7 +160,7 @@ class Qmp:
 # --- la macchina ----------------------------------------------------------------------
 
 class Macchina:
-    """Un mkernel acceso in QEMU, per una prova.
+    """Un mshell acceso in QEMU, per una prova.
 
         m = Macchina("x86_64", build, lavoro, porta=4465, ram=2048)
         m.accendi()
@@ -192,12 +194,13 @@ class Macchina:
         if self.cpu == "arm64":
             veloce = (platform.system() == "Darwin" and platform.machine() == "arm64")
             cpu_qemu = ["-accel", "hvf", "-cpu", "host"] if veloce else ["-cpu", "cortex-a72"]
+            riga = (self.build / "riga_kernel.txt").read_text().strip()
             argomenti = [trova_qemu("qemu-system-aarch64"), "-M", "virt", *cpu_qemu,
                          "-m", str(self.ram),
-                         "-kernel", str(self.build / "kernel.img"),
-                         "-device", "ramfb",
-                         "-drive", f"if=none,id=disco,file={disco},format=raw",
-                         "-device", "virtio-blk-pci,drive=disco"]
+                         "-kernel", str(self.build / "linux"),
+                         "-initrd", str(self.build / "avvio.img"),
+                         "-append", riga,
+                         "-device", "virtio-gpu-pci,xres=1280,yres=800"]
         else:
             programma = trova_qemu("qemu-system-x86_64")
             firmware = trova_firmware(programma)
@@ -205,7 +208,9 @@ class Macchina:
                          "-drive", f"if=pflash,format=raw,readonly=on,file={firmware}",
                          "-drive", f"file={self.build / 'esp.img'},format=raw,if=ide,index=2,"
                                    "snapshot=on",
-                         "-drive", f"file={disco},format=raw,if=ide,index=0"]
+                         "-vga", "none", "-device", "virtio-vga,xres=1280,yres=800"]
+        argomenti += ["-drive", f"if=none,id=disco,file={disco},format=raw",
+                      "-device", "virtio-blk-pci,drive=disco"]
         # Un'ora fissa (clock=vm: corre solo quando corre la macchina): l'orologio
         # dell'isola segna sempre piu' o meno la stessa ora, prova dopo prova.
         return argomenti + [
@@ -220,8 +225,8 @@ class Macchina:
     def accendi(self):
         self.lavoro.mkdir(parents=True, exist_ok=True)
         origine = self.build / "disco.img"
-        immagine = self.build / ("kernel.img" if self.cpu == "arm64" else "esp.img")
-        for f in (origine, immagine):
+        avvio = ["linux", "avvio.img", "riga_kernel.txt"] if self.cpu == "arm64" else ["esp.img"]
+        for f in [origine] + [self.build / n for n in avvio]:
             if not f.exists():
                 raise ErroreProva(f"manca {f}: compila prima (--compila)")
         for p in (self.porta_qmp, self.porta_hmp):
@@ -274,8 +279,9 @@ class Macchina:
             s = self.testo_seriale()
             if testo in s:
                 return s
-            if "PANICO" in s:
-                raise ErroreProva("PANICO nella seriale:\n" + s[s.index("PANICO"):][:400])
+            for panico in ("Kernel panic", "PANICO"):
+                if panico in s:
+                    raise ErroreProva(f"{panico} nella seriale:\n" + s[s.index(panico):][:400])
             if not self.viva():
                 raise ErroreProva("QEMU si e' chiuso da solo")
             time.sleep(0.2)
@@ -317,13 +323,15 @@ class Macchina:
             time.sleep(pausa)
 
     def aspetta_scrivania(self, attesa=120.0):
-        """Aspetta il desktop: il disco montato (seriale), poi l'isola disegnata in
-        alto e lo schermo fermo. Il puntatore va in un angolo, dove non copre niente.
-        (Non si aspetta la riga "Compiti : scheduler acceso": e' l'ultima del kernel, ma
-        i programmi partono mentre la scrive e a volte la loro scritta ci finisce in
-        mezzo, "Cciao come va\\nompiti : ...", e la riga intera non c'e' piu'.)
-        Sul PC l'attesa comprende il firmware UEFI, che parte prima del kernel."""
-        self.aspetta_seriale("VFS     : / montato", attesa)
+        """Aspetta il desktop: il disco montato e la tavoletta USB presa dal servizio
+        eventi (le righe nella seriale), poi l'isola disegnata in alto e lo schermo fermo.
+        Il puntatore va in un angolo, dove non copre niente. Sul PC l'attesa comprende il
+        firmware UEFI, che parte prima del kernel.
+        La tavoletta si aspetta perche' Linux prepara l'USB mentre il sistema parte: un
+        movimento mandato prima che la tavoletta sia pronta si perde (QEMU svuota la sua
+        coda quando Linux la "resetta", come fa con ogni dispositivo USB nuovo)."""
+        self.aspetta_seriale("avvio: / montato", attesa)
+        self.aspetta_seriale('eventi: tavoletta', attesa)
         self.muovi(*PUNTO_VUOTO)
         self.aspetta_che(isola_visibile, attesa, 0.5, "l'isola della scrivania")
         return self.aspetta_schermo_fermo()

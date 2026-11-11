@@ -1,14 +1,17 @@
-/* init: il primo programma, come in Linux.
+/* init: il primo programma del sistema, il processo numero 1 di Linux.
  *
- * Il kernel, finito di prepararsi, lo legge dal disco (/Sistema/init) e lo fa partire in
- * ring 3, come sistema (uid 0). E' lui a far nascere i servizi del sistema: il
- * compositore, il launcher (che fa partire le applicazioni) e la scrivania. Le
- * applicazioni non le fa partire lui: le apre il launcher, quando la scrivania lo chiede.
+ * Lo fa partire avvio (utente/avvio/avvio.c), il programma dell'archivio di avvio, dopo
+ * aver montato il disco: init prende il suo posto, con lo stesso numero 1, come sistema
+ * (uid 0). E' lui a far nascere i servizi del sistema: eventi (che legge tastiera e
+ * mouse), il compositore, il launcher (che fa partire le applicazioni) e la scrivania.
+ * Le applicazioni non le fa partire lui: le apre il launcher, quando la scrivania lo
+ * chiede.
  *
- * INIT TIENE LE RISORSE DEI SERVIZI, e gliele presta (al launcher, il suo nome). E' lui ad aprire lo schermo,
- * la tastiera e il mouse, e a mettersi in ascolto con il nome "compositore"; poi fa
- * partire il compositore passandogli queste tre cose gia' aperte (avvia_con), come
- * launchd sul Mac e systemd su Linux. Init non le usa: le tiene soltanto in mano.
+ * INIT TIENE LE RISORSE DEI SERVIZI, e gliele presta. E' lui ad aprire lo schermo, a
+ * preparare il tubo degli eventi (un capo al servizio eventi, che ci scrive, e l'altro al
+ * compositore, che ci legge) e a mettersi in ascolto con i nomi "compositore" e
+ * "launcher"; poi fa partire i servizi passandogli queste cose gia' aperte (avvia_con),
+ * come launchd sul Mac e systemd su Linux. Init non le usa: le tiene soltanto in mano.
  *
  * E LI SORVEGLIA. Se un servizio cade, init se ne accorge (il descrittore del processo
  * diventa pronto) e lo fa ripartire; il compositore, con le stesse risorse. Siccome init non
@@ -19,9 +22,10 @@
 #include "protocollo.h"
 #include "launcher.h"
 
-/* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Il compositore
- * riceve in prestito schermo, tastiera e il suo nome; la scrivania niente (si collega al
- * compositore come le applicazioni). L'ordine conta: prima il compositore. */
+/* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Eventi riceve
+ * in prestito il capo del tubo su cui scrive; il compositore lo schermo, l'altro capo del
+ * tubo e il suo nome; il launcher il suo nome; la scrivania niente (si collega al
+ * compositore come le applicazioni). L'ordine conta: prima eventi e il compositore. */
 struct servizio {
     const char *percorso;
     const int *risorse;      /* i descrittori da prestargli, ai posti 0, 1, 2... */
@@ -29,9 +33,11 @@ struct servizio {
     int processo;            /* il descrittore del suo processo: pronto quando finisce */
 };
 
+static int risorse_eventi[1];
 static int risorse_compositore[3];
 static int risorse_launcher[1];
 static struct servizio servizi[] = {
+    { "/Sistema/Servizi/eventi", risorse_eventi, 1, -1 },
     { "/Sistema/Servizi/compositore", risorse_compositore, 3, -1 },
     { "/Sistema/Servizi/launcher", risorse_launcher, 1, -1 },
     { "/Sistema/Servizi/scrivania", 0, 0, -1 },
@@ -52,12 +58,16 @@ static void avvia_servizio(struct servizio *s) {
 int main(void) {
     scrivi_testo("ciao come va\n");
 
-    /* le risorse del compositore, nell'ordine in cui le trovera': 0, 1, 2 */
+    /* le risorse del compositore, nell'ordine in cui le trovera': 0, 1, 2. Il tubo degli
+     * eventi resta a init anche se eventi o il compositore cadono: ripartono con lo stesso */
+    int tubo[2] = { -1, -1 };
+    coppia(tubo);
+    risorse_eventi[0] = tubo[1];
     risorse_compositore[0] = apri_schermo();
-    risorse_compositore[1] = apri_eventi();
+    risorse_compositore[1] = tubo[0];
     risorse_compositore[2] = ascolta(NOME_COMPOSITORE);
     risorse_launcher[0] = ascolta(NOME_LAUNCHER);
-    if (risorse_compositore[0] < 0 || risorse_compositore[1] < 0 || risorse_compositore[2] < 0 ||
+    if (risorse_compositore[0] < 0 || tubo[0] < 0 || risorse_compositore[2] < 0 ||
         risorse_launcher[0] < 0) {
         scrivi_testo("init: non riesco a prendere schermo, tastiera o i nomi dei servizi\n");
         for (;;) dormi(60 * 1000);

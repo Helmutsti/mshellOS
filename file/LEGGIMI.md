@@ -6,5 +6,6 @@ Quello che metti in questa cartella finisce nel disco del sistema, nella cartell
 Nel sistema i file sono del sistema e tutti li possono leggere (cartelle 755, file 644).
 Questo `LEGGIMI.md` resta qui: non viene copiato.
 
-Per ora il disco del sistema e' in sola lettura: i file di `/File` si leggono, ma non si
-possono cambiare da dentro mkernel. Per cambiarli, cambiali qui e ricompila.
+Il disco del sistema si puo' scrivere (Linux scrive ext4), ma solo il sistema puo'
+cambiare `/File`. Il disco si rifa' a ogni compilazione: per cambiare questi file per
+sempre, cambiali qui e ricompila.

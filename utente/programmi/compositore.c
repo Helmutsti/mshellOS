@@ -22,10 +22,12 @@
  * che glieli passa gia' aperti ai descrittori 0, 1 e 2 (avvia_con). Se il compositore
  * cade, init li ha ancora, e lo fa ripartire con le stesse.
  *
- * LO SCHERMO, VISTO DA QUI. Dopo mappa_schermo la memoria dello schermo e' nella
- * nostra mappa, a SCHERMO_PROGRAMMA: scrivere li' un numero vuol dire accendere un
+ * LO SCHERMO, VISTO DA QUI. Dopo mappa_schermo l'immagine che si vede sullo schermo e'
+ * nella nostra memoria, a 'memoria': scrivere li' un numero vuol dire accendere un
  * pixel. Riga dopo riga, da sinistra a destra, 4 byte per pixel. Tra l'inizio di una
  * riga e la successiva ci sono 'passo' byte (puo' essere piu' della larghezza * 4).
+ * Finito un fotogramma, si dice al sistema quali rettangoli sono cambiati
+ * (schermo_cambiato): alcune schede video, come quella virtuale di QEMU, li copiano.
  *
  * IL DOPPIO BUFFER. Non si disegna direttamente sullo schermo: se no, a ogni movimento
  * si vedrebbe lo sfondo cancellare per un attimo le finestre (lo schermo "sfarfalla").
@@ -58,11 +60,11 @@
 #define D_EVENTI  1
 #define D_ASCOLTO 2
 
-#define MAX_LARGHEZZA 1280  /* quanto chiede il kernel a GRUB (kernel_head.s) */
+#define MAX_LARGHEZZA 1280  /* la modalita' che chiede la libreria (schermo.c) */
 #define MAX_ALTEZZA   800
 
 static struct info_schermo schermo;
-static unsigned char *memoria = (unsigned char *)SCHERMO_PROGRAMMA;
+static unsigned char *memoria;
 static int larghezza, altezza;
 
 /* La scena, prima dello schermo: pixel premoltiplicati, come quelli delle finestre.
@@ -774,6 +776,12 @@ static void disegna_puntatore(void) {
     }
 }
 
+/* Il rettangolo della freccia con la punta in (x, y), tagliato dentro lo schermo. */
+static struct zona_schermo dentro_lo_schermo(int x, int y) {
+    return (struct zona_schermo){ x, y, x + FRECCIA_L < larghezza ? x + FRECCIA_L : larghezza,
+                                  y + FRECCIA_A < altezza ? y + FRECCIA_A : altezza };
+}
+
 /* --- la scena, poi sullo schermo --- */
 
 /* L'ELENCO DI QUELLE DA DISEGNARE, nell'ordine in cui si disegnano: gli strati dal
@@ -971,9 +979,19 @@ static void componi(void) {
 
     /* sullo schermo: le zone, poi dove stava la freccia (la scena senza freccia), poi
      * la freccia dove sta adesso (sopra le zone appena copiate) */
-    for (int k = 0; k < quante_zone; k++) copia(zone[k].x0, zone[k].y0, zone[k].x1, zone[k].y1);
-    if (mosso) copia(px_prima, py_prima, px_prima + FRECCIA_L, py_prima + FRECCIA_A);
+    struct zona_schermo cambiate[MAX_ZONE + 2];
+    int n = 0;
+    for (int k = 0; k < quante_zone; k++) {
+        copia(zone[k].x0, zone[k].y0, zone[k].x1, zone[k].y1);
+        cambiate[n++] = (struct zona_schermo){ zone[k].x0, zone[k].y0, zone[k].x1, zone[k].y1 };
+    }
+    if (mosso) {
+        copia(px_prima, py_prima, px_prima + FRECCIA_L, py_prima + FRECCIA_A);
+        cambiate[n++] = dentro_lo_schermo(px_prima, py_prima);
+    }
     disegna_puntatore();
+    cambiate[n++] = dentro_lo_schermo(px, py);
+    schermo_cambiato(D_SCHERMO, cambiate, n);   /* tutto in una volta, a fine fotogramma */
     px_prima = px;
     py_prima = py;
 }
@@ -1087,7 +1105,7 @@ static int servi(int ms) {
 }
 
 int main(void) {
-    if (mappa_schermo(D_SCHERMO, &schermo) < 0) {
+    if (!(memoria = mappa_schermo(D_SCHERMO, &schermo))) {
         scrivi_testo("compositore: non ho lo schermo (mi deve far partire init)\n");
         return 0;
     }

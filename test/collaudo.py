@@ -2,7 +2,7 @@
 # requires-python = ">=3.10"
 # dependencies = ["pillow"]
 # ///
-"""collaudo.py: le prove automatiche di mkernel, sul PC (x86_64, UEFI) e su ARM64.
+"""collaudo.py: le prove automatiche di mshell, sul PC (x86_64, UEFI) e su ARM64.
 
     uv run test/collaudo.py                       tutte le prove, su tutte e due le CPU
     uv run test/collaudo.py --cpu x86_64          solo sul PC ("x86" vale lo stesso)
@@ -13,12 +13,12 @@
     uv run test/collaudo.py --compila             prima compila (Docker, come run.sh)
 
 COME FUNZIONA. Ogni prova e' un file in test/prove/. Per ogni prova e per ogni CPU si
-accende un mkernel NUOVO in QEMU (senza finestra: vedi qemu.py), si aspetta la scrivania
+accende un mshell NUOVO in QEMU (senza finestra: vedi qemu.py), si aspetta la scrivania
 e si chiama la funzione 'esegui' della prova, che muove il mouse, preme tasti, fotografa
 lo schermo e controlla. Ogni prova parte da zero: se una si rompe, non trascina le altre.
 
 Una prova FALLISCE se solleva ErroreProva (o qualsiasi altro errore), oppure se alla fine
-nella seriale del kernel c'e' un PANICO o un messaggio d'errore. Le foto e la seriale di
+nella seriale c'e' un "Kernel panic" o un messaggio d'errore. Le foto e la seriale di
 una prova fallita restano in test/risultati/<cpu>/<prova>/; quelle delle prove riuscite
 si cancellano (con --tieni restano).
 
@@ -42,7 +42,7 @@ import qemu
 from qemu import ErroreProva, Macchina
 
 QUI = Path(__file__).resolve().parent          # test/
-REPO = QUI.parent                              # la cartella di mkernel
+REPO = QUI.parent                              # la cartella di mshell
 PROVE = QUI / "prove"
 RIFERIMENTI = QUI / "riferimenti"
 RISULTATI = QUI / "risultati"
@@ -50,7 +50,7 @@ CPU_TUTTE = ["x86_64", "arm64"]
 ALIAS_CPU = {"x86": "x86_64"}            # come build.sh e run.sh
 
 # Le righe che nella seriale non devono MAI comparire (in qualsiasi prova).
-VIETATE = ["PANICO", "ERRORE", "non riesco"]
+VIETATE = ["Kernel panic", "PANICO", "ERRORE", "non riesco"]
 
 
 # --- il "contesto" che riceve ogni prova -----------------------------------------------
@@ -192,7 +192,7 @@ def esegui_una(modulo, cpu, args):
 
 
 def main():
-    a = argparse.ArgumentParser(description="Le prove automatiche di mkernel")
+    a = argparse.ArgumentParser(description="Le prove automatiche di mshell")
     a.add_argument("--cpu", choices=[*CPU_TUTTE, *ALIAS_CPU, "tutte"], default="tutte",
                    help="x86_64 (il PC; anche x86), arm64, o tutte (se non si dice)")
     a.add_argument("--ram", type=int, default=2048, metavar="MB",
@@ -230,7 +230,7 @@ def main():
     if args.compila:
         compila(cpu_scelte, args.build)
 
-    print(f"mkernel: collaudo su {', '.join(cpu_scelte)} (build: {args.build}, "
+    print(f"mshell: collaudo su {', '.join(cpu_scelte)} (build: {args.build}, "
           f"RAM del PC {args.ram} MB, porte {args.porte}-{args.porte + 1})")
     risultati = []
     for cpu in cpu_scelte:

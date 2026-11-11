@@ -3,9 +3,9 @@ un'applicazione.
 
 Si apre prima Contatore (primo posto) e poi Attivita (secondo posto, angolo in 180,170).
 
-LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 31,9 MB su 2041,7 MB". Il
-totale deve essere circa 2041 MB sul PC con 2 GB (8185 con --ram 8192: e' la RAM vera,
-kernel compreso, meno i buchi del PC) e 512 MB su ARM64. Per leggerlo senza un vero lettore di testo
+LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 69,6 MB su 1972,1 MB". Il
+totale e' quello che Linux dice in /proc/meminfo (MemTotal: la RAM meno quello che il
+kernel tiene per se' fin dall'avvio): 1972 MB sul PC con 2 GB, 7946 con --ram 8192. Per leggerlo senza un vero lettore di testo
 (OCR) si fa cosi':
   - si prende la riga, e si tengono solo i pixel chiari (il testo e' bianco);
   - si divide in PAROLE (colonne vuote larghe) e ogni parola in LETTERE (colonne vuote);
@@ -14,12 +14,12 @@ kernel compreso, meno i buchi del PC) e 512 MB su ARM64. Per leggerlo senza un v
   - quel pezzo di immagine si confronta con quello salvato in riferimenti/<cpu>/
     (memoria_totale_<MB dati a QEMU>.png: memoria_totale_2048.png, _8192.png, _512.png).
     Le cifre sono disegnate sempre uguali, quindi basta questo: se il totale cambia
-    (per esempio 2040 o 512 al posto di 2041), il disegno e' diverso.
+    (per esempio 1971 al posto di 1972), il disegno e' diverso.
 Il riferimento si rifa' con --riferimenti (con --ram, per un'altra RAM), e va guardato a
 occhio una volta.
 
 TERMINARE. Nella scheda "Processi" si sceglie la riga di Contatore (il primo processo
-dopo quelli del sistema: idle, init, compositore, launcher, scrivania) e si preme
+dopo quelli del sistema: init, eventi, compositore, launcher, scrivania) e si preme
 "Termina processo": la finestra di Contatore deve sparire, e nell'isola Contatore non
 deve piu' risultare aperta.
 """
@@ -31,10 +31,10 @@ from qemu import ErroreProva, PUNTO_VUOTO
 
 NOME = "attivita"
 ORDINE = 60
-DESCRIZIONE = "Attivita: il totale della memoria (2041 MB a 2 GB / 512 MB); termina Contatore"
+DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); termina Contatore"
 RIFERIMENTI = True
 
-RIGA_CONTATORE = 5        # 0 inattivo, 1 init, 2 compositore, 3 launcher, 4 scrivania
+RIGA_CONTATORE = 5        # 0 init, 1 eventi, 2 compositore, 3 launcher, 4 scrivania
 
 
 def inchiostro(foto, area, soglia=170):
