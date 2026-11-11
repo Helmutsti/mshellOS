@@ -17,6 +17,7 @@ static volatile unsigned int tick;   /* volatile: cambia "da solo", dentro l'int
 static void al_tick(struct registri *r) {
     (void)r;
     tick++;
+    timer_esegui_lavori();   /* i lavoretti dei driver (timer.h) */
 }
 
 void timer_prepara(unsigned int hz) {

@@ -53,4 +53,10 @@ void pag_cancella_mappa(indirizzo_t mappa);
 /* Fa usare alla CPU questa mappa (0 = quella del kernel). */
 void pag_usa_mappa(indirizzo_t mappa);
 
+/* Rende raggiungibile al kernel la memoria di un dispositivo (i suoi registri, MMIO):
+ * indirizzo virtuale = fisico, lettura e scrittura, SENZA CACHE (ogni accesso deve
+ * arrivare davvero al dispositivo). Va chiamata all'avvio, prima che nascano i programmi
+ * (le loro mappe copiano quella del kernel quando nascono). 0 se non si e' potuto. */
+int pag_mappa_dispositivo(indirizzo_t fisico, unsigned int byte);
+
 #endif

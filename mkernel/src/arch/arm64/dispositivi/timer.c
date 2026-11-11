@@ -11,7 +11,6 @@
 #include "timer.h"
 #include "gic.h"
 
-#define LINEA_TIMER 27
 
 static volatile unsigned int tick;   /* volatile: cambia "da solo", dentro l'interruzione */
 static unsigned long colpi_per_tick;
@@ -23,13 +22,14 @@ static void ricarica(void) {
 static void al_tick(void) {
     tick++;
     ricarica();
+    timer_esegui_lavori();   /* i lavoretti dei driver (timer.h) */
 }
 
 void timer_prepara(unsigned int hz) {
     unsigned long frequenza;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frequenza));
     colpi_per_tick = frequenza / hz;
-    gic_collega(LINEA_TIMER, al_tick);
+    gic_collega(GIC_LINEA_TIMER, al_tick);
     ricarica();
     __asm__ volatile("msr cntv_ctl_el0, %0" : : "r"(1UL));   /* acceso, non mascherato */
 }

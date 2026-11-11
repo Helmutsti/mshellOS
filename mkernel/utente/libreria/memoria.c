@@ -36,7 +36,7 @@ struct blocco {
 #define ETICHETTA sizeof(struct blocco)
 
 static struct blocco *primo, *ultimo;
-static unsigned int fine_zona;   /* dove arriva adesso la zona: il confine */
+static parola fine_zona;   /* dove arriva adesso la zona: il confine */
 
 static char *fine(struct blocco *b) { return (char *)(b + 1) + b->dimensione; }
 

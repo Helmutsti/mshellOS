@@ -239,6 +239,7 @@ static void metti(char c) {
 }
 
 void console_putc(char c) {
+    seriale_eco(c);                  /* anche sulla seriale: per leggere l'avvio da fuori */
     if (!memoria) return;            /* niente schermo: niente da fare */
     unsigned int s = interruzioni_spegni();
     togli_cursore();

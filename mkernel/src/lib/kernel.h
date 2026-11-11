@@ -19,6 +19,7 @@ struct schermo {
 int console_prepara(const struct schermo *s);         /* pulisce, cursore in alto. 0 se non sa usarlo */
 unsigned char console_colore(unsigned char colore);   /* 0xSF: S sfondo, F primo piano. Restituisce il vecchio */
 void console_putc(char c);
+void seriale_eco(char c);   /* la CPU (arch) ripete la console sulla sua seriale */
 const struct schermo *console_schermo(void);          /* com'e' fatto lo schermo (0: non c'e') */
 /* Presta lo schermo a 'chi' (un compito): la console smette di disegnare.
  * 0 se e' gia' prestato a qualcun altro. */

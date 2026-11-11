@@ -3,8 +3,9 @@
  * SU ARM NON CI SONO LE PORTE. Su x86 i dispositivi si parlano con le istruzioni in e out,
  * in uno spazio di indirizzi a parte. Su ARM ogni dispositivo e' un PEZZO DI MEMORIA
  * ("I/O mappato in memoria", MMIO): i suoi registri hanno un indirizzo, e leggerli o
- * scriverli con una normale load/store vuol dire parlare con lui. La seriale sta a
- * 0x09000000:
+ * scriverli con una normale load/store vuol dire parlare con lui. Dove sta, lo dice il
+ * device tree (seriale_usa); finche' non lo si e' letto, si usa 0x09000000, quello della
+ * macchina "virt" di QEMU:
  *   +0x00  DR  (dato): scrivere un byte qui lo spedisce
  *   +0x18  FR  (stato): il bit 5 (TXFF) dice "la coda d'uscita e' piena, aspetta"
  * QEMU la lascia gia' pronta: non serve prepararla.
@@ -15,14 +16,19 @@
  * valore nuovo). 'volatile' gli dice: fai ogni accesso, esattamente come scritto. */
 #include "seriale.h"
 
-#define SERIALE   0x09000000UL
+static unsigned long seriale = 0x09000000UL;
 #define DR        0x00
 #define FR        0x18
 #define FR_PIENA  (1u << 5)
 
 static inline volatile unsigned int *registro(unsigned long scostamento) {
-    return (volatile unsigned int *)(SERIALE + scostamento);
+    return (volatile unsigned int *)(seriale + scostamento);
 }
+
+void seriale_usa(unsigned long indirizzo) { seriale = indirizzo; }
+
+/* La console del kernel ripetuta qui (vedi kernel.h). */
+void seriale_eco(char c) { seriale_scrivi(c); }
 
 void seriale_scrivi(char c) {
     if (c == '\n') seriale_scrivi('\r');   /* i terminali vogliono anche "torna a capo" */

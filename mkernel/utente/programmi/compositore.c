@@ -814,8 +814,13 @@ static void componi(void) {
 static unsigned int pulsanti_prima;
 
 static void al_mouse(const struct evento *e) {
-    px += e->dx;
-    py += e->dy;
+    if (e->tipo == EVENTO_PUNTATORE) {   /* una tavoletta: dove sta, sullo schermo intero */
+        px = e->dx * (larghezza - 1) / PUNTATORE_MAX;   /* al massimo 32767 x 1279: ci sta */
+        py = e->dy * (altezza - 1) / PUNTATORE_MAX;
+    } else {                             /* un mouse: di quanto si e' spostato */
+        px += e->dx;
+        py += e->dy;
+    }
     if (px < 0) px = 0;
     if (py < 0) py = 0;
     if (px >= larghezza) px = larghezza - 1;
@@ -885,7 +890,7 @@ static int servi(int ms) {
     if (g[0].pronto) {
         struct evento e;
         if (ricevi(eventi, &e, sizeof e) != sizeof e) return -1;
-        if (e.tipo == EVENTO_MOUSE) al_mouse(&e);
+        if (e.tipo == EVENTO_MOUSE || e.tipo == EVENTO_PUNTATORE) al_mouse(&e);
         else if (e.tipo == EVENTO_TASTO) al_tasto(&e);
     }
     /* prima i messaggi, poi i collegamenti nuovi: un collegamento nuovo potrebbe

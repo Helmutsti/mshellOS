@@ -1,12 +1,16 @@
-/* La libreria dei programmi in ring 3.
+/* La libreria dei programmi (ring 3 su x86, EL0 su ARM).
  *
  * Un programma non puo' chiamare le funzioni del kernel: nella sua mappa il kernel
- * c'e', ma in pagine senza il bit utente, e saltarci farebbe page fault. Tutto quello
- * che gli serve deve stare nel programma stesso: queste funzioni sono "static inline",
+ * c'e', ma in pagine riservate al kernel, e saltarci darebbe errore. Tutto quello che
+ * gli serve deve stare nel programma stesso: queste funzioni sono "static inline",
  * quindi il compilatore le copia dentro ogni programma.
  *
- * Le chiamate di sistema bussano alla porta (int 0x80): numero del servizio in EAX,
- * argomenti in EBX, ECX ed EDX, risposta in EAX. */
+ * LE CHIAMATE DI SISTEMA bussano alla porta del kernel, in un modo diverso per CPU (ma
+ * passano tutte da chiamata5, qui sotto):
+ *   x86:   int 0x80. Numero del servizio in EAX, argomenti in EBX, ECX, EDX, ESI, EDI,
+ *          risposta in EAX.
+ *   ARM64: svc #0. Numero del servizio in x8, argomenti in x0-x4, risposta in x0 (come
+ *          Linux). */
 #ifndef LIBRERIA_H
 #define LIBRERIA_H
 
@@ -14,114 +18,94 @@
 
 /* --- le chiamate di sistema --- */
 
-static inline int scrivi(const char *testo, int byte) {
-    int risultato;
-    __asm__ volatile("int %1"
-                     : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(SIS_SCRIVI), "b"(testo), "c"(byte)
+/* UNA PAROLA: quello che sta in un registro (un numero, un indirizzo). 32 bit su x86,
+ * 64 su ARM64: unsigned long e' proprio cosi' su tutte e due. */
+typedef unsigned long parola;
+
+static inline long chiamata5(int servizio, parola a, parola b, parola c, parola d, parola e) {
+#ifdef __aarch64__
+    register parola x8 __asm__("x8") = (parola)servizio;
+    register parola x0 __asm__("x0") = a;
+    register parola x1 __asm__("x1") = b;
+    register parola x2 __asm__("x2") = c;
+    register parola x3 __asm__("x3") = d;
+    register parola x4 __asm__("x4") = e;
+    __asm__ volatile("svc #0"
+                     : "+r"(x0)
+                     : "r"(x8), "r"(x1), "r"(x2), "r"(x3), "r"(x4)
                      : "memory");
-    return risultato;
-}
-
-static inline void dormi(unsigned int millisecondi) {
-    int risultato;
-    __asm__ volatile("int %1"
-                     : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(SIS_DORMI), "b"(millisecondi)
-                     : "memory");
-}
-
-static inline void esci(void) {
-    __asm__ volatile("int %0" : : "i"(INT_SISTEMA), "a"(SIS_ESCI) : "memory");
-    for (;;) ;   /* non si arriva mai qui: il kernel non torna */
-}
-
-/* Fa partire il programma 'percorso' del disco. Il suo numero di compito, o -1. */
-static inline int avvia(const char *percorso) {
-    int risultato;
-    __asm__ volatile("int %1"
-                     : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(SIS_AVVIA), "b"(percorso)
-                     : "memory");
-    return risultato;
-}
-
-/* Lo schermo: un descrittore, o -1 se e' gia' aperto (vedi chiamate.h). */
-static inline int apri_schermo(void) {
-    int risultato;
-    __asm__ volatile("int %1" : "=a"(risultato) : "i"(INT_SISTEMA), "a"(SIS_APRI_SCHERMO) : "memory");
-    return risultato;
-}
-
-/* Un descrittore da cui ricevere gli eventi di tastiera e mouse (struct evento), o -1
- * se li ha gia' un altro programma. */
-static inline int apri_eventi(void) {
-    int risultato;
-    __asm__ volatile("int %1" : "=a"(risultato) : "i"(INT_SISTEMA), "a"(SIS_APRI_EVENTI) : "memory");
-    return risultato;
-}
-
-/* --- i socket: parlare con gli altri programmi (vedi chiamate.h) --- */
-
-static inline int chiamata1(int servizio, unsigned int a) {
-    int risultato;
-    __asm__ volatile("int %1" : "=a"(risultato) : "i"(INT_SISTEMA), "a"(servizio), "b"(a) : "memory");
-    return risultato;
-}
-
-static inline int chiamata3(int servizio, unsigned int a, unsigned int b, unsigned int c) {
-    int risultato;
-    __asm__ volatile("int %1"
-                     : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(servizio), "b"(a), "c"(b), "d"(c)
-                     : "memory");
-    return risultato;
-}
-
-/* Si mette in ascolto con 'nome': il descrittore su cui arrivano i collegamenti, o -1. */
-static inline int ascolta(const char *nome) { return chiamata1(SIS_ASCOLTA, (unsigned int)nome); }
-
-/* Si collega a chi ascolta su 'nome': il descrittore per parlargli, o -1. */
-static inline int collega(const char *nome) { return chiamata1(SIS_COLLEGA, (unsigned int)nome); }
-
-/* Il prossimo collegamento arrivato su 'd' (dorme se non ce n'e'): un descrittore nuovo. */
-static inline int accetta(int d) { return chiamata1(SIS_ACCETTA, d); }
-
-static inline int chiamata5(int servizio, unsigned int a, unsigned int b, unsigned int c,
-                            unsigned int d, unsigned int e) {
-    int risultato;
+    return (long)x0;
+#else
+    long risultato;
     __asm__ volatile("int %1"
                      : "=a"(risultato)
                      : "i"(INT_SISTEMA), "a"(servizio), "b"(a), "c"(b), "d"(c), "S"(d), "D"(e)
                      : "memory");
     return risultato;
+#endif
 }
 #define chiamata4(s, a, b, c, d) chiamata5(s, a, b, c, d, 0)
+#define chiamata3(s, a, b, c)    chiamata5(s, a, b, c, 0, 0)
+#define chiamata1(s, a)          chiamata5(s, a, 0, 0, 0, 0)
+#define chiamata0(s)             chiamata5(s, 0, 0, 0, 0, 0)
+
+static inline int scrivi(const char *testo, int byte) {
+    return (int)chiamata3(SIS_SCRIVI, (parola)testo, (parola)byte, 0);
+}
+
+static inline void dormi(unsigned int millisecondi) { chiamata1(SIS_DORMI, millisecondi); }
+
+static inline void esci(void) {
+    chiamata0(SIS_ESCI);
+    for (;;) ;   /* non si arriva mai qui: il kernel non torna */
+}
+
+/* Fa partire il programma 'percorso' del disco. Il suo numero di compito, o -1. */
+static inline int avvia(const char *percorso) { return (int)chiamata1(SIS_AVVIA, (parola)percorso); }
+
+/* Lo schermo: un descrittore, o -1 se e' gia' aperto (vedi chiamate.h). */
+static inline int apri_schermo(void) { return (int)chiamata0(SIS_APRI_SCHERMO); }
+
+/* Un descrittore da cui ricevere gli eventi di tastiera e mouse (struct evento), o -1
+ * se li ha gia' un altro programma. */
+static inline int apri_eventi(void) { return (int)chiamata0(SIS_APRI_EVENTI); }
+
+/* --- i socket: parlare con gli altri programmi (vedi chiamate.h) --- */
+
+/* Si mette in ascolto con 'nome': il descrittore su cui arrivano i collegamenti, o -1. */
+static inline int ascolta(const char *nome) { return chiamata1(SIS_ASCOLTA, (parola)nome); }
+
+/* Si collega a chi ascolta su 'nome': il descrittore per parlargli, o -1. */
+static inline int collega(const char *nome) { return chiamata1(SIS_COLLEGA, (parola)nome); }
+
+/* Il prossimo collegamento arrivato su 'd' (dorme se non ce n'e'): un descrittore nuovo. */
+static inline int accetta(int d) { return chiamata1(SIS_ACCETTA, d); }
+
 
 /* Manda un messaggio: i byte mandati, o -1 se l'altro ha chiuso. */
 static inline int manda(int d, const void *dati, unsigned int byte) {
-    return chiamata4(SIS_MANDA, d, (unsigned int)dati, byte, -1);
+    return chiamata4(SIS_MANDA, d, (parola)dati, byte, -1);
 }
 
 /* Come manda, ma senza mai aspettare: -1 anche se la casella dell'altro e' piena. */
 static inline int manda_subito(int d, const void *dati, unsigned int byte) {
-    return chiamata5(SIS_MANDA, d, (unsigned int)dati, byte, -1, MANDA_SUBITO);
+    return chiamata5(SIS_MANDA, d, (parola)dati, byte, -1, MANDA_SUBITO);
 }
 
 /* Come manda, con allegato il foglio del descrittore 'foglio'. */
 static inline int manda_foglio(int d, const void *dati, unsigned int byte, int foglio) {
-    return chiamata4(SIS_MANDA, d, (unsigned int)dati, byte, foglio);
+    return chiamata4(SIS_MANDA, d, (parola)dati, byte, foglio);
 }
 
 /* Riceve il prossimo messaggio (dorme se non ce n'e'): i byte ricevuti, 0 se l'altro
  * ha chiuso, -1 se errore. Un foglio allegato, se c'e', si lascia. */
 static inline int ricevi(int d, void *dove, unsigned int byte) {
-    return chiamata4(SIS_RICEVI, d, (unsigned int)dove, byte, 0);
+    return chiamata4(SIS_RICEVI, d, (parola)dove, byte, 0);
 }
 
 /* Come ricevi; in *foglio il descrittore del foglio allegato, o -1 se non c'era. */
 static inline int ricevi_foglio(int d, void *dove, unsigned int byte, int *foglio) {
-    return chiamata4(SIS_RICEVI, d, (unsigned int)dove, byte, (unsigned int)foglio);
+    return chiamata4(SIS_RICEVI, d, (parola)dove, byte, (parola)foglio);
 }
 
 /* --- i fogli: memoria condivisa con gli altri programmi (vedi chiamate.h) --- */
@@ -132,12 +116,12 @@ static inline int foglio(unsigned int byte) { return chiamata1(SIS_FOGLIO, byte)
 /* Mette il foglio nella memoria del programma: dove sta, o 0. In *byte (se non e' 0)
  * quanto e' grande. */
 static inline void *mappa(int d, unsigned int *byte) {
-    int r = chiamata3(SIS_MAPPA, d, (unsigned int)byte, 0);
+    long r = chiamata3(SIS_MAPPA, d, (parola)byte, 0);
     return r == -1 ? 0 : (void *)r;
 }
 
 /* Lo leva dalla memoria. */
-static inline int togli(void *indirizzo) { return chiamata1(SIS_TOGLI, (unsigned int)indirizzo); }
+static inline int togli(void *indirizzo) { return chiamata1(SIS_TOGLI, (parola)indirizzo); }
 
 static inline int chiudi(int d) { return chiamata1(SIS_CHIUDI, d); }
 
@@ -145,15 +129,11 @@ static inline int chiudi(int d) { return chiamata1(SIS_CHIUDI, d); }
  * finche' non passano 'ms' millisecondi (-1: senza limite). Segna 'pronto' in ognuno;
  * quanti sono pronti (0: tempo scaduto), o -1. */
 static inline int aspetta(struct da_guardare *elenco, int quanti, int ms) {
-    return chiamata3(SIS_ASPETTA, (unsigned int)elenco, quanti, ms);
+    return chiamata3(SIS_ASPETTA, (parola)elenco, quanti, ms);
 }
 
 /* I millisecondi passati dall'avvio. */
-static inline unsigned int tempo(void) {
-    int risultato;
-    __asm__ volatile("int %1" : "=a"(risultato) : "i"(INT_SISTEMA), "a"(SIS_TEMPO) : "memory");
-    return risultato;
-}
+static inline unsigned int tempo(void) { return (unsigned int)chiamata0(SIS_TEMPO); }
 
 /* Chiude il programma all'altro capo del collegamento 'd'. 0 se fatto, o -1. */
 static inline int termina(int d) { return chiamata1(SIS_TERMINA, d); }
@@ -163,7 +143,7 @@ static inline int termina(int d) { return chiamata1(SIS_TERMINA, d); }
 /* Apre un file o una cartella: il descrittore, o -1. modo: APRI_LEGGERE, APRI_SCRIVERE,
  * APRI_CREARE, APRI_SVUOTARE, sommati. */
 static inline int apri(const char *percorso, unsigned int modo) {
-    return chiamata3(SIS_APRI, (unsigned int)percorso, modo, 0);
+    return chiamata3(SIS_APRI, (parola)percorso, modo, 0);
 }
 
 /* Legge fino a 'byte' byte dalla posizione del file: quanti ne ha letti, 0 alla fine.
@@ -176,32 +156,32 @@ static inline int scrivi_in(int d, const void *dati, unsigned int byte) { return
 static inline int posiziona(int d, unsigned int byte) { return chiamata3(SIS_POSIZIONA, d, byte, 0); }
 
 static inline int info(const char *percorso, struct info_file *i) {
-    return chiamata3(SIS_INFO, (unsigned int)percorso, (unsigned int)i, 0);
+    return chiamata3(SIS_INFO, (parola)percorso, (parola)i, 0);
 }
 
-static inline int crea_cartella(const char *percorso) { return chiamata1(SIS_CREA_CARTELLA, (unsigned int)percorso); }
-static inline int cancella(const char *percorso) { return chiamata1(SIS_CANCELLA, (unsigned int)percorso); }
+static inline int crea_cartella(const char *percorso) { return chiamata1(SIS_CREA_CARTELLA, (parola)percorso); }
+static inline int cancella(const char *percorso) { return chiamata1(SIS_CANCELLA, (parola)percorso); }
 
 /* Cambia proprietario e permessi (vedi chiamate.h: il proprietario lo cambia solo il sistema). */
 static inline int cambia_permessi(const char *percorso, unsigned int proprietario, unsigned int permessi) {
-    return chiamata3(SIS_PERMESSI, (unsigned int)percorso, proprietario, permessi);
+    return chiamata3(SIS_PERMESSI, (parola)percorso, proprietario, permessi);
 }
 
 /* Fa partire un programma con un altro uid: solo il sistema. Il numero del compito, o -1. */
 static inline int avvia_come(const char *percorso, unsigned int uid) {
-    return chiamata3(SIS_AVVIA_COME, (unsigned int)percorso, uid, 0);
+    return chiamata3(SIS_AVVIA_COME, (parola)percorso, uid, 0);
 }
 
 /* Mette lo schermo del descrittore 'd' nella memoria del programma, a SCHERMO_PROGRAMMA:
  * scrivere li' un numero vuol dire accendere un pixel. 'info' dice com'e' fatto. 0, o -1. */
 static inline int mappa_schermo(int d, struct info_schermo *info) {
-    return chiamata3(SIS_MAPPA_SCHERMO, d, (unsigned int)info, 0);
+    return chiamata3(SIS_MAPPA_SCHERMO, d, (parola)info, 0);
 }
 
 /* Fa partire un programma che trova gia' aperti i descrittori dell'elenco, ai posti
  * 0, 1, 2... Il numero del compito, o -1. */
 static inline int avvia_con(const char *percorso, const int *descrittori, int quanti) {
-    return chiamata3(SIS_AVVIA_CON, (unsigned int)percorso, (unsigned int)descrittori, quanti);
+    return chiamata3(SIS_AVVIA_CON, (parola)percorso, (parola)descrittori, quanti);
 }
 
 /* Un descrittore del programma 'numero': ricevi aspetta che finisca. -1 se non c'e'. */
@@ -209,22 +189,22 @@ static inline int processo(int numero) { return chiamata1(SIS_PROCESSO, numero);
 
 /* I processi che ci sono (al massimo 'max'): quanti sono, o -1. */
 static inline int elenco_processi(struct info_processo *v, int max) {
-    return chiamata3(SIS_ELENCO_PROCESSI, (unsigned int)v, max, 0);
+    return chiamata3(SIS_ELENCO_PROCESSI, (parola)v, max, 0);
 }
 
 /* Termina il processo 'numero' (vedi chiamate.h per chi si puo'). 0, o -1. */
 static inline int termina_processo(int numero) { return chiamata1(SIS_TERMINA_PROCESSO, numero); }
 
 /* Com'e' usata la RAM. */
-static inline int stato_memoria(struct info_memoria *m) { return chiamata1(SIS_MEMORIA, (unsigned int)m); }
+static inline int stato_memoria(struct info_memoria *m) { return chiamata1(SIS_MEMORIA, (parola)m); }
 
 /* La data e l'ora, dall'orologio del PC. */
-static inline int data_ora(struct data_ora *d) { return chiamata1(SIS_DATA_ORA, (unsigned int)d); }
+static inline int data_ora(struct data_ora *d) { return chiamata1(SIS_DATA_ORA, (parola)d); }
 
 /* Il percorso del programma all'altro capo del collegamento 'd', in 'dove' (MAX_PERCORSO
  * byte). 0, o -1. */
 static inline int programma_di(int d, char *dove) {
-    return chiamata3(SIS_PROGRAMMA_DI, d, (unsigned int)dove, 0);
+    return chiamata3(SIS_PROGRAMMA_DI, d, (parola)dove, 0);
 }
 
 /* L'uid del programma all'altro capo del collegamento 'd', o -1. */
@@ -232,15 +212,15 @@ static inline int chi(int d) { return chiamata1(SIS_CHI, d); }
 
 /* Rinomina o sposta. Un file gia' presente in 'a' si sostituisce. */
 static inline int rinomina(const char *da, const char *a) {
-    return chiamata3(SIS_RINOMINA, (unsigned int)da, (unsigned int)a, 0);
+    return chiamata3(SIS_RINOMINA, (parola)da, (parola)a, 0);
 }
 
 /* --- la memoria dinamica --- */
 
 /* Sposta il confine della zona dinamica (vedi chiamate.h); rottura(0) dice dov'e'.
  * Di solito non serve: c'e' malloc. */
-static inline unsigned int rottura(unsigned int indirizzo) {
-    return (unsigned int)chiamata1(SIS_ROTTURA, indirizzo);
+static inline parola rottura(parola indirizzo) {
+    return (parola)chiamata1(SIS_ROTTURA, indirizzo);
 }
 
 /* Un pezzo di almeno 'byte' byte, allineato a 8, o 0 se la memoria e' finita. Il

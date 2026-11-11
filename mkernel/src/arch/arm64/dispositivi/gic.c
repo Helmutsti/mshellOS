@@ -4,7 +4,11 @@
  *   - la VERSIONE 2 quando QEMU emula la CPU;
  *   - la VERSIONE 3 quando usa la virtualizzazione del Mac (hvf): e' quella dei computer
  *     ARM moderni.
- * Il kernel guarda quale ha davanti con due domande sicure:
+ * QUALE VERSIONE, E DOVE. Lo dice il device tree: il nodo del GIC si dichiara
+ * "arm,gic-v3" (versione 3: nel suo reg prima il distributore, poi i redistributori)
+ * oppure "arm,cortex-a15-gic" / "arm,gic-400" (versione 2: il distributore, poi
+ * l'interfaccia della CPU). Come Linux. Senza device tree, si usano gli indirizzi della
+ * macchina "virt" e la versione si indovina con due domande sicure:
  *   1. alla CPU: ID_AA64PFR0_EL1 (bit 27-24) vale 1 se ha i registri del GIC versione 3;
  *   2. se dice di no, al distributore: GICD_TYPER (+0x004) c'e' in tutte e due le
  *      versioni; nella 3 i bit 23-19 dicono quanti bit ha il numero di una linea, nella 2
@@ -39,11 +43,13 @@
  *     mettono tutte nel gruppo 1 (IGROUPR). */
 #include "gic.h"
 #include "seriale.h"
+#include "albero.h"
 
-#define GICD 0x08000000UL
-#define GICC 0x08010000UL   /* versione 2 */
-#define GICR 0x080A0000UL   /* versione 3: il redistributore della CPU 0 */
-#define GICR_SGI (GICR + 0x10000)   /* ... la sua pagina delle linee 0-31 */
+/* Dove stanno i pezzi: dal device tree (gic_prepara); questi sono quelli di "virt". */
+static unsigned long GICD = 0x08000000UL;
+static unsigned long GICC = 0x08010000UL;   /* versione 2 */
+static unsigned long GICR = 0x080A0000UL;   /* versione 3: il redistributore della CPU 0 */
+#define GICR_SGI (GICR + 0x10000)           /* ... la sua pagina delle linee 0-31 */
 
 #define GICD_CTLR       0x000
 #define GICD_TYPER      0x004
@@ -76,11 +82,31 @@ static inline void icc_scrivi_eoir1(unsigned long v) { __asm__ volatile("msr icc
 
 int gic_versione(void) { return versione; }
 
+unsigned long gic_distributore(void) { return GICD; }
+
+/* Cerca il GIC nel device tree. 1 se c'e' (e ha messo versione e indirizzi). */
+static int gic_dal_device_tree(void) {
+    unsigned long a, b, dim;
+    if (albero_cerca_n("arm,gic-v3", 0, &a, &dim) && albero_cerca_n("arm,gic-v3", 1, &b, &dim)) {
+        versione = 3; GICD = a; GICR = b;
+        return 1;
+    }
+    static const char *const v2[] = { "arm,cortex-a15-gic", "arm,gic-400", "arm,cortex-a7-gic" };
+    for (unsigned int i = 0; i < sizeof v2 / sizeof v2[0]; i++)
+        if (albero_cerca_n(v2[i], 0, &a, &dim) && albero_cerca_n(v2[i], 1, &b, &dim)) {
+            versione = 2; GICD = a; GICC = b;
+            return 1;
+        }
+    return 0;
+}
+
 void gic_prepara(void) {
-    unsigned long pfr0;
-    __asm__ volatile("mrs %0, id_aa64pfr0_el1" : "=r"(pfr0));
-    unsigned int bit_linee = (*reg32(GICD, GICD_TYPER) >> 19) & 0x1F;
-    versione = ((pfr0 >> 24) & 0xF) || bit_linee ? 3 : 2;
+    if (!gic_dal_device_tree()) {
+        unsigned long pfr0;
+        __asm__ volatile("mrs %0, id_aa64pfr0_el1" : "=r"(pfr0));
+        unsigned int bit_linee = (*reg32(GICD, GICD_TYPER) >> 19) & 0x1F;
+        versione = ((pfr0 >> 24) & 0xF) || bit_linee ? 3 : 2;
+    }
 
     if (versione == 2) {
         *reg32(GICD, GICD_CTLR) = 1;      /* il distributore: acceso */
@@ -133,10 +159,10 @@ void gic_collega(unsigned int linea, gestore_linea gestore) {
     *reg32(base, GICD_ISENABLER + (linea / 32) * 4) = bit;
 }
 
-void gic_interruzione(void) {
+unsigned int gic_interruzione(void) {
     unsigned int iar = versione == 2 ? *reg32(GICC, GICC_IAR) : (unsigned int)icc_leggi_iar1();
     unsigned int linea = iar & 0x3FF;
-    if (linea == NESSUNO) return;                  /* falso allarme: niente da dire */
+    if (linea == NESSUNO) return NESSUNO;          /* falso allarme: niente da dire */
     if (linea < GIC_MAX_LINEE && gestori[linea]) gestori[linea]();
     else {
         seriale_testo("[gic] interruzione senza gestore sulla linea ");
@@ -145,4 +171,5 @@ void gic_interruzione(void) {
     }
     if (versione == 2) *reg32(GICC, GICC_EOIR) = iar;   /* fatto */
     else icc_scrivi_eoir1(iar);
+    return linea;
 }

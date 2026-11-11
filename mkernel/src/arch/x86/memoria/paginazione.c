@@ -164,6 +164,20 @@ void pag_usa_mappa(unsigned int mappa) {
 
 /* --- l'avvio --- */
 
+/* La memoria di un dispositivo: come lo schermo, ma senza cache (PCD, bit 4, e PWT,
+ * bit 3): ogni lettura e scrittura arriva al dispositivo. Non deve cadere nella RAM ne'
+ * nella zona dei programmi. */
+#define PAG_SENZA_CACHE 0x18
+int pag_mappa_dispositivo(indirizzo_t fisico, unsigned int byte) {
+    unsigned int fine = fisico + byte;
+    if (fine < fisico || fisico < memoria_fine() ||
+        (fisico < PROGRAMMI_FINE && fine > PROGRAMMI_INIZIO))
+        return 0;
+    for (unsigned int p = fisico & ~(PAGINA - 1); p < fine; p += PAGINA)
+        if (!mappa_in(kernel, p, p, PAG_SCRITTURA | PAG_SENZA_CACHE)) return 0;
+    return 1;
+}
+
 void paginazione_prepara(unsigned int schermo, unsigned int byte_schermo) {
     kernel = (unsigned int *)pagina_chiedi();
     if (!kernel) panico("paginazione: memoria finita per la directory");

@@ -17,57 +17,14 @@
 #include "idt.h"
 #include "tastiera.h"
 #include "kernel.h"
-#include "eventi.h"
+#include "tastiera_it.h"
 
 #define PORTA_DATI 0x60
 
-/* codici della code page 437 */
-#define A_GRAVE 0x85   /* à */
-#define E_GRAVE 0x8A   /* è */
-#define E_ACUTA 0x82   /* é */
-#define I_GRAVE 0x8D   /* ì */
-#define O_GRAVE 0x95   /* ò */
-#define U_GRAVE 0x97   /* ù */
-#define C_CEDIG 0x87   /* ç */
-#define STERLINA 0x9C  /* £ */
-#define GRADO   0xF8   /* ° */
-#define PARAGR  0x15   /* § */
-
-/* Tastiera italiana: scancode -> carattere, senza e con Shift. 0 = nessun carattere. */
-static const unsigned char normale[0x59] = {
-    [0x02] = '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\'', I_GRAVE, '\b',
-    [0x0F] = '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', E_GRAVE, '+', '\n',
-    [0x1E] = 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', O_GRAVE, A_GRAVE, '\\',
-    [0x2B] = U_GRAVE, 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '-',
-    [0x37] = '*', [0x39] = ' ', [0x56] = '<',
-};
-
-static const unsigned char maiuscolo[0x59] = {
-    [0x02] = '!', '"', STERLINA, '$', '%', '&', '/', '(', ')', '=', '?', '^', '\b',
-    [0x0F] = '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', E_ACUTA, '*', '\n',
-    [0x1E] = 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', C_CEDIG, GRADO, '|',
-    [0x2B] = PARAGR, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ';', ':', '_',
-    [0x37] = '*', [0x39] = ' ', [0x56] = '>',
-};
-
-#define SHIFT_SX  0x2A
-#define SHIFT_DX  0x36
-#define ALT       0x38   /* preceduto da 0xE0 e' AltGr */
-#define CAPS_LOCK 0x3A
 #define ESTESO    0xE0
+#define ALT       0x38   /* preceduto da 0xE0 e' AltGr */
 
-static int shift, altgr, caps, esteso;
-
-/* Combinazioni con AltGr sulla tastiera italiana. */
-static char con_altgr(unsigned char sc) {
-    switch (sc) {
-    case 0x1A: return shift ? '{' : '[';   /* tasto è */
-    case 0x1B: return shift ? '}' : ']';   /* tasto + */
-    case 0x27: return '@';                 /* tasto ò */
-    case 0x28: return '#';                 /* tasto à */
-    default:   return 0;
-    }
-}
+static int esteso;
 
 /* --- il gestore: gira dentro l'interruzione, quindi corto e veloce --- */
 
@@ -82,27 +39,9 @@ static void al_tasto(struct registri *r) {
     int rilasciato = sc & 0x80;
     sc &= 0x7F;
 
-    /* i tasti che cambiano lo stato, sia quando si premono sia quando si rilasciano */
-    if (sc == SHIFT_SX || sc == SHIFT_DX) { shift = !rilasciato; return; }
-    if (sc == ALT && era_esteso)          { altgr = !rilasciato; return; }
-    if (rilasciato) return;                              /* gli altri rilasci non ci interessano */
-    if (sc == CAPS_LOCK) { caps = !caps; return; }
-    if (era_esteso) return;                              /* frecce e simili: per ora no */
-    if (sc >= sizeof normale) return;
-
-    char c;
-    if (altgr) {
-        c = con_altgr(sc);
-    } else {
-        c = shift ? maiuscolo[sc] : normale[sc];
-        /* Caps Lock inverte maiuscole e minuscole, ma solo per le lettere */
-        if (caps && c >= 'a' && c <= 'z') c -= 'a' - 'A';
-        else if (caps && c >= 'A' && c <= 'Z') c += 'a' - 'A';
-    }
-    if (c) {
-        struct evento e = { .tipo = EVENTO_TASTO, .tasto = (unsigned char)c };
-        eventi_metti(&e);
-    }
+    if (era_esteso && sc == ALT) tastiera_tasto(TASTO_ALTGR, !rilasciato);
+    else if (!era_esteso) tastiera_tasto(sc, !rilasciato);
+    /* gli altri estesi (frecce e simili): per ora no */
 }
 
 void tastiera_prepara(void) {

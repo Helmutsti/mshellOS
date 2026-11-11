@@ -45,7 +45,7 @@ void kernel_avvia(const struct schermo *s) {
      * Quali sono dipende dalla macchina (arch). Alla fine le interruzioni sono accese. */
     arch_dispositivi_prepara();
 
-    /* Il disco: si chiede al controller "chi sei?". Con polling, quindi non servono interruzioni. */
+    /* Il disco: qualche driver (ATA, virtio...) l'ha trovato e si e' iscritto? */
     int c_e_il_disco = disco_prepara();
     if (c_e_il_disco)
         kprintf("Disco   : %s, %u settori (%u KB)\n",

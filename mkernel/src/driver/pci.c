@@ -11,34 +11,25 @@
  *   righe 0x10-0x24: i sei BAR, dove la scheda ha le sue porte o la sua memoria
  *   riga 0x3C: la linea IRQ
  *
- * LO SPORTELLO. La scheda non si legge con un indirizzo di memoria: si scrive sulla
- * porta 0xCF8 "piano, stanza, letto, riga" (con il bit 31 acceso: "e' una domanda"),
- * e dalla porta 0xCFC si legge la risposta, 4 byte. Stanza vuota: vendor 0xFFFF.
+ * LO SPORTELLO lo da' la CPU (arch_pci_leggi): su x86 sono le porte 0xCF8/0xCFC
+ * (arch/x86/dispositivi/pci_porte.c), su ARM un pezzo di memoria ("ECAM") dove ogni
+ * stanza ha la sua scheda a un indirizzo fisso. Questo file e' NEUTRO: il giro delle
+ * stanze e' uguale per tutte. Stanza vuota: vendor 0xFFFF.
  *
  * Si bussa a tutte le stanze di tutti i piani: 256 x 32 = 8192 domande, una frazione
  * di secondo. Un sistema vero segue i "ponti" (schede che portano a un altro piano)
  * per non bussare a vuoto; per noi la forza bruta basta. */
 #include "kernel.h"
-#include "io.h"
 #include "pci.h"
 
-#define PCI_DOMANDA  0xCF8
-#define PCI_RISPOSTA 0xCFC
 #define MAX_SCHEDE   64
 
 static struct pci_scheda schede[MAX_SCHEDE];
 static int quante;
 
-static unsigned int indirizzo(unsigned char bus, unsigned char slot, unsigned char funzione,
-                              unsigned char riga) {
-    return 0x80000000u | (unsigned int)bus << 16 | (unsigned int)slot << 11 |
-           (unsigned int)funzione << 8 | (riga & 0xFC);
-}
-
 static unsigned int leggi(unsigned char bus, unsigned char slot, unsigned char funzione,
                           unsigned char riga) {
-    outl(PCI_DOMANDA, indirizzo(bus, slot, funzione, riga));
-    return inl(PCI_RISPOSTA);
+    return arch_pci_leggi(bus, slot, funzione, riga);
 }
 
 unsigned int pci_leggi(const struct pci_scheda *s, unsigned char riga) {
@@ -46,8 +37,7 @@ unsigned int pci_leggi(const struct pci_scheda *s, unsigned char riga) {
 }
 
 void pci_scrivi(const struct pci_scheda *s, unsigned char riga, unsigned int valore) {
-    outl(PCI_DOMANDA, indirizzo(s->bus, s->slot, s->funzione, riga));
-    outl(PCI_RISPOSTA, valore);
+    arch_pci_scrivi(s->bus, s->slot, s->funzione, riga, valore);
 }
 
 /* C'e' qualcuno in questo letto? Se si', lo si annota. */
@@ -69,6 +59,7 @@ static void annota(unsigned char bus, unsigned char slot, unsigned char funzione
 
 int pci_prepara(void) {
     quante = 0;
+    if (!arch_pci_prepara()) return 0;   /* questa macchina non ha un bus PCI */
     for (int bus = 0; bus < 256; bus++)
         for (int slot = 0; slot < 32; slot++) {
             if ((leggi(bus, slot, 0, 0x00) & 0xFFFF) == 0xFFFF) continue;   /* stanza vuota */
@@ -126,5 +117,42 @@ const struct pci_scheda *pci_trova(int classe, int sottoclasse, int interfaccia,
         if (schede[i].classe == classe && schede[i].sottoclasse == sottoclasse &&
             (interfaccia < 0 || schede[i].interfaccia == interfaccia))
             return &schede[i];
+    return 0;
+}
+
+int pci_quante(void) { return quante; }
+const struct pci_scheda *pci_scheda(int i) { return i >= 0 && i < quante ? &schede[i] : 0; }
+
+/* I BAR: il bit 0 dice "porte" (1) o "memoria" (0); per la memoria i bit 2-1 dicono
+ * "a 32 bit" (00) o "a 64 bit" (10: la parte alta sta nel BAR dopo). L'indirizzo e'
+ * il resto, senza i 4 bit bassi. */
+indirizzo_t pci_bar_memoria(const struct pci_scheda *s, int n) {
+    if (n < 0 || n > 5) return 0;
+    unsigned int bar = s->bar[n];
+    if (bar & 1) return 0;                          /* sono porte */
+    unsigned long long a = bar & ~0xFu;
+    if (((bar >> 1) & 3) == 2 && n < 5)              /* a 64 bit */
+        a |= (unsigned long long)s->bar[n + 1] << 32;
+    if (a != (indirizzo_t)a) return 0;              /* non ci sta in un indirizzo di questa CPU */
+    return (indirizzo_t)a;
+}
+
+/* Il registro dei comandi (riga 0x04, i 16 bit bassi): bit 1 "rispondi sulla tua
+ * memoria", bit 2 "bus master". */
+void pci_accendi(const struct pci_scheda *s) {
+    unsigned int c = pci_leggi(s, 0x04);
+    pci_scrivi(s, 0x04, (c & 0xFFFF) | 0x6);
+}
+
+/* Le capacita': se il bit 4 dello stato (riga 0x04, parte alta) e' acceso, la riga 0x34
+ * dice dove comincia l'elenco; ogni voce ha il tipo (1 byte) e dove sta la prossima. */
+unsigned char pci_capacita(const struct pci_scheda *s, unsigned char tipo, unsigned char dopo) {
+    if (!(pci_leggi(s, 0x04) >> 16 & 0x10)) return 0;
+    unsigned char p = dopo ? (pci_leggi(s, dopo) >> 8) & 0xFC : pci_leggi(s, 0x34) & 0xFC;
+    for (int giri = 0; p && giri < 48; giri++) {    /* un limite: un elenco rovinato non gira per sempre */
+        unsigned int v = pci_leggi(s, p);
+        if ((v & 0xFF) == tipo) return p;
+        p = (v >> 8) & 0xFC;
+    }
     return 0;
 }

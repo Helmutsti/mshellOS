@@ -69,11 +69,11 @@ static indirizzo_t carica_elf(indirizzo_t mappa, const char *percorso, const cha
     int byte = mfs_leggi(percorso, 0, file, MAX_PROGRAMMA);
     if (byte < 0) { *errore = mfs_messaggio(byte); goto fine; }
 
-    /* 1. l'intestazione: e' davvero un eseguibile ELF a 32 bit per questa CPU? */
+    /* 1. l'intestazione: e' davvero un eseguibile ELF per questa CPU? */
     struct elf_intestazione *e = (struct elf_intestazione *)file;
-    *errore = "non e' un eseguibile ELF a 32 bit per x86";
-    if ((unsigned int)byte < sizeof *e || memcmp(e->magico, "\x7F" "ELF", 4) || e->classe != 1 ||
-        e->tipo != ELF_ESEGUIBILE || e->macchina != ELF_386 ||
+    *errore = "non e' " ELF_DESCRIZIONE;
+    if ((unsigned int)byte < sizeof *e || memcmp(e->magico, "\x7F" "ELF", 4) || e->classe != ELF_CLASSE ||
+        e->tipo != ELF_ESEGUIBILE || e->macchina != ELF_MACCHINA ||
         e->dim_pezzo != sizeof(struct elf_pezzo) ||
         e->tabella_pezzi + e->numero_pezzi * sizeof(struct elf_pezzo) > (unsigned int)byte)
         goto fine;

@@ -20,6 +20,8 @@
 #include "tastiera.h"
 #include "mouse.h"
 #include "pci.h"
+#include "driver.h"
+#include "ata.h"
 
 extern char kernel_start[], kernel_end[];   /* messi dal linker script */
 
@@ -112,4 +114,10 @@ void arch_dispositivi_prepara(void) {
     titolo("PCI");
     kprintf("%d schede:\n", pci_prepara());
     pci_mostra();
+
+    /* Il disco IDE per primo: e' quello con il sistema (se c'e' anche un disco virtio,
+     * si iscrive dopo e non conta). Poi la libreria dei driver: per ogni scheda, chi la
+     * sa gestire. */
+    ata_prepara();
+    driver_avvia_pci();
 }

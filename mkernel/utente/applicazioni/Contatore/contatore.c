@@ -24,7 +24,8 @@ static void mostra_conto(void) {
 
 static void al_clic(struct pulsante *p, void *dati) {
     (void)p;
-    conto += (int)dati;   /* -1 per il meno, +1 per il piu' */
+    conto += (int)(long)dati;   /* -1 per il meno, +1 per il piu' (prima long: su 64 bit
+                                 * un puntatore e' piu' grande di un int) */
     mostra_conto();
 }
 

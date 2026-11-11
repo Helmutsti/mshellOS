@@ -14,4 +14,10 @@ struct registri {
 /* Carica la tabella dei vettori nella CPU (VBAR_EL1). */
 void vettori_prepara(void);
 
+/* PER LE PROVE: il prossimo errore di memoria del kernel non lo ferma. L'eccezione si
+ * annota l'indirizzo e la classe, salta l'istruzione sbagliata e si va avanti.
+ * prova_esito dice com'e' andata: 1 se l'errore c'e' stato (e lo descrive), 0 se no. */
+void prova_errore_atteso(void);
+int prova_esito(unsigned long *indirizzo, unsigned long *classe);
+
 #endif

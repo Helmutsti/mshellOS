@@ -1,7 +1,8 @@
 /* Come legare un programma in ring 3.
  *
- * Ogni programma e' un file ELF a se', compilato per vivere da 1 GB in su nella sua
- * mappa (PROGRAMMI_INIZIO in comune/chiamate.h: i due numeri devono coincidere).
+ * Ogni programma e' un file ELF a se', compilato per vivere all'inizio della zona dei
+ * programmi nella sua mappa (PROGRAMMI_INIZIO in comune/chiamate.h; build.sh lo passa
+ * come INIZIO_PROGRAMMI: i due numeri devono coincidere).
  *
  * Tre parti con permessi diversi, e quindi tre pezzi nel file ELF:
  *   codice:     lettura ed esecuzione
@@ -13,7 +14,8 @@
 ENTRY(_start)
 
 SECTIONS {
-    . = 0x40000000;
+    /* INIZIO_PROGRAMMI lo da' build.sh: 1 GB su x86, 513 GB su ARM64 */
+    . = INIZIO_PROGRAMMI;
 
     .text   : ALIGN(4K) { *(.text*) }
     .rodata : ALIGN(4K) { *(.rodata*) }

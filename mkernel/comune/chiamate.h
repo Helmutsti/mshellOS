@@ -229,6 +229,9 @@ struct info_schermo {
  * ricevi dal descrittore di apri_eventi, un evento per volta. */
 #define EVENTO_TASTO 1     /* e' stato premuto un tasto: il carattere e' in 'tasto' */
 #define EVENTO_MOUSE 2     /* il mouse si e' spostato di dx, dy, o un pulsante e' cambiato */
+#define EVENTO_PUNTATORE 3 /* una tavoletta: il puntatore e' in (dx, dy), da 0 a PUNTATORE_MAX
+                            * su ogni asse (lo schermo intero), e questi sono i pulsanti */
+#define PUNTATORE_MAX 32767
 
 #define PULSANTE_SINISTRO 1   /* i bit di 'pulsanti': quelli tenuti premuti adesso */
 #define PULSANTE_DESTRO   2
@@ -237,20 +240,29 @@ struct info_schermo {
 struct evento {
     unsigned int tipo;
     unsigned int tasto;      /* EVENTO_TASTO: il carattere (code page 437) */
-    int dx, dy;              /* EVENTO_MOUSE: lo spostamento in pixel; dy positivo = in basso */
-    unsigned int pulsanti;   /* EVENTO_MOUSE: PULSANTE_... tenuti premuti */
+    int dx, dy;              /* EVENTO_MOUSE: lo spostamento in pixel; dy positivo = in basso.
+                              * EVENTO_PUNTATORE: la posizione, da 0 a PUNTATORE_MAX */
+    unsigned int pulsanti;   /* EVENTO_MOUSE, EVENTO_PUNTATORE: PULSANTE_... tenuti premuti */
 };
 
-/* Dove vivono i programmi nella loro mappa: tra 1 e 2 GB. Il codice e le variabili
- * dal basso, i fogli da 1,5 GB, lo schermo (se lo chiedono) a 1,75 GB, la pila appena sotto i 2 GB.
- * Il resto della mappa e' del kernel (invisibile al ring 3): la RAM sotto 1 GB, la
- * memoria dello schermo sopra i 2 GB. */
-#define PROGRAMMI_INIZIO    0x40000000u
-#define FOGLI_INIZIO        0x60000000u   /* la zona dei fogli: 16 posti da 16 MB */
-#define FOGLIO_MAX          0x01000000u   /* il foglio piu' grande */
+/* Dove vivono i programmi nella loro mappa: una zona di 1 GB. Il codice e le variabili
+ * dal basso, i fogli a meta', lo schermo (se lo chiedono) a tre quarti, la pila in cima.
+ * Il resto della mappa e' del kernel (invisibile ai programmi).
+ *   x86:   tra 1 e 2 GB. La RAM sta sotto 1 GB, la memoria dello schermo sopra i 2 GB.
+ *   ARM64: tra 513 e 514 GB. Sulle macchine ARM la RAM sta spesso proprio fra 1 e 2 GB
+ *          (QEMU "virt": da 0x40000000), e il kernel la vede li': i primi 512 GB (la voce
+ *          0 della tabella L0) sono del kernel, i secondi (la voce 1) dei programmi. */
+#ifdef __aarch64__
+#define ZONA_PROGRAMMI      0x8000000000ul   /* 512 GB */
+#else
+#define ZONA_PROGRAMMI      0x0u
+#endif
+#define PROGRAMMI_INIZIO    (ZONA_PROGRAMMI + 0x40000000u)
+#define FOGLI_INIZIO        (ZONA_PROGRAMMI + 0x60000000u)   /* la zona dei fogli: 16 posti da 16 MB */
+#define FOGLIO_MAX          0x01000000u                      /* il foglio piu' grande */
 #define MAX_MAPPATI         16
-#define SCHERMO_PROGRAMMA   0x70000000u
-#define PROGRAMMI_FINE      0x80000000u
+#define SCHERMO_PROGRAMMA   (ZONA_PROGRAMMI + 0x70000000u)
+#define PROGRAMMI_FINE      (ZONA_PROGRAMMI + 0x80000000u)
 #define PILA_PROGRAMMA_CIMA PROGRAMMI_FINE
 
 #endif

@@ -13,11 +13,15 @@
  * I settori si indicano col loro numero, da 0 in su (LBA: Logical Block Address).
  * Con 28 bit di numero si arriva a 128 GB: per noi basta e avanza.
  *
+ * Quando lo trova, si ISCRIVE allo sportello dei dischi (dispositivi/disco.h): mfs legge
+ * e scrive passando da li', senza sapere che e' un disco ATA.
+ *
  * Due semplificazioni:
  *   - PIO: i dati passano dalla CPU, 2 byte alla volta (niente DMA)
  *   - polling: si aspetta guardando lo stato in un ciclo (niente interruzione IRQ 14) */
 #include "kernel.h"
 #include "io.h"
+#include "ata.h"
 #include "disco.h"
 
 #define DATI       0x1F0
@@ -81,7 +85,11 @@ static void prepara(unsigned int n) {
     outb(LBA_ALTO,  (n >> 16) & 0xFF);
 }
 
-int disco_prepara(void) {
+static int leggi(unsigned int n, void *dati);
+static int scrivi(unsigned int n, const void *dati);
+static struct disco disco = { .modello = modello, .leggi = leggi, .scrivi = scrivi };
+
+int ata_prepara(void) {
     outb(DISPOSITIVO, DISCO_PRINCIPALE);
     attesa_breve();
     outb(CONTEGGIO, 0); outb(LBA_BASSO, 0); outb(LBA_MEDIO, 0); outb(LBA_ALTO, 0);
@@ -106,13 +114,12 @@ int disco_prepara(void) {
 
     /* parole 60-61: quanti settori ha il disco */
     settori = info[60] | ((unsigned int)info[61] << 16);
+    disco.settori = settori;
+    disco_iscrivi(&disco);   /* da qui e' il disco del sistema (disco.h) */
     return 1;
 }
 
-const char *disco_modello(void) { return modello; }
-unsigned int disco_settori(void) { return settori; }
-
-int disco_leggi(unsigned int n, void *dati) {
+static int leggi(unsigned int n, void *dati) {
     if (n >= settori) return -1;
     if (aspetta_libero() < 0) return -1;
 
@@ -127,7 +134,7 @@ int disco_leggi(unsigned int n, void *dati) {
     return 0;
 }
 
-int disco_scrivi(unsigned int n, const void *dati) {
+static int scrivi(unsigned int n, const void *dati) {
     if (n >= settori) return -1;
     if (aspetta_libero() < 0) return -1;
 
