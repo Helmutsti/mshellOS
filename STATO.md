@@ -113,10 +113,11 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
 | `utente/libreria/` | la libreria comune: disegno, finestre, toolkit, stile (`stile.h` riprende le variabili del file Figma) |
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
-| `utente/applicazioni/` | Attivita, Contatore, Esempio, Files, Impostazioni (una cartella ciascuna, con il manifest) |
+| `utente/applicazioni/` | Attivita, Contatore, Doom, Esempio, Files, Impostazioni (una cartella ciascuna, con il manifest) |
 | `utente/prove/` | programmi solo per le prove (vanno solo nel disco delle prove) |
 | `file/` | quello che finisce nella casa della persona (`/data/users/1000/home`) |
 | `strumenti/grafica/` | genera font e icone (anche dagli SVG esportati da Figma) |
+| `strumenti/anteprima/` | disegna widget e finestre in PNG sul Mac, senza Docker né QEMU (vedi la sezione 6b) |
 | `test/` | le prove automatiche e le foto di riferimento |
 | `build.sh`, `run.sh`, `run.ps1` | compilare e avviare |
 
@@ -184,6 +185,35 @@ dell'avvio, non di Files); il giro ripetuto è passato 9 su 9. Da tenere d'occhi
 **Da rivedere a occhio**: nel menu del tasto destro aperto sopra l'elemento scelto, la
 sfocatura sotto il menu lascia una macchia chiara vicino ad "Apri" (si vede in
 `test/riferimenti/x86_64/files_menu_file.png`).
+
+## 6b. Doom, tasti fisici e anteprima
+
+**Doom** (`utente/applicazioni/Doom/`): doomgeneric (GPL) con il WAD shareware `doom1.wad`
+(4 MB, sha1 `5b2e249b...`). Disegna a 320x200 e viene ingrandito in una finestra 640x480 con
+una barra (trascinamento e X). Si apre dalla scrivania (icona rossa con il triangolo).
+- Comandi: frecce, Ctrl spara, Spazio usa/apre, Maiusc corre, Alt passi laterali, Invio ed Esc
+  per il menu. Salvataggi in `/data/users/1000/appsdata/doom`.
+- **Provato a mano su ARM (Mac): funziona.** Su x86 compila ma non è stato provato (in QEMU
+  emulato sarà più lento).
+- Non c'è l'audio né il mouse. Se parte male l'errore è silenzioso (`I_Error` scrive su uno
+  stdout che in mshell non va da nessuna parte).
+
+**Tasti fisici** (premuto/rilasciato): `eventi` manda `EVENTO_TASTO_FISICO` (codice Linux
+KEY_*, senza ripetizione automatica) al compositore, che lo recapita solo alla finestra
+attiva che l'ha chiesto con `finestra_tasti_fisici()` (messaggio `VOGLIO_TASTI_FISICI`,
+notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. Il toolkit non usa
+ancora i tasti fisici: le scorciatoie di Files (Ctrl, F2, Canc, Esc) si possono costruire su
+questo, ma la domanda 5 della sezione 8 resta aperta.
+
+**Anteprima su Mac**: `strumenti/anteprima/anteprima.sh <scena> [scala]` disegna in un PNG
+(`strumenti/anteprima/out/`) in circa un secondo. Scene: `campo`, `pulsanti`, `impostazioni`,
+`files`; una scena nuova è un file C con un `main()` come quello di un'app. Disegna un solo
+fotogramma (niente eventi, hover o animazioni) con uno sfondo a gradiente finto: spaziature e
+testo sono esatti, il vetro un po' meno.
+
+**Altro**: lo spazio tra l'ultima lettera e il cursore dei campi è `CAMPO_CURSORE_SPAZIO`
+(`stile.h`, 1 px), usato anche dal campo di rinomina di Files. `build.sh` lega compiler-rt
+nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 128 bit).
 
 ## 7. Decisioni prese
 
@@ -260,6 +290,7 @@ uv run test/collaudo.py --cpu arm64
   puntatore nuovo, la barra degli strumenti di Impostazioni, Files, la Home e il totale della
   memoria. Vanno rifatte con `--riferimenti`, **dopo aver guardato a occhio ogni schermata**.
 - Anche il valore atteso della memoria su ARM (nella prova di Attività) va rifatto.
+- Su ARM si è provato a mano solo Doom (funziona); le prove automatiche ARM restano da fare.
 
 ## 11. Storia
 
