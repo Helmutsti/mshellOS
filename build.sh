@@ -347,6 +347,10 @@ for r in file/* file/.[!.]*; do
         printf '  %-40s da file/\n' "$CASA/home/$(basename "$r")"
     fi
 done
+# Le date dei file della casa sono fisse (l'ultima sera prima dell'orologio delle prove,
+# 1/1/2026: Files le scrive "ieri, 18:02"), non quelle della compilazione: cosi' quello
+# che mostra Files e' sempre uguale, compilazione dopo compilazione.
+find "$CASA_VERA" -exec touch -d "2025-12-31 18:02:00" {} +
 echo "programmi pronti"
 
 # I programmi delle prove (utente/prove): servono SOLO alle prove automatiche (test/), e

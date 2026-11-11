@@ -1,6 +1,7 @@
 """applicazioni: ogni applicazione si apre dall'isola.
 
-Si cliccano una dopo l'altra le quattro applicazioni dell'isola. Per ognuna:
+Si cliccano una dopo l'altra le cinque applicazioni dell'isola (Files per ultima: la
+sua finestra, 800 x 480, al quinto posto sta ancora tutta nello schermo). Per ognuna:
   - sotto la sua icona deve comparire il segno "aperta" (il puntino o il trattino);
   - la sua finestra deve comparire dove la mette il compositore (a scala: la prima in
     (140, 130), le altre 40 pixel piu' in basso e a destra), cioe' quella zona dello
@@ -22,7 +23,7 @@ DESCRIZIONE = "ogni applicazione si apre dall'isola; il pulsante del menu non ro
 def esegui(p):
     m = p.m
     prima = p.scrivania
-    for posto, app in enumerate(["Attivita", "Contatore", "Esempio", "Impostazioni"]):
+    for posto, app in enumerate(["Attivita", "Contatore", "Esempio", "Impostazioni", "Files"]):
         p.controlla(s.segno_sotto(prima, app) == 0, f"{app} risulta gia' aperta nell'isola")
         dopo = s.apri(m, app)
         x, y = s.angolo(posto)

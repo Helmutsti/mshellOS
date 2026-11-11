@@ -59,6 +59,15 @@
 #define ELEMENTO_SCELTO         VETRO_SOPRA              /* 22% */
 #define ELEMENTO_SOPRA          VELATO(0xFFFFFF, 20)     /*  8% */
 
+/* --- il menu del tasto destro (il menu contestuale) ---
+ * Un pannello di vetro con le voci; la voce sotto il puntatore e' VETRO_SOPRA, le voci si
+ * dividono in gruppi con una linea. L'ombra e' quella dei pannelli (giu' di 10, sfocata
+ * 15). Il menu sta DENTRO la finestra, sopra il suo contenuto: quello che ha sotto lo
+ * sfoca l'applicazione stessa (il compositore sfoca solo quello che sta sotto le
+ * finestre), se no il testo di sotto si confonderebbe con le voci. */
+#define MENU_SEPARATORE         VELATO(0xFFFFFF, 36)     /* 14% */
+#define MENU_OMBRA              VELATO(0x050A24, 71)     /* 28% */
+
 /* --- gli stati --- */
 #define STATO_ERRORE            OPACO(0xEF4444)
 #define STATO_ERRORE_VELO       VELATO(0xEF4444, 115)    /* 45% */
@@ -131,7 +140,34 @@
 #define PERCORSO_CASA          16   /* l'icona della casetta */
 #define PERCORSO_FRECCIA       14   /* la freccetta tra un nome e l'altro */
 
+/* il menu del tasto destro: un pannello largo 248, con 6 di margine dentro e 2 tra una voce
+ * e l'altra. La voce e' alta 28 (8 ai lati, icona 16, 8 tra icona ed etichetta); la
+ * linea che divide i gruppi occupa 9 (4 sopra, 1 di linea, 4 sotto) */
+#define MENU_LARGHEZZA        248
+#define MENU_MARGINE            6
+#define MENU_SPAZIO             2
+#define MENU_VOCE              28
+#define MENU_VOCE_MARGINE       8
+#define MENU_ICONA             16
+#define MENU_SEPARA             9
+/* gli elementi dei file (Files e la scrivania). Vista a icone: largo 84, 8 di margine
+ * dentro, icona 56, 6 tra icona e nome, il nome al massimo su due righe; tra un elemento
+ * e l'altro 8. Vista a elenco: righe alte 32 (10 ai lati e tra le colonne, icona 18),
+ * 2 tra una riga e l'altra; le colonne Tipo, Dimensione e Modificato sono larghe 90, 80
+ * e 110 */
+#define ELEMENTO_LARGHEZZA     84
+#define ELEMENTO_MARGINE        8
+#define ELEMENTO_ICONA         56
+#define ELEMENTO_SPAZIO         6
+#define ELEMENTO_RIGHE_NOME     2
+#define ELEMENTO_TRA            8
+#define RIGA_FILE_ALTEZZA      32
+#define RIGA_FILE_MARGINE      10
+#define RIGA_FILE_ICONA        18
+#define RIGA_FILE_TRA           2
+
 /* --- i tempi (in millisecondi) --- */
+#define DOPPIO_CLIC           500   /* due pressioni piu' vicine di cosi' sono un doppio clic */
 #define SCORRIMENTO_COMPARE   100   /* la barra compare quando si comincia a scorrere */
 #define SCORRIMENTO_RESTA    1000   /* resta ancora un secondo dopo l'ultimo scatto */
 #define SCORRIMENTO_SVANISCE  300   /* poi svanisce */
@@ -171,5 +207,12 @@
 #define FONT_SEGMENTO     (&inter_medio_13)
 /* le note piccole, in grigio (per esempio il riassunto sotto una tabella) */
 #define FONT_PICCOLO      (&inter_13)
+/* i file: il nome sotto l'icona (medio 12), le colonne dell'elenco e le scorciatoie dei
+ * menu (12), i titoli delle sezioni e delle colonne (semigrassetto 12), il titolo dello
+ * stato di una cartella (semigrassetto 14). Le voci dei menu sono FONT_STRUMENTI (13) */
+#define FONT_NOME_FILE    (&inter_medio_12)
+#define FONT_DETTAGLIO    (&inter_12)
+#define FONT_SEZIONE      (&inter_semigrassetto_12)
+#define FONT_STATO        (&inter_semigrassetto_14)
 
 #endif

@@ -1,0 +1,6 @@
+# Il manifest di Files: il gestore dei file (le cartelle e i file della persona).
+# Una riga "chiave = valore" per voce; le righe che cominciano con # sono commenti.
+nome = Files
+programma = code
+icona = folder
+colore = blu

@@ -2,7 +2,7 @@
 riferimento (test/riferimenti/<cpu>/<scena>.png).
 
 Serve ad accorgersi di un cambiamento NON voluto nel disegno (il compositore, il toolkit,
-i caratteri, il vetro). L'ora dell'isola cambia e si copre (x 680..820, y 25..50); l'ora
+i caratteri, il vetro). L'ora dell'isola cambia e si copre (x 695..845, y 25..50); l'ora
 del PC virtuale e' comunque fissa (qemu.py: -rtc base=2026-01-01T10:00:00).
 Le scene, una dopo l'altra nella stessa accensione:
   scrivania     appena accesa, niente aperto

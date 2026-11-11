@@ -176,7 +176,7 @@ static void tabella_rotella(struct widget *w, int sx, int sy) {
 }
 
 static const struct tipo_widget tipo_tabella = {
-    tabella_misura, tabella_disponi, tabella_disegna, tabella_puntatore, 0, tabella_rotella, 0
+    tabella_misura, tabella_disponi, tabella_disegna, tabella_puntatore, 0, tabella_rotella, 0, 0
 };
 
 /* --- i grafici: la barra a pezzi e la legenda, per la memoria e per il disco ---
@@ -239,7 +239,7 @@ static void barra_disegna(struct widget *w, struct pennello *p) {
     contorna_forma(p, &t, 256);
 }
 
-static const struct tipo_widget tipo_barra = { barra_misura, 0, barra_disegna, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_barra = { barra_misura, 0, barra_disegna, 0, 0, 0, 0, 0 };
 
 #define LEGENDA_RIGA 30
 
@@ -270,7 +270,7 @@ static void legenda_disegna(struct widget *w, struct pennello *p) {
     }
 }
 
-static const struct tipo_widget tipo_legenda = { legenda_misura, 0, legenda_disegna, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_legenda = { legenda_misura, 0, legenda_disegna, 0, 0, 0, 0, 0 };
 
 /* Una pagina con un grafico: il riassunto in alto (un titolo), la barra, la legenda. */
 struct pagina_grafico {

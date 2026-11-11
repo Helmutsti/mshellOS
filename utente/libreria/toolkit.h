@@ -92,6 +92,10 @@ struct tipo_widget {
     /* il puntatore e' appena arrivato sopra di lui, o se n'e' andato: 'sopra' e' gia'
      * cambiato (0: basta il ridisegno che fa il toolkit) */
     void (*sopra_cambiato)(struct widget *w);
+    /* il puntatore si muove sopra di lui senza pulsanti premuti, in (x, y) (0: non gli
+     * interessa). Serve a chi deve sapere SOPRA QUALE SUA PARTE e' il puntatore (i file
+     * di una cartella, per illuminare quello li' sotto), non solo se e' sopra di lui */
+    void (*movimento)(struct widget *w, int x, int y);
 };
 
 #define MAX_FIGLI 16
@@ -246,7 +250,7 @@ static inline void contenitore_disponi(struct widget *w) {
 }
 
 static const struct tipo_widget tipo_contenitore = {
-    contenitore_misura, contenitore_disponi, 0, 0, 0, 0, 0
+    contenitore_misura, contenitore_disponi, 0, 0, 0, 0, 0, 0
 };
 
 static inline void riga_prepara(struct contenitore *c, int spazio) {
@@ -263,7 +267,7 @@ static inline void colonna_prepara(struct contenitore *c, int spazio) {
 
 struct spazio { struct widget base; };
 
-static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static inline void spazio_prepara(struct spazio *s) {
     *s = (struct spazio){ .base = { .tipo = &tipo_spazio, .elastico = 1 } };
@@ -290,7 +294,7 @@ static inline void etichetta_disegna(struct widget *w, struct pennello *p) {
     testo_centrato(p, e->font, w->x, w->y, w->a, e->testo);
 }
 
-static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0, 0 };
 
 static inline void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font) {
     *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font,
@@ -411,7 +415,7 @@ static inline void pulsante_puntatore(struct widget *w, int x, int y, unsigned i
 }
 
 static const struct tipo_widget tipo_pulsante = {
-    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0, 0, 0
+    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0, 0, 0, 0
 };
 
 /* Un pulsante neutro, di misura media. Per un pulsante solo icona, testo "". */
@@ -524,7 +528,7 @@ static inline void casella_puntatore(struct widget *w, int x, int y, unsigned in
 }
 
 static const struct tipo_widget tipo_casella = {
-    casella_misura, 0, casella_disegna, casella_puntatore, 0, 0, 0
+    casella_misura, 0, casella_disegna, casella_puntatore, 0, 0, 0, 0
 };
 
 static inline void casella_prepara(struct casella *c, const char *testo, int valore,
@@ -643,7 +647,7 @@ static inline void campo_tasto(struct widget *w, unsigned int tasto) {
 }
 
 static const struct tipo_widget tipo_campo = {
-    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto, 0, 0
+    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto, 0, 0, 0
 };
 
 static inline void campo_prepara(struct campo *c, const char *testo, const char *suggerimento,
@@ -688,6 +692,7 @@ struct finestra_tk {
     struct widget *strumenti;          /* la barra degli strumenti, o 0 (finestra_tk_barra) */
     char titolo[MAX_TITOLO];
     int l_fissa, a_fissa;              /* 0: la misura la decide il contenuto */
+    int senza_margine;                 /* 1: il contenuto arriva fino ai bordi (finestra_tk_bordo) */
     struct finestra finestra;          /* il collegamento con il compositore */
     int attiva;                        /* ha il fuoco: e' in primo piano */
     int da_ridisegnare;
@@ -764,11 +769,12 @@ static inline void finestra_tk_disponi(struct widget *w) {
         f->strumenti->a = STRUMENTI_ALTEZZA;
     }
     int corpo = finestra_tk_corpo(f);
+    int margine = f->senza_margine ? 0 : FINESTRA_MARGINE;
     struct widget *c = w->figli[0];
-    c->x = FINESTRA_MARGINE;
-    c->y = corpo + FINESTRA_MARGINE;
-    c->l = w->l - 2 * FINESTRA_MARGINE;
-    c->a = w->a - corpo - 2 * FINESTRA_MARGINE;
+    c->x = margine;
+    c->y = corpo + margine;
+    c->l = w->l - 2 * margine;
+    c->a = w->a - corpo - 2 * margine;
 }
 
 /* La finestra disegna il vetro (la barra un po' piu' chiara del corpo), il bordo, il
@@ -826,7 +832,7 @@ static inline void finestra_tk_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_finestra_tk = {
-    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0, 0, 0
+    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0, 0, 0, 0
 };
 
 static inline void finestra_tk_prepara(struct finestra_tk *f, const char *titolo,
@@ -842,6 +848,19 @@ static inline void finestra_tk_prepara(struct finestra_tk *f, const char *titolo
 static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strumenti) {
     f->strumenti = strumenti;
     widget_aggiungi(&f->base, strumenti);
+}
+
+/* Il contenuto senza il margine intorno: arriva fino ai bordi della finestra e fin sotto
+ * la barra (degli strumenti, se c'e'). Per le finestre fatte a "pannelli", come Files con
+ * la sua barra laterale: i margini, dentro, li decide l'applicazione. Prima di
+ * toolkit_esegui. */
+static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine = 1; }
+
+/* Cambia il titolo della finestra (per esempio, la cartella in cui si e'). Lo disegna la
+ * finestra stessa, nella sua barra: basta ridisegnarla. */
+static inline void finestra_tk_titolo(struct finestra_tk *f, const char *titolo) {
+    copia_testo(f->titolo, titolo, MAX_TITOLO);
+    f->da_ridisegnare = 1;
 }
 
 /* Chiude la finestra, come il pulsante "chiudi": toolkit_esegui torna. */
@@ -944,7 +963,7 @@ static inline void barra_strumenti_disponi(struct widget *w) {
 }
 
 static const struct tipo_widget tipo_barra_strumenti = {
-    barra_strumenti_misura, barra_strumenti_disponi, 0, 0, 0, 0, 0
+    barra_strumenti_misura, barra_strumenti_disponi, 0, 0, 0, 0, 0, 0
 };
 
 static inline void barra_strumenti_prepara(struct barra_strumenti *b) {
@@ -1055,7 +1074,7 @@ static inline void pillola_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_pillola = {
-    pillola_misura, pillola_disponi, pillola_disegna, 0, 0, 0, 0
+    pillola_misura, pillola_disponi, pillola_disegna, 0, 0, 0, 0, 0
 };
 
 /* Accende o spegne un pulsante; in una pillola a scelta, accenderlo spegne gli altri. */
@@ -1079,7 +1098,7 @@ static inline void pulsante_barra_puntatore(struct widget *w, int x, int y, unsi
 }
 
 static const struct tipo_widget tipo_pulsante_barra = {
-    pulsante_barra_misura, 0, pulsante_barra_disegna, pulsante_barra_puntatore, 0, 0, 0
+    pulsante_barra_misura, 0, pulsante_barra_disegna, pulsante_barra_puntatore, 0, 0, 0, 0
 };
 
 static inline void pulsante_barra_prepara(struct pulsante_barra *b, int icona,
@@ -1130,6 +1149,7 @@ struct percorso {
     struct widget base;
     struct nome_percorso nomi[MAX_NOMI_PERCORSO];
     int quanti;
+    int senza_casa;                    /* 1: senza la casetta (fuori dalla casa: percorso_casa) */
     al_clic_percorso al_clic;
     void *dati;
 };
@@ -1142,17 +1162,29 @@ static inline int percorso_largo(const struct percorso *p, int i) {
     return larghezza_testo(percorso_font(p, i), p->nomi[i].nome);
 }
 
-/* Al minimo: la casetta e il nome dell'ultima cartella. Il resto viene dall'elastico. */
+/* Lo spazio della casetta, con quello dopo di lei (0 senza la casetta). */
+static inline int percorso_inizio(const struct percorso *p) {
+    return p->senza_casa ? 0 : PERCORSO_CASA + PERCORSO_SPAZIO;
+}
+
+/* Al minimo: la casetta e il nome dell'ultima cartella (ma non piu' di
+ * PERCORSO_ULTIMO_MINIMO: un nome lunghissimo si taglia, invece di spingere fuori dalla
+ * barra le cose dopo di lui). Il resto viene dall'elastico. */
+#define PERCORSO_ULTIMO_MINIMO 120
+
 static inline void percorso_misura(struct widget *w, int *l, int *a) {
     struct percorso *p = (struct percorso *)w;
-    *l = PERCORSO_CASA + (p->quanti ? PERCORSO_SPAZIO + percorso_largo(p, p->quanti - 1) : 0);
+    int ultimo = p->quanti ? percorso_largo(p, p->quanti - 1) : 0;
+    if (ultimo > PERCORSO_ULTIMO_MINIMO) ultimo = PERCORSO_ULTIMO_MINIMO;
+    *l = percorso_inizio(p) + ultimo;
     *a = STRUMENTI_CONTENUTO;
 }
 
-/* Da destra a sinistra: si mettono i nomi finche' ci stanno. */
+/* Da destra a sinistra: si mettono i nomi finche' ci stanno. (Il primo nome non ha uno
+ * spazio davanti: l'inizio lo comprende gia'.) */
 static inline void percorso_disponi(struct widget *w) {
     struct percorso *p = (struct percorso *)w;
-    int resta = w->l - PERCORSO_CASA, primo = p->quanti;
+    int resta = w->l - percorso_inizio(p) + PERCORSO_SPAZIO, primo = p->quanti;
     for (int i = p->quanti - 1; i >= 0; i--) {
         int serve = PERCORSO_SPAZIO + percorso_largo(p, i) +
                     (i < p->quanti - 1 ? PERCORSO_FRECCIA + PERCORSO_SPAZIO : 0);
@@ -1160,7 +1192,7 @@ static inline void percorso_disponi(struct widget *w) {
         resta -= serve;
         primo = i;
     }
-    int x = w->x + PERCORSO_CASA + PERCORSO_SPAZIO;
+    int x = w->x + percorso_inizio(p);
     for (int i = 0; i < p->quanti; i++) {
         struct widget *n = &p->nomi[i].base;
         n->nascosto = i < primo;
@@ -1179,7 +1211,7 @@ static inline void percorso_disponi(struct widget *w) {
 static inline void percorso_disegna(struct widget *w, struct pennello *p) {
     struct percorso *pc = (struct percorso *)w;
     pennello_colore(p, CONTENUTO_SECONDARIO);
-    icona(p, ICONA_HOUSE, PERCORSO_CASA, w->x, w->y + (w->a - PERCORSO_CASA) / 2);
+    if (!pc->senza_casa) icona(p, ICONA_HOUSE, PERCORSO_CASA, w->x, w->y + (w->a - PERCORSO_CASA) / 2);
     for (int i = 0; i < pc->quanti - 1; i++) {
         struct widget *n = &pc->nomi[i].base;
         if (n->nascosto) continue;
@@ -1189,7 +1221,7 @@ static inline void percorso_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_percorso = {
-    percorso_misura, percorso_disponi, percorso_disegna, 0, 0, 0, 0
+    percorso_misura, percorso_disponi, percorso_disegna, 0, 0, 0, 0, 0
 };
 
 static inline void nome_percorso_disegna(struct widget *w, struct pennello *p) {
@@ -1212,16 +1244,21 @@ static inline void nome_percorso_puntatore(struct widget *w, int x, int y, unsig
 
 /* Due tipi: i nomi che si cliccano, e l'ultimo (dove si e') che non sente il puntatore. */
 static const struct tipo_widget tipo_nome_percorso = {
-    0, 0, nome_percorso_disegna, nome_percorso_puntatore, 0, 0, 0
+    0, 0, nome_percorso_disegna, nome_percorso_puntatore, 0, 0, 0, 0
 };
 static const struct tipo_widget tipo_nome_percorso_qui = {
-    0, 0, nome_percorso_disegna, 0, 0, 0, 0
+    0, 0, nome_percorso_disegna, 0, 0, 0, 0, 0
 };
 
 static inline void percorso_prepara(struct percorso *p, al_clic_percorso al_clic, void *dati) {
     *p = (struct percorso){ .base = { .tipo = &tipo_percorso, .elastico = 1 },
                             .al_clic = al_clic, .dati = dati };
 }
+
+/* Con o senza la casetta davanti: la casetta dice "sei dentro la tua casa" (il primo nome
+ * e' allora la casa), senza si e' altrove nel disco. Va chiamata prima di percorso_metti,
+ * che rifa' il posto dei nomi. */
+static inline void percorso_casa(struct percorso *p, int casa) { p->senza_casa = !casa; }
 
 /* Cambia il percorso: 'quanti' nomi, dal piu' esterno a quello in cui si e'. Si puo'
  * chiamare anche con la finestra aperta (per esempio dopo un clic su un nome). */
@@ -1479,7 +1516,7 @@ static inline void barra_scorrimento_sopra(struct widget *w) {
 
 static const struct tipo_widget tipo_barra_scorrimento = {
     0, 0, barra_scorrimento_disegna, barra_scorrimento_puntatore, 0,
-    barra_scorrimento_su_rotella, barra_scorrimento_sopra
+    barra_scorrimento_su_rotella, barra_scorrimento_sopra, 0
 };
 
 static inline void barra_scorrimento_prepara(struct barra_scorrimento *b) {
@@ -1537,10 +1574,20 @@ static inline void toolkit_fuoco(struct finestra_tk *f, struct widget *w) {
 /* Il puntatore: un clic su "chiudi" chiude; sulla barra (o sul vuoto della barra degli
  * strumenti) e' un "trascinami"; nel contenuto e tra gli strumenti cattura il widget
  * sotto, che sentira' il puntatore finche' il pulsante non si lascia, e se prende i
- * tasti gli da' il fuoco. */
+ * tasti gli da' il fuoco.
+ *
+ * IL TASTO DESTRO cattura il widget sotto come il sinistro (e gli da' il fuoco): sara'
+ * lui, guardando PULSANTE_DESTRO in 'pulsanti', a decidere cosa farne (di solito, un
+ * menu). Barra del titolo, "trascinami", riduci e chiudi restano del solo sinistro. I
+ * widget che guardano solo il sinistro, al destro non fanno niente.
+ *
+ * Senza pulsanti premuti, il widget sotto il puntatore che lo vuole sapere riceve il
+ * MOVIMENTO (il campo 'movimento' del suo tipo). */
 static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pulsanti) {
-    int giu = pulsanti & PULSANTE_SINISTRO;
-    int appena_premuto = giu && !(f->pulsanti_prima & PULSANTE_SINISTRO);
+    const unsigned int cattura = PULSANTE_SINISTRO | PULSANTE_DESTRO;
+    int giu = pulsanti & cattura;
+    int appena_premuto = giu && !(f->pulsanti_prima & cattura);
+    int sinistro = pulsanti & PULSANTE_SINISTRO;
     f->pulsanti_prima = pulsanti;
 
     /* riduci e chiudi si accendono sotto il puntatore (non mentre si tiene premuto
@@ -1549,18 +1596,18 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
     if (comando != f->comando_sopra) { f->comando_sopra = comando; f->da_ridisegnare = 1; }
 
     if (appena_premuto) {
-        if (comando == 2) { f->chiudi_premuto = 1; f->da_ridisegnare = 1; return; }
-        if (comando == 1) { f->riduci_premuto = 1; f->da_ridisegnare = 1; return; }
+        if (comando == 2 && sinistro) { f->chiudi_premuto = 1; f->da_ridisegnare = 1; return; }
+        if (comando == 1 && sinistro) { f->riduci_premuto = 1; f->da_ridisegnare = 1; return; }
         /* la barra del titolo, e lo spazio vuoto della barra degli strumenti: "trascinami" */
         if (y < BARRA_ALTEZZA || barra_strumenti_vuota(f, x, y)) {
-            finestra_trascinami(&f->finestra);
+            if (sinistro) finestra_trascinami(&f->finestra);
             return;
         }
         f->catturato = widget_sotto(&f->base, x, y);
         toolkit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
     }
     if (f->chiudi_premuto) {
-        if (!giu) {
+        if (!sinistro) {
             f->chiudi_premuto = 0;
             f->da_ridisegnare = 1;
             if (su_comando(&f->base, 1, x, y)) f->da_chiudere = 1;
@@ -1568,7 +1615,7 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
         return;
     }
     if (f->riduci_premuto) {                /* scatta quando si lascia, se si e' ancora sopra */
-        if (!giu) {
+        if (!sinistro) {
             f->riduci_premuto = 0;
             f->da_ridisegnare = 1;
             if (su_comando(&f->base, 0, x, y)) finestra_riducimi(&f->finestra);
@@ -1582,6 +1629,7 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
         f->catturato = 0;
     }
     toolkit_sotto(f, widget_sotto(&f->base, x, y));
+    if (!giu && f->sotto && f->sotto->tipo->movimento) f->sotto->tipo->movimento(f->sotto, x, y);
 }
 
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il

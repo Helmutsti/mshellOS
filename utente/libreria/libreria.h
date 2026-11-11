@@ -40,6 +40,12 @@ int avvia(const char *percorso);
 /* Come avvia, ma il programma nuovo ha quell'uid. Solo per il sistema. */
 int avvia_come(const char *percorso, unsigned int uid);
 
+/* Come avvia_come, con un ARGOMENTO per il programma nuovo (un testo, per esempio la
+ * cartella da aprire): lui lo trova in main, come secondo argomento,
+ *     int main(int quanti, char **argomenti)   ->   argomenti[1] (se quanti > 1)
+ * Un argomento vuoto (o 0) e' come nessun argomento. */
+int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento);
+
 /* Fa partire un programma che trova gia' aperti i descrittori dell'elenco, ai posti
  * 0, 1, 2... Il suo numero, o -1. */
 int avvia_con(const char *percorso, const int *descrittori, int quanti);

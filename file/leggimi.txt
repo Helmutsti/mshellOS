@@ -1,0 +1,2 @@
+Benvenuto in mshell.
+Questa e la tua casa: i tuoi file stanno qui.

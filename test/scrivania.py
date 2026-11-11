@@ -4,17 +4,21 @@ Sono numeri presi dallo schermo vero (1280x800). Se la scrivania o il compositor
 cambiano disegno (l'isola, dove si aprono le finestre), si cambiano QUI e basta.
 
     L'ISOLA, in alto al centro (y = 38 il centro dei tondi):
-        menu (griglia)  x = 483
-        Attivita        x = 529
-        Contatore       x = 567
-        Esempio         x = 604
-        Impostazioni    x = 643
-        l'ora           x = 680..820 (cambia: nei confronti fra foto si copre)
+        menu (griglia)  x = 464
+        Attivita        x = 510
+        Contatore       x = 548
+        Esempio         x = 586
+        Files           x = 624
+        Impostazioni    x = 662
+        l'ora           x = 699..839 (cambia: nei confronti fra foto si copre)
     Sotto un'applicazione aperta c'e' un puntino (y = 57), sotto quella che ha il fuoco
     un trattino.
 
     LE FINESTRE si aprono "a scala": la prima con l'angolo in (140, 130), ognuna delle
     successive 40 pixel piu' in basso e a destra.
+
+    LA CARTELLA HOME, sullo sfondo in alto a sinistra: l'elemento (84 x 93) con l'angolo in
+    (16, 16), l'icona al centro in (58, 52).
 """
 
 import time
@@ -22,13 +26,14 @@ import time
 from qemu import ErroreProva, pixel_diversi, PUNTO_VUOTO
 
 ISOLA_Y = 38
-MENU_X = 483
-APP_X = {"Attivita": 529, "Contatore": 567, "Esempio": 604, "Impostazioni": 643}
+MENU_X = 464
+APP_X = {"Attivita": 510, "Contatore": 548, "Esempio": 586, "Files": 624, "Impostazioni": 662}
+HOME = (58, 52)       # il centro dell'icona della cartella Home sulla scrivania
 SEGNO_Y = 57          # il puntino / trattino sotto le applicazioni aperte
 
 # Le misure delle finestre (larghezza, altezza), senza l'ombra.
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),
-          "Impostazioni": (460, 420)}
+          "Impostazioni": (460, 420), "Files": (800, 480)}
 
 BARRA = 36            # l'altezza della barra del titolo delle finestre del toolkit
 

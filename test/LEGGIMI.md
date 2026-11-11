@@ -17,6 +17,7 @@ viene copiato prima di ogni prova: `build/` non si tocca.
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
 | `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Contatore |
 | `scorrimento`  | con 4 applicazioni aperte e 6 processi "riempitivi" (vedi sotto) la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
+| `files`        | Files: la casa a icone e a elenco, entrare in una cartella e tornare indietro, gli stati (vuota, errore, permesso negato), i menu del tasto destro, nuova cartella / rinomina / elimina, l'avviso, le informazioni, un filtro, Invio; il doppio clic sulla Home della scrivania apre Files |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
 Dopo ogni prova si controlla anche che nella seriale non ci siano `Kernel panic`, `PANICO`,
@@ -112,7 +113,7 @@ Meglio **aspettare una condizione** (`aspetta_che`) che dormire un tempo fisso.
 
 ## Le foto di riferimento
 
-`immagini` e `attivita` confrontano lo schermo con le foto in `test/riferimenti/<cpu>/`
+`immagini`, `attivita` e `files` confrontano lo schermo con le foto in `test/riferimenti/<cpu>/`
 (`x86_64/` e `arm64/`). Per la memoria c'è una foto per ogni RAM provata:
 `memoria_totale_2048.png` e `memoria_totale_8192.png` sul PC, `memoria_totale_512.png` su ARM64.
 Quando il disegno cambia apposta (nuovo stile, nuove applicazioni), si rifanno:

@@ -1,0 +1,1 @@
+Questa cartella ha un nome lungo: Files non riesce ad aprirla (il percorso supera i 63 caratteri).

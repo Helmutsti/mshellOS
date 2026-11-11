@@ -6,7 +6,8 @@
  *      in /system/apps (quelle del sistema) o, se li' non c'e', in /data/apps (quelle
  *      installate dalla persona: descrizione.h);
  *   2. dal manifest prende quale programma far partire (code, nella stessa cartella);
- *   3. lo fa partire come APPLICAZIONE (uid 1000), non come sistema: e' per questo che
+ *   3. lo fa partire come APPLICAZIONE (uid 1000), con l'argomento della richiesta se
+ *      c'e' (launcher.h), non come sistema: e' per questo che
  *      il launcher e' del sistema (uid 0), perche' solo il sistema puo' far partire un
  *      programma con un altro uid;
  *   4. risponde "fatto" (con il numero del compito) o "non si puo'".
@@ -26,10 +27,11 @@ static void rispondi(int d) {
     int n = ricevi(d, &r, sizeof r);
     if (n != sizeof r || r.tipo != APRI_APPLICAZIONE) return;
     r.applicazione[MAX_NOME_FILE - 1] = 0;
+    r.argomento[MAX_PERCORSO - 1] = 0;
     struct risposta_launcher risposta = { -1, -1 };
     struct descrizione desc;
     if (leggi_descrizione(r.applicazione, &desc) == 0) {
-        risposta.numero = avvia_come(desc.programma, UID_APPLICAZIONI);
+        risposta.numero = avvia_come_con(desc.programma, UID_APPLICAZIONI, r.argomento);
         if (risposta.numero >= 0) risposta.esito = 0;
     }
     manda_subito(d, &risposta, sizeof risposta);   /* chi chiede non ci blocca mai */

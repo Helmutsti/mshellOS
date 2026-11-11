@@ -49,7 +49,7 @@ from PIL import Image, ImageChops
 LARGHEZZA, ALTEZZA = 1280, 800
 
 # Dove sta l'orologio dell'isola: cambia ogni minuto, nei confronti fra foto non conta.
-OROLOGIO = (680, 25, 820, 50)
+OROLOGIO = (695, 25, 845, 50)
 
 
 class ErroreProva(Exception):
@@ -165,7 +165,7 @@ class Macchina:
         m = Macchina("x86_64", build, lavoro, porta=4465, ram=2048)
         m.accendi()
         m.aspetta_scrivania()
-        m.clic(529, 38)
+        m.clic(510, 38)
         foto = m.foto("dopo_il_clic")
         m.spegni()
     """

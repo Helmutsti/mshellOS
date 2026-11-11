@@ -32,6 +32,13 @@ FONT_USATI = [
     ('inter_medio_16',      'Inter-Medium.ttf',   16),
     ('inter_semigrassetto_13', 'Inter-SemiBold.ttf', 13),
     ('inter_semigrassetto_15', 'Inter-SemiBold.ttf', 15),
+    # per Files: i nomi sotto le icone (medio 12), le colonne e le scorciatoie (12), i
+    # titoli delle sezioni e delle colonne (semigrassetto 12), lo stato della cartella
+    # (semigrassetto 14)
+    ('inter_12',            'Inter-Regular.ttf',  12),
+    ('inter_medio_12',      'Inter-Medium.ttf',   12),
+    ('inter_semigrassetto_12', 'Inter-SemiBold.ttf', 12),
+    ('inter_semigrassetto_14', 'Inter-SemiBold.ttf', 14),
 ]
 
 # code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
@@ -40,8 +47,11 @@ CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù',
 CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
 
 ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity',
-         'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right']
-LATI = [12, 14, 16, 20, 24]
+         'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right',
+         # Files: la barra laterale, i menu, gli stati della cartella
+         'folder', 'folder-open', 'folder-plus', 'pencil', 'copy', 'info', 'trash-2',
+         'arrow-up-down', 'image', 'file', 'terminal', 'lock']
+LATI = [12, 14, 16, 18, 20, 24, 32]   # in ordine: icona() prende la piu' grande che ci sta
 
 def svg_in_png(file, l, a):
     return Image.open(io.BytesIO(subprocess.check_output(
@@ -165,6 +175,30 @@ for nome, file in [('scelta_accesa', 'scelta-accesa.svg'), ('scelta_accesa_sopra
         ['rsvg-convert', os.path.join(FIGMA, file)]))).convert('RGBA')
     c.append('static const unsigned int %s_pixel[] = {\n%s\n};' % (nome, tabella_parole(premoltiplicato(img))))
     c.append('static const struct immagine %s = { %d, %d, %s_pixel };\n' % (nome, img.size[0], img.size[1], nome))
+
+# LE ICONE DEI FILE (Files e la scrivania): non sono icone dell'interfaccia ma
+# "contenuto", a colori, ognuna in due misure (grande 56, piccola 18), dagli SVG
+# esportati dal file Figma (il set "Icona file"). Le ombre e le luci interne sono
+# filtri SVG: le calcola rsvg-convert, qui, una volta per tutte.
+TIPI_FILE = ['cartella', 'home', 'file', 'immagine', 'testo', 'programma']
+c.append('/* Le icone dei file: [tipo][0 grande, 1 piccola]. */')
+for tipo in TIPI_FILE:
+    for dimensione in ('grande', 'piccola'):
+        nome = 'file_%s_%s' % (tipo, dimensione)
+        img = Image.open(io.BytesIO(subprocess.check_output(
+            ['rsvg-convert', os.path.join(FIGMA, 'file-%s-%s.svg' % (tipo, dimensione))]))).convert('RGBA')
+        lato = 56 if dimensione == 'grande' else 18
+        img = img.crop((0, 0, lato, lato))   # alcune sono alte mezzo pixel in piu' (l'ombra)
+        c.append('static const unsigned int %s_pixel[] = {\n%s\n};' % (nome, tabella_parole(premoltiplicato(img))))
+        c.append('static const struct immagine %s = { %d, %d, %s_pixel };' % (nome, lato, lato, nome))
+c.append('#define TIPI_FILE %d' % len(TIPI_FILE))
+c.append('static const struct immagine *const icone_file[TIPI_FILE][2] = {')
+for tipo in TIPI_FILE:
+    c.append('    { &file_%s_grande, &file_%s_piccola },' % (tipo, tipo))
+c.append('};')
+for i, tipo in enumerate(TIPI_FILE):
+    c.append('#define FILE_%s %d' % (tipo.upper(), i))
+c.append('')
 
 sfondo = svg_in_png(os.path.join(FIGMA, 'sfondo.svg'), 320, 200).convert('RGB')
 c.append('/* Lo sfondo, rimpicciolito: 0xRRGGBB. Il compositore lo ingrandisce a 1280x800. */')

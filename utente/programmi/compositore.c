@@ -1049,8 +1049,11 @@ static void al_mouse(const struct evento *e) {
     if (px >= larghezza) px = larghezza - 1;
     if (py >= altezza) py = altezza - 1;
 
-    int premuto = e->pulsanti & PULSANTE_SINISTRO;
-    int appena_premuto = premuto && !(pulsanti_prima & PULSANTE_SINISTRO);
+    /* il destro conta come il sinistro: porta davanti, da' il fuoco e "prende" la
+     * finestra finche' non si lascia (cosi' il menu del tasto destro arriva a lei) */
+    const unsigned int premere = PULSANTE_SINISTRO | PULSANTE_DESTRO;
+    int premuto = e->pulsanti & premere;
+    int appena_premuto = premuto && !(pulsanti_prima & premere);
     pulsanti_prima = e->pulsanti;
 
     if (appena_premuto) {   /* un clic: la finestra sotto va davanti e prende il fuoco */

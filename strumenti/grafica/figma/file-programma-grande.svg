@@ -1,0 +1,21 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Icona file">
+<g id="Fondo" filter="url(#filter0_d_0_58)">
+<rect x="7" y="7" width="42" height="42" rx="10.5" fill="#242936"/>
+<rect x="7.4375" y="7.4375" width="41.125" height="41.125" rx="10.0625" stroke-width="0.875" stroke="white" stroke-opacity="0.28"/>
+</g>
+<path id="Freccia" d="M18.375 21.875L25.375 28L18.375 34.125" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" stroke="#22C55E"/>
+<path id="Cursore" d="M28.875 35H37.625" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" stroke="#22C55E"/>
+</g>
+<defs>
+<filter id="filter0_d_0_58" x="4.375" y="5.6875" width="47.25" height="47.25" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feFlood flood-opacity="0" result="BackgroundImageFix"/>
+<feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+<feOffset dy="1.3125"/>
+<feGaussianBlur stdDeviation="1.3125"/>
+<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.22 0"/>
+<feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_0_58"/>
+<feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_0_58" result="shape"/>
+</filter>
+</defs>
+</svg>

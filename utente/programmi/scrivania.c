@@ -23,12 +23,20 @@
  * Sotto le applicazioni aperte c'e' un puntino; sotto quella in primo piano, una
  * lineetta.
  *
+ * LA CARTELLA HOME, in alto a sinistra sullo sfondo, come una cartella del Finder sulla
+ * scrivania del Mac: l'icona grande e il nome ("Elemento file" del disegno, lo stesso di
+ * Files: elemento_file.h). Sotto il puntatore si vela appena, un clic la sceglie (vetro
+ * chiaro), un clic altrove sullo sfondo la lascia. Il DOPPIO CLIC la apre: aprire una
+ * cartella vuol dire far partire Files su di lei, quindi la scrivania chiede al launcher
+ * "apri files, con argomento /home" (launcher.h).
+ *
  * Disegna con la libreria di disegno e lo stile del sistema, come il disegno Figma
  * "mshell - interfaccia" (Isola, Voce dell'isola, Pulsante applicazioni, Orologio). */
 #include "finestra.h"
 #include "stile.h"
 #include "descrizione.h"
 #include "launcher.h"
+#include "elemento_file.h"
 
 /* --- le applicazioni installate --- */
 
@@ -49,6 +57,7 @@ static const struct { const char *nome; int icona; } nomi_icone[] = {
     { "plus", ICONA_PLUS }, { "x", ICONA_X }, { "user", ICONA_USER },
     { "triangle-alert", ICONA_TRIANGLE_ALERT }, { "layout-grid", ICONA_LAYOUT_GRID },
     { "settings", ICONA_SETTINGS }, { "square", ICONA_SQUARE }, { "activity", ICONA_ACTIVITY },
+    { "folder", ICONA_FOLDER },
 };
 static const struct { const char *nome; unsigned int colore; } nomi_colori[] = {
     { "neutro", 0 }, { "blu", BLU_NORMALE }, { "verde", VERDE_NORMALE },
@@ -360,13 +369,13 @@ static int notizia_puntatore(const struct notizia *n) {
 /* --- lo sfondo --- */
 
 static struct finestra sfondo;
+static int sfondo_l, sfondo_a;
+static unsigned int *sfondo_pulito;   /* lo sfondo senza niente sopra, per ridisegnare la Home */
 
 /* Lo sfondo del disegno, ingrandito da quello piccolo (320x200) di grafica_dati.h: ogni
  * pixel nuovo e' una media pesata dei quattro vicini di quello piccolo. E' una sfumatura
  * morbida: ingrandendola non si perde niente. */
-static int disegna_sfondo(int l, int a) {
-    unsigned int *pixel = finestra_tela(&sfondo);
-    if (!pixel) return 0;
+static void prepara_sfondo(unsigned int *pixel, int l, int a) {
     for (int y = 0; y < a; y++) {
         int fy = y * ((SFONDO_A - 1) << 8) / (a - 1);   /* in 256esimi di pixel piccolo */
         int iy = fy >> 8, ty = fy & 255, iy2 = iy + 1 < SFONDO_A ? iy + 1 : iy;
@@ -384,7 +393,62 @@ static int disegna_sfondo(int l, int a) {
             pixel[y * l + x] = px;
         }
     }
+}
+
+/* --- la cartella Home sullo sfondo --- */
+
+#define HOME_X 16            /* dove sta, come nel disegno (in alto a sinistra) */
+#define HOME_Y 16
+
+static int home_stato = ELEMENTO_NORMALE;   /* normale, sotto il puntatore, scelta */
+static int home_alta;
+
+/* Lo sfondo, con sopra la Home nel suo stato. Lo sfondo vero si calcola una volta sola
+ * (sfondo_pulito): ogni volta lo si ricopia e si disegna la Home. */
+static int disegna_sfondo(void) {
+    unsigned int *pixel = finestra_tela(&sfondo);
+    if (!pixel) return 0;
+    int quanti = sfondo_l * sfondo_a;
+    if (sfondo_pulito) for (int i = 0; i < quanti; i++) pixel[i] = sfondo_pulito[i];
+    else prepara_sfondo(pixel, sfondo_l, sfondo_a);
+    struct tela t = { pixel, sfondo_l, sfondo_a };
+    struct pennello p;
+    pennello_prepara(&p, &t);
+    elemento_disegna(&p, HOME_X, HOME_Y, home_alta, icone_file[FILE_HOME][0], "Home", home_stato);
     return finestra_mostra(&sfondo) >= 0;
+}
+
+static int sulla_home(int x, int y) {
+    return x >= HOME_X && x < HOME_X + ELEMENTO_LARGHEZZA && y >= HOME_Y && y < HOME_Y + home_alta;
+}
+
+/* Il puntatore sullo sfondo: 1 se la Home va ridisegnata. Si sceglie premendo (come nel
+ * Finder); due pressioni vicine sulla Home la aprono in Files. */
+static int puntatore_sfondo(const struct notizia *n) {
+    static unsigned int pulsanti_prima, clic_prima;
+    static int scelta;
+    int prima = home_stato;
+    int giu = n->pulsanti & PULSANTE_SINISTRO, appena = giu && !(pulsanti_prima & PULSANTE_SINISTRO);
+    pulsanti_prima = n->pulsanti;
+    int sopra = n->tipo == PUNTATORE && sulla_home(n->x, n->y);
+    if (appena) {
+        unsigned int adesso = tempo();
+        if (sopra && scelta && (int)(adesso - clic_prima) < DOPPIO_CLIC) {
+            apri_applicazione_con("files", "/home");
+            clic_prima = 0;
+        } else {
+            clic_prima = adesso;
+        }
+        scelta = sopra;
+    }
+    home_stato = scelta ? ELEMENTO_STATO_SCELTO : sopra ? ELEMENTO_STATO_SOPRA : ELEMENTO_NORMALE;
+    return home_stato != prima;
+}
+
+static int notizia_sfondo(const struct notizia *n) {
+    if (n->tipo == PUNTATORE) return puntatore_sfondo(n);
+    if (n->tipo == USCITO) return puntatore_sfondo(&(struct notizia){ .tipo = USCITO });
+    return 0;
 }
 
 /* --- il ciclo --- */
@@ -397,8 +461,13 @@ int main(void) {
     }
     leggi_applicazioni();
 
+    sfondo_l = schermo_l;
+    sfondo_a = schermo_a;
+    home_alta = elemento_altezza("Home");
+    sfondo_pulito = malloc((unsigned long)schermo_l * schermo_a * 4);
+    if (sfondo_pulito) prepara_sfondo(sfondo_pulito, schermo_l, schermo_a);
     if (finestra_apri_come(&sfondo, schermo_l, schermo_a, "sfondo", RUOLO_SFONDO, 0, 0, 0) < 0 ||
-        !disegna_sfondo(schermo_l, schermo_a))
+        !disegna_sfondo())
         return 1;
     isola_l = calcola_isola();
     if (finestra_apri_come(&isola, isola_l, ISOLA_ALTEZZA, "isola", RUOLO_PANNELLO,
@@ -426,7 +495,17 @@ int main(void) {
         scrivi_ora(ora, &d);
         int ridisegna = !uguali(ora, ora_mostrata);  /* e' cambiato il minuto */
         struct notizia n;
-        if (g[0].pronto && !finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
+        if (g[0].pronto) {
+            if (!finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
+            if (notizia_sfondo(&n)) {
+                if (!disegna_sfondo()) return 1;
+                /* le notizie arrivate mentre si aspettava una tela libera */
+                int ancora = 0;
+                for (int i = 0; i < sfondo.quante; i++) ancora |= notizia_sfondo(&sfondo.messe_da_parte[i]);
+                sfondo.quante = 0;
+                if (ancora && !disegna_sfondo()) return 1;
+            }
+        }
         if (g[1].pronto) {
             if (!finestra_ricevi(&isola, &n)) return 1;
             ridisegna |= notizia_puntatore(&n);
