@@ -3,12 +3,13 @@
 #define IDT_H
 
 /* Come i registri si trovano sulla pila quando il gestore viene chiamato.
- * L'ordine e' quello in cui isr.s e la CPU li hanno messi, dal piu' recente. */
+ * L'ordine e' quello in cui isr.s e la CPU li hanno messi, dal piu' recente.
+ * 22 numeri da 8 byte (176 byte): la pila resta multipla di 16, come vuole il C. */
 struct registri {
-    unsigned int ds;                                     /* messo da isr_comune */
-    unsigned int edi, esi, ebp, esp_inutile, ebx, edx, ecx, eax;   /* messi da pusha */
-    unsigned int numero, errore;                         /* messi dall'ingresso isrN */
-    unsigned int eip, cs, eflags;                        /* messi dalla CPU */
+    unsigned long r15, r14, r13, r12, r11, r10, r9, r8;     /* messi da isr_comune */
+    unsigned long rbp, rdi, rsi, rdx, rcx, rbx, rax;         /* messi da isr_comune */
+    unsigned long numero, errore;                           /* messi dall'ingresso isrN */
+    unsigned long rip, cs, rflags, rsp, ss;                 /* messi dalla CPU */
 };
 
 /* Prepara la tabella e la consegna alla CPU. */

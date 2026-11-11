@@ -1,63 +1,74 @@
 #!/bin/sh
 # Compila tutto. Gira dentro un container Docker alpine con la cartella montata in /w.
-#   sh build.sh        oppure  sh build.sh x86   : il PC (avviato da GRUB)
-#   sh build.sh arm64                             : ARM a 64 bit (QEMU "virt", UTM sul Mac)
+#   sh build.sh        oppure  sh build.sh x86_64  : il PC a 64 bit (avviato da UEFI)
+#                                                    ("x86" vale lo stesso)
+#   sh build.sh arm64                              : ARM a 64 bit (QEMU "virt", UTM sul Mac)
 #
-#   src/       il kernel, una cartella per argomento (avvio, memoria, compiti, driver...).
-#              Quello che dipende dalla CPU sta in src/arch/<cpu>/ (x86, arm64); il resto
-#              e' uguale per tutte. Ogni CPU prende il resto + SOLO la sua cartella
-#   utente/    i programmi: la libreria, i programmi del sistema, le applicazioni
-#   comune/    quello che kernel e programmi devono vedere uguale (le chiamate di sistema)
-#   strumenti/ programmi che girano qui, sul computer che compila (crea_disco)
-#   build/     il compilato (si puo' cancellare, viene rifatto):
-#              x86:   build/kernel, build/utente/..., build/disco.img, build/mkernel.iso
-#              arm64: build/arm64/kernel.img, build/arm64/utente/..., build/arm64/disco.img
+#   src/        il kernel, una cartella per argomento (avvio, memoria, compiti, driver...).
+#               Quello che dipende dalla CPU sta in src/arch/<cpu>/ (x86_64, arm64); il
+#               resto e' uguale per tutte. Ogni CPU prende il resto + SOLO la sua cartella
+#   utente/     i programmi: la libreria, i programmi del sistema, le applicazioni
+#   comune/     quello che kernel e programmi (e il caricatore) devono vedere uguale
+#   caricatore/ il caricatore UEFI del PC: il programma che il firmware fa partire, e
+#               che carica il kernel
+#   strumenti/  programmi che girano qui, sul computer che compila (crea_disco)
+#   build/      il compilato (si puo' cancellare, viene rifatto), una cartella per CPU:
+#               x86_64: build/x86_64/kernel, .../utente/..., .../disco.img, .../esp.img
+#               arm64:  build/arm64/kernel.img, .../utente/..., .../disco.img
 #
 # USCITA (variabile d'ambiente): un'altra cartella dove scrivere, per compilare in
 # parallelo senza pestarsi i piedi (per esempio USCITA=build/prova).
 set -e
 cd /w
-CPU=${1:-x86}
+CPU=${1:-x86_64}
+[ "$CPU" = x86 ] && CPU=x86_64
 
 # --- le opzioni di ogni CPU ---
 # -ffreestanding : niente libreria standard, niente main() obbligatorio
-# x86:   --target=i686-elf: codice x86 a 32 bit per una macchina nuda.
-#        -mno-sse ...: niente istruzioni SSE/MMX. Il compilatore le userebbe per
-#        velocizzare i cicli, ma la CPU le accetta solo dopo che il kernel le ha attivate:
-#        senza questo, la prima che incontra manda in crash la macchina.
-# arm64: --target=aarch64-none-elf: codice ARM a 64 bit per una macchina nuda.
-#        -mgeneral-regs-only: lo stesso per ARM (niente SIMD/virgola mobile).
-#        -mstrict-align: niente letture "storte" (un intero a meta' tra due indirizzi):
-#        con la MMU spenta ARM non le accetta.
+# x86_64: --target=x86_64-elf: codice x86 a 64 bit per una macchina nuda.
+#         -mno-sse ...: niente istruzioni SSE/MMX. Il compilatore le userebbe per
+#         velocizzare i cicli, ma i loro registri il kernel non li salva quando cambia
+#         compito: due compiti se li pesterebbero.
+#         -mno-red-zone: il C a 64 bit puo' usare 128 byte SOTTO la cima della pila senza
+#         spostarla ("zona rossa"). Nel kernel un'interruzione scrive proprio li': vietato.
+#         IL MODELLO DI CODICE. Il kernel sta a 2 MB: il modello normale ("small", tutto
+#         nei primi 2 GB, indirizzi da 32 bit dentro le istruzioni) va bene. I programmi
+#         stanno a 127,5 TB, dove un indirizzo non sta in 32 bit: si compilano
+#         "indipendenti dalla posizione" (-fPIE), cioe' ogni variabile si trova contando
+#         da dove sta l'istruzione (RIP + distanza, fino a 2 GB: il programma e' tutto
+#         dentro 1 GB). Il linker li mette lo stesso al loro indirizzo fisso.
+#         (L'alternativa, -mcmodel=large, scrive ogni indirizzo per intero, 8 byte, e fa
+#         ogni chiamata passando da un registro: codice piu' lungo e piu' lento.)
+# arm64:  --target=aarch64-none-elf: codice ARM a 64 bit per una macchina nuda.
+#         -mgeneral-regs-only: lo stesso di -mno-sse, per ARM (niente SIMD/virgola mobile).
+#         -mstrict-align: niente letture "storte" (un intero a meta' tra due indirizzi):
+#         con la MMU spenta ARM non le accetta.
 # INIZIO_PROGRAMMI: dove vivono i programmi nella loro mappa (PROGRAMMI_INIZIO in
-# comune/chiamate.h: i due numeri devono coincidere).
+# comune/chiamate.h: i due numeri devono coincidere). Uguale per le due CPU.
+INIZIO_PROGRAMMI=0x7F8040000000
 case "$CPU" in
-x86)
-    B=${USCITA:-build}
-    NUDO="--target=i686-elf -ffreestanding -O2 -Wall -Wextra -mno-sse -mno-sse2 -mno-mmx"
-    INIZIO_PROGRAMMI=0x40000000
-    # grub-bios e xorriso servono a grub-mkrescue, che prepara il CD avviabile
-    apk add --no-cache clang lld gcc musl-dev grub grub-bios xorriso >/dev/null
+x86_64)
+    B=${USCITA:-build/x86_64}
+    NUDO="--target=x86_64-elf -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mno-sse -mno-sse2 -mno-mmx"
+    PROGRAMMI="-fPIE"
+    # mtools serve a crea_esp.sh, che prepara il disco di avvio (FAT)
+    apk add --no-cache clang lld gcc musl-dev mtools >/dev/null
     ;;
 arm64)
     B=${USCITA:-build/arm64}
     NUDO="--target=aarch64-none-elf -ffreestanding -O2 -Wall -Wextra -mgeneral-regs-only -mstrict-align"
-    INIZIO_PROGRAMMI=0x8040000000
+    PROGRAMMI=""
     apk add --no-cache clang lld gcc musl-dev >/dev/null
     ;;
 *)
-    echo "build.sh: CPU sconosciuta '$CPU' (x86 o arm64)"
+    echo "build.sh: CPU sconosciuta '$CPU' (x86_64 o arm64)"
     exit 1
     ;;
 esac
 
-# si ripulisce la cartella d'uscita (in build/, quelle delle altre compilazioni restano)
-mkdir -p "$B"
-if [ "$B" = build ]; then
-    find build -mindepth 1 -maxdepth 1 ! -name 'arm64*' -exec rm -rf {} +
-else
-    rm -rf "$B"
-fi
+# si ripulisce la cartella d'uscita (mai build/ intera: dentro ci sono le altre CPU)
+[ "$B" = build ] && { echo "build.sh: USCITA=build cancellerebbe tutto"; exit 1; }
+rm -rf "$B"
 mkdir -p "$B/kernel.o" "$B/utente/libreria"
 
 # --- 1. il kernel ---
@@ -74,9 +85,9 @@ done
 for f in $FILE_C; do
     clang $NUDO $INCLUDE -c "$f" -o "$B/kernel.o/$(basename "$f" .c).o"
 done
-if [ "$CPU" = x86 ]; then
-    # l'ordine dei .o non conta: e' linker.ld a mettere la firma Multiboot per prima
-    ld.lld -T src/arch/x86/avvio/linker.ld -o "$B/kernel" "$B"/kernel.o/*.o
+if [ "$CPU" = x86_64 ]; then
+    # un ELF a 64 bit: il caricatore UEFI lo legge e mette i pezzi dove dice linker.ld
+    ld.lld -T src/arch/x86_64/avvio/linker.ld -o "$B/kernel" "$B"/kernel.o/*.o
     echo "$B/kernel pronto"
 else
     # due forme dello stesso kernel: ELF (con i nomi delle funzioni, per guardarci dentro)
@@ -91,7 +102,8 @@ fi
 # contiene _start: chiama main, poi esci), stringhe.o (le funzioni sulla memoria che il
 # compilatore puo' chiamare da solo) e memoria.o (malloc e free); e con programma.ld (che
 # lo mette a INIZIO_PROGRAMMI, dove vivono i programmi nella loro mappa).
-UTENTE="-Iutente/libreria -Icomune"
+# Sul PC si compilano con -fPIE (vedi sopra: il modello di codice).
+UTENTE="$PROGRAMMI -Iutente/libreria -Icomune"
 LEGA="ld.lld -T utente/libreria/programma.ld --defsym=INIZIO_PROGRAMMI=$INIZIO_PROGRAMMI"
 for f in utente/libreria/*.c; do
     clang $NUDO $UTENTE -c "$f" -o "$B/utente/libreria/$(basename "$f" .c).o"
@@ -153,21 +165,12 @@ gcc -O2 -Wall -Istrumenti/finto -Isrc/dispositivi -Isrc/fs \
 "./$B/crea_disco" "$B/disco.img" 32768 $SUL_DISCO   # 32768 settori = 16 MB
 echo "$B/disco.img pronto"
 
-# --- 4. (solo x86) il CD avviabile: GRUB, che accende la modalita' pixel e carica il kernel ---
-# GRUB si avvia per primo, legge grub.cfg, trova la firma Multiboot nel kernel (con la
-# richiesta 1280x800 a 32 bit), accende lo schermo e salta a _start. Su ARM non serve:
-# chi avvia carica direttamente kernel.img.
-if [ "$CPU" = x86 ]; then
-    mkdir -p "$B/iso/boot/grub"
-    cp "$B/kernel" "$B/iso/boot/kernel"
-    cat > "$B/iso/boot/grub/grub.cfg" <<'FINE'
-set timeout=0
-insmod all_video
-menuentry "mkernel" {
-    multiboot /boot/kernel
-    boot
-}
-FINE
-    grub-mkrescue -o "$B/mkernel.iso" "$B/iso" 2>/dev/null
-    echo "$B/mkernel.iso pronto"
+# --- 4. (solo x86_64) il disco di avvio: il caricatore UEFI e il kernel ---
+# All'accensione il firmware UEFI cerca un disco con una partizione FAT e dentro il file
+# \EFI\BOOT\BOOTX64.EFI: e' il nostro caricatore (caricatore/), che legge \mkernel\kernel,
+# chiede lo schermo al firmware e salta al kernel. Su ARM non serve: chi avvia carica
+# direttamente kernel.img.
+if [ "$CPU" = x86_64 ]; then
+    sh caricatore/compila.sh "$B"
+    sh caricatore/crea_esp.sh "$B" "$B/kernel" "$B/esp.img"
 fi

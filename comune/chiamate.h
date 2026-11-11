@@ -1,9 +1,10 @@
 /* Le chiamate di sistema: come un programma in ring 3 chiede qualcosa al kernel.
  *
- * Il programma mette in EAX il numero del servizio, negli altri registri gli argomenti,
- * ed esegue "int 0x80". E' l'unica riga della IDT che il ring 3 puo' far scattare:
- * la CPU passa al ring 0 (sulla pila del kernel indicata dalla TSS), il kernel fa il
- * servizio, mette il risultato in EAX e la CPU torna al programma.
+ * Sul PC il programma mette in RAX il numero del servizio, in RDI, RSI, RDX, R10, R8 gli
+ * argomenti, ed esegue "int 0x80". E' l'unica riga della IDT che il ring 3 puo' far
+ * scattare: la CPU passa al ring 0 (sulla pila del kernel indicata dalla TSS), il kernel
+ * fa il servizio, mette il risultato in RAX e la CPU torna al programma. Su ARM64 e'
+ * "svc #0", con il numero in x8 e gli argomenti in x0-x4 (utente/libreria/libreria.h).
  *
  * Sta in comune/ perche' lo usano sia il kernel (src/) sia i programmi (utente/):
  * e' il contratto tra i due, i numeri devono coincidere. */
@@ -12,7 +13,7 @@
 
 #define INT_SISTEMA 0x80   /* la porta: come Linux */
 
-/* I servizi. Argomenti in EBX, ECX, EDX, ESI, EDI; risultato in EAX (-1 = errore). */
+/* I servizi. Fino a 5 argomenti; il risultato -1 vuol dire errore. */
 #define SIS_SCRIVI 1       /* scrivi(testo, byte): scrive sullo schermo */
 #define SIS_DORMI  2       /* dormi(millisecondi): non gira per quel tempo */
 #define SIS_ESCI   3       /* esci(): il programma finisce */
@@ -191,10 +192,10 @@ struct info_processo {
     char nome[16];
 };
 
-struct info_memoria {
-    unsigned int totale;           /* byte di RAM */
-    unsigned int libera;           /* byte che nessuno usa */
-    unsigned int condivisa;        /* byte dei fogli condivisi: le immagini delle finestre */
+struct info_memoria {              /* in byte, a 64 bit: la RAM puo' superare i 4 GB */
+    unsigned long long totale;     /* byte di RAM */
+    unsigned long long libera;     /* byte che nessuno usa */
+    unsigned long long condivisa;  /* byte dei fogli condivisi: le immagini delle finestre */
 };
 
 struct data_ora {
@@ -248,15 +249,15 @@ struct evento {
 /* Dove vivono i programmi nella loro mappa: una zona di 1 GB. Il codice e le variabili
  * dal basso, i fogli a meta', lo schermo (se lo chiedono) a tre quarti, la pila in cima.
  * Il resto della mappa e' del kernel (invisibile ai programmi).
- *   x86:   tra 1 e 2 GB. La RAM sta sotto 1 GB, la memoria dello schermo sopra i 2 GB.
- *   ARM64: tra 513 e 514 GB. Sulle macchine ARM la RAM sta spesso proprio fra 1 e 2 GB
- *          (QEMU "virt": da 0x40000000), e il kernel la vede li': i primi 512 GB (la voce
- *          0 della tabella L0) sono del kernel, i secondi (la voce 1) dei programmi. */
-#ifdef __aarch64__
-#define ZONA_PROGRAMMI      0x8000000000ul   /* 512 GB */
-#else
-#define ZONA_PROGRAMMI      0x0u
-#endif
+ * Su tutte e due le CPU (x86-64 e ARM64) i programmi stanno nell'ULTIMA riga della
+ * tabella piu' in alto (PML4 sul PC, L0 su ARM) che ha indirizzi "bassi": la 255, da
+ * 127,5 TB. Il kernel vede la RAM e i dispositivi al loro indirizzo vero (fisico), e
+ * gli indirizzi fisici di una macchina vera arrivano al massimo a qualche TB: cosi' la
+ * zona dei programmi non cade mai sopra qualcosa che il kernel deve vedere.
+ * PERCHE' COSI' IN ALTO. La RAM puo' stare dove vuole (su ARM "virt" parte da 1 GB, sul
+ * PC ce n'e' sopra i 4 GB), e cosi' le schede: sul PC il firmware mette i registri
+ * delle schede PCI a 64 bit oltre la RAM, anche a centinaia di GB (QEMU: 768 GB). */
+#define ZONA_PROGRAMMI      0x7F8000000000ul   /* 127,5 TB: la riga 255 */
 #define PROGRAMMI_INIZIO    (ZONA_PROGRAMMI + 0x40000000u)
 #define FOGLI_INIZIO        (ZONA_PROGRAMMI + 0x60000000u)   /* la zona dei fogli: 16 posti da 16 MB */
 #define FOGLIO_MAX          0x01000000u                      /* il foglio piu' grande */

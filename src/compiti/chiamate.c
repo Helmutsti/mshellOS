@@ -23,6 +23,7 @@
 #include "chiamate.h"
 
 #define MAX_SCRITTURA (1024 * 1024)   /* il pezzo piu' grande in una chiamata: 1 MB */
+#define PEZZO_SCRIVI  256             /* scrivi: quanto esce al massimo tutto insieme */
 
 /* NON SI CREDE AL PROGRAMMA. Un indirizzo che arriva dal ring 3 e' un numero
  * qualsiasi: potrebbe puntare alla memoria del kernel, e il kernel (ring 0) la
@@ -107,7 +108,25 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
         const char *testo = (const char *)arg[1];
         unsigned int byte = arg[2];
         if (!del_programma((indirizzo_t)testo, byte, LEGGERE)) { chiamata_risultato(r, -1); break; }
-        for (unsigned int i = 0; i < byte; i++) console_putc(testo[i]);
+        /* A PEZZI, ognuno intero. Ogni pezzo esce sotto il lucchetto della console, cosi'
+         * le righe di due programmi (o del kernel) non si mescolano. Ma un programma puo'
+         * chiedere fino a 1 MB, e tenere le interruzioni spente per tutto quel tempo
+         * fermerebbe i tick e tutti gli altri. Allora un pezzo finisce a ogni a capo, o
+         * dopo PEZZO_SCRIVI byte: una riga normale esce sempre intera; una riga piu'
+         * lunga di cosi' si puo' spezzare (tra un pezzo e l'altro scrive chi aspettava).
+         * Piu' grande il pezzo, piu' raro lo spezzarsi ma piu' lungo il tempo a
+         * interruzioni spente: su una seriale vera a 115200 baud, 256 byte sono ~22 ms. */
+        unsigned int i = 0;
+        while (i < byte) {
+            unsigned int s = console_blocca();
+            unsigned int fine = byte - i > PEZZO_SCRIVI ? i + PEZZO_SCRIVI : byte;
+            while (i < fine) {
+                char c = testo[i++];
+                console_metti(c);
+                if (c == '\n') break;
+            }
+            console_sblocca(s);
+        }
         chiamata_risultato(r, byte);
         break;
     }
@@ -264,9 +283,9 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
         struct info_memoria *m = (struct info_memoria *)arg[1];
         chiamata_risultato(r, -1);
         if (!del_programma((indirizzo_t)m, sizeof *m, SCRIVERE)) break;
-        m->totale = pagine_ram() * PAGINA;
-        m->libera = pagine_libere() * PAGINA;
-        m->condivisa = fogli_pagine() * PAGINA;
+        m->totale = (unsigned long long)pagine_ram() * PAGINA;
+        m->libera = (unsigned long long)pagine_libere() * PAGINA;
+        m->condivisa = (unsigned long long)fogli_pagine() * PAGINA;
         chiamata_risultato(r, 0);
         break;
     }

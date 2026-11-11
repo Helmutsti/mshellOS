@@ -4,7 +4,7 @@
  * sistema.
  *
  * Questa e' la parte NEUTRA, uguale per ogni CPU. Prima di arrivare qui, l'avvio della
- * CPU (arch: su x86 kernel_main, in arch/x86/avvio/avvio.c) ha gia' acceso lo schermo
+ * CPU (arch: su x86 kernel_main, in arch/x86_64/avvio/avvio.c) ha gia' acceso lo schermo
  * e la console, preparato le tabelle della CPU e dato al magazziniere la RAM libera. */
 #include "kernel.h"
 #include "kmalloc.h"

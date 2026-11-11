@@ -2,7 +2,8 @@
  * di Linux (fbcon).
  *
  * Lo schermo e' una zona di memoria (il framebuffer) con un numero per ogni pixel:
- * 4 byte, cioe' rosso, verde, blu e un byte vuoto. GRUB ha acceso la modalita' pixel
+ * 4 byte, cioe' rosso, verde, blu e un byte vuoto. Chi ci ha avviato (sul PC il firmware
+ * UEFI, tramite il caricatore; su ARM il driver ramfb) ha acceso la modalita' pixel
  * e ci ha detto dove sta, quanto e' grande e in che ordine stanno i colori.
  * La scheda non sa piu' disegnare le lettere: lo facciamo noi, con il font 8x16
  * (font.h). Ogni carattere e' una CASELLA di 8x16 pixel: a 1280x800 sono 160 colonne
@@ -37,7 +38,7 @@
 #define MAX_COLONNE 256
 #define MAX_RIGHE   128
 
-static struct schermo schermo;           /* com'e' fatto, come ce lo ha descritto GRUB */
+static struct schermo schermo;           /* com'e' fatto, come ce lo ha descritto l'avvio */
 static const void *padrone;               /* a chi e' prestato lo schermo (0: e' nostro) */
 static unsigned char *memoria;            /* il framebuffer */
 static unsigned int passo;                /* byte da una riga di pixel alla successiva */
@@ -238,12 +239,39 @@ static void metti(char c) {
     if (++colonna == colonne) a_capo();
 }
 
-void console_putc(char c) {
+/* IL LUCCHETTO DELLA CONSOLE. Proteggere riga e colonna non basta: chi scrive vuole che
+ * il SUO testo esca tutto insieme. Se un tick arriva a meta' di una riga e lo scheduler
+ * fa scrivere un altro compito, sulla seriale e sullo schermo le due righe si mescolano:
+ *   Cciao come va
+ *   ompiti : scheduler acceso
+ * Chi vuole scrivere un pezzo intero (kprintf, la chiamata scrivi) prende il lucchetto,
+ * mette i suoi caratteri con console_metti, e lo lascia: nel mezzo nessun altro scrive.
+ *
+ * Oggi c'e' un solo core: basta spegnere le interruzioni (niente tick, quindi niente
+ * cambio di compito, e nessun driver che scrive da un'interruzione). E si puo' prendere
+ * due volte di fila (un panico dentro una kprintf): spegnere gia' spento non fa niente.
+ * Con piu' core non basta piu': un altro core scrive comunque, con le interruzioni
+ * accese o spente. Allora qui dentro si aggiunge uno spinlock (un intero che un core
+ * alla volta porta da 0 a 1 con un'istruzione atomica; gli altri girano finche' torna
+ * 0), SEMPRE insieme alle interruzioni spente: se no un'interruzione sullo stesso core
+ * che ha il lucchetto vorrebbe riprenderlo e girerebbe per sempre. E il panico dovra'
+ * forzarlo, perche' il lucchetto potrebbe averlo proprio il core che sta morendo.
+ * Chi lo tiene deve fare presto: per tutto quel tempo i tick aspettano. */
+unsigned int console_blocca(void)        { return interruzioni_spegni(); }
+void console_sblocca(unsigned int stato) { interruzioni_ripristina(stato); }
+
+/* Un carattere, con il lucchetto gia' preso da chi chiama. */
+void console_metti(char c) {
     seriale_eco(c);                  /* anche sulla seriale: per leggere l'avvio da fuori */
     if (!memoria) return;            /* niente schermo: niente da fare */
-    unsigned int s = interruzioni_spegni();
     togli_cursore();
     metti(c);
     mostra_cursore();
-    interruzioni_ripristina(s);
+}
+
+/* Un carattere da solo: prende e lascia il lucchetto. */
+void console_putc(char c) {
+    unsigned int s = console_blocca();
+    console_metti(c);
+    console_sblocca(s);
 }

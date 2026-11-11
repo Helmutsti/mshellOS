@@ -17,7 +17,7 @@
 //   4. una pila (il registro sp);
 //   5. la zona .bss a zero (le variabili globali senza valore: il C le vuole a 0);
 //   6. via, nel C.
-// Su x86 era kernel_head.s con la firma Multiboot; qui la firma non serve.
+// Sul PC il kernel lo carica il nostro caricatore UEFI (caricatore/), che legge l'ELF.
 
 .section .text.avvio
 .global _start

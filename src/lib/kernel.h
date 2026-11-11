@@ -7,7 +7,7 @@
 /* La CPU: indirizzo_t, le interruzioni (spegni, ripristina...) e il resto: arch.h. */
 #include "arch.h"
 
-/* Lo schermo a pixel, come ce lo descrive GRUB. */
+/* Lo schermo a pixel, come ce lo descrive chi ci ha avviato (arch). */
 struct schermo {
     indirizzo_t indirizzo;                 /* dove sta la memoria dello schermo */
     unsigned int passo;                    /* byte da una riga di pixel alla successiva */
@@ -19,6 +19,12 @@ struct schermo {
 int console_prepara(const struct schermo *s);         /* pulisce, cursore in alto. 0 se non sa usarlo */
 unsigned char console_colore(unsigned char colore);   /* 0xSF: S sfondo, F primo piano. Restituisce il vecchio */
 void console_putc(char c);
+/* Il lucchetto della console: tra blocca e sblocca nessun altro scrive, cosi' un
+ * messaggio esce tutto intero. Dentro si scrive con console_metti. Va tenuto poco:
+ * spegne le interruzioni (console.c spiega perche', e cosa cambia con piu' core). */
+unsigned int console_blocca(void);
+void console_sblocca(unsigned int stato);
+void console_metti(char c);   /* un carattere, con il lucchetto gia' preso */
 void seriale_eco(char c);   /* la CPU (arch) ripete la console sulla sua seriale */
 const struct schermo *console_schermo(void);          /* com'e' fatto lo schermo (0: non c'e') */
 /* Presta lo schermo a 'chi' (un compito): la console smette di disegnare.

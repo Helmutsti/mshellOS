@@ -145,7 +145,7 @@ struct compito *compito_crea_programma(const char *percorso, unsigned int uid, c
     indirizzo_t inizio = carica_elf(mappa, percorso, errore, &fine);
     if (!inizio) goto non_va;
 
-    /* 2. la sua pila: una pagina nuova, nella sua mappa appena sotto i 2 GB.
+    /* 2. la sua pila: una pagina nuova, nella sua mappa in cima alla zona dei programmi.
      *    In cima un indirizzo di ritorno 0: se il programma tornasse da _start invece di
      *    chiamare esci, salterebbe a 0 -> page fault, e il kernel chiuderebbe il compito.
      *    (La pagina si scrive dal suo indirizzo fisico: nella mappa del kernel, che e'

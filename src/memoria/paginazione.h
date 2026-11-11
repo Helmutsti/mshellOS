@@ -13,8 +13,9 @@
  * Quando la mappa si cancella, non va restituita. */
 #define PAG_PRESTATA  0x200
 
-/* Costruisce le tabelle del kernel (indirizzo virtuale = fisico per la RAM e per la
- * memoria dello schermo, pagina 0 assente, codice di sola lettura) e accende la paginazione. */
+/* La paginazione del kernel: le sue tabelle (indirizzo virtuale = fisico per la RAM,
+ * pagina 0 assente, codice di sola lettura) le ha gia' fatte l'avvio della CPU (arch:
+ * mmu.c su ARM, paginazione.c sul PC); qui ci si ricorda solo cio' che serve dopo. */
 void paginazione_prepara(indirizzo_t schermo, unsigned int byte_schermo);
 
 /* Dove porta l'indirizzo virtuale 'virt', nella mappa che la CPU sta usando adesso?
@@ -25,17 +26,17 @@ unsigned int pag_tabelle(void);   /* quante tabelle (pagine da 4 KB) usano le ma
 
 /* --- le mappe dei programmi --- */
 
-/* Da PROGRAMMI_INIZIO a PROGRAMMI_FINE (1-2 GB, in chiamate.h) gli indirizzi sono dei
+/* Da PROGRAMMI_INIZIO a PROGRAMMI_FINE (un GB a 127,5 TB, in chiamate.h) gli indirizzi sono dei
  * programmi: ogni mappa ha li' le sue pagine. Il resto e' del kernel, uguale e
  * condiviso in tutte. */
 #include "chiamate.h"
 
 /* Una mappa nuova: la parte del kernel gia' dentro, quella del programma vuota.
- * Restituisce l'indirizzo della sua directory, o 0 se la memoria e' finita. */
+ * Restituisce l'indirizzo della sua radice (la tabella piu' in alto), o 0 se la memoria e' finita. */
 indirizzo_t pag_nuova_mappa(void);
 
-/* Nella mappa di un programma collega 'virt' (tra 1 e 2 GB) alla pagina fisica 'fis'.
- * 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' fuori da 1-2 GB. */
+/* Nella mappa di un programma collega 'virt' (nella zona dei programmi) alla pagina
+ * fisica 'fis'. 1 se fatto, 0 se la memoria per le tabelle e' finita o 'virt' e' fuori. */
 int pag_mappa_programma(indirizzo_t mappa, indirizzo_t virt, indirizzo_t fis, unsigned int permessi);
 
 /* Toglie 'virt' dalla mappa di un programma (la pagina non si restituisce: e' di chi
@@ -47,7 +48,7 @@ void pag_togli_programma(indirizzo_t mappa, indirizzo_t virt);
 unsigned int pag_conta_programma(indirizzo_t mappa);
 
 /* Restituisce al magazziniere tutte le pagine del programma (non quelle PRESTATE), le
- * sue tabelle e la directory. Non si puo' fare sulla mappa che la CPU sta usando. */
+ * sue tabelle e la radice. Non si puo' fare sulla mappa che la CPU sta usando. */
 void pag_cancella_mappa(indirizzo_t mappa);
 
 /* Fa usare alla CPU questa mappa (0 = quella del kernel). */

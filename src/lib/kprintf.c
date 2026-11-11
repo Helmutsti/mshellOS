@@ -71,11 +71,18 @@ static void formatta(metti_carattere metti, void *dove, const char *fmt, va_list
 
 static void sullo_schermo(char c, void *dove) {
     (void)dove;
-    console_putc(c);
+    console_metti(c);
 }
 
+/* Una kprintf esce tutta intera: il lucchetto della console resta preso dal primo
+ * all'ultimo carattere, cosi' nessun compito (e nessun driver) ci scrive in mezzo.
+ * I messaggi del kernel sono corti e li decide il kernel: si possono tenere interi.
+ * Da un'interruzione (per esempio il driver USB) va bene lo stesso: le interruzioni
+ * sono gia' spente, e chi aveva il lucchetto non puo' essere stato interrotto. */
 void vkprintf(const char *fmt, va_list ap) {
+    unsigned int s = console_blocca();
     formatta(sullo_schermo, 0, fmt, ap);
+    console_sblocca(s);
 }
 
 void kprintf(const char *fmt, ...) {

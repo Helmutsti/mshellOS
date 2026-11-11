@@ -187,6 +187,7 @@ static int larghezza_ora(void) {
 
 static struct finestra isola;
 static int isola_l, spazio_ora;
+static char ora_mostrata[32];   /* il testo dell'ora che si vede adesso nell'isola */
 
 static int calcola_isola(void) {
     spazio_ora = larghezza_ora();
@@ -253,12 +254,11 @@ static int disegna_isola(void) {
     x += 1 + ISOLA_SPAZIO;
 
     struct data_ora d;
-    char ora[32];
     data_ora(&d);
-    scrivi_ora(ora, &d);
+    scrivi_ora(ora_mostrata, &d);
     pennello_colore(&p, CONTENUTO_PRINCIPALE);
-    testo(&p, FONT_BARRA, x + (spazio_ora - larghezza_testo(FONT_BARRA, ora)) / 2,
-          (ISOLA_ALTEZZA - FONT_BARRA->altezza) / 2, ora);
+    testo(&p, FONT_BARRA, x + (spazio_ora - larghezza_testo(FONT_BARRA, ora_mostrata)) / 2,
+          (ISOLA_ALTEZZA - FONT_BARRA->altezza) / 2, ora_mostrata);
     return finestra_mostra(&isola) >= 0;
 }
 
@@ -346,14 +346,24 @@ int main(void) {
         return 1;
 
     /* Si aspettano le notizie del compositore (le finestre che compaiono e spariscono, e i
-     * suoi "ci sei?", a cui risponde la libreria) e l'inizio del minuto dopo, per l'ora. */
+     * suoi "ci sei?", a cui risponde la libreria) e l'inizio del minuto dopo, per l'ora.
+     *
+     * L'ORA. Non basta ridisegnare quando l'attesa scade: il compositore manda un "ci
+     * sei?" ogni secondo, quindi l'attesa finisce quasi sempre prima, per una notizia, e
+     * il cambio di minuto passerebbe inosservato. Allora, comunque ci si sia svegliati,
+     * si riscrive l'ora e la si confronta con quella che si vede: se e' cambiata (un
+     * minuto nuovo, o a mezzanotte un giorno nuovo) si ridisegna. Il tempo massimo
+     * dell'attesa (fino al minuto dopo) serve solo se nessuno scrive. */
     for (;;) {
         struct data_ora d;
         data_ora(&d);
         struct da_guardare g[2] = { { sfondo.collegamento, 0 }, { isola.collegamento, 0 } };
         int pronti = aspetta(g, 2, (60 - (int)d.secondi) * 1000);
         if (pronti < 0) return 1;
-        int ridisegna = pronti == 0;                 /* tempo scaduto: e' cambiato il minuto */
+        char ora[32];
+        data_ora(&d);
+        scrivi_ora(ora, &d);
+        int ridisegna = !uguali(ora, ora_mostrata);  /* e' cambiato il minuto */
         struct notizia n;
         if (g[0].pronto && !finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
         if (g[1].pronto) {

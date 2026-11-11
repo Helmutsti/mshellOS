@@ -3,3 +3,7 @@ build/
 
 # Il disco di mkernel: build.sh lo ricrea
 disco.img
+
+# Le prove automatiche: foto e seriali delle prove fallite (test/collaudo.py)
+test/risultati/
+__pycache__/

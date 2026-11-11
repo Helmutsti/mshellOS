@@ -30,10 +30,10 @@ static char *metti_testo(char *d, const char *s) {
 }
 
 /* "512 KB", "23,4 MB" */
-static char *metti_byte(char *d, unsigned int byte) {
-    unsigned int kb = byte / 1024;
+static char *metti_byte(char *d, unsigned long long byte) {
+    unsigned int kb = (unsigned int)(byte / 1024);
     if (kb < 1024) return metti_testo(metti_numero(d, kb), " KB");
-    unsigned int decimi = kb * 10 / 1024;
+    unsigned int decimi = (unsigned int)((unsigned long long)kb * 10 / 1024);
     d = metti_numero(d, decimi / 10);
     *d++ = ',';
     d = metti_numero(d, decimi % 10);
@@ -154,8 +154,8 @@ static const unsigned int colori_pezzi[PEZZI] = {
 };
 
 struct grafico {                       /* la barra e la legenda leggono gli stessi numeri */
-    unsigned int byte[PEZZI];
-    unsigned int totale;
+    unsigned long long byte[PEZZI];
+    unsigned long long totale;
 };
 static struct grafico grafico;
 
@@ -175,9 +175,9 @@ static void barra_disegna(struct widget *w, struct pennello *p) {
     riempi_forma(p, &t);
     if (!grafico.totale) return;
     int x = w->x;
-    unsigned int somma = 0, totale = grafico.totale / 1024;   /* in KB: niente divisioni a 64 bit */
+    unsigned long long somma = 0, totale = grafico.totale;
     for (int i = 0; i < LIBERA; i++) {
-        somma += grafico.byte[i] / 1024;
+        somma += grafico.byte[i];
         int fine = w->x + (int)(somma * (unsigned int)w->l / totale);
         if (fine <= x) continue;
         pennello_salva(p);
@@ -235,8 +235,26 @@ static struct tabella tabella;
 static struct barra barra;
 static struct legenda legenda;
 
+/* CHI SIAMO. Per sapere quali processi si possono terminare serve il proprio uid. Non
+ * c'e' una chiamata apposta, ma l'elenco dei processi lo dice gia': mentre il kernel lo
+ * scrive, il processo "in esecuzione" e' per forza quello che l'ha chiesto, cioe' noi
+ * (c'e' una CPU sola, e sta servendo la nostra chiamata). -1: non si sa. */
+static int mio_uid = -1;
+
+/* La stessa regola del kernel (SIS_TERMINA_PROCESSO): l'inattivo (0) e init (1) mai,
+ * un processo finito no; il sistema termina chiunque, gli altri solo i loro processi. */
+static int si_puo_terminare(const struct info_processo *pr) {
+    if (pr->numero <= 1 || pr->stato == STATO_FINITO || mio_uid < 0) return 0;
+    return (unsigned int)mio_uid == UID_SISTEMA || pr->uid == (unsigned int)mio_uid;
+}
+
+/* "Termina processo" si accende solo se il processo scelto si puo' terminare davvero. */
 static void aggiorna_termina(void) {
-    widget_disabilita(&pulsante_termina.base, tabella.scelto < 0);
+    int si_puo = 0;
+    for (int i = 0; i < tabella.quante; i++)
+        if (tabella.righe[i].numero == tabella.scelto) si_puo = si_puo_terminare(&tabella.righe[i]);
+    if (pulsante_termina.base.disabilitato == !si_puo) return;   /* niente di nuovo */
+    widget_disabilita(&pulsante_termina.base, !si_puo);
 }
 
 /* Rilegge processi e memoria dal kernel. */
@@ -244,27 +262,27 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     (void)f; (void)dati;
     int n = elenco_processi(tabella.righe, MAX_PROCESSI);
     tabella.quante = n < 0 ? 0 : n;
+    for (int i = 0; i < tabella.quante; i++)          /* noi: vedi "chi siamo" */
+        if (tabella.righe[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)tabella.righe[i].uid;
 
     /* il processo scelto non c'e' piu' (e' finito): non e' piu' scelto */
     int trovato = 0;
     for (int i = 0; i < tabella.quante; i++)
         if (tabella.righe[i].numero == tabella.scelto) trovato = 1;
-    if (!trovato && tabella.scelto >= 0) {
-        tabella.scelto = -1;
-        aggiorna_termina();
-    }
+    if (!trovato) tabella.scelto = -1;
+    aggiorna_termina();                               /* anche il suo stato puo' cambiare */
     widget_cambiato(&tabella.base);
 
     /* la memoria: quello che sanno i processi, la parte condivisa, la libera; il resto
      * e' del kernel (il suo codice, le sue tabelle, le pile dei compiti...) */
     struct info_memoria m;
     if (stato_memoria(&m) < 0) return;
-    unsigned int sistema = 0, applicazioni = 0;
+    unsigned long long sistema = 0, applicazioni = 0;
     for (int i = 0; i < tabella.quante; i++) {
         if (tabella.righe[i].uid == UID_SISTEMA) sistema += tabella.righe[i].memoria;
         else applicazioni += tabella.righe[i].memoria;
     }
-    unsigned int contati = m.libera + m.condivisa + sistema + applicazioni;
+    unsigned long long contati = m.libera + m.condivisa + sistema + applicazioni;
     grafico.totale = m.totale;
     grafico.byte[KERNEL] = m.totale > contati ? m.totale - contati : 0;
     grafico.byte[SISTEMA] = sistema;

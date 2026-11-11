@@ -551,7 +551,17 @@ static inline void campo_disegna(struct widget *w, struct pennello *p) {
         x += 16 + 8;
     }
     if (c->testo[0] || w->fuoco) {
-        x = testo_centrato(p, FONT_TESTO, x, w->y, w->a, c->testo);
+        /* LO SCORRIMENTO. Il testo si vede in una striscia, dal suo inizio a 10 pixel dal
+         * bordo destro (lo stesso margine di sinistra). Se e' piu' lungo, si fa scorrere
+         * a sinistra quanto basta perche' il cursore resti dentro, come in ogni campo di
+         * testo. Il cursore e' sempre in fondo (la tastiera non manda ancora le frecce),
+         * quindi basta guardare la fine del testo: scrivendo il testo va a sinistra,
+         * cancellando torna a destra. Senza fuoco si vede l'inizio, come sul Mac. */
+        int destra = w->x + w->l - 10;
+        int fine = larghezza_testo(FONT_TESTO, c->testo) + 8 + 2;   /* il cursore compreso */
+        int scorrimento = w->fuoco && x + fine > destra ? x + fine - destra : 0;
+        pennello_ritaglia(p, x - 2, w->y, destra - (x - 2), w->a);  /* 2: le lettere che sbordano */
+        x = testo_centrato(p, FONT_TESTO, x - scorrimento, w->y, w->a, c->testo);
         if (w->fuoco) {                    /* il cursore: una barretta alta 18 */
             struct tondo cursore = tondo(x + 8, w->y + (w->a - 18) / 2, 2, 18, 0);
             riempi_forma(p, &cursore);

@@ -7,8 +7,8 @@
  *
  * LE CHIAMATE DI SISTEMA bussano alla porta del kernel, in un modo diverso per CPU (ma
  * passano tutte da chiamata5, qui sotto):
- *   x86:   int 0x80. Numero del servizio in EAX, argomenti in EBX, ECX, EDX, ESI, EDI,
- *          risposta in EAX.
+ *   x86-64: int 0x80. Numero del servizio in RAX, argomenti in RDI, RSI, RDX, R10, R8,
+ *           risposta in RAX (gli stessi registri di Linux).
  *   ARM64: svc #0. Numero del servizio in x8, argomenti in x0-x4, risposta in x0 (come
  *          Linux). */
 #ifndef LIBRERIA_H
@@ -18,8 +18,8 @@
 
 /* --- le chiamate di sistema --- */
 
-/* UNA PAROLA: quello che sta in un registro (un numero, un indirizzo). 32 bit su x86,
- * 64 su ARM64: unsigned long e' proprio cosi' su tutte e due. */
+/* UNA PAROLA: quello che sta in un registro (un numero, un indirizzo): 64 bit, su
+ * tutte e due le CPU. */
 typedef unsigned long parola;
 
 static inline long chiamata5(int servizio, parola a, parola b, parola c, parola d, parola e) {
@@ -36,10 +36,14 @@ static inline long chiamata5(int servizio, parola a, parola b, parola c, parola 
                      : "memory");
     return (long)x0;
 #else
+    /* r10 e r8 non hanno una lettera loro nei vincoli dell'asm: si legano per nome */
+    register parola r10 __asm__("r10") = d;
+    register parola r8 __asm__("r8") = e;
     long risultato;
     __asm__ volatile("int %1"
                      : "=a"(risultato)
-                     : "i"(INT_SISTEMA), "a"(servizio), "b"(a), "c"(b), "d"(c), "S"(d), "D"(e)
+                     : "i"(INT_SISTEMA), "a"((parola)servizio), "D"(a), "S"(b), "d"(c),
+                       "r"(r10), "r"(r8)
                      : "memory");
     return risultato;
 #endif

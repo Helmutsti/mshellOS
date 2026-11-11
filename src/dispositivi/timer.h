@@ -1,6 +1,6 @@
 /* Il timer: chiama il kernel un numero fisso di volte al secondo (un tick).
  * L'interfaccia e' la stessa su ogni CPU; su x86 il timer e' il PIT, sulla linea IRQ 0
- * (arch/x86/dispositivi/timer.c). */
+ * (arch/x86_64/dispositivi/timer.c). */
 #ifndef TIMER_H
 #define TIMER_H
 

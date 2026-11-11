@@ -14,7 +14,7 @@
 ENTRY(_start)
 
 SECTIONS {
-    /* INIZIO_PROGRAMMI lo da' build.sh: 1 GB su x86, 513 GB su ARM64 */
+    /* INIZIO_PROGRAMMI lo da' build.sh: 127,5 TB + 1 GB, su tutte e due le CPU */
     . = INIZIO_PROGRAMMI;
 
     .text   : ALIGN(4K) { *(.text*) }

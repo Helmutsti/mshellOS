@@ -1,6 +1,6 @@
 /* LO SPORTELLO DELLA CPU (ARM64).
  *
- * Gli stessi nomi di arch/x86/arch.h: il kernel neutro chiede qui, e non sa se sotto c'e'
+ * Gli stessi nomi di arch/x86_64/arch.h: il kernel neutro chiede qui, e non sa se sotto c'e'
  * x86 o ARM. Questo e' l'adattatore per ARM64 (DAIF, x0-x8, EL0, svc, wfi).
  * Sono tutte funzioni "static inline": non costano niente (vedi la versione x86). */
 #ifndef ARCH_H

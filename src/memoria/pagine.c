@@ -5,13 +5,17 @@
  * Il numero di una pagina e il suo indirizzo si ricavano l'uno dall'altro:
  *   indirizzo = numero * 4096        numero = indirizzo / 4096
  *
- * Il registro copre 4 GB (tutto quello che una CPU a 32 bit puo' indirizzare):
- * 1M pagine = 1M bit = 128 KB. E' una globale a zero, quindi sta nel .bss:
- * lo spazio lo riserva il linker e kernel_end lo comprende gia'. */
+ * Il registro copre i primi 64 GB di indirizzi: 16M pagine = 16M bit = 2 MB. E' una
+ * globale a zero, quindi sta nel .bss: lo spazio lo riserva il linker e kernel_end lo
+ * comprende gia'. La RAM oltre i 64 GB non si usa (sui PC di oggi la RAM sopra i 4 GB e'
+ * quasi tutta; una CPU a 64 bit la vede, e la mappa del kernel la copre fino a 64 GB).
+ * DA IMPLEMENTARE: un registro grande quanto la RAM che c'e', messo in RAM libera
+ * all'avvio invece che nella .bss. */
 #include "kernel.h"
 #include "pagine.h"
 
-#define MAX_PAGINE (1024 * 1024)            /* 4 GB / 4 KB */
+#define LIMITE     0x1000000000ull           /* 64 GB: oltre, la RAM non si vede */
+#define MAX_PAGINE (LIMITE / PAGINA)          /* 16M pagine */
 #define BIT_GRUPPO 32                       /* un gruppo = un unsigned int = 32 caselle */
 #define TUTTO_PIENO 0xFFFFFFFF
 
@@ -62,8 +66,8 @@ void pagine_prepara(const struct zona_ram *zone, int quante) {
     for (int z = 0; z < quante; z++) {
         unsigned long long inizio_z = zone[z].inizio;
         unsigned long long fine_z   = zone[z].fine;
-        if (inizio_z >= 0x100000000ull) continue;          /* oltre 4 GB: non la vediamo */
-        if (fine_z   >  0x100000000ull) fine_z = 0x100000000ull;
+        if (inizio_z >= LIMITE) continue;                   /* oltre 64 GB: non la vediamo */
+        if (fine_z   >  LIMITE) fine_z = LIMITE;
 
         /* solo pagine TUTTE dentro la zona: l'inizio si arrotonda in su, la fine in giu' */
         unsigned int prima  = (unsigned int)((inizio_z + PAGINA - 1) / PAGINA);

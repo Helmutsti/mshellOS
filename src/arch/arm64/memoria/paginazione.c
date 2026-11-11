@@ -12,14 +12,14 @@
  *     condivisa. Cosi' il kernel c'e' in ogni mappa (serve quando arriva un'interruzione
  *     o una chiamata), ma le sue pagine non hanno il permesso per EL0, i programmi:
  *     se le toccano, la CPU li ferma;
- *   - la voce 1 (da 512 GB a 1 TB) e' solo del programma: sotto ci sono L1, L2 e L3
+ *   - la voce 255 (da 127,5 a 128 TB) e' solo del programma: sotto ci sono L1, L2 e L3
  *     create quando servono, con le sue pagine.
  *
- * PERCHE' I PROGRAMMI STANNO A 512 GB. Su x86 stanno a 1-2 GB, dove il kernel non c'e'.
- * Su ARM, nella macchina "virt" di QEMU, la RAM sta proprio fra 1 e 2 GB: li' c'e' il
- * kernel. Per non pestarci i piedi mettiamo i programmi nella voce 1 di L0, oltre i
- * primi 512 GB: una voce intera tutta per loro, e la voce 0 resta quella del kernel.
- * (PROGRAMMI_INIZIO e' 512 GB + 1 GB, PROGRAMMI_FINE 512 GB + 2 GB: vedi chiamate.h.)
+ * PERCHE' I PROGRAMMI STANNO A 127,5 TB. Il kernel vede la RAM e i dispositivi al loro
+ * indirizzo vero: nella macchina "virt" di QEMU la RAM sta fra 1 e 2 GB, e le schede
+ * PCI a 64 bit possono stare oltre i 512 GB. Per non pestarsi i piedi i programmi
+ * stanno nell'ultima voce di L0 degli indirizzi "bassi" (la 255), dove nessun indirizzo
+ * fisico arriva: una voce intera tutta per loro. Uguale sul PC (vedi chiamate.h).
  *
  * LE VOCI DELLE PAGINE (L3), i bit che usiamo:
  *   bit 1-0 = 11     e' una pagina
@@ -57,7 +57,7 @@
 #define NO_ESEGUI_KERNEL (1ul << 53)
 #define VOCE_PRESTATA (1ul << 55)
 
-#define VOCE_PROGRAMMI 1          /* la voce di L0 dei programmi (512 GB) */
+#define VOCE_PROGRAMMI INDICE_L0(ZONA_PROGRAMMI)   /* la voce di L0 dei programmi: 255 */
 
 static unsigned long *kernel;     /* la L0 del kernel (la mappa 0) */
 static unsigned int tabelle;

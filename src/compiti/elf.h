@@ -12,20 +12,16 @@
 #ifndef ELF_H
 #define ELF_H
 
-/* Il formato dipende dalla CPU: ELF a 32 bit per x86 ("Intel 386"), ELF a 64 bit per
- * ARM64 ("AArch64"). I campi hanno gli stessi nomi; nella versione a 64 bit gli indirizzi
- * e le misure sono di 8 byte, e nella tabella dei pezzi i permessi stanno subito dopo il
- * tipo. Il caricatore (compiti.c) usa i nomi, e va bene per tutte e due. */
-#ifdef __aarch64__
+/* Su tutte e due le CPU il formato e' ELF a 64 bit: indirizzi e misure di 8 byte. Cambia
+ * solo il numero della macchina scritto nell'intestazione. */
 typedef unsigned long elf_parola;      /* indirizzi e misure: 8 byte */
 #define ELF_CLASSE      2              /* 64 bit */
+#ifdef __aarch64__
 #define ELF_MACCHINA    183            /* AArch64 */
 #define ELF_DESCRIZIONE "un eseguibile ELF a 64 bit per ARM64"
 #else
-typedef unsigned int elf_parola;       /* indirizzi e misure: 4 byte */
-#define ELF_CLASSE      1              /* 32 bit */
-#define ELF_MACCHINA    3              /* Intel 386 */
-#define ELF_DESCRIZIONE "un eseguibile ELF a 32 bit per x86"
+#define ELF_MACCHINA    62             /* x86-64 */
+#define ELF_DESCRIZIONE "un eseguibile ELF a 64 bit per x86-64"
 #endif
 
 struct elf_intestazione {
@@ -35,7 +31,7 @@ struct elf_intestazione {
     unsigned char  versione_id;
     unsigned char  resto_id[9];
     unsigned short tipo;           /* 2 = eseguibile */
-    unsigned short macchina;       /* 3 = Intel 386, 183 = AArch64 */
+    unsigned short macchina;       /* 62 = x86-64, 183 = AArch64 */
     unsigned int   versione;
     elf_parola     inizio;         /* l'indirizzo da cui parte il programma */
     elf_parola     tabella_pezzi;  /* dove sta, nel file, la tabella dei pezzi */
@@ -49,17 +45,12 @@ struct elf_intestazione {
 
 struct elf_pezzo {
     unsigned int tipo;             /* 1 = PT_LOAD: da caricare in memoria */
-#ifdef __aarch64__
-    unsigned int permessi;         /* PF_X, PF_W, PF_R (a 64 bit stanno qui) */
-#endif
+    unsigned int permessi;         /* PF_X, PF_W, PF_R */
     elf_parola   nel_file;         /* da dove leggerlo nel file */
     elf_parola   virtuale;         /* a che indirizzo metterlo */
     elf_parola   fisico;           /* (non usato) */
     elf_parola   byte_file;        /* quanti byte leggere dal file */
     elf_parola   byte_memoria;     /* quanti byte occupa in memoria (>= byte_file) */
-#ifndef __aarch64__
-    unsigned int permessi;         /* PF_X, PF_W, PF_R (a 32 bit stanno qui) */
-#endif
     elf_parola   allineamento;
 } __attribute__((packed));
 

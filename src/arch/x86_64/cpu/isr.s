@@ -1,11 +1,15 @@
 # Gli ingressi delle eccezioni (ISR = Interrupt Service Routine).
 #
-# Quando succede un'eccezione la CPU, da sola:
-#   1. mette sulla pila EFLAGS, CS, EIP (dove stava lavorando)
-#   2. per alcune eccezioni mette anche un "codice di errore"
-#   3. salta all'indirizzo scritto nella riga della IDT
+# Quando succede un'eccezione la CPU a 64 bit, da sola:
+#   1. allinea la pila a 16 byte e ci mette SS, RSP, RFLAGS, CS, RIP (dove stava
+#      lavorando, e con quale pila). A 64 bit li mette SEMPRE tutti e cinque, anche se
+#      era gia' nel kernel: la pila e' sempre uguale, e iretq li riprende tutti;
+#   2. per alcune eccezioni mette anche un "codice di errore";
+#   3. salta all'indirizzo scritto nella riga della IDT.
+# Se arriva mentre gira un programma (ring 3), prima di tutto passa alla pila del kernel
+# scritta nella TSS (RSP0).
 #
-# Il C non sa partire cosi', ne' sa tornare con iret. Questi ingressi fanno da ponte:
+# Il C non sa partire cosi', ne' sa tornare con iretq. Questi ingressi fanno da ponte:
 # rendono la pila sempre uguale (codice di errore finto se la CPU non l'ha messo),
 # ci aggiungono il numero dell'eccezione, e passano al pezzo comune.
 
@@ -89,43 +93,60 @@ SENZA_ERRORE 128   # 0x80
 SENZA_ERRORE 129   # 0x81
 
 # Il pezzo comune: salva tutto, chiama il C, rimette tutto, torna.
+# A 64 bit non c'e' piu' pusha: i 15 registri si salvano uno per uno. I registri di
+# segmento (DS, ES...) a 64 bit non contano: non si salvano.
 isr_comune:
-    pusha                    # salva EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI
-    mov %ds, %ax
-    push %eax                # salva il segmento dei dati
-
-    mov $0x10, %ax           # usa i segmenti dati del kernel (riga 2 della GDT)
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
+    push %rax
+    push %rbx
+    push %rcx
+    push %rdx
+    push %rsi
+    push %rdi
+    push %rbp
+    push %r8
+    push %r9
+    push %r10
+    push %r11
+    push %r12
+    push %r13
+    push %r14
+    push %r15
 
     cld                      # il C si aspetta la "direzione" in avanti
-    push %esp                # argomento: dove stanno i registri salvati
+    mov %rsp, %rdi           # 1o argomento (in RDI, come vuole il C): i registri salvati
     call interruzione        # il gestore in C (idt.c)
 
-    # IL CAMBIO DI CONTESTO. interruzione() restituisce in EAX dove ripescare i
+    # IL CAMBIO DI CONTESTO. interruzione() restituisce in RAX dove ripescare i
     # registri. Di solito e' lo stesso posto (si torna al compito interrotto).
     # Se lo scheduler ha scelto un altro compito, e' la cima della SUA pila:
-    # da qui in poi pop e iret lavorano sulla pila dell'altro compito.
-    mov %eax, %esp
+    # da qui in poi pop e iretq lavorano sulla pila dell'altro compito.
+    mov %rax, %rsp
 
-    pop %eax                 # rimette il segmento dei dati
-    mov %ax, %ds
-    mov %ax, %es
-    mov %ax, %fs
-    mov %ax, %gs
-    popa                     # rimette i registri
-    add $8, %esp             # toglie numero e codice di errore
-    iret                     # torna dove la CPU era stata interrotta
+    pop %r15
+    pop %r14
+    pop %r13
+    pop %r12
+    pop %r11
+    pop %r10
+    pop %r9
+    pop %r8
+    pop %rbp
+    pop %rdi
+    pop %rsi
+    pop %rdx
+    pop %rcx
+    pop %rbx
+    pop %rax
+    add $16, %rsp            # toglie numero e codice di errore
+    iretq                    # torna dove la CPU era stata interrotta (con la sua pila)
 
 # L'elenco degli indirizzi dei 48 ingressi, per riempire la IDT dal C.
 .section .rodata
 .global isr_tabella
 isr_tabella:
-    .long isr0,  isr1,  isr2,  isr3,  isr4,  isr5,  isr6,  isr7      # eccezioni
-    .long isr8,  isr9,  isr10, isr11, isr12, isr13, isr14, isr15
-    .long isr16, isr17, isr18, isr19, isr20, isr21, isr22, isr23
-    .long isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
-    .long isr32, isr33, isr34, isr35, isr36, isr37, isr38, isr39     # IRQ 0-7
-    .long isr40, isr41, isr42, isr43, isr44, isr45, isr46, isr47     # IRQ 8-15
+    .quad isr0,  isr1,  isr2,  isr3,  isr4,  isr5,  isr6,  isr7      # eccezioni
+    .quad isr8,  isr9,  isr10, isr11, isr12, isr13, isr14, isr15
+    .quad isr16, isr17, isr18, isr19, isr20, isr21, isr22, isr23
+    .quad isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
+    .quad isr32, isr33, isr34, isr35, isr36, isr37, isr38, isr39     # IRQ 0-7
+    .quad isr40, isr41, isr42, isr43, isr44, isr45, isr46, isr47     # IRQ 8-15

@@ -12,7 +12,7 @@
  *   riga 0x3C: la linea IRQ
  *
  * LO SPORTELLO lo da' la CPU (arch_pci_leggi): su x86 sono le porte 0xCF8/0xCFC
- * (arch/x86/dispositivi/pci_porte.c), su ARM un pezzo di memoria ("ECAM") dove ogni
+ * (arch/x86_64/dispositivi/pci_porte.c), su ARM un pezzo di memoria ("ECAM") dove ogni
  * stanza ha la sua scheda a un indirizzo fisso. Questo file e' NEUTRO: il giro delle
  * stanze e' uguale per tutte. Stanza vuota: vendor 0xFFFF.
  *
