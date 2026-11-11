@@ -9,7 +9,8 @@
 
 /* Lo schermo a pixel, come ce lo descrive chi ci ha avviato (arch). */
 struct schermo {
-    indirizzo_t indirizzo;                 /* dove sta la memoria dello schermo */
+    indirizzo_t indirizzo;                 /* dove il kernel vede la memoria dello schermo */
+    indirizzo_t fisico;                    /* dove sta davvero (per prestarla ai programmi) */
     unsigned int passo;                    /* byte da una riga di pixel alla successiva */
     unsigned int larghezza, altezza, bpp;  /* pixel, pixel, bit per pixel */
     unsigned int rosso, verde, blu;        /* dove sta ogni colore dentro il pixel (bit) */

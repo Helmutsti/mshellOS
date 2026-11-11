@@ -31,10 +31,15 @@
  * QEMU li legge dalla memoria della macchina: con l'emulazione non c'e' differenza, con
  * la virtualizzazione (hvf) la cache e' quella vera, ma e' condivisa con QEMU perche'
  * sta sullo stesso processore, quindi di solito si vede tutto. Qui la richiesta DMA si
- * pulisce comunque dalla cache a mano, per non lasciare dubbi. */
+ * pulisce comunque dalla cache a mano, per non lasciare dubbi.
+ *
+ * DUE INDIRIZZI. QEMU legge la RAM della macchina direttamente (come un DMA): gli si danno
+ * indirizzi FISICI (dei pixel e della richiesta). Il kernel invece scrive i pixel dalla
+ * mappa diretta, e i registri di fw_cfg li vede nella zona dei dispositivi. */
 #include "ramfb.h"
 #include "albero.h"
 #include "pagine.h"
+#include "paginazione.h"
 
 #define FWCFG_DATI        0x00
 #define FWCFG_SELETTORE   0x08
@@ -70,7 +75,7 @@ struct configurazione_ramfb {
 static struct richiesta_dma richiesta;
 static struct configurazione_ramfb configurazione;
 
-static unsigned long fwcfg;   /* dove sta fw_cfg */
+static unsigned long fwcfg;   /* dove il kernel vede fw_cfg (nella zona dei dispositivi) */
 
 static int uguali(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
@@ -128,10 +133,10 @@ static unsigned int fwcfg_cerca(const char *nome) {
 static int fwcfg_scrivi(unsigned int selettore, const void *dati, unsigned int byte) {
     richiesta.control = __builtin_bswap32((selettore << 16) | DMA_SELEZIONA | DMA_SCRIVI);
     richiesta.length  = __builtin_bswap32(byte);
-    richiesta.address = __builtin_bswap64((unsigned long)dati);
+    richiesta.address = __builtin_bswap64(fisico_da_virt(dati));
     cache_pulisci(&richiesta, sizeof richiesta);
 
-    unsigned long r = (unsigned long)&richiesta;
+    unsigned long r = fisico_da_virt(&richiesta);   /* a QEMU: l'indirizzo fisico */
     volatile unsigned int *dma = (volatile unsigned int *)(fwcfg + FWCFG_DMA);
     dma[0] = __builtin_bswap32((unsigned int)(r >> 32));   /* meta' alta */
     dma[1] = __builtin_bswap32((unsigned int)r);           /* meta' bassa: parte */
@@ -147,7 +152,10 @@ static int fwcfg_scrivi(unsigned int selettore, const void *dati, unsigned int b
 
 int ramfb_prepara(struct schermo *s, unsigned int larghezza, unsigned int altezza) {
     unsigned long dimensione;
-    if (!albero_cerca("qemu,fw-cfg-mmio", &fwcfg, &dimensione)) return 0;
+    unsigned long fisico;
+    if (!albero_cerca("qemu,fw-cfg-mmio", &fisico, &dimensione)) return 0;
+    fwcfg = pag_mappa_dispositivo(fisico, 0x20);   /* dati, selettore, DMA: 0x18 byte */
+    if (!fwcfg) return 0;
 
     /* Il segno di fw_cfg: il file 0x19 non e' vuoto e c'e' etc/ramfb. */
     unsigned int selettore = fwcfg_cerca("etc/ramfb");
@@ -158,8 +166,9 @@ int ramfb_prepara(struct schermo *s, unsigned int larghezza, unsigned int altezz
     unsigned int pagine = (unsigned int)((byte + PAGINA - 1) / PAGINA);
     indirizzo_t pixel = pagine_chiedi_consecutive(pagine);
     if (!pixel) return 0;
-    memset((void *)pixel, 0, byte);
-    cache_pulisci((void *)pixel, byte);
+    unsigned char *pixel_qui = virt_da_fisico(pixel);   /* li' li scrive il kernel */
+    memset(pixel_qui, 0, byte);
+    cache_pulisci(pixel_qui, byte);
 
     configurazione.indirizzo = __builtin_bswap64(pixel);
     configurazione.fourcc    = __builtin_bswap32(FOURCC_XR24);
@@ -170,7 +179,8 @@ int ramfb_prepara(struct schermo *s, unsigned int larghezza, unsigned int altezz
     cache_pulisci(&configurazione, sizeof configurazione);
     if (!fwcfg_scrivi(selettore, &configurazione, BYTE_RAMFB)) return 0;
 
-    s->indirizzo = pixel;
+    s->indirizzo = (indirizzo_t)pixel_qui;
+    s->fisico = pixel;
     s->passo = (unsigned int)passo;
     s->larghezza = larghezza;
     s->altezza = altezza;

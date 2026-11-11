@@ -10,13 +10,20 @@
 // metterlo. La prima voce e' un'istruzione (salta oltre l'intestazione); poi a che
 // distanza dall'inizio della RAM va messo (0x80000), quanto e' grande, e la firma "ARM\x64".
 //
-// Qui si fa solo il minimo per poter chiamare il C:
+// DOVE SIAMO. Il kernel e' legato IN ALTO, a KERNEL_IMMAGINE (la pianta e' in
+// src/memoria/pagine.h), ma adesso gira dove l'ha messo chi ci avvia (su QEMU "virt" a
+// 0x40080000), con la MMU spenta: ogni indirizzo e' fisico. Finche' la MMU non e'
+// accesa e non si e' saltati in alto, qui (e in mmu_avvio) si usano solo indirizzi
+// RELATIVI all'istruzione (adr, adrp): valgono ovunque il codice stia davvero.
+//
+// Qui si fa solo il minimo per arrivare al C, in alto:
 //   1. se ci sono piu' CPU, lavora solo la prima: le altre aspettano;
 //   2. ci si annota il device tree (x0), prima di usare x0 per altro;
 //   3. se si e' a EL2 (l'hypervisor: succede sulle macchine vere), si scende a EL1;
-//   4. una pila (il registro sp);
+//   4. una pila (il registro sp), per ora al suo indirizzo fisico;
 //   5. la zona .bss a zero (le variabili globali senza valore: il C le vuole a 0);
-//   6. via, nel C.
+//   6. le tabelle delle pagine (mmu_avvio, in mmu.c) e la MMU accesa;
+//   7. il salto in alto, la pila in alto, e via nel C.
 // Sul PC il kernel lo carica il nostro caricatore UEFI (caricatore/), che legge l'ELF.
 
 .section .text.avvio
@@ -39,15 +46,15 @@ inizio:
     cbnz    x1, ferma
 
     // 2. Il device tree: in x0. Si scrive in avvio_albero (nella .data, non nella .bss,
-    //    che fra poco si azzera).
-    ldr     x1, =avvio_albero
-    str     x0, [x1]
+    //    che fra poco si azzera). adrp + :lo12: = l'indirizzo calcolato dal PC.
+    adrp    x1, avvio_albero
+    str     x0, [x1, :lo12:avvio_albero]
 
     // 3. A che livello siamo? CurrentEL, bit 3-2.
     mrs     x1, CurrentEL
     lsr     x1, x1, #2
-    ldr     x2, =avvio_livello
-    str     x1, [x2]                // ci si annota da dove si e' partiti (per raccontarlo)
+    adrp    x2, avvio_livello
+    str     x1, [x2, :lo12:avvio_livello]   // ci si annota da dove si e' partiti (per raccontarlo)
     cmp     x1, #2
     b.ne    a_el1
 
@@ -87,20 +94,44 @@ a_el1:
     //    A EL1 ci sono due pile: SP_EL0 (dei programmi) e SP_EL1 (del kernel). Si sceglie
     //    SP_EL1 (spsel = 1): e' quella che la CPU usa quando arriva un'eccezione.
     msr     spsel, #1
-    ldr     x1, =pila_cima
+    adrp    x1, pila_cima
+    add     x1, x1, :lo12:pila_cima
     mov     sp, x1
 
     // 5. La .bss a zero, 8 byte alla volta (linker.ld la allinea a 8).
     //    xzr e' il "registro zero": vale sempre 0.
-    ldr     x1, =bss_inizio
-    ldr     x2, =bss_fine
+    adrp    x1, bss_inizio
+    add     x1, x1, :lo12:bss_inizio
+    adrp    x2, bss_fine
+    add     x2, x2, :lo12:bss_fine
 1:  cmp     x1, x2
     b.hs    2f
     str     xzr, [x1], #8          // scrive 0 in [x1], poi x1 += 8
     b       1b
 2:
-    // 6. Il C. Se tornasse (non deve), ci si ferma.
-    bl      kernel_main
+    // 6. Le tabelle delle pagine: il kernel in alto, e per ora anche gli indirizzi bassi
+    //    uguali a quelli fisici (per l'istruzione subito dopo l'accensione, e per leggere
+    //    il device tree e scrivere sulla seriale finche' non hanno un posto in alto).
+    bl      mmu_avvio
+    //    SCTLR_EL1: si accende. M (bit 0) la MMU, C (bit 2) la cache dei dati, I (bit 12)
+    //    quella delle istruzioni. A (bit 1) spento: con la memoria normale le letture
+    //    "storte" sono permesse. WXN (bit 19) acceso: cio' che si scrive non si esegue mai.
+    mrs     x1, sctlr_el1
+    orr     x1, x1, #(1 << 0)
+    orr     x1, x1, #(1 << 2)
+    orr     x1, x1, #(1 << 12)
+    orr     x1, x1, #(1 << 19)
+    bic     x1, x1, #(1 << 1)
+    msr     sctlr_el1, x1
+    isb
+
+    // 7. In alto: un salto a un indirizzo intero (letto dalla memoria), non relativo.
+    ldr     x1, =in_alto
+    br      x1
+in_alto:
+    ldr     x1, =pila_cima          // la stessa pila, vista in alto
+    mov     sp, x1
+    bl      kernel_main             // se tornasse (non deve), ci si ferma
 
 ferma:
     wfe
@@ -111,10 +142,13 @@ ferma:
 .balign 8
 .global avvio_albero
 avvio_albero:
-    .quad   0                       // l'indirizzo del device tree (x0 all'avvio)
+    .quad   0                       // l'indirizzo (fisico) del device tree (x0 all'avvio)
 .global avvio_livello
 avvio_livello:
     .quad   0                       // il livello a cui si e' partiti (1 o 2)
+.global kernel_fisico
+kernel_fisico:
+    .quad   0                       // dove sta il kernel nella RAM (lo scrive mmu_avvio)
 
 // La pila dell'avvio: 16 KB nella .bss. Su ARM64 sp deve essere sempre multiplo di 16.
 .section .bss

@@ -35,7 +35,7 @@ struct virtio_dispositivo {
 
 /* Un pezzo di una catena: un pezzo di memoria che il dispositivo legge o scrive. */
 struct virtq_pezzo {
-    indirizzo_t indirizzo;       /* dove sta (fisico = virtuale) */
+    indirizzo_t indirizzo;       /* dove sta: l'indirizzo FISICO (lo usa il dispositivo) */
     unsigned int byte;           /* quanto e' lungo */
     int scrive_dispositivo;      /* 1: ci scrive il dispositivo; 0: lo legge soltanto */
 };

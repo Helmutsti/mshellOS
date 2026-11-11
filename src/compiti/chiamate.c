@@ -31,7 +31,9 @@
  * per pagina, che tutto il pezzo stia in memoria che il programma puo' toccare.
  * E se il kernel ci deve SCRIVERE (una risposta per il programma), che il programma
  * stesso ci possa scrivere: se no il kernel scriverebbe nel suo codice, o farebbe page
- * fault in ring 0 (panico) su una pagina di sola lettura. */
+ * fault in ring 0 (panico) su una pagina di sola lettura. pag_traduci risponde solo per
+ * la zona dei programmi, nella meta' bassa: un indirizzo della meta' alta (il kernel) e'
+ * rifiutato sempre, anche se la pagina c'e'. */
 #define LEGGERE  PAG_UTENTE
 #define SCRIVERE (PAG_UTENTE | PAG_SCRITTURA)
 static int del_programma(indirizzo_t inizio, unsigned int byte, unsigned int serve) {
@@ -193,12 +195,12 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
         if (!a || !e_lo_schermo(a) || !s || !del_programma((indirizzo_t)info, sizeof *info, SCRIVERE))
             break;
         unsigned int byte = s->passo * s->altezza;
-        if (s->indirizzo % PAGINA || byte > PILA_PROGRAMMA_CIMA - PAGINA - SCHERMO_PROGRAMMA)
+        if (s->fisico % PAGINA || byte > PILA_PROGRAMMA_CIMA - PAGINA - SCHERMO_PROGRAMMA)
             break;                                 /* non ci sta nella zona dei programmi */
         indirizzo_t mappa = compito_attuale()->mappa;
         unsigned int p;
-        for (p = 0; p < byte; p += PAGINA)
-            if (!pag_mappa_programma(mappa, SCHERMO_PROGRAMMA + p, s->indirizzo + p,
+        for (p = 0; p < byte; p += PAGINA)   /* nella mappa vanno gli indirizzi fisici */
+            if (!pag_mappa_programma(mappa, SCHERMO_PROGRAMMA + p, s->fisico + p,
                                      PAG_UTENTE | PAG_SCRITTURA | PAG_PRESTATA)) break;
         if (p < byte) break;                       /* memoria finita per le tabelle */
         info->passo = s->passo;

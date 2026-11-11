@@ -2,18 +2,25 @@
  * sta lo dice il device tree ("arm,pl031"). Ha un solo registro che ci serve:
  *   +0x00 DR: i secondi passati dal 1 gennaio 1970 (il "tempo Unix")
  * Da li' si ricavano data e ora, contando gli anni e i mesi. QEMU lo mette all'ora del
- * Mac se gli si dice -rtc base=localtime. */
+ * Mac se gli si dice -rtc base=localtime. La prima volta lo si mappa nella zona dei
+ * dispositivi. */
 #include "kernel.h"
 #include "chiamate.h"
 #include "orologio.h"
 #include "albero.h"
+#include "paginazione.h"
 
 static int bisestile(unsigned int a) { return (a % 4 == 0 && a % 100 != 0) || a % 400 == 0; }
 
 void orologio_leggi(struct data_ora *d) {
-    unsigned long dove = 0x09010000UL, quanto;
-    albero_cerca("arm,pl031", &dove, &quanto);
-    unsigned long secondi = *(volatile unsigned int *)dove;
+    static indirizzo_t pl031;
+    if (!pl031) {
+        unsigned long dove = 0x09010000UL, quanto;
+        albero_cerca("arm,pl031", &dove, &quanto);
+        pl031 = pag_mappa_dispositivo(dove, 0x1000);
+        if (!pl031) { *d = (struct data_ora){ 1970, 1, 1, 4, 0, 0, 0 }; return; }
+    }
+    unsigned long secondi = *(volatile unsigned int *)pl031;
 
     unsigned long giorni = secondi / 86400, resto = secondi % 86400;
     d->ore = (unsigned int)(resto / 3600);

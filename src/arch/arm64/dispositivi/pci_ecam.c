@@ -5,7 +5,7 @@
  * 32 KB per stanza, 4 KB per letto:
  *     indirizzo = inizio + (bus << 20) + (slot << 15) + (funzione << 12) + riga
  * Dov'e' la finestra, lo dice il device tree: il nodo "pci-host-ecam-generic", nel suo reg
- * (su QEMU "virt", a 0x40_1000_0000: 256 GB).
+ * (su QEMU "virt", a 0x40_1000_0000: 256 GB). La si mappa nella zona dei dispositivi.
  *
  * I BAR, DA ASSEGNARE. Su un PC il BIOS da' a ogni scheda il suo indirizzo (i BAR) prima
  * di avviare il kernel. Qui QEMU avvia il kernel direttamente, senza firmware: i BAR sono
@@ -21,8 +21,9 @@
 #include "kernel.h"
 #include "pci.h"
 #include "albero.h"
+#include "paginazione.h"
 
-static unsigned long ecam;                 /* l'inizio della finestra ECAM */
+static unsigned long ecam;                 /* l'inizio della finestra ECAM (dove la vede il kernel) */
 static unsigned long finestra, finestra_fine;   /* la memoria PCI a 32 bit, da distribuire */
 
 static volatile unsigned int *cella(unsigned char bus, unsigned char slot, unsigned char funzione,
@@ -99,7 +100,12 @@ static void assegna_bar(unsigned char bus, unsigned char slot, unsigned char fun
 
 int arch_pci_prepara(void) {
     unsigned long dimensione;
-    if (!albero_cerca("pci-host-ecam-generic", &ecam, &dimensione)) return 0;
+    unsigned long fisico;
+    if (!albero_cerca("pci-host-ecam-generic", &fisico, &dimensione)) return 0;
+    /* la finestra nella zona dei dispositivi (256 MB su "virt": a blocchi da 2 MB) */
+    if (dimensione > 0xFFFFFFFFUL) dimensione = 0x10000000UL;   /* 256 piani bastano */
+    ecam = pag_mappa_dispositivo(fisico, (unsigned int)dimensione);
+    if (!ecam) return 0;
     if (!trova_finestra()) return 0;
     /* il piano 0 (su "virt" i dispositivi stanno tutti li'): a ogni funzione i suoi BAR */
     for (unsigned char slot = 0; slot < 32; slot++)

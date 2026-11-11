@@ -15,7 +15,7 @@ lettura (`snapshot=on`): `build/` non si tocca.
 | `mouse`        | il puntatore gira in tondo per 8 s (e 4 s sopra una finestra): segue, non si blocca, arriva preciso |
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
-| `attivita`     | la pagina Memoria di Attività dice 2039 MB (PC con 2 GB; 8183 con 8 GB) o 512 MB (ARM64); "Termina processo" chiude Contatore |
+| `attivita`     | la pagina Memoria di Attività dice 2041 MB (PC con 2 GB; 8185 con 8 GB) o 512 MB (ARM64); "Termina processo" chiude Contatore |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
 Dopo ogni prova si controlla anche che nella seriale non ci siano `PANICO`, `ERRORE` o
@@ -102,4 +102,4 @@ uv run test/collaudo.py --riferimenti --cpu x86_64 --ram 8192 --solo attivita  #
 ```
 
 Prima di salvarle nel repo, guardarle: devono mostrare la cosa giusta (per
-`memoria_totale_<MB>.png`, le cifre 2039 sul PC a 2 GB, 8183 a 8 GB e 512 su ARM64).
+`memoria_totale_<MB>.png`, le cifre 2041 sul PC a 2 GB, 8185 a 8 GB e 512 su ARM64).

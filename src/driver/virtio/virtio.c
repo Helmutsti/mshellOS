@@ -43,6 +43,11 @@
  * Per questo c'e' __sync_synchronize() (una "barriera": tutto quello scritto prima e'
  * davvero in memoria prima di quello dopo).
  *
+ * DUE INDIRIZZI PER OGNI COSA. Il dispositivo legge e scrive la RAM da solo (DMA) e non
+ * sa niente delle mappe: gli si danno indirizzi FISICI (le tabelle della coda, i pezzi
+ * delle catene). Il kernel invece le stesse pagine le vede nella mappa diretta
+ * (virt_da_fisico, pagine.h), e i registri della scheda nella zona dei dispositivi.
+ *
  * Noi non usiamo le interruzioni: a ogni tick il driver guarda l'anello usato ("polling").
  * Quindi non servono ne' ISR ne' MSI-X. */
 #include "kernel.h"
@@ -116,7 +121,8 @@ static unsigned int cap_u32(const struct pci_scheda *s, unsigned char pos, unsig
     return pci_leggi(s, pos + i);    /* pos e' multiplo di 4, e i pure */
 }
 
-/* Dalla capacita' alla memoria: il BAR, piu' la distanza. Rende il pezzo raggiungibile. */
+/* Dalla capacita' alla memoria: il BAR, piu' la distanza (un indirizzo fisico). Il pezzo
+ * si mappa nella zona dei dispositivi: il puntatore e' dove lo vede il kernel. */
 static volatile unsigned char *mappa_parte(const struct pci_scheda *s, unsigned char pos,
                                            unsigned int *lunghezza) {
     unsigned int bar = cap_byte(s, pos, 4);
@@ -125,9 +131,10 @@ static volatile unsigned char *mappa_parte(const struct pci_scheda *s, unsigned 
     if (bar > 5) return 0;
     indirizzo_t base = pci_bar_memoria(s, bar);
     if (!base) return 0;
-    if (!pag_mappa_dispositivo(base + distanza, lung)) return 0;
+    indirizzo_t virt = pag_mappa_dispositivo(base + distanza, lung);
+    if (!virt) return 0;
     if (lunghezza) *lunghezza = lung;
-    return (volatile unsigned char *)(base + distanza);
+    return (volatile unsigned char *)virt;
 }
 
 int virtio_prepara(struct virtio_dispositivo *d, const struct pci_scheda *s,
@@ -200,15 +207,16 @@ int virtio_coda(struct virtio_dispositivo *d, unsigned short numero, struct virt
      *   da 0      i descrittori (16 byte l'uno)
      *   da 1024   l'anello disponibile (4 byte + 2 per voce)
      *   da 2048   l'anello usato (4 byte + 8 per voce)  */
-    indirizzo_t pagina = pagina_chiedi();
+    indirizzo_t pagina = pagina_chiedi();   /* fisico: e' quello che si da' al dispositivo */
     if (!pagina) return 0;
-    memset((void *)pagina, 0, PAGINA);
+    unsigned char *qui = virt_da_fisico(pagina);   /* ... e qui la vede il kernel */
+    memset(qui, 0, PAGINA);
 
     q->dimensione = dim;
     q->numero = numero;
-    q->descrittori = (struct virtq_descrittore *)pagina;
-    q->disponibile = (volatile struct virtq_disponibile *)(pagina + 1024);
-    q->usato = (volatile struct virtq_usato *)(pagina + 2048);
+    q->descrittori = (struct virtq_descrittore *)qui;
+    q->disponibile = (volatile struct virtq_disponibile *)(qui + 1024);
+    q->usato = (volatile struct virtq_usato *)(qui + 2048);
     q->disponibile_idx = 0;
     q->usato_visti = 0;
     /* Tutti i descrittori sono liberi: una lista, ognuno punta al successivo. */
@@ -217,9 +225,9 @@ int virtio_coda(struct virtio_dispositivo *d, unsigned short numero, struct virt
     q->liberi = dim;
 
     w16(c, C_CODA_DIM, dim);
-    w64(c, C_CODA_DESC, (unsigned long long)(indirizzo_t)q->descrittori);
-    w64(c, C_CODA_DISP, (unsigned long long)(indirizzo_t)q->disponibile);
-    w64(c, C_CODA_USATO, (unsigned long long)(indirizzo_t)q->usato);
+    w64(c, C_CODA_DESC, pagina);
+    w64(c, C_CODA_DISP, pagina + 1024);
+    w64(c, C_CODA_USATO, pagina + 2048);
     unsigned short off = r16(c, C_CODA_NOTIFICA);
     q->campanello = (volatile unsigned short *)(d->notifica + (unsigned int)off * d->moltiplicatore);
     __sync_synchronize();

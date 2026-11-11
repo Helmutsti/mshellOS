@@ -97,11 +97,13 @@ static indirizzo_t carica_elf(indirizzo_t mappa, const char *percorso, const cha
         for (indirizzo_t v = p->virtuale; v < fine_pezzo; v += PAGINA) {
             indirizzo_t pagina = pagina_chiedi();
             if (!pagina) { *errore = "memoria finita"; goto fine; }
-            memset((void *)pagina, 0, PAGINA);   /* cio' che non sta nel file resta a zero */
+            /* la pagina si scrive dalla mappa diretta: nella mappa del kernel, che e'
+             * quella che stiamo usando, l'indirizzo 'v' del programma non esiste */
+            memset(virt_da_fisico(pagina), 0, PAGINA);   /* cio' che non sta nel file resta a zero */
             unsigned int dentro = (unsigned int)(v - p->virtuale);   /* dentro il pezzo: piccolo */
             if (dentro < p->byte_file) {
                 unsigned int n = p->byte_file - dentro < PAGINA ? p->byte_file - dentro : PAGINA;
-                memcpy((void *)pagina, file + p->nel_file + dentro, n);
+                memcpy(virt_da_fisico(pagina), file + p->nel_file + dentro, n);
             }
             if (!pag_mappa_programma(mappa, v, pagina, permessi)) {
                 pagina_restituisci(pagina);
@@ -148,12 +150,12 @@ struct compito *compito_crea_programma(const char *percorso, unsigned int uid, c
     /* 2. la sua pila: una pagina nuova, nella sua mappa in cima alla zona dei programmi.
      *    In cima un indirizzo di ritorno 0: se il programma tornasse da _start invece di
      *    chiamare esci, salterebbe a 0 -> page fault, e il kernel chiuderebbe il compito.
-     *    (La pagina si scrive dal suo indirizzo fisico: nella mappa del kernel, che e'
-     *    quella che stiamo usando, il suo indirizzo virtuale non esiste.) */
+     *    (La pagina si scrive dalla mappa diretta: nella mappa del kernel, che e' quella
+     *    che stiamo usando, il suo indirizzo nella meta' bassa non esiste.) */
     *errore = "memoria finita";
     pila_programma = pagina_chiedi();
     if (!pila_programma) goto non_va;
-    memset((void *)pila_programma, 0, PAGINA);
+    memset(virt_da_fisico(pila_programma), 0, PAGINA);
     if (!pag_mappa_programma(mappa, PILA_PROGRAMMA_CIMA - PAGINA, pila_programma,
                              PAG_UTENTE | PAG_SCRITTURA)) goto non_va;
     pila_programma = 0;   /* ora e' della mappa: la restituira' pag_cancella_mappa */

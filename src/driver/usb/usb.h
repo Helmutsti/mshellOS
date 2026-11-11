@@ -44,8 +44,9 @@ typedef void (*usb_ricevi)(void *privato, const unsigned char *dati, unsigned in
 
 /* Una domanda sull'endpoint 0. Aspetta la risposta (fino a un secondo). Ritorna i
  * byte ricevuti (o 0 se non ci sono dati), -1 se il dispositivo ha detto no o non ha
- * risposto. 'buffer' deve stare in una pagina avuta da pagina_chiedi (il controllore
- * ci scrive da solo). */
+ * risposto. 'buffer' deve stare in una pagina avuta da pagina_chiedi, vista dalla mappa
+ * diretta (il controllore ci scrive da solo: gli si da' l'indirizzo fisico, che si
+ * ricava con fisico_da_virt). */
 int usb_controllo(struct usb_dispositivo *d, unsigned char tipo, unsigned char richiesta,
                   unsigned short valore, unsigned short indice, void *buffer, unsigned short byte);
 

@@ -11,6 +11,9 @@
  * puntatore alla consegna. Interruzioni spente. La paginazione e' ancora quella del
  * firmware (mappatura identica: indirizzo = indirizzo fisico); la pila e' ancora
  * quella del caricatore: il kernel deve passare SUBITO alla sua pila e alle sue tabelle.
+ * Il kernel e' legato in alto (KERNEL_IMMAGINE, src/memoria/pagine.h) ma messo nella RAM
+ * agli indirizzi fisici del suo ELF: il caricatore salta al punto d'ingresso tradotto in
+ * fisico, e sara' il kernel a portarsi in alto (kernel_head.s).
  *
  * DOVE STA IL BIGLIETTO. In memoria del caricatore (EfiLoaderData), che nella mappa qui
  * sotto risulta LIBERA: il kernel deve COPIARLO nelle sue variabili prima di usare
@@ -26,7 +29,8 @@
 #define ZONA_RISERVATA   2   /* non toccare (firmware, dispositivi, buchi...) */
 #define ZONA_ACPI        3   /* tabelle ACPI: si leggono, poi si potranno liberare */
 #define ZONA_ACPI_NVS    4   /* memoria del firmware per ACPI: non toccare mai */
-#define ZONA_KERNEL      5   /* il kernel caricato: non e' libera */
+#define ZONA_KERNEL      5   /* il kernel caricato: non e' libera, ma e' RAM (conta
+                              * nel totale) */
 
 #define MAX_ZONE 256
 

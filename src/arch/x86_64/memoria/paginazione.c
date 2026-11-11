@@ -24,37 +24,43 @@
  *   bit 3  PWT, bit 4 PCD: senza cache (i dispositivi)
  *   bit 7  PS   (nella PD) pagina grande da 2 MB
  *   bit 9       uno dei bit lasciati al kernel: PAG_PRESTATA
- *   bit 12-51   l'indirizzo fisico (della tabella sotto, o della pagina)
+ *   bit 12-51   l'indirizzo FISICO (della tabella sotto, o della pagina)
  * I bit 0, 1, 2 e 9 sono proprio PAG_PRESENTE, PAG_SCRITTURA, PAG_UTENTE e PAG_PRESTATA
  * di paginazione.h (che e' nata sul PC).
  *
- * LA MAPPA DEL KERNEL: indirizzo virtuale = fisico ("mappatura identica"), come su ARM,
- * costruita dalla mappa della memoria della consegna, solo ring 0:
- *   - la RAM (libera, del kernel, delle tabelle ACPI) a pagine grandi da 2 MB; i pezzi
- *     da 2 MB che sono RAM solo in parte scendono a pagine da 4 KB, e solo le pagine di
- *     RAM ci sono. Sopra i 64 GB la RAM non si vede (MAX_GB);
- *   - la pagina 0 non c'e': un puntatore nullo fa page fault invece di fare danni;
- *   - codice e costanti del kernel sono di sola lettura (a pagine da 4 KB);
- *   - i dispositivi (lo schermo, i registri delle schede PCI) si aggiungono quando
- *     servono, senza cache: pag_mappa_dispositivo.
- * Le tabelle della RAM stanno nella .bss del kernel (non nelle pagine libere: quando si
- * costruiscono, le pagine libere sono ancora piene delle tabelle del firmware, che la
- * CPU sta usando).
+ * LA MAPPA DEL KERNEL: la pianta di pagine.h. La PML4 ha 512 righe da 512 GB; le prime
+ * 256 sono la meta' bassa, le altre la meta' alta:
+ *   - righe 0-255: i PROGRAMMI. Nella mappa del kernel sono vuote;
+ *   - riga 256 (MAPPA_DIRETTA): tutta la RAM, a MAPPA_DIRETTA + indirizzo fisico,
+ *     costruita dalla mappa della memoria della consegna (la RAM libera, del kernel, delle
+ *     tabelle ACPI) a pagine grandi da 2 MB; i pezzi da 2 MB che sono RAM solo in parte
+ *     scendono a pagine da 4 KB, e solo le pagine di RAM ci sono. Sopra i 64 GB la RAM
+ *     non si vede (MAX_GB). Anche qui il codice del kernel e' di sola lettura;
+ *   - riga 384 (ZONA_DISPOSITIVI): i dispositivi (lo schermo, i registri delle schede
+ *     PCI), aggiunti quando servono, senza cache: pag_mappa_dispositivo;
+ *   - riga 511 (KERNEL_IMMAGINE): il kernel, a pagine da 4 KB: codice e costanti di sola
+ *     lettura, il resto si scrive.
+ * Nessuna riga della meta' alta ha il bit US: il ring 3 non puo' toccare niente del
+ * kernel. Un indirizzo basso nella mappa del kernel (un puntatore nullo) fa page fault.
+ * Le tabelle della mappa diretta e del kernel stanno nella .bss del kernel (non nelle
+ * pagine libere: quando si costruiscono, il magazziniere non c'e' ancora).
+ *
+ * L'AVVIO. kernel_head.s parte con le tabelle del firmware (virtuale = fisico), ne fa
+ * di provvisorie (il primo GB due volte: dov'e' e in alto, dove il kernel e' legato),
+ * salta in alto e chiama il C. Qui mmu_prepara fa le tabelle vere: da li' gli
+ * indirizzi bassi non portano piu' al kernel.
  *
  * LE MAPPE DEI PROGRAMMI: una per ogni programma in ring 3, come su ARM. Ogni mappa ha
- *   - le stesse righe della PML4 del kernel, che puntano alle STESSE tabelle: il kernel
- *     c'e' in ogni mappa (serve quando arriva un'interruzione), ma le sue pagine non
- *     hanno il bit US, quindi il programma non le puo' toccare;
- *   - la riga 255 (da 127,5 a 128 TB, l'ultima degli indirizzi "bassi") solo sua: li'
- *     vivono i programmi (PROGRAMMI_INIZIO - PROGRAMMI_FINE, in chiamate.h), con tabelle
- *     create quando servono. Cosi' in alto perche' nessun indirizzo fisico ci arriva:
- *     il kernel vede la RAM e le schede al loro indirizzo vero, e il firmware puo'
- *     mettere le schede PCI a 64 bit molto in alto (QEMU: a 768 GB). Il kernel puo'
- *     usare tutte le altre righe (anche oltre i primi 512 GB, per i dispositivi).
+ *   - le righe 256-511 della PML4 uguali a quelle del kernel: puntano alle STESSE
+ *     tabelle, cosi' il kernel c'e' in ogni mappa (serve quando arriva un'interruzione) e
+ *     un dispositivo mappato dopo compare in tutte;
+ *   - le righe 0-255 solo sue (i programmi usano i primi 2 GB, PROGRAMMI_INIZIO -
+ *     PROGRAMMI_FINE in chiamate.h), con tabelle create quando servono.
  * Lo scheduler, a ogni cambio di turno, mette in CR3 la mappa di chi parte.
  *
- * Le tabelle dei programmi sono pagine prese dal magazziniere. Siccome il kernel ha la
- * mappatura identica in ogni mappa, il loro indirizzo fisico si usa come puntatore. */
+ * FISICO E VIRTUALE. Nelle righe c'e' l'indirizzo fisico (la CPU legge la RAM vera); il
+ * kernel legge e scrive le tabelle passando dalla mappa diretta (virt_da_fisico). Una
+ * mappa si indica con l'indirizzo fisico della sua PML4, quello che va in CR3. */
 #include "kernel.h"
 #include "pagine.h"
 #include "paginazione.h"
@@ -80,19 +86,24 @@
 #define GB1 0x40000000ul
 #define MAX_GB 64                 /* la RAM che si vede: i primi 64 GB */
 #define MAX_PT 64                 /* le PT dei pezzi da 2 MB spezzati (di RAM) */
+#define MAX_PT_KERNEL 4           /* il kernel: fino a 8 MB (linker.ld lo controlla) */
 
-#define RIGA_PROGRAMMI INDICE_PML4(ZONA_PROGRAMMI)   /* la riga dei programmi: 255 */
+#define META_ALTA 256             /* la prima riga della PML4 della meta' alta */
 
 #define CR0_PROTEGGI_SCRITTURA 0x10000 /* WP: anche il kernel rispetta la sola lettura */
 
 /* Le tabelle della mappa del kernel, nella .bss (a zero = righe vuote). */
 static unsigned long pml4[RIGHE] __attribute__((aligned(4096)));
-static unsigned long pdpt0[RIGHE] __attribute__((aligned(4096)));
+static unsigned long pdpt_diretta[RIGHE] __attribute__((aligned(4096)));
 static unsigned long scorta_pd[MAX_GB][RIGHE] __attribute__((aligned(4096)));
 static unsigned long scorta_pt[MAX_PT][RIGHE] __attribute__((aligned(4096)));
 static int pt_usate;
+static unsigned long pdpt_dispositivi[RIGHE] __attribute__((aligned(4096)));
+static unsigned long pdpt_kernel[RIGHE] __attribute__((aligned(4096)));
+static unsigned long pd_kernel[RIGHE] __attribute__((aligned(4096)));
+static unsigned long pt_kernel[MAX_PT_KERNEL][RIGHE] __attribute__((aligned(4096)));
 
-extern char kernel_start[], sola_lettura_fine[];   /* dal linker script */
+extern char kernel_start[], sola_lettura_fine[], kernel_end[];   /* dal linker script */
 
 static unsigned int tabelle;
 
@@ -102,11 +113,18 @@ static void dimentica(indirizzo_t virt) {
     __asm__ volatile("invlpg (%0)" : : "r"(virt) : "memory");
 }
 
-static unsigned long *attuale(void) {   /* la PML4 che la CPU sta usando */
+/* La tabella che sta all'indirizzo fisico scritto nella riga: dalla mappa diretta. */
+static unsigned long *tabella_di(unsigned long riga) {
+    return (unsigned long *)virt_da_fisico(INDIRIZZO(riga));
+}
+
+static unsigned long cr3_attuale(void) {   /* l'indirizzo fisico della PML4 in uso */
     unsigned long cr3;
     __asm__ volatile("mov %%cr3, %0" : "=r"(cr3));
-    return (unsigned long *)INDIRIZZO(cr3);
+    return INDIRIZZO(cr3);
 }
+
+static unsigned long *attuale(void) { return tabella_di(cr3_attuale()); }
 
 static int zona_programmi(indirizzo_t virt) { return virt >= PROGRAMMI_INIZIO && virt < PROGRAMMI_FINE; }
 
@@ -118,34 +136,43 @@ static int e_ram(unsigned int tipo) {
     return tipo == ZONA_LIBERA || tipo == ZONA_KERNEL || tipo == ZONA_ACPI || tipo == ZONA_ACPI_NVS;
 }
 
-/* La PD del GB numero g (dalla scorta, la prima volta). */
+/* Mentre si costruisce, la mappa diretta non c'e' ancora: le tabelle della .bss si
+ * scrivono dall'indirizzo del kernel. Nelle righe va il loro indirizzo fisico. */
+static unsigned long fis(const void *tabella) { return fisico_da_virt(tabella); }
+
+/* La PD del GB numero g della RAM (dalla scorta, la prima volta). La mappa diretta
+ * comincia a un multiplo di 512 GB: il GB g della RAM e' la riga g della sua PDPT. */
 static unsigned long *pd_del_gb(unsigned long g) {
-    if (!(pdpt0[g] & P))
-        pdpt0[g] = (unsigned long)scorta_pd[g] | P | RW;
+    if (!(pdpt_diretta[g] & P))
+        pdpt_diretta[g] = fis(scorta_pd[g]) | P | RW;
     return scorta_pd[g];
 }
 
 /* La PT del pezzo da 2 MB che comincia a 'base' (dalla scorta, la prima volta). */
 static unsigned long *pt_del_pezzo(unsigned long base) {
-    unsigned long *pd = pd_del_gb(base / GB1);
-    unsigned long *riga = &pd[INDICE_PD(base)];
+    unsigned long *riga = &pd_del_gb(base / GB1)[INDICE_PD(base)];
     if (!(*riga & P)) {
         if (pt_usate == MAX_PT)
             panico("paginazione: la RAM e' spezzata in troppi pezzi (piu' di %d)", MAX_PT);
-        *riga = (unsigned long)scorta_pt[pt_usate++] | P | RW;
+        *riga = fis(scorta_pt[pt_usate++]) | P | RW;
     }
-    return (unsigned long *)INDIRIZZO(*riga);
+    /* quale PT della scorta e': si conta da dove comincia la scorta */
+    return scorta_pt[(INDIRIZZO(*riga) - fis(scorta_pt)) / KB4];
+}
+
+/* Il codice del kernel, in indirizzi fisici: anche nella mappa diretta e' di sola lettura. */
+static int e_codice(unsigned long p) {
+    return p >= fis(kernel_start) && p < fis(sola_lettura_fine);
 }
 
 /* Il pezzo da 2 MB che comincia a 'base' va spezzato in pagine da 4 KB anche se e' tutto
- * RAM? Si', se contiene la pagina 0 (che non deve esserci) o il codice del kernel (che
- * deve essere di sola lettura). */
+ * RAM? Si', se contiene il codice del kernel (che deve essere di sola lettura). */
 static int da_spezzare(unsigned long base) {
-    return base == 0 ||
-           (base < (unsigned long)sola_lettura_fine && base + MB2 > (unsigned long)kernel_start);
+    return base < fis(sola_lettura_fine) && base + MB2 > fis(kernel_start);
 }
 
-/* La RAM [da, a): pagine grandi dove si puo', pagine da 4 KB ai bordi. */
+/* La RAM [da, a) (indirizzi fisici) nella mappa diretta: pagine grandi dove si puo',
+ * pagine da 4 KB ai bordi. */
 static void mappa_ram(unsigned long da, unsigned long a) {
     for (unsigned long base = da & ~(MB2 - 1); base < a; base += MB2) {
         if (!da_spezzare(base) && base >= da && base + MB2 <= a) {
@@ -154,11 +181,25 @@ static void mappa_ram(unsigned long da, unsigned long a) {
         }
         unsigned long *pt = pt_del_pezzo(base);
         unsigned long p = base < da ? da : base, fine = base + MB2 < a ? base + MB2 : a;
-        for (; p < fine; p += KB4) {
-            if (p == 0) continue;                                    /* la pagina 0: no */
-            int codice = p >= (unsigned long)kernel_start && p < (unsigned long)sola_lettura_fine;
-            pt[INDICE_PT(p)] = p | P | (codice ? 0 : RW);
+        for (; p < fine; p += KB4)
+            pt[INDICE_PT(p)] = p | P | (e_codice(p) ? 0 : RW);
+    }
+}
+
+/* Il kernel in alto, pagina per pagina: codice e costanti di sola lettura. */
+static void mappa_kernel(void) {
+    pml4[INDICE_PML4(KERNEL_IMMAGINE)] = fis(pdpt_kernel) | P | RW;
+    pdpt_kernel[INDICE_PDPT(KERNEL_IMMAGINE)] = fis(pd_kernel) | P | RW;
+    int usate = 0;
+    unsigned long *pt = 0;
+    for (unsigned long v = (unsigned long)kernel_start; v < (unsigned long)kernel_end; v += KB4) {
+        unsigned long *riga = &pd_kernel[INDICE_PD(v)];
+        if (!(*riga & P)) {
+            if (usate == MAX_PT_KERNEL) panico("paginazione: il kernel e' troppo grande");
+            pt = pt_kernel[usate++];
+            *riga = fis(pt) | P | RW;
         }
+        pt[INDICE_PT(v)] = fis((void *)v) | P | (v < (unsigned long)sola_lettura_fine ? 0 : RW);
     }
 }
 
@@ -181,15 +222,19 @@ unsigned long mmu_prepara(const struct consegna *c) {
         if (!fine) { da = z->inizio; a = z->inizio + z->byte; }
     }
 
-    /* La riga 0 della PML4: i primi 512 GB, la RAM. La riga dei programmi resta vuota:
-     * ognuno ha la sua. */
-    pml4[0] = (unsigned long)pdpt0 | P | RW;
+    /* La meta' alta: la mappa diretta, la zona dei dispositivi (ancora vuota, ma la sua
+     * PDPT c'e' gia': le mappe dei programmi la condividono), il kernel. La meta' bassa
+     * resta vuota: ogni programma ha la sua. */
+    pml4[INDICE_PML4(MAPPA_DIRETTA)] = fis(pdpt_diretta) | P | RW;
+    pml4[INDICE_PML4(ZONA_DISPOSITIVI)] = fis(pdpt_dispositivi) | P | RW;
+    mappa_kernel();
 
-    /* "la PML4 e' qui": da questa istruzione in poi le tabelle del firmware non servono
-     * piu'. Se le nostre fossero sbagliate, la prossima istruzione (che sta in una
-     * pagina del kernel) farebbe page fault. Poi WP: anche il kernel rispetta la sola
-     * lettura (una scrittura nel suo codice e' un errore, non passa in silenzio). */
-    __asm__ volatile("mov %0, %%cr3" : : "r"(pml4) : "memory");
+    /* "la PML4 e' qui": da questa istruzione in poi le tabelle provvisorie di
+     * kernel_head.s non servono piu', e gli indirizzi bassi non portano a niente. Se le
+     * nostre fossero sbagliate, la prossima istruzione farebbe page fault. Poi WP: anche
+     * il kernel rispetta la sola lettura (una scrittura nel suo codice e' un errore, non
+     * passa in silenzio). */
+    __asm__ volatile("mov %0, %%cr3" : : "r"(fis(pml4)) : "memory");
     unsigned long cr0;
     __asm__ volatile("mov %%cr0, %0" : "=r"(cr0));
     __asm__ volatile("mov %0, %%cr0" : : "r"(cr0 | CR0_PROTEGGI_SCRITTURA) : "memory");
@@ -201,12 +246,15 @@ unsigned int mmu_pezzi_spezzati(void) { return (unsigned int)pt_usate; }
 /* --- scendere nelle tabelle --- */
 
 /* Una tabella nuova (per i programmi e i dispositivi): una pagina del magazziniere,
- * tutta a zero (tutte le righe "assente"). */
-static unsigned long *tabella_nuova(void) {
-    unsigned long *t = (unsigned long *)pagina_chiedi();
-    if (!t) return 0;
+ * tutta a zero (tutte le righe "assente"). Il suo indirizzo virtuale, e in *fisico
+ * quello da scrivere nella riga sopra. */
+static unsigned long *tabella_nuova(unsigned long *fisico) {
+    indirizzo_t p = pagina_chiedi();
+    if (!p) return 0;
+    unsigned long *t = virt_da_fisico(p);
     memset(t, 0, PAGINA);
     tabelle++;
+    *fisico = p;
     return t;
 }
 
@@ -216,17 +264,17 @@ static unsigned long *tabella_nuova(void) {
 static unsigned long *scendi(unsigned long *t, unsigned long i, int crea, unsigned long riga) {
     if (!(t[i] & P)) {
         if (!crea) return 0;
-        unsigned long *nuova = tabella_nuova();
-        if (!nuova) return 0;
-        t[i] = (unsigned long)nuova | riga;
+        unsigned long fisico;
+        if (!tabella_nuova(&fisico)) return 0;
+        t[i] = fisico | riga;
     }
     if (t[i] & PS) return 0;
-    return (unsigned long *)INDIRIZZO(t[i]);
+    return tabella_di(t[i]);
 }
 
 /* La PT che copre 'virt' nella mappa 'radice'. Le righe dei livelli sopra sono
  * permissive (anche US): i permessi veri li decide la PT (la CPU guarda tutti i livelli
- * e applica il piu' severo). Per il kernel la riga della PML4 non ha US, e basta lei. */
+ * e applica il piu' severo). Si usa solo per la meta' bassa: quella dei programmi. */
 static unsigned long *pt_di(unsigned long *radice, indirizzo_t virt, int crea) {
     unsigned long *pdpt = scendi(radice, INDICE_PML4(virt), crea, P | RW | US);
     if (!pdpt) return 0;
@@ -237,7 +285,8 @@ static unsigned long *pt_di(unsigned long *radice, indirizzo_t virt, int crea) {
 
 int pag_traduci(indirizzo_t virt, indirizzo_t *fis, unsigned int *permessi) {
     /* Fuori dalla zona dei programmi: 0. Il kernel usa questa funzione per controllare i
-     * puntatori che arrivano dai programmi: un programma non puo' passare indirizzi del kernel. */
+     * puntatori che arrivano dai programmi: un programma non puo' passare indirizzi del
+     * kernel (la meta' alta). */
     if (!zona_programmi(virt)) return 0;
     unsigned long *pt = pt_di(attuale(), virt, 0);
     if (!pt) return 0;
@@ -253,61 +302,64 @@ unsigned int pag_tabelle(void) { return tabelle; }
 /* --- le mappe dei programmi --- */
 
 indirizzo_t pag_nuova_mappa(void) {
-    unsigned long *radice = tabella_nuova();
+    unsigned long fisico;
+    unsigned long *radice = tabella_nuova(&fisico);
     if (!radice) return 0;
-    /* la parte del kernel: le stesse righe, quindi le stesse tabelle (condivise).
-     * La riga dei programmi nella PML4 del kernel e' vuota: resta vuota anche qui. */
-    for (int i = 0; i < RIGHE; i++) radice[i] = pml4[i];
-    return (indirizzo_t)radice;
+    /* la meta' alta: le stesse righe, quindi le stesse tabelle (condivise). La meta'
+     * bassa resta vuota: e' del programma. */
+    for (int i = META_ALTA; i < RIGHE; i++) radice[i] = pml4[i];
+    return fisico;
 }
 
 int pag_mappa_programma(indirizzo_t mappa, indirizzo_t virt, indirizzo_t fis, unsigned int permessi) {
-    if (!zona_programmi(virt)) return 0;   /* fuori: e' del kernel */
-    unsigned long *radice = (unsigned long *)mappa;
-    unsigned long *pt = pt_di(radice, virt, 1);
+    if (!zona_programmi(virt)) return 0;   /* fuori: non e' dei programmi */
+    unsigned long *pt = pt_di(virt_da_fisico(mappa), virt, 1);
     if (!pt) return 0;
     pt[INDICE_PT(virt)] = INDIRIZZO(fis) | (permessi & PERMESSI) | P;
-    if (radice == attuale()) dimentica(virt);
+    if (mappa == cr3_attuale()) dimentica(virt);
     return 1;
 }
 
 void pag_togli_programma(indirizzo_t mappa, indirizzo_t virt) {
     if (!zona_programmi(virt)) return;
-    unsigned long *radice = (unsigned long *)mappa;
-    unsigned long *pt = pt_di(radice, virt, 0);
+    unsigned long *pt = pt_di(virt_da_fisico(mappa), virt, 0);
     if (!pt) return;
     pt[INDICE_PT(virt)] = 0;
-    if (radice == attuale()) dimentica(virt);
+    if (mappa == cr3_attuale()) dimentica(virt);
 }
 
 /* La tabella sotto la riga 'riga' (0 se non c'e'). */
 static unsigned long *sotto(unsigned long riga) {
-    return (riga & P) && !(riga & PS) ? (unsigned long *)INDIRIZZO(riga) : 0;
+    return (riga & P) && !(riga & PS) ? tabella_di(riga) : 0;
 }
 
 unsigned int pag_conta_programma(indirizzo_t mappa) {
-    unsigned long *pdpt = sotto(((unsigned long *)mappa)[RIGA_PROGRAMMI]);
+    unsigned long *radice = virt_da_fisico(mappa);
     unsigned int n = 0;
-    if (!pdpt) return 0;
-    for (int i = 0; i < RIGHE; i++) {
-        unsigned long *pd = sotto(pdpt[i]);
-        if (!pd) continue;
-        for (int j = 0; j < RIGHE; j++) {
-            unsigned long *pt = sotto(pd[j]);
-            if (!pt) continue;
-            for (int k = 0; k < RIGHE; k++)
-                if ((pt[k] & P) && !(pt[k] & PAG_PRESTATA)) n++;   /* le sue pagine */
+    for (int r = 0; r < META_ALTA; r++) {               /* solo la meta' bassa */
+        unsigned long *pdpt = sotto(radice[r]);
+        if (!pdpt) continue;
+        for (int i = 0; i < RIGHE; i++) {
+            unsigned long *pd = sotto(pdpt[i]);
+            if (!pd) continue;
+            for (int j = 0; j < RIGHE; j++) {
+                unsigned long *pt = sotto(pd[j]);
+                if (!pt) continue;
+                for (int k = 0; k < RIGHE; k++)
+                    if ((pt[k] & P) && !(pt[k] & PAG_PRESTATA)) n++;   /* le sue pagine */
+            }
         }
     }
     return n;
 }
 
 void pag_cancella_mappa(indirizzo_t mappa) {
-    unsigned long *radice = (unsigned long *)mappa;
-    if (radice == attuale()) panico("paginazione: cancello la mappa che sto usando");
-    /* solo la riga dei programmi: le altre sono del kernel, condivise, e restano */
-    unsigned long *pdpt = sotto(radice[RIGA_PROGRAMMI]);
-    if (pdpt) {
+    if (mappa == cr3_attuale()) panico("paginazione: cancello la mappa che sto usando");
+    unsigned long *radice = virt_da_fisico(mappa);
+    /* solo la meta' bassa: l'altra e' del kernel, condivisa, e resta */
+    for (int r = 0; r < META_ALTA; r++) {
+        unsigned long *pdpt = sotto(radice[r]);
+        if (!pdpt) continue;
         for (int i = 0; i < RIGHE; i++) {
             unsigned long *pd = sotto(pdpt[i]);
             if (!pd) continue;
@@ -317,52 +369,69 @@ void pag_cancella_mappa(indirizzo_t mappa) {
                 for (int k = 0; k < RIGHE; k++)
                     if ((pt[k] & P) && !(pt[k] & PAG_PRESTATA))   /* le sue pagine */
                         pagina_restituisci(INDIRIZZO(pt[k]));
-                pagina_restituisci((indirizzo_t)pt);   /* la PT */
+                pagina_restituisci(INDIRIZZO(pd[j]));   /* la PT */
                 tabelle--;
             }
-            pagina_restituisci((indirizzo_t)pd);       /* la PD */
+            pagina_restituisci(INDIRIZZO(pdpt[i]));     /* la PD */
             tabelle--;
         }
-        pagina_restituisci((indirizzo_t)pdpt);         /* la PDPT */
+        pagina_restituisci(INDIRIZZO(radice[r]));       /* la PDPT */
         tabelle--;
     }
-    pagina_restituisci(mappa);                         /* la PML4 */
+    pagina_restituisci(mappa);                          /* la PML4 */
     tabelle--;
 }
 
 void pag_usa_mappa(indirizzo_t mappa) {
-    unsigned long *radice = mappa ? (unsigned long *)mappa : pml4;
+    unsigned long radice = mappa ? mappa : fis(pml4);
     /* scrivere CR3 fa dimenticare alla CPU tutto il TLB: lo si fa solo se cambia davvero */
-    if (radice != attuale()) __asm__ volatile("mov %0, %%cr3" : : "r"(radice) : "memory");
+    if (radice != cr3_attuale()) __asm__ volatile("mov %0, %%cr3" : : "r"(radice) : "memory");
 }
 
 /* --- i dispositivi --- */
 
-/* La memoria di un dispositivo: pagine da 4 KB, senza cache (PCD e PWT): ogni lettura e
- * scrittura arriva al dispositivo. Non deve cadere nella RAM (le sue pagine ci sono gia',
- * con la cache) ne' nella riga dei programmi. Le tabelle nuove vengono dal magazziniere:
- * si chiama dopo pagine_prepara. Rimappare una zona gia' mappata come dispositivo va bene. */
-int pag_mappa_dispositivo(indirizzo_t fisico, unsigned int byte) {
-    indirizzo_t fine = fisico + byte;
-    if (fine < fisico || fine > 0x800000000000ul) return 0;   /* oltre i 128 TB: no (non e' un indirizzo "basso") */
-    for (indirizzo_t p = fisico & ~(KB4 - 1); p < fine; p += KB4) {
-        if (INDICE_PML4(p) == RIGA_PROGRAMMI) return 0;
-        unsigned long *pdpt = scendi(pml4, INDICE_PML4(p), 1, P | RW);
-        if (!pdpt) return 0;
-        unsigned long *pd = scendi(pdpt, INDICE_PDPT(p), 1, P | RW);
+/* I pezzi gia' mappati: chi chiede di nuovo lo stesso pezzo (o un pezzo dentro) riceve
+ * lo stesso indirizzo. */
+#define MAX_PEZZI_DISPOSITIVI 32
+static struct { indirizzo_t fisico, virtuale, byte; } pezzi[MAX_PEZZI_DISPOSITIVI];
+static int quanti_pezzi;
+static indirizzo_t prossimo = ZONA_DISPOSITIVI;   /* il primo indirizzo libero della zona */
+
+/* La memoria di un dispositivo, senza cache (PCD e PWT): ogni lettura e scrittura arriva
+ * al dispositivo. Ogni pezzo nuovo comincia in un posto da 2 MB tutto suo, alla stessa
+ * distanza dall'inizio dei 2 MB che ha l'indirizzo fisico: cosi' dove il pezzo copre
+ * 2 MB interi si usa una pagina grande (la finestra PCI di ARM e' di 256 MB), e pagine
+ * da 4 KB solo ai bordi. Le tabelle nuove vengono dal magazziniere. */
+indirizzo_t pag_mappa_dispositivo(indirizzo_t fisico, unsigned int byte) {
+    if (byte == 0) return 0;
+    for (int i = 0; i < quanti_pezzi; i++)
+        if (fisico >= pezzi[i].fisico && fisico + byte <= pezzi[i].fisico + pezzi[i].byte)
+            return pezzi[i].virtuale + (fisico - pezzi[i].fisico);
+
+    indirizzo_t da = fisico & ~(KB4 - 1), a = (fisico + byte + KB4 - 1) & ~(KB4 - 1);
+    if (a <= da) return 0;                                    /* fa il giro: non e' vero */
+    indirizzo_t virt = ((prossimo + MB2 - 1) & ~(MB2 - 1)) + (da & (MB2 - 1));
+    if (virt + (a - da) > ZONA_DISPOSITIVI_FINE) return 0;   /* la zona e' piena */
+
+    for (indirizzo_t p = da; p < a; ) {
+        indirizzo_t v = virt + (p - da);
+        unsigned long *pd = scendi(pdpt_dispositivi, INDICE_PDPT(v), 1, P | RW);
         if (!pd) return 0;
-        if (pd[INDICE_PD(p)] & PS) return 0;                 /* una pagina grande: RAM */
-        unsigned long *pt = scendi(pd, INDICE_PD(p), 1, P | RW);
-        if (!pt) return 0;
-        unsigned long riga = pt[INDICE_PT(p)];
-        if (riga & P) {
-            if (riga & PCD) continue;                        /* gia' mappata come dispositivo */
-            return 0;                                        /* e' RAM */
+        if (!(p & (MB2 - 1)) && p + MB2 <= a) {              /* 2 MB interi: pagina grande */
+            pd[INDICE_PD(v)] = p | P | RW | PCD | PWT | PS;
+            p += MB2;
+            continue;
         }
-        pt[INDICE_PT(p)] = p | P | RW | PCD | PWT;
-        dimentica(p);
+        unsigned long *pt = scendi(pd, INDICE_PD(v), 1, P | RW);
+        if (!pt) return 0;
+        pt[INDICE_PT(v)] = p | P | RW | PCD | PWT;
+        p += KB4;
     }
-    return 1;
+    /* Indirizzi mai usati prima: nel TLB non ci sono, non c'e' niente da dimenticare. */
+    prossimo = virt + (a - da);
+    if (quanti_pezzi < MAX_PEZZI_DISPOSITIVI)
+        pezzi[quanti_pezzi++] = (typeof(pezzi[0])){ da, virt, a - da };
+    return virt + (fisico - da);
 }
 
 void paginazione_prepara(indirizzo_t schermo, unsigned int byte_schermo) {

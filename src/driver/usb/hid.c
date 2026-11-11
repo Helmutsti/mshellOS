@@ -447,7 +447,7 @@ int usb_hid_prova(struct usb_dispositivo *d, const unsigned char *config, unsign
     if (!appunti) {
         indirizzo_t pagina = pagina_chiedi();
         if (!pagina) return 0;
-        appunti = (unsigned char *)pagina;
+        appunti = virt_da_fisico(pagina);
     }
 
     /* gli endpoint si preparano, poi si sceglie la configurazione: da li' sono attivi */

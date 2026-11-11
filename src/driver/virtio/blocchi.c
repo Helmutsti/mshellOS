@@ -18,7 +18,9 @@
  *
  * Tutto il modulo sta in una nostra pagina di appoggio: cosi' non importa dove stia il
  * buffer di chi ci chiama, copiamo da/verso quello. Una richiesta alla volta, con le
- * interruzioni spente, cosi' nessuno tocca la coda a meta'.
+ * interruzioni spente, cosi' nessuno tocca la coda a meta'. Il kernel scrive e legge la
+ * pagina dalla mappa diretta; nelle catene va il suo indirizzo fisico (il dispositivo
+ * non conosce le mappe).
  *
  * LA CONFIGURAZIONE: i primi 8 byte sono la capacita' in settori da 512 byte. */
 #include "kernel.h"
@@ -49,7 +51,8 @@ struct domanda {
 
 static struct virtio_dispositivo dev;
 static struct virtq coda;
-static unsigned char *pagina;       /* la pagina di appoggio */
+static unsigned char *pagina;       /* la pagina di appoggio, dove la vede il kernel */
+static indirizzo_t pagina_fisica;   /* ... e dove la vede il dispositivo */
 static int ha_flush;
 static int trovato;
 
@@ -76,17 +79,17 @@ static int richiesta(unsigned int tipo, unsigned int settore, int dati, int scri
     d->settore_alto = 0;
     *stato = 0xFF;                  /* "non ancora": il dispositivo la mettera' a 0 se va bene */
 
-    pezzi[n].indirizzo = (indirizzo_t)d;
+    pezzi[n].indirizzo = pagina_fisica + POSTO_DOMANDA;   /* al dispositivo: fisici */
     pezzi[n].byte = sizeof *d;
     pezzi[n].scrive_dispositivo = 0;
     n++;
     if (dati) {
-        pezzi[n].indirizzo = (indirizzo_t)(pagina + POSTO_DATI);
+        pezzi[n].indirizzo = pagina_fisica + POSTO_DATI;
         pezzi[n].byte = SETTORE;
         pezzi[n].scrive_dispositivo = scrive;
         n++;
     }
-    pezzi[n].indirizzo = (indirizzo_t)stato;
+    pezzi[n].indirizzo = pagina_fisica + POSTO_STATO;
     pezzi[n].byte = 1;
     pezzi[n].scrive_dispositivo = 1;
     n++;
@@ -143,8 +146,9 @@ static int prepara(const struct pci_scheda *s) {
     if (!virtio_coda(&dev, 0, &coda)) return 0;
     indirizzo_t p = pagina_chiedi();
     if (!p) return 0;
-    memset((void *)p, 0, PAGINA);
-    pagina = (unsigned char *)p;
+    pagina_fisica = p;
+    pagina = virt_da_fisico(p);
+    memset(pagina, 0, PAGINA);
 
     virtio_pronto(&dev);
     trovato = 1;

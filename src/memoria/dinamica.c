@@ -7,7 +7,7 @@
  * divide poi quella zona in pezzetti.
  *
  *     codice | variabili | zona dinamica ->     ...      | fogli | schermo | pila
- *     1 GB                ^dati_inizio   ^confine          1,5 GB
+ *     4 MB                ^dati_inizio   ^confine          1,5 GB
  *
  * LE PAGINE ARRIVANO AL PRIMO TOCCO, come in Linux. Spostare il confine non prende
  * nessuna pagina: e' solo una PROMESSA ("fin qui, la memoria e' tua"). La prima volta
@@ -50,7 +50,7 @@ int memoria_promessa(indirizzo_t virt) {
     if (pag_traduci(virt, &fisico, &permessi)) return 0;   /* c'e' gia': l'errore e' un altro */
     indirizzo_t pagina = pagina_chiedi();
     if (!pagina) return 0;                                 /* memoria finita: errore vero */
-    memset((void *)pagina, 0, PAGINA);   /* mai dare a un programma i resti di un altro */
+    memset(virt_da_fisico(pagina), 0, PAGINA);   /* mai dare a un programma i resti di un altro */
     if (!pag_mappa_programma(c->mappa, virt & ~(PAGINA - 1), pagina, PAG_UTENTE | PAG_SCRITTURA)) {
         pagina_restituisci(pagina);
         return 0;

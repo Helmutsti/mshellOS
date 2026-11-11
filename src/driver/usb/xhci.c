@@ -29,6 +29,11 @@
  *   4. sull'endpoint 0 chiediamo i descrittori: chi e', come e' fatto;
  *   5. il driver della classe (hid.c) decide se prenderlo.
  *
+ * DUE INDIRIZZI. Il controllore legge e scrive la RAM da solo (DMA: anelli, contesti,
+ * buffer) e non conosce le mappe: gli si danno sempre indirizzi FISICI. Il kernel le
+ * stesse pagine le usa dalla mappa diretta (virt_da_fisico, pagine.h), e i registri del
+ * controllore dalla zona dei dispositivi (pag_mappa_dispositivo).
+ *
  * PRIMA DI TUTTO, IL BIOS. Sui PC il firmware usa l'USB da solo (per far funzionare
  * la tastiera USB nel BIOS e in GRUB) e finge una tastiera PS/2. Il controllore va
  * chiesto a lui: c'e' una "capacita' estesa" apposta, con un semaforo (BIOS e OS).
@@ -135,7 +140,8 @@ struct trb {
 #define CASELLE 256        /* una pagina: 256 TRB da 16 byte; l'ultima e' il LINK */
 
 struct anello {
-    volatile struct trb *trb;
+    volatile struct trb *trb;    /* dove lo vede il kernel (la mappa diretta) */
+    indirizzo_t fisico;          /* dove lo vede il controllore: l'indirizzo fisico */
     unsigned int dove;     /* la prossima casella da scrivere (o da leggere: eventi) */
     unsigned int ciclo;
 };
@@ -143,8 +149,9 @@ struct anello {
 static int anello_nuovo(struct anello *a) {
     indirizzo_t p = pagina_chiedi();
     if (!p) return 0;
-    memset((void *)p, 0, PAGINA);
-    a->trb = (volatile struct trb *)p;
+    memset(virt_da_fisico(p), 0, PAGINA);
+    a->trb = (volatile struct trb *)virt_da_fisico(p);
+    a->fisico = p;
     a->dove = 0;
     a->ciclo = 1;
     /* il LINK in fondo: rimanda all'inizio (il suo ciclo si scrive quando ci si arriva) */
@@ -153,11 +160,13 @@ static int anello_nuovo(struct anello *a) {
     return 1;
 }
 
+/* L'indirizzo FISICO di una casella: e' cosi' che il controllore la chiama negli
+ * eventi, ed e' cosi' che gliela si indica. */
 static indirizzo_t indirizzo_di(struct anello *a, unsigned int casella) {
-    return (indirizzo_t)&a->trb[casella];
+    return a->fisico + (indirizzo_t)casella * sizeof(struct trb);
 }
 
-/* Scrive un TRB e ritorna dov'e'. Il controllo (con il ciclo) per ultimo: finche' il
+/* Scrive un TRB e ritorna dov'e' (fisico). Il controllo (con il ciclo) per ultimo: finche' il
  * ciclo e' quello vecchio, il controllore non lo considera. */
 static indirizzo_t anello_metti(struct anello *a, unsigned long long parametro,
                                 unsigned int stato, unsigned int controllo) {
@@ -167,7 +176,7 @@ static indirizzo_t anello_metti(struct anello *a, unsigned long long parametro,
     t->stato = stato;
     __sync_synchronize();
     t->controllo = controllo | a->ciclo;
-    indirizzo_t qui = (indirizzo_t)t;
+    indirizzo_t qui = indirizzo_di(a, a->dove);
     if (++a->dove == CASELLE - 1) {
         volatile struct trb *link = &a->trb[CASELLE - 1];
         __sync_synchronize();
@@ -198,7 +207,8 @@ struct usb_endpoint {
     unsigned int dci;           /* il numero nel contesto: 2 * numero + 1 (per IN) */
     unsigned int byte;          /* quanti byte per rapporto */
     struct anello anello;
-    unsigned char *buffer;      /* BUFFER_EP buffer da 'byte' */
+    unsigned char *buffer;      /* BUFFER_EP buffer da 'byte' (dove li vede il kernel) */
+    indirizzo_t buffer_fisico;  /* ... e dove li scrive il controllore */
     unsigned char buffer_di[CASELLE];   /* quale buffer usa ogni casella dell'anello */
     usb_ricevi ricevi;
     void *privato;
@@ -210,6 +220,7 @@ struct usb_dispositivo {
     unsigned int posto;         /* lo slot dato dal controllore (1..) */
     unsigned int velocita, presa;
     unsigned char *input;       /* il contesto di input (una pagina) */
+    indirizzo_t input_fisico;   /* ... il suo indirizzo fisico, per i comandi */
     unsigned char *uscita;      /* il contesto del controllore (una pagina) */
     struct anello ep0;
     unsigned char *appunti;     /* una pagina per le risposte sull'endpoint 0 */
@@ -280,7 +291,7 @@ static void ep_riempi(struct usb_endpoint *e) {
     unsigned int byte = e->byte > MAX_RAPPORTO ? MAX_RAPPORTO : e->byte;
     for (unsigned int b = 0; b < BUFFER_EP; b++) {
         e->buffer_di[e->anello.dove] = (unsigned char)b;
-        anello_metti(&e->anello, (indirizzo_t)(e->buffer + b * MAX_RAPPORTO), byte,
+        anello_metti(&e->anello, e->buffer_fisico + b * MAX_RAPPORTO, byte,
                      TIPO(TRB_NORMALE) | T_AVVISA | T_CORTO_OK);
     }
 }
@@ -357,7 +368,7 @@ static void evento(struct xhci *hc, volatile struct trb *t) {
         if (e->ripresa) return;                 /* in ripristino: i buffer li rimette lui */
         /* il buffer torna in coda */
         e->buffer_di[e->anello.dove] = (unsigned char)b;
-        anello_metti(&e->anello, (indirizzo_t)dati, e->byte,
+        anello_metti(&e->anello, e->buffer_fisico + b * MAX_RAPPORTO, e->byte,
                      TIPO(TRB_NORMALE) | T_AVVISA | T_CORTO_OK);
         __sync_synchronize();
         hc->campanelli[d->posto] = e->dci;
@@ -432,7 +443,7 @@ int usb_controllo(struct usb_dispositivo *d, unsigned char tipo, unsigned char r
     d->ep0_dati = 0;
     anello_metti(&d->ep0, setup, 8, TIPO(TRB_SETUP) | T_DATI_DENTRO | trt << 16);
     if (byte)
-        d->ep0_dati = anello_metti(&d->ep0, (indirizzo_t)buffer, byte,
+        d->ep0_dati = anello_metti(&d->ep0, fisico_da_virt(buffer), byte,
                                    TIPO(TRB_DATI) | T_CORTO_OK | (dentro ? T_IN : 0));
     /* lo STATUS va nel verso opposto ai dati (IN se non ce ne sono) */
     d->ep0_stato = anello_metti(&d->ep0, 0, 0,
@@ -480,8 +491,9 @@ struct usb_endpoint *usb_endpoint_prepara(struct usb_dispositivo *d, const unsig
     e->byte = byte;
     indirizzo_t pagina = pagina_chiedi();
     if (!pagina || !anello_nuovo(&e->anello)) return 0;
-    memset((void *)pagina, 0, PAGINA);
-    e->buffer = (unsigned char *)pagina;
+    e->buffer = virt_da_fisico(pagina);
+    e->buffer_fisico = pagina;
+    memset(e->buffer, 0, PAGINA);
 
     /* il contesto di input: aggiungo questo endpoint (e la scheda dello slot, che dice
      * fin dove arrivano gli endpoint) */
@@ -499,7 +511,7 @@ struct usb_endpoint *usb_endpoint_prepara(struct usb_dispositivo *d, const unsig
     ep[3] = (unsigned int)((unsigned long long)indirizzo_di(&e->anello, 0) >> 32);
     ep[4] = byte | pacchetto << 16;                   /* lunghezza media, carico massimo */
 
-    if (comando(hc, (indirizzo_t)d->input, TIPO(TRB_CONFIGURA_EP) | d->posto << 24) != CC_OK) {
+    if (comando(hc, d->input_fisico, TIPO(TRB_CONFIGURA_EP) | d->posto << 24) != CC_OK) {
         kprintf("xhci: l'endpoint %x non si configura\n", indirizzo);
         return 0;
     }
@@ -543,11 +555,13 @@ static void accogli(struct xhci *hc, unsigned int presa, unsigned int velocita) 
         comando(hc, 0, TIPO(TRB_LIBERA_POSTO) | posto << 24);
         return;
     }
-    memset((void *)in, 0, PAGINA);
-    memset((void *)out, 0, PAGINA);
-    d->input = (unsigned char *)in;
-    d->uscita = (unsigned char *)out;
-    d->appunti = (unsigned char *)app;
+    /* il kernel le usa dalla mappa diretta; al controllore si danno gli indirizzi fisici */
+    d->input = virt_da_fisico(in);
+    d->input_fisico = in;
+    d->uscita = virt_da_fisico(out);
+    d->appunti = virt_da_fisico(app);
+    memset(d->input, 0, PAGINA);
+    memset(d->uscita, 0, PAGINA);
     d->dci_massimo = 1;
     hc->dcbaa[posto] = out;
 
@@ -614,22 +628,23 @@ static void accogli(struct xhci *hc, unsigned int presa, unsigned int velocita) 
 /* --- il controllore --- */
 
 /* Il controllore lo usa il BIOS: glielo chiediamo (capacita' estesa 1, "legacy"). */
-static void chiedi_al_bios(struct xhci *hc) {
+static void chiedi_al_bios(struct xhci *hc, indirizzo_t base) {
     unsigned int hcc = r32(hc->cap, CAP_HCC1);
     unsigned int pos = (hcc >> 16) << 2;
     for (int giri = 0; pos && giri < 64; giri++) {
         /* le capacita' estese possono stare lontano (sui PC Intel verso 32 KB): prima
-         * di leggerne una, la sua pagina va mappata */
-        if (!pag_mappa_dispositivo((indirizzo_t)hc->cap + pos, 8)) return;
-        unsigned int v = r32(hc->cap, pos);
+         * di leggerne una, la si mappa (base e' l'indirizzo fisico del BAR) */
+        volatile unsigned char *c = (volatile unsigned char *)pag_mappa_dispositivo(base + pos, 8);
+        if (!c) return;
+        unsigned int v = r32(c, 0);
         if ((v & 0xFF) == 1) {
             if (v & (1u << 16)) {                       /* ce l'ha il BIOS */
-                w32(hc->cap, pos, v | (1u << 24));      /* lo chiede il sistema */
-                if (!aspetta_bit(hc->cap, pos, 1u << 16, 0, 1000))
+                w32(c, 0, v | (1u << 24));              /* lo chiede il sistema */
+                if (!aspetta_bit(c, 0, 1u << 16, 0, 1000))
                     kprintf("xhci: il BIOS non lascia il controllore\n");
             }
             /* niente piu' interruzioni "SMI" verso il BIOS; i bit di stato si cancellano con 1 */
-            w32(hc->cap, pos + 4, (r32(hc->cap, pos + 4) & 0x000E1FEEu) | 0xE0000000u);
+            w32(c, 4, (r32(c, 4) & 0x000E1FEEu) | 0xE0000000u);
             return;
         }
         unsigned int dopo = (v >> 8) & 0xFF;
@@ -656,10 +671,13 @@ static int prepara(const struct pci_scheda *s) {
     struct xhci *hc = &controllori[n_controllori];
     memset(hc, 0, sizeof *hc);
 
+    /* i registri: all'indirizzo fisico del BAR 0, che si mappa nella zona dei
+     * dispositivi. Prima una pagina, per leggere quanto e' grande tutto. */
     indirizzo_t base = pci_bar_memoria(s, 0);
-    if (!base || !pag_mappa_dispositivo(base, PAGINA)) return 0;
+    if (!base) return 0;
+    hc->cap = (volatile unsigned char *)pag_mappa_dispositivo(base, PAGINA);
+    if (!hc->cap) return 0;
     pci_accendi(s);
-    hc->cap = (volatile unsigned char *)base;
     unsigned int lung = r32(hc->cap, CAP_LUNGHEZZA) & 0xFF;   /* a 32 bit: certi ponti PCIe non leggono un byte */
     unsigned int hcs1 = r32(hc->cap, CAP_HCS1), hcs2 = r32(hc->cap, CAP_HCS2);
     unsigned int dboff = r32(hc->cap, CAP_DBOFF) & ~3u, rtsoff = r32(hc->cap, CAP_RTSOFF) & ~31u;
@@ -677,12 +695,13 @@ static int prepara(const struct pci_scheda *s) {
     unsigned int fine = lung + OP_PORTSC(hc->prese + 1);
     if (dboff + 4 * 256 > fine) fine = dboff + 4 * 256;
     if (rtsoff + IR0 + 0x20 > fine) fine = rtsoff + IR0 + 0x20;
-    if (!pag_mappa_dispositivo(base, fine)) return 0;
+    hc->cap = (volatile unsigned char *)pag_mappa_dispositivo(base, fine);
+    if (!hc->cap) return 0;
     hc->op = hc->cap + lung;
     hc->run = hc->cap + rtsoff;
     hc->campanelli = (volatile unsigned int *)(hc->cap + dboff);
 
-    chiedi_al_bios(hc);
+    chiedi_al_bios(hc, base);
     prese_intel(s);
 
     /* fermo, poi reset */
@@ -699,22 +718,22 @@ static int prepara(const struct pci_scheda *s) {
     /* l'elenco dei contesti, e le pagine di appunti che il controllore chiede per se' */
     indirizzo_t p = pagina_chiedi();
     if (!p) return 0;
-    memset((void *)p, 0, PAGINA);
-    hc->dcbaa = (unsigned long long *)p;
+    hc->dcbaa = virt_da_fisico(p);
+    memset(hc->dcbaa, 0, PAGINA);
     unsigned int appunti = ((hcs2 >> 27) & 0x1F) | ((hcs2 >> 21) & 0x1F) << 5;
     if (appunti) {
         indirizzo_t elenco = pagina_chiedi();
         if (!elenco || appunti > PAGINA / 8) return 0;
-        unsigned long long *e = (unsigned long long *)elenco;
+        unsigned long long *e = virt_da_fisico(elenco);
         for (unsigned int i = 0; i < appunti; i++) {
             indirizzo_t a = pagina_chiedi();
             if (!a) return 0;
-            memset((void *)a, 0, PAGINA);
-            e[i] = a;
+            memset(virt_da_fisico(a), 0, PAGINA);
+            e[i] = a;                                   /* il controllore vuole i fisici */
         }
         hc->dcbaa[0] = elenco;
     }
-    w64(hc->op, OP_DCBAAP, (indirizzo_t)hc->dcbaa);
+    w64(hc->op, OP_DCBAAP, p);
 
     /* l'anello dei comandi */
     if (!anello_nuovo(&hc->comandi)) return 0;
@@ -726,8 +745,8 @@ static int prepara(const struct pci_scheda *s) {
     hc->eventi.trb[CASELLE - 1].p0 = hc->eventi.trb[CASELLE - 1].p1 = 0;
     indirizzo_t tabella = pagina_chiedi();
     if (!tabella) return 0;
-    memset((void *)tabella, 0, PAGINA);
-    unsigned int *riga = (unsigned int *)tabella;
+    unsigned int *riga = virt_da_fisico(tabella);
+    memset(riga, 0, PAGINA);
     riga[0] = (unsigned int)indirizzo_di(&hc->eventi, 0);
     riga[1] = (unsigned int)((unsigned long long)indirizzo_di(&hc->eventi, 0) >> 32);
     riga[2] = CASELLE;

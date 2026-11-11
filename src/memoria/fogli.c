@@ -71,7 +71,7 @@ int foglio_nuovo(unsigned int byte) {
     for (; f->pagine < pagine; f->pagine++) {
         indirizzo_t p = pagina_chiedi();
         if (!p) { chiudi(&f->aperto); return -1; }   /* memoria finita: si rende quel che si e' preso */
-        memset((void *)p, 0, PAGINA);   /* mai dare a un programma i resti di un altro */
+        memset(virt_da_fisico(p), 0, PAGINA);   /* mai dare a un programma i resti di un altro */
         f->fisiche[f->pagine] = p;
         pagine_dei_fogli++;
     }

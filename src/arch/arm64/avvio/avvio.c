@@ -5,7 +5,12 @@
  *   - ci si presenta sulla seriale (livello, CPU);
  *   - la tabella dei vettori (le eccezioni);
  *   - il device tree: dove sono la RAM, la seriale, il GIC...;
- *   - la MMU, con due prove che dice di no;
+ *   - la MMU: kernel_head.s l'ha gia' accesa, con il kernel in alto e una mappa
+ *     provvisoria in basso (virtuale = fisico: cosi' qui si leggono il device tree e si
+ *     scrive sulla seriale al loro indirizzo fisico). Qui si aggiunge la mappa diretta
+ *     della RAM (mmu_prepara), si danno al device tree e alla seriale i loro posti in alto,
+ *     e si toglie la mappa provvisoria: da li' la meta' bassa e' solo dei programmi.
+ *     Poi due prove che dice di no;
  *   - la RAM al magazziniere, proteggendo il device tree;
  * poi si passa la mano al kernel neutro (kernel_avvia, in avvio/kernel.c), come su x86.
  *
@@ -28,6 +33,7 @@
 #include "pci.h"
 #include "driver.h"
 #include "ramfb.h"
+#include "paginazione.h"
 
 extern char kernel_start[], kernel_end[];   /* da linker.ld */
 extern unsigned long avvio_albero, avvio_livello;   /* da kernel_head.s */
@@ -112,7 +118,9 @@ void kernel_main(void) {
     } else {
         seriale_testo("nessun device tree: uso gli indirizzi di QEMU \"virt\"\n");
     }
-    /* Dal device tree: la RAM e la seriale (da qui la si usa all'indirizzo che dice lui). */
+    /* Dal device tree: la RAM e la seriale (da qui la si usa all'indirizzo che dice lui:
+     * per ora quello fisico, nella mappa provvisoria). */
+    unsigned long seriale = 0x09000000UL;   /* quella di "virt", se il device tree non c'e' */
     unsigned long dove, quanto;
     if (albero && albero_prepara((const void *)albero)) {
         if (albero_memoria(&dove, &quanto)) {
@@ -123,6 +131,7 @@ void kernel_main(void) {
             seriale_testo(" MB\n");
         }
         if (albero_cerca("arm,pl011", &dove, &quanto)) {
+            seriale = dove;
             seriale_usa(dove);
             seriale_testo("Seriale : PL011 a ");
             seriale_esadecimale(dove);
@@ -138,6 +147,8 @@ void kernel_main(void) {
     seriale_esadecimale((unsigned long)kernel_start);
     seriale_testo(" -> ");
     seriale_esadecimale((unsigned long)kernel_end);
+    seriale_testo(", nella RAM a ");
+    seriale_esadecimale(kernel_fisico);
     seriale_scrivi('\n');
 
     /* Le eccezioni: da qui un errore stampa il panico invece di bloccare tutto in silenzio. */
@@ -148,7 +159,33 @@ void kernel_main(void) {
      * accesa, la RAM e' memoria normale, con la cache. (In una macchina virtuale la
      * differenza non si vede: la RAM dell'ospite la tiene in cache chi la ospita.) */
     mmu_prepara();
-    seriale_testo("MMU     : accesa (4 livelli, pagine da 4 KB), cache accese\n");
+    seriale_testo("MMU     : accesa (4 livelli, pagine da 4 KB), cache accese, la RAM in alto\n");
+
+    /* Il device tree e la seriale in alto: il device tree sta nella RAM, quindi nella
+     * mappa diretta; la seriale nella zona dei dispositivi (ci vuole il magazziniere,
+     * per le tabelle: lo si prepara prima, sotto). */
+    unsigned long albero_fisico = albero;
+    if (albero) {
+        albero = (unsigned long)virt_da_fisico(albero_fisico);
+        albero_prepara((const void *)albero);
+    }
+
+    /* Il magazziniere: la RAM che dice il device tree (se non c'e', quella di "virt");
+     * poi si rioccupa cio' che e' gia' usato: il device tree stesso (lo si legge ancora). */
+    static struct zona_ram zona;
+    unsigned long ram, ram_byte;
+    if (!albero_memoria(&ram, &ram_byte)) { ram = 0x40000000UL; ram_byte = 128UL << 20; }
+    zona = (struct zona_ram){ ram, ram + ram_byte };
+    pagine_prepara(&zona, 1);
+    if (albero) pagine_proteggi(albero_fisico, albero_fisico + albero_dimensione());
+
+    /* La seriale nella zona dei dispositivi; poi via la mappa provvisoria. */
+    indirizzo_t seriale_alta = pag_mappa_dispositivo(seriale, 0x1000);
+    if (!seriale_alta) panico("non posso mappare la seriale");
+    seriale_usa(seriale_alta);
+    pag_usa_mappa(0);
+    kprintf("Pagine  : %u libere = %u KB; la meta' bassa ora e' vuota\n",
+            pagine_libere(), pagine_libere() * 4);
 
     /* Le prove: la MMU deve dire di no. */
     prova_errore_atteso();
@@ -158,21 +195,11 @@ void kernel_main(void) {
     (void)*nascosto(0x10);                         /* leggere vicino a NULL */
     racconta_prova("Prova   : leggere l'indirizzo 0x10");
 
-    /* Il magazziniere: la RAM che dice il device tree (se non c'e', quella di "virt");
-     * poi si rioccupa cio' che e' gia' usato: il device tree stesso (lo si legge ancora). */
-    static struct zona_ram zona;
-    unsigned long ram, ram_byte;
-    if (!albero_memoria(&ram, &ram_byte)) { ram = 0x40000000UL; ram_byte = 128UL << 20; }
-    zona = (struct zona_ram){ ram, ram + ram_byte };
-    pagine_prepara(&zona, 1);
-    if (albero) pagine_proteggi(albero, albero + albero_dimensione());
-    kprintf("Pagine  : %u libere = %u KB\n", pagine_libere(), pagine_libere() * 4);
-
     /* Lo schermo: ramfb (QEMU, UTM). Se non c'e', la console scrive solo sulla seriale. */
     static struct schermo schermo;
     if (ramfb_prepara(&schermo, 1280, 800) && console_prepara(&schermo))
         kprintf("Schermo : %ux%u, ramfb a %p\n", schermo.larghezza, schermo.altezza,
-                (void *)schermo.indirizzo);
+                (void *)schermo.fisico);
     else
         kprintf("Schermo : nessuno (solo la seriale)\n");
     kernel_avvia(&schermo);   /* da qui, il kernel neutro: non torna */

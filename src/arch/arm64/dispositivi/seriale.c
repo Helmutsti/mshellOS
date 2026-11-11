@@ -5,7 +5,9 @@
  * ("I/O mappato in memoria", MMIO): i suoi registri hanno un indirizzo, e leggerli o
  * scriverli con una normale load/store vuol dire parlare con lui. Dove sta, lo dice il
  * device tree (seriale_usa); finche' non lo si e' letto, si usa 0x09000000, quello della
- * macchina "virt" di QEMU:
+ * macchina "virt" di QEMU. All'inizio la si usa al suo indirizzo fisico (nella mappa
+ * provvisoria dell'avvio, virtuale = fisico); poi avvio.c la mappa nella zona dei
+ * dispositivi e le da' l'indirizzo nuovo, sempre con seriale_usa:
  *   +0x00  DR  (dato): scrivere un byte qui lo spedisce
  *   +0x18  FR  (stato): il bit 5 (TXFF) dice "la coda d'uscita e' piena, aspetta"
  * QEMU la lascia gia' pronta: non serve prepararla.

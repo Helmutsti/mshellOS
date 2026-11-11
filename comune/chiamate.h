@@ -246,24 +246,25 @@ struct evento {
     unsigned int pulsanti;   /* EVENTO_MOUSE, EVENTO_PUNTATORE: PULSANTE_... tenuti premuti */
 };
 
-/* Dove vivono i programmi nella loro mappa: una zona di 1 GB. Il codice e le variabili
- * dal basso, i fogli a meta', lo schermo (se lo chiedono) a tre quarti, la pila in cima.
- * Il resto della mappa e' del kernel (invisibile ai programmi).
- * Su tutte e due le CPU (x86-64 e ARM64) i programmi stanno nell'ULTIMA riga della
- * tabella piu' in alto (PML4 sul PC, L0 su ARM) che ha indirizzi "bassi": la 255, da
- * 127,5 TB. Il kernel vede la RAM e i dispositivi al loro indirizzo vero (fisico), e
- * gli indirizzi fisici di una macchina vera arrivano al massimo a qualche TB: cosi' la
- * zona dei programmi non cade mai sopra qualcosa che il kernel deve vedere.
- * PERCHE' COSI' IN ALTO. La RAM puo' stare dove vuole (su ARM "virt" parte da 1 GB, sul
- * PC ce n'e' sopra i 4 GB), e cosi' le schede: sul PC il firmware mette i registri
- * delle schede PCI a 64 bit oltre la RAM, anche a centinaia di GB (QEMU: 768 GB). */
-#define ZONA_PROGRAMMI      0x7F8000000000ul   /* 127,5 TB: la riga 255 */
-#define PROGRAMMI_INIZIO    (ZONA_PROGRAMMI + 0x40000000u)
-#define FOGLI_INIZIO        (ZONA_PROGRAMMI + 0x60000000u)   /* la zona dei fogli: 16 posti da 16 MB */
-#define FOGLIO_MAX          0x01000000u                      /* il foglio piu' grande */
+/* Dove vivono i programmi nella loro mappa. Gli indirizzi sono divisi in due meta', come
+ * in Linux, Windows e macOS (la pianta intera e' in src/memoria/pagine.h):
+ *   - la META' BASSA (da 0 a 128 TB) e' dei programmi: ogni mappa ha la sua;
+ *   - la META' ALTA (gli indirizzi che cominciano con 0xFFFF...) e' del kernel, uguale in
+ *     tutte le mappe, e la CPU non la lascia toccare ai programmi.
+ * Cosi' un programma e il kernel non si pestano mai i piedi, comunque sia fatta la
+ * macchina: la RAM e i registri delle schede il kernel li vede in alto, a indirizzi suoi,
+ * qualunque sia il loro indirizzo fisico.
+ * Dentro la meta' bassa i programmi usano i primi 2 GB: il codice e le variabili da 4 MB
+ * (sotto non c'e' niente: un puntatore nullo, o quasi, fa errore), la memoria dinamica
+ * dopo il codice, i fogli da 1,5 GB, lo schermo (se lo chiedono) da 1,75 GB, la pila in
+ * cima, sotto i 2 GB. Restare sotto i 2 GB permette di compilarli nel modo normale (ogni
+ * indirizzo sta in 32 bit dentro le istruzioni: vedi build.sh). Su tutte e due le CPU. */
+#define PROGRAMMI_INIZIO    0x00400000ul   /* 4 MB */
+#define FOGLI_INIZIO        0x60000000ul   /* 1,5 GB: la zona dei fogli, 16 posti da 16 MB */
+#define FOGLIO_MAX          0x01000000u    /* il foglio piu' grande */
 #define MAX_MAPPATI         16
-#define SCHERMO_PROGRAMMA   (ZONA_PROGRAMMI + 0x70000000u)
-#define PROGRAMMI_FINE      (ZONA_PROGRAMMI + 0x80000000u)
+#define SCHERMO_PROGRAMMA   0x70000000ul   /* 1,75 GB */
+#define PROGRAMMI_FINE      0x80000000ul   /* 2 GB */
 #define PILA_PROGRAMMA_CIMA PROGRAMMI_FINE
 
 #endif

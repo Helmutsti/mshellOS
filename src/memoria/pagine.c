@@ -8,7 +8,8 @@
  * Il registro copre i primi 64 GB di indirizzi: 16M pagine = 16M bit = 2 MB. E' una
  * globale a zero, quindi sta nel .bss: lo spazio lo riserva il linker e kernel_end lo
  * comprende gia'. La RAM oltre i 64 GB non si usa (sui PC di oggi la RAM sopra i 4 GB e'
- * quasi tutta; una CPU a 64 bit la vede, e la mappa del kernel la copre fino a 64 GB).
+ * quasi tutta; una CPU a 64 bit la vede, e la mappa diretta del kernel la copre fino a 64 GB).
+ * Gli indirizzi del registro sono FISICI: per usare una pagina, virt_da_fisico (pagine.h).
  * DA IMPLEMENTARE: un registro grande quanto la RAM che c'e', messo in RAM libera
  * all'avvio invece che nella .bss. */
 #include "kernel.h"
@@ -23,7 +24,7 @@ extern char kernel_start[], kernel_end[];   /* messi dal linker script */
 
 static unsigned int registro[MAX_PAGINE / BIT_GRUPPO];
 static unsigned int n_pagine;   /* pagine fino alla fine della RAM: oltre non si cerca */
-static unsigned int ram_pagine;  /* pagine di RAM vera: quelle delle zone libere, buchi esclusi */
+static unsigned int ram_pagine;  /* pagine di RAM vera: quelle delle zone, kernel compreso, buchi esclusi */
 static unsigned int libere;     /* quante caselle sono a 0 */
 static unsigned int ripresa;    /* gruppo da cui ripartire a cercare */
 
@@ -62,7 +63,8 @@ void pagine_prepara(const struct zona_ram *zone, int quante) {
     libere = 0;
     n_pagine = 0;
 
-    /* Mossa 2: libera solo le zone che ci dicono libere. */
+    /* Mossa 2: libera le zone di RAM che ci danno. Fra queste c'e' anche il kernel:
+     * per un attimo risulta libero, e la mossa 3 lo rioccupa. */
     for (int z = 0; z < quante; z++) {
         unsigned long long inizio_z = zone[z].inizio;
         unsigned long long fine_z   = zone[z].fine;
@@ -76,13 +78,16 @@ void pagine_prepara(const struct zona_ram *zone, int quante) {
             segna_libera(p);
         if (ultima > n_pagine) n_pagine = ultima;
     }
-    /* La RAM vera e' quella appena liberata. Non e' n_pagine: le pagine si contano da
+    /* La RAM vera e' quella appena liberata, kernel compreso: il totale e' la RAM della
+     * macchina e non cambia se il kernel cresce. Non e' n_pagine: le pagine si contano da
      * 0, e prima della RAM possono esserci buchi (su ARM "virt" la RAM parte da 1 GB). */
     ram_pagine = libere;
 
     /* Mossa 3: rioccupa cio' che e' gia' nostro: il kernel, registro compreso. (Quello
-     * del BIOS e del bootloader lo protegge chi ci ha avviato: pagine_proteggi.) */
-    pagine_proteggi((indirizzo_t)kernel_start, (indirizzo_t)kernel_end);
+     * del BIOS e del bootloader lo protegge chi ci ha avviato: pagine_proteggi.) Il
+     * registro parla di pagine FISICHE: del kernel servono i suoi indirizzi fisici, non
+     * quelli in alto dove lo vede la CPU. */
+    pagine_proteggi(fisico_da_virt(kernel_start), fisico_da_virt(kernel_end));
 
     ripresa = 0;
 }
@@ -151,7 +156,7 @@ void pagina_restituisci(indirizzo_t indirizzo) {
     if (p >= n_pagine)
         panico("pagina_restituisci: %x e' oltre la fine della RAM", indirizzo);
     if (indirizzo < 0x100000 ||
-        (indirizzo >= (indirizzo_t)kernel_start && indirizzo < (indirizzo_t)kernel_end))
+        (indirizzo >= fisico_da_virt(kernel_start) && indirizzo < fisico_da_virt(kernel_end)))
         panico("pagina_restituisci: %x e' una pagina protetta", indirizzo);
     if (!e_occupata(p))
         panico("pagina_restituisci: %x restituita due volte", indirizzo);

@@ -59,7 +59,7 @@ static int aggiungi_zona(unsigned int byte) {
     indirizzo_t indirizzo = pagine_chiedi_consecutive(pagine);
     if (!indirizzo) return 0;
 
-    struct blocco *nuovo = (struct blocco *)indirizzo;
+    struct blocco *nuovo = virt_da_fisico(indirizzo);   /* il magazziniere da' l'indirizzo fisico */
     nuovo->stato = LIBERO;
     nuovo->dimensione = pagine * PAGINA - ETICHETTA;
 

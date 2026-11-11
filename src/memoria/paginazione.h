@@ -13,26 +13,30 @@
  * Quando la mappa si cancella, non va restituita. */
 #define PAG_PRESTATA  0x200
 
-/* La paginazione del kernel: le sue tabelle (indirizzo virtuale = fisico per la RAM,
- * pagina 0 assente, codice di sola lettura) le ha gia' fatte l'avvio della CPU (arch:
- * mmu.c su ARM, paginazione.c sul PC); qui ci si ricorda solo cio' che serve dopo. */
+/* La paginazione del kernel: le sue tabelle (la meta' alta degli indirizzi: la mappa
+ * diretta della RAM, i dispositivi, il kernel con il codice di sola lettura; la pianta e'
+ * in pagine.h) le ha gia' fatte l'avvio della CPU (arch: mmu.c su ARM, paginazione.c sul
+ * PC). Qui non resta niente da fare: c'e' per simmetria con l'avvio delle altre parti. */
 void paginazione_prepara(indirizzo_t schermo, unsigned int byte_schermo);
 
 /* Dove porta l'indirizzo virtuale 'virt', nella mappa che la CPU sta usando adesso?
- * Mette in *fis l'indirizzo fisico e in *permessi i bit. 1 se la pagina c'e', 0 se no. */
+ * Mette in *fis l'indirizzo fisico e in *permessi i bit. 1 se la pagina c'e', 0 se no.
+ * Risponde solo per la zona dei programmi (sotto): per il resto, 0. */
 int pag_traduci(indirizzo_t virt, indirizzo_t *fis, unsigned int *permessi);
 
 unsigned int pag_tabelle(void);   /* quante tabelle (pagine da 4 KB) usano le mappe */
 
 /* --- le mappe dei programmi --- */
 
-/* Da PROGRAMMI_INIZIO a PROGRAMMI_FINE (un GB a 127,5 TB, in chiamate.h) gli indirizzi sono dei
- * programmi: ogni mappa ha li' le sue pagine. Il resto e' del kernel, uguale e
- * condiviso in tutte. */
+/* Da PROGRAMMI_INIZIO a PROGRAMMI_FINE (da 4 MB a 2 GB, in chiamate.h), nella meta' bassa,
+ * gli indirizzi sono dei programmi: ogni mappa ha li' le sue pagine. La meta' alta e' del
+ * kernel, uguale e condivisa in tutte. */
 #include "chiamate.h"
 
-/* Una mappa nuova: la parte del kernel gia' dentro, quella del programma vuota.
- * Restituisce l'indirizzo della sua radice (la tabella piu' in alto), o 0 se la memoria e' finita. */
+/* Una mappa nuova: la meta' del kernel gia' dentro, quella del programma vuota.
+ * Restituisce l'indirizzo FISICO della sua radice (la tabella piu' in alto: quello che si
+ * da' alla CPU), o 0 se la memoria e' finita. E' il "numero" della mappa per le funzioni
+ * qui sotto. */
 indirizzo_t pag_nuova_mappa(void);
 
 /* Nella mappa di un programma collega 'virt' (nella zona dei programmi) alla pagina
@@ -51,13 +55,16 @@ unsigned int pag_conta_programma(indirizzo_t mappa);
  * sue tabelle e la radice. Non si puo' fare sulla mappa che la CPU sta usando. */
 void pag_cancella_mappa(indirizzo_t mappa);
 
-/* Fa usare alla CPU questa mappa (0 = quella del kernel). */
+/* Fa usare alla CPU questa mappa (0 = quella del kernel, con la meta' bassa vuota). */
 void pag_usa_mappa(indirizzo_t mappa);
 
-/* Rende raggiungibile al kernel la memoria di un dispositivo (i suoi registri, MMIO):
- * indirizzo virtuale = fisico, lettura e scrittura, SENZA CACHE (ogni accesso deve
- * arrivare davvero al dispositivo). Va chiamata all'avvio, prima che nascano i programmi
- * (le loro mappe copiano quella del kernel quando nascono). 0 se non si e' potuto. */
-int pag_mappa_dispositivo(indirizzo_t fisico, unsigned int byte);
+/* Rende raggiungibile al kernel la memoria di un dispositivo (i suoi registri, MMIO, che
+ * stanno all'indirizzo fisico 'fisico'): la mette nella ZONA_DISPOSITIVI (pagine.h),
+ * lettura e scrittura, SENZA CACHE (ogni accesso deve arrivare davvero al dispositivo).
+ * Restituisce l'indirizzo VIRTUALE da usare, o 0 se non si e' potuto. Chiedere di nuovo
+ * un pezzo gia' mappato da' lo stesso indirizzo. Si chiama dopo pagine_prepara (le
+ * tabelle sono pagine del magazziniere); la zona e' condivisa da tutte le mappe, quindi
+ * va bene anche dopo che sono nati i programmi. */
+indirizzo_t pag_mappa_dispositivo(indirizzo_t fisico, unsigned int byte);
 
 #endif

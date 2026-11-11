@@ -2,11 +2,14 @@
 #ifndef MMU_H
 #define MMU_H
 
-/* Costruisce la mappa del kernel (identica: virtuale = fisico) e accende la MMU e le
- * cache. Vedi mmu.c. */
+/* Con la MMU spenta (la chiama kernel_head.s): il kernel in alto, la mappa provvisoria
+ * (virtuale = fisico) in basso, e i registri della traduzione. Vedi mmu.c. */
+void mmu_avvio(void);
+
+/* In alto, letto il device tree: la mappa diretta della RAM e la voce dei dispositivi. */
 void mmu_prepara(void);
 
-/* L'indirizzo della tabella L0 del kernel (la radice della sua mappa). */
-unsigned long mmu_tabella_l0(void);
+/* La tabella L1 della zona dei dispositivi (la usa pag_mappa_dispositivo). */
+unsigned long *mmu_l1_dispositivi(void);
 
 #endif

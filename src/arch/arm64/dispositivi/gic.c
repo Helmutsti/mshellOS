@@ -44,9 +44,13 @@
 #include "gic.h"
 #include "seriale.h"
 #include "albero.h"
+#include "paginazione.h"
 
-/* Dove stanno i pezzi: dal device tree (gic_prepara); questi sono quelli di "virt". */
+/* Dove stanno i pezzi: dal device tree (gic_prepara); questi sono quelli di "virt".
+ * Sono indirizzi fisici finche' gic_prepara non li mappa nella zona dei dispositivi
+ * (pag_mappa_dispositivo): da li' sono quelli dove li vede il kernel. */
 static unsigned long GICD = 0x08000000UL;
+static unsigned long gicd_fisico;
 static unsigned long GICC = 0x08010000UL;   /* versione 2 */
 static unsigned long GICR = 0x080A0000UL;   /* versione 3: il redistributore della CPU 0 */
 #define GICR_SGI (GICR + 0x10000)           /* ... la sua pagina delle linee 0-31 */
@@ -82,7 +86,14 @@ static inline void icc_scrivi_eoir1(unsigned long v) { __asm__ volatile("msr icc
 
 int gic_versione(void) { return versione; }
 
-unsigned long gic_distributore(void) { return GICD; }
+unsigned long gic_distributore(void) { return gicd_fisico; }
+
+/* Un pezzo del GIC nella zona dei dispositivi. Senza, non si va avanti. */
+static unsigned long mappa(unsigned long fisico, unsigned int byte) {
+    indirizzo_t v = pag_mappa_dispositivo(fisico, byte);
+    if (!v) panico("gic: non posso mappare %p", (void *)fisico);
+    return v;
+}
 
 /* Cerca il GIC nel device tree. 1 se c'e' (e ha messo versione e indirizzi). */
 static int gic_dal_device_tree(void) {
@@ -101,12 +112,19 @@ static int gic_dal_device_tree(void) {
 }
 
 void gic_prepara(void) {
-    if (!gic_dal_device_tree()) {
+    /* Le grandezze: il distributore 64 KB; l'interfaccia della CPU (versione 2) 8 KB; il
+     * redistributore della CPU 0 (versione 3) due pagine da 64 KB. */
+    int trovato = gic_dal_device_tree();
+    gicd_fisico = GICD;
+    GICD = mappa(GICD, 0x10000);
+    if (!trovato) {
         unsigned long pfr0;
         __asm__ volatile("mrs %0, id_aa64pfr0_el1" : "=r"(pfr0));
         unsigned int bit_linee = (*reg32(GICD, GICD_TYPER) >> 19) & 0x1F;
         versione = ((pfr0 >> 24) & 0xF) || bit_linee ? 3 : 2;
     }
+    if (versione == 2) GICC = mappa(GICC, 0x2000);
+    else GICR = mappa(GICR, 0x20000);
 
     if (versione == 2) {
         *reg32(GICD, GICD_CTLR) = 1;      /* il distributore: acceso */
