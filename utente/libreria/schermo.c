@@ -8,7 +8,7 @@
  *   1. le RISORSE della scheda: i CONNETTORI (le uscite: HDMI, quella virtuale di QEMU...),
  *      i CRTC (chi legge un'immagine dalla memoria e la manda a un'uscita) e gli ENCODER
  *      (tra i due);
- *   2. un connettore collegato, e la sua MODALITA': 1280x800, se c'e';
+ *   2. un connettore collegato, e la sua MODALITA': 1280x800 (vedi scegli_modo);
  *   3. un "dumb buffer": un'immagine in memoria, senza scheda grafica che ci disegni
  *      (si disegna con la CPU), con un "framebuffer" che dice com'e' fatta (32 bit per
  *      pixel, XRGB8888: 0x00RRGGBB);
@@ -75,6 +75,40 @@ static unsigned int trova_crtc(int d, const struct drm_mode_card_res *r, const u
     return 0;
 }
 
+/* 1280x800 a 60 Hz con i tempi dello standard VESA (DMT, "reduced blanking"): per gli
+ * schermi virtuali che non la mettono nel loro elenco (vedi scegli_modo). */
+static struct drm_mode_modeinfo modo_voluto = {
+    .clock = 71000,
+    .hdisplay = 1280, .hsync_start = 1328, .hsync_end = 1360, .htotal = 1440,
+    .vdisplay = 800, .vsync_start = 803, .vsync_end = 809, .vtotal = 823,
+    .vrefresh = 60, .flags = DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_NVSYNC,
+    .type = DRM_MODE_TYPE_USERDEF, .name = "1280x800",
+};
+
+/* La modalita' da usare, tra quelle del connettore:
+ *   1. 1280x800, se c'e' nell'elenco;
+ *   2. se lo schermo e' VIRTUALE (quello di QEMU), 1280x800 lo stesso: uno schermo
+ *      virtuale prende qualsiasi misura. Serve perche' nell'elenco c'e' cio' che dice
+ *      QEMU: con una finestra vera, la "preferita" e' la misura che la finestra ha in quel
+ *      momento (640x480, quella del firmware), e 1280x800 spesso non c'e';
+ *   3. se no (un monitor vero) la piu' grande che non supera 1280x800 (il compositore
+ *      piu' grande non la sa disegnare), a parita' quella che il monitor preferisce;
+ *   4. se nessuna ci sta, 0. */
+static struct drm_mode_modeinfo *scegli_modo(struct drm_mode_modeinfo *modi, unsigned int quanti,
+                                             unsigned int tipo_connettore) {
+    for (unsigned int k = 0; k < quanti; k++)
+        if (modi[k].hdisplay == LARGHEZZA_VOLUTA && modi[k].vdisplay == ALTEZZA_VOLUTA) return &modi[k];
+    if (tipo_connettore == DRM_MODE_CONNECTOR_VIRTUAL) return &modo_voluto;
+    struct drm_mode_modeinfo *m = 0;
+    for (unsigned int k = 0; k < quanti; k++) {
+        if (modi[k].hdisplay > LARGHEZZA_VOLUTA || modi[k].vdisplay > ALTEZZA_VOLUTA) continue;
+        unsigned long area = (unsigned long)modi[k].hdisplay * modi[k].vdisplay;
+        unsigned long finora = m ? (unsigned long)m->hdisplay * m->vdisplay : 0;
+        if (!m || area > finora || (area == finora && (modi[k].type & DRM_MODE_TYPE_PREFERRED))) m = &modi[k];
+    }
+    return m;
+}
+
 void *mappa_schermo(int d, struct info_schermo *info) {
     /* 1. le risorse: prima quante sono, poi gli elenchi */
     unsigned int connettori[16], crtc[16];
@@ -103,12 +137,8 @@ void *mappa_schermo(int d, struct info_schermo *info) {
         if (c.count_modes > 64) c.count_modes = 64;
         if (c.count_encoders > 8) c.count_encoders = 8;
 
-        /* 1280x800 se c'e'; se no quella che il monitor preferisce; se no la prima */
-        struct drm_mode_modeinfo *m = &modi[0];
-        for (unsigned int k = 0; k < c.count_modes; k++)
-            if (modi[k].type & DRM_MODE_TYPE_PREFERRED) { m = &modi[k]; break; }
-        for (unsigned int k = 0; k < c.count_modes; k++)
-            if (modi[k].hdisplay == LARGHEZZA_VOLUTA && modi[k].vdisplay == ALTEZZA_VOLUTA) { m = &modi[k]; break; }
+        struct drm_mode_modeinfo *m = scegli_modo(modi, c.count_modes, c.connector_type);
+        if (!m) continue;
         unsigned int quale_crtc = trova_crtc(d, &r, crtc, &c, encoder);
         if (!quale_crtc) continue;
 
