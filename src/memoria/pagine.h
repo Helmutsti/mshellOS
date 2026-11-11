@@ -30,5 +30,6 @@ void pagina_restituisci(indirizzo_t indirizzo);
 
 unsigned int pagine_libere(void);   /* quante pagine si possono ancora chiedere */
 indirizzo_t memoria_fine(void);     /* l'indirizzo dopo l'ultima pagina di RAM */
+unsigned int pagine_ram(void);      /* quante pagine di RAM ci sono davvero (buchi esclusi) */
 
 #endif

@@ -264,7 +264,7 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
         struct info_memoria *m = (struct info_memoria *)arg[1];
         chiamata_risultato(r, -1);
         if (!del_programma((indirizzo_t)m, sizeof *m, SCRIVERE)) break;
-        m->totale = memoria_fine();
+        m->totale = pagine_ram() * PAGINA;
         m->libera = pagine_libere() * PAGINA;
         m->condivisa = fogli_pagine() * PAGINA;
         chiamata_risultato(r, 0);

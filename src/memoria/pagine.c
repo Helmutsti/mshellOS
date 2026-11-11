@@ -19,6 +19,7 @@ extern char kernel_start[], kernel_end[];   /* messi dal linker script */
 
 static unsigned int registro[MAX_PAGINE / BIT_GRUPPO];
 static unsigned int n_pagine;   /* pagine fino alla fine della RAM: oltre non si cerca */
+static unsigned int ram_pagine;  /* pagine di RAM vera: quelle delle zone libere, buchi esclusi */
 static unsigned int libere;     /* quante caselle sono a 0 */
 static unsigned int ripresa;    /* gruppo da cui ripartire a cercare */
 
@@ -71,6 +72,9 @@ void pagine_prepara(const struct zona_ram *zone, int quante) {
             segna_libera(p);
         if (ultima > n_pagine) n_pagine = ultima;
     }
+    /* La RAM vera e' quella appena liberata. Non e' n_pagine: le pagine si contano da
+     * 0, e prima della RAM possono esserci buchi (su ARM "virt" la RAM parte da 1 GB). */
+    ram_pagine = libere;
 
     /* Mossa 3: rioccupa cio' che e' gia' nostro: il kernel, registro compreso. (Quello
      * del BIOS e del bootloader lo protegge chi ci ha avviato: pagine_proteggi.) */
@@ -157,3 +161,4 @@ void pagina_restituisci(indirizzo_t indirizzo) {
 
 unsigned int pagine_libere(void) { return libere; }
 indirizzo_t memoria_fine(void) { return (indirizzo_t)n_pagine * PAGINA; }
+unsigned int pagine_ram(void) { return ram_pagine; }
