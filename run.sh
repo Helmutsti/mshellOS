@@ -12,9 +12,10 @@
 #                            RAM e avvia direttamente, passandogli il device tree
 #   build/arm64/disco.img  : il disco, con i programmi compilati per ARM64
 #
-# I dispositivi virtio (la "libreria" di driver di mkernel li sa usare su tutte e due le CPU):
-#   virtio-keyboard-pci, virtio-tablet-pci : tastiera e tavoletta. La tavoletta dice DOVE
-#       e' il puntatore (non di quanto si e' mosso): il mouse non va catturato, e il
+# Tastiera e mouse sono USB, come su un computer vero (lo stesso driver):
+#   qemu-xhci : il controllore USB 3
+#   usb-kbd, usb-tablet : tastiera e tavoletta USB. La tavoletta dice DOVE e' il
+#       puntatore (non di quanto si e' mosso): il mouse non va catturato, e il
 #       puntatore di mkernel e' sempre sotto quello del Mac
 #   virtio-blk-pci : il disco (su ARM; su x86 il disco e' quello IDE di sempre)
 set -e
@@ -40,7 +41,7 @@ if [ "$cpu" = arm64 ]; then
         -device ramfb -display cocoa,zoom-to-fit=on \
         -drive if=none,id=disco,file="$qui/build/arm64/disco.img",format=raw \
         -device virtio-blk-pci,drive=disco \
-        -device virtio-keyboard-pci -device virtio-tablet-pci
+        -device qemu-xhci -device usb-kbd -device usb-tablet
 fi
 
 # -cdrom + -boot d  : si parte dal "CD" con GRUB
@@ -50,5 +51,5 @@ fi
 qemu-system-i386 \
     -cdrom "$qui/build/mkernel.iso" -boot d -rtc base=localtime \
     -drive file="$qui/build/disco.img",format=raw,if=ide,index=0 \
-    -device virtio-keyboard-pci -device virtio-tablet-pci \
+    -device qemu-xhci -device usb-kbd -device usb-tablet \
     -display cocoa,zoom-to-fit=on
