@@ -15,7 +15,7 @@
 #include "fogli.h"
 #include "timer.h"
 #include "dinamica.h"
-#include "mfs.h"
+#include "vfs_operazioni.h"
 #include "file.h"
 #include "schermo.h"
 #include "processo.h"
@@ -381,29 +381,36 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
     case SIS_INFO:
     case SIS_CREA_CARTELLA:
     case SIS_CANCELLA: {
+        /* Il lavoro lo fa il file system virtuale, che controlla anche i permessi; qui si
+         * copia il percorso e si passano avanti i suoi errori (gli ERRORE_ di chiamate.h
+         * sono gli stessi numeri). */
         char percorso[MAX_PERCORSO] = {0};
-        unsigned int servizio = numero;
+        unsigned int servizio = numero, uid = compito_attuale()->uid;
         chiamata_risultato(r, -1);
         if (!copia_percorso(percorso, (const char *)arg[1])) break;
         if (servizio == SIS_APRI) {
             chiamata_risultato(r, file_apri(percorso, arg[2]));
         } else if (servizio == SIS_INFO) {
+            /* come stat di Unix: un collegamento simbolico si segue */
             struct info_file *info = (struct info_file *)arg[2];
-            int tipo;
-            unsigned int dimensione, proprietario, permessi;
-            if (!del_programma((indirizzo_t)info, sizeof *info, SCRIVERE) ||
-                mfs_info(percorso, &tipo, &dimensione, &proprietario, &permessi) < 0) break;
-            info->tipo = tipo;
-            info->dimensione = dimensione;
-            info->proprietario = proprietario;
-            info->permessi = permessi;
+            struct nodo_vfs n;
+            struct info_vfs i;
+            if (!del_programma((indirizzo_t)info, sizeof *info, SCRIVERE)) break;
+            int esito = vfs_cerca(percorso, 1, &n);
+            if (esito == 0) esito = vfs_info(&n, &i);
+            if (esito < 0) { chiamata_risultato(r, esito); break; }
+            info->tipo = i.tipo;
+            info->permessi = i.permessi;
+            info->proprietario = i.proprietario;
+            info->collegamenti = i.collegamenti;
+            info->dimensione = i.dimensione;
+            info->modificato = i.modificato;
             chiamata_risultato(r, 0);
+        } else if (servizio == SIS_CREA_CARTELLA) {
+            /* una cartella nuova e' di chi la crea, con 0755 */
+            chiamata_risultato(r, vfs_crea(percorso, VFS_CARTELLA, 0755, uid, 0));
         } else {
-            /* creare e cancellare: bisogna poter scrivere nella cartella che lo contiene */
-            if (!file_puo_nella_cartella(percorso, PERMESSO_SCRIVERE)) break;
-            int esito = servizio == SIS_CREA_CARTELLA
-                      ? mfs_mkdir(percorso, compito_attuale()->uid, 0755) : mfs_rm(percorso);
-            chiamata_risultato(r, esito < 0 ? -1 : 0);
+            chiamata_risultato(r, vfs_cancella(percorso, uid));
         }
         break;
     }
@@ -411,24 +418,14 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
         char da[MAX_PERCORSO], a[MAX_PERCORSO];
         chiamata_risultato(r, -1);
         if (!copia_percorso(da, (const char *)arg[1]) || !copia_percorso(a, (const char *)arg[2])) break;
-        /* si toglie da una cartella e si mette in un'altra: si deve poter scrivere in tutte e due */
-        if (!file_puo_nella_cartella(da, PERMESSO_SCRIVERE) ||
-            !file_puo_nella_cartella(a, PERMESSO_SCRIVERE)) break;
-        chiamata_risultato(r, mfs_rinomina(da, a) < 0 ? -1 : 0);
+        chiamata_risultato(r, vfs_rinomina(da, a, compito_attuale()->uid));
         break;
     }
     case SIS_PERMESSI: {
         char percorso[MAX_PERCORSO];
-        unsigned int nuovo_proprietario = arg[2], nuovi_permessi = arg[3];
         chiamata_risultato(r, -1);
         if (!copia_percorso(percorso, (const char *)arg[1])) break;
-        int tipo;
-        unsigned int dimensione, proprietario;
-        if (mfs_info(percorso, &tipo, &dimensione, &proprietario, 0) < 0) break;
-        unsigned int uid = compito_attuale()->uid;
-        /* il sistema puo' tutto; il proprietario solo i permessi, e il file resta suo */
-        if (uid != UID_SISTEMA && (uid != proprietario || nuovo_proprietario != proprietario)) break;
-        chiamata_risultato(r, mfs_permessi(percorso, nuovo_proprietario, nuovi_permessi) < 0 ? -1 : 0);
+        chiamata_risultato(r, vfs_cambia(percorso, arg[2], arg[3], compito_attuale()->uid));
         break;
     }
     case SIS_POSIZIONA:

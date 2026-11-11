@@ -122,9 +122,9 @@ void arch_dispositivi_prepara(void) {
     kprintf("%d schede:\n", pci_prepara());
     pci_mostra();
 
-    /* Il disco IDE per primo: e' quello con il sistema (se c'e' anche un disco virtio,
-     * si iscrive dopo e non conta). Poi la libreria dei driver: per ogni scheda, chi la
-     * sa gestire. */
+    /* Il disco IDE per primo: e' quello con il sistema, il disco numero 0 (se c'e' anche
+     * un disco virtio, si iscrive dopo, come disco 1). Poi la libreria dei driver: per
+     * ogni scheda, chi la sa gestire. */
     ata_prepara();
     driver_avvia_pci();
 }

@@ -85,15 +85,20 @@
                             * pagine sotto il confine arrivano la prima volta che si
                             * toccano. Di solito la usa solo malloc */
 
-/* I FILE E LE CARTELLE (sul disco, mfs). Un file aperto e' un descrittore come gli
- * altri: si legge con ricevi e si scrive con manda, a partire dalla sua POSIZIONE, che
- * va avanti da sola (come read e write in Unix). Una cartella aperta si legge una voce
- * alla volta: ogni ricevi da' la prossima struct voce_cartella, 0 quando sono finite. */
-#define SIS_APRI          20   /* apri(percorso, modo): un descrittore, o -1. 'modo' e' una
-                                * somma di APRI_... */
+/* I FILE E LE CARTELLE: un unico albero, che comincia da "/" (il disco del sistema,
+ * ext4, per ora in sola lettura). Un file aperto e' un descrittore come gli altri: si
+ * legge con ricevi e si scrive con manda, a partire dalla sua POSIZIONE, che va avanti
+ * da sola (come read e write in Unix). Una cartella aperta si legge una voce alla volta:
+ * ogni ricevi da' la prossima struct voce_cartella, 0 quando sono finite.
+ * I percorsi sono assoluti (cominciano con /); "." e ".." valgono come in Unix, e i
+ * collegamenti simbolici si seguono. Se qualcosa va storto le chiamate dei file
+ * restituiscono un ERRORE_... (negativo, qui sotto). */
+#define SIS_APRI          20   /* apri(percorso, modo): un descrittore, o un errore. 'modo'
+                                * e' una somma di APRI_... */
 #define SIS_POSIZIONA     21   /* posiziona(d, byte): la prossima lettura o scrittura
-                                * comincia da li' (non oltre la fine). La posizione, o -1 */
-#define SIS_INFO          22   /* info(percorso, &info): che cos'e' e quanto e' grande */
+                                * comincia da li' (non oltre la fine; per una cartella: la
+                                * voce numero 'byte', 0 per ricominciare). La posizione */
+#define SIS_INFO          22   /* info(percorso, &info): che cos'e', quanto e' grande... */
 #define SIS_CREA_CARTELLA 23   /* crea_cartella(percorso) */
 #define SIS_CANCELLA      24   /* cancella(percorso): un file, o una cartella vuota */
 #define SIS_RINOMINA      25   /* rinomina(da, a): rinomina o sposta, anche in un'altra
@@ -105,16 +110,38 @@
 #define APRI_CREARE    4       /* se non c'e', lo si crea vuoto */
 #define APRI_SVUOTARE  8       /* lo si svuota prima di cominciare (serve anche SCRIVERE) */
 
-#define TIPO_FILE      1
-#define TIPO_CARTELLA  2
-#define MAX_NOME_FILE 28       /* lettere di un nome, compreso lo 0 finale */
+#define TIPO_FILE         1
+#define TIPO_CARTELLA     2
+#define TIPO_COLLEGAMENTO 3    /* collegamento simbolico (le voci delle cartelle lo dicono) */
+#define TIPO_ALTRO        4    /* dispositivi, code...: non si aprono */
+#define MAX_NOME_FILE   256    /* byte di un nome (UTF-8), compreso lo 0 finale */
 
 struct info_file {
-    unsigned int tipo;          /* TIPO_FILE o TIPO_CARTELLA */
-    unsigned int dimensione;    /* byte */
-    unsigned int proprietario;  /* l'uid di chi l'ha creato */
-    unsigned int permessi;      /* come in Unix, in ottale: 0755, 0644... */
+    unsigned int tipo;               /* TIPO_... */
+    unsigned int permessi;           /* come in Unix, in ottale: 0755, 0644... */
+    unsigned int proprietario;       /* l'uid di chi l'ha creato */
+    unsigned int collegamenti;       /* quanti nomi ha */
+    unsigned long long dimensione;   /* byte */
+    long long modificato;            /* l'ultima modifica: secondi dal 1/1/1970 (UTC) */
 };
+
+/* Gli errori delle chiamate dei file, sempre negativi: gli stessi numeri di VFS_ERR_ nel
+ * kernel (src/fs/vfs.h). -1 lo danno anche le richieste sbagliate (un indirizzo fuori
+ * dalla memoria del programma, un descrittore che non c'e'). */
+#define ERRORE_DISCO          -1
+#define ERRORE_FORMATO        -2    /* il disco e' rovinato */
+#define ERRORE_NON_SUPPORTATO -3
+#define ERRORE_NON_TROVATO    -4
+#define ERRORE_ESISTE         -5
+#define ERRORE_NON_CARTELLA   -6
+#define ERRORE_E_CARTELLA     -7
+#define ERRORE_NON_VUOTA      -8
+#define ERRORE_PIENO          -9
+#define ERRORE_NOME          -10    /* percorso scritto male, o nome troppo lungo */
+#define ERRORE_PERMESSO      -11
+#define ERRORE_SOLA_LETTURA  -12    /* il disco (o il formato) non si puo' scrivere */
+#define ERRORE_MEMORIA       -13
+#define ERRORE_TROPPI_LINK   -14
 
 /* GLI UTENTI E I PERMESSI, come in Unix. Ogni programma ha un uid: 0 e' il SISTEMA (puo'
  * tutto: il kernel non gli controlla niente), 1000 le APPLICAZIONI. Un programma nuovo
@@ -145,9 +172,11 @@ struct info_file {
                                 * fingere: cosi' un servizio sa se parla con il sistema */
 
 struct voce_cartella {
+    unsigned int tipo;               /* TIPO_... (un collegamento non si segue) */
+    unsigned int permessi;
+    unsigned long long dimensione;   /* byte */
+    long long modificato;            /* secondi dal 1/1/1970 (UTC) */
     char nome[MAX_NOME_FILE];
-    unsigned int tipo;
-    unsigned int dimensione;
 };
 
 #define SIS_MAPPA_SCHERMO 29 /* mappa_schermo(d, &info): mette la memoria dello schermo

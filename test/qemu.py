@@ -323,7 +323,7 @@ class Macchina:
         i programmi partono mentre la scrive e a volte la loro scritta ci finisce in
         mezzo, "Cciao come va\\nompiti : ...", e la riga intera non c'e' piu'.)
         Sul PC l'attesa comprende il firmware UEFI, che parte prima del kernel."""
-        self.aspetta_seriale("mfs     : montato", attesa)
+        self.aspetta_seriale("VFS     : / montato", attesa)
         self.muovi(*PUNTO_VUOTO)
         self.aspetta_che(isola_visibile, attesa, 0.5, "l'isola della scrivania")
         return self.aspetta_schermo_fermo()

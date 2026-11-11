@@ -12,9 +12,15 @@
  *
  * I settori si indicano col loro numero, da 0 in su (LBA: Logical Block Address).
  * Con 28 bit di numero si arriva a 128 GB: per noi basta e avanza.
+ * DA IMPLEMENTARE: i comandi "LBA48" (0x24, 0x34), con numeri a 48 bit, per i dischi
+ * piu' grandi.
+ * Un comando legge o scrive fino a 256 settori di fila (nel registro del conteggio, 0
+ * vuol dire 256): il disco li passa uno dopo l'altro, e prima di ognuno si aspetta che
+ * sia pronto.
  *
- * Quando lo trova, si ISCRIVE allo sportello dei dischi (dispositivi/disco.h): mfs legge
- * e scrive passando da li', senza sapere che e' un disco ATA.
+ * Quando lo trova, si ISCRIVE allo sportello dei dischi (dispositivi/disco.h) come
+ * "ata0": il file system legge e scrive passando da li', senza sapere che e' un disco
+ * ATA.
  *
  * Due semplificazioni:
  *   - PIO: i dati passano dalla CPU, 2 byte alla volta (niente DMA)
@@ -48,9 +54,10 @@
 
 #define DISCO_PRINCIPALE 0xE0  /* bit 6 = numeri di settore (LBA), bit 4 = 0: il primo disco */
 #define PAZIENZA 10000000      /* quanti giri di attesa prima di arrendersi */
+#define MAX_PER_COMANDO 256    /* settori in un comando */
+#define LIMITE_LBA28 (1ULL << 28)
 
 static char modello[41];
-static unsigned int settori;
 
 /* Il disco vuole circa 400 nanosecondi per aggiornare lo stato dopo un comando:
  * leggere 4 volte la porta di stato e' il modo classico per farli passare. */
@@ -76,18 +83,22 @@ static int aspetta_dati(void) {
     return -1;
 }
 
-/* Prepara un comando su un settore: quale disco, quale settore, quanti. */
-static void prepara(unsigned int n) {
+/* Prepara un comando: quale disco, da quale settore, quanti (1..256; 256 si scrive 0). */
+static void prepara(unsigned int n, unsigned int quanti) {
     outb(DISPOSITIVO, DISCO_PRINCIPALE | ((n >> 24) & 0x0F));
-    outb(CONTEGGIO, 1);
+    outb(CONTEGGIO, quanti & 0xFF);
     outb(LBA_BASSO, n & 0xFF);
     outb(LBA_MEDIO, (n >> 8) & 0xFF);
     outb(LBA_ALTO,  (n >> 16) & 0xFF);
 }
 
-static int leggi(unsigned int n, void *dati);
-static int scrivi(unsigned int n, const void *dati);
-static struct disco disco = { .modello = modello, .leggi = leggi, .scrivi = scrivi };
+static int leggi(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti,
+                 void *dove);
+static int scrivi(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti,
+                  const void *da);
+static struct dispositivo_blocchi disco = {
+    .nome = "ata0", .byte_settore = SETTORE, .leggi = leggi, .scrivi = scrivi,
+};
 
 int ata_prepara(void) {
     outb(DISPOSITIVO, DISCO_PRINCIPALE);
@@ -112,42 +123,58 @@ int ata_prepara(void) {
     }
     for (int i = 39; i >= 0 && modello[i] == ' '; i--) modello[i] = 0;   /* toglie gli spazi in fondo */
 
-    /* parole 60-61: quanti settori ha il disco */
-    settori = info[60] | ((unsigned int)info[61] << 16);
-    disco.settori = settori;
-    disco_iscrivi(&disco);   /* da qui e' il disco del sistema (disco.h) */
+    /* parole 60-61: quanti settori ha il disco (quelli che si raggiungono con 28 bit) */
+    disco.settori = info[60] | ((unsigned int)info[61] << 16);
+    kprintf("ATA     : %s\n", modello);
+    disco_iscrivi(&disco);   /* da qui lo trova chi usa i dischi (disco.h) */
     return 1;
 }
 
-static int leggi(unsigned int n, void *dati) {
-    if (n >= settori) return -1;
-    if (aspetta_libero() < 0) return -1;
-
-    prepara(n);
-    outb(COMANDO, CMD_LEGGI);
-    attesa_breve();
-    if (aspetta_dati() < 0) return -1;
-
-    unsigned short *p = dati;
-    for (int i = 0; i < SETTORE / 2; i++)   /* 256 volte, 2 byte alla volta */
-        p[i] = inw(DATI);
+/* I settori da 'primo' in poi, MAX_PER_COMANDO alla volta. */
+static int leggi(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti,
+                 void *dove) {
+    unsigned short *p = dove;
+    (void)d;
+    if (primo + quanti > disco.settori || primo + quanti > LIMITE_LBA28) return -1;
+    while (quanti) {
+        unsigned int n = quanti < MAX_PER_COMANDO ? quanti : MAX_PER_COMANDO;
+        if (aspetta_libero() < 0) return -1;
+        prepara((unsigned int)primo, n);
+        outb(COMANDO, CMD_LEGGI);
+        for (unsigned int s = 0; s < n; s++) {
+            attesa_breve();
+            if (aspetta_dati() < 0) return -1;      /* il prossimo settore e' pronto */
+            for (int i = 0; i < SETTORE / 2; i++)   /* 256 volte, 2 byte alla volta */
+                *p++ = inw(DATI);
+        }
+        primo += n;
+        quanti -= n;
+    }
     return 0;
 }
 
-static int scrivi(unsigned int n, const void *dati) {
-    if (n >= settori) return -1;
-    if (aspetta_libero() < 0) return -1;
-
-    prepara(n);
-    outb(COMANDO, CMD_SCRIVI);
-    attesa_breve();
-    if (aspetta_dati() < 0) return -1;      /* il disco e' pronto a ricevere */
-
-    const unsigned short *p = dati;
-    for (int i = 0; i < SETTORE / 2; i++)
-        outw(DATI, p[i]);
+static int scrivi(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti,
+                  const void *da) {
+    const unsigned short *p = da;
+    (void)d;
+    if (primo + quanti > disco.settori || primo + quanti > LIMITE_LBA28) return -1;
+    while (quanti) {
+        unsigned int n = quanti < MAX_PER_COMANDO ? quanti : MAX_PER_COMANDO;
+        if (aspetta_libero() < 0) return -1;
+        prepara((unsigned int)primo, n);
+        outb(COMANDO, CMD_SCRIVI);
+        for (unsigned int s = 0; s < n; s++) {
+            attesa_breve();
+            if (aspetta_dati() < 0) return -1;      /* il disco e' pronto a ricevere */
+            for (int i = 0; i < SETTORE / 2; i++)
+                outw(DATI, *p++);
+        }
+        primo += n;
+        quanti -= n;
+    }
 
     /* il disco potrebbe tenere i dati nella sua cache: gli chiediamo di scriverli davvero */
+    if (aspetta_libero() < 0) return -1;
     outb(COMANDO, CMD_SVUOTA);
     attesa_breve();
     if (aspetta_libero() < 0) return -1;

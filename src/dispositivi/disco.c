@@ -2,22 +2,34 @@
 #include "kernel.h"
 #include "disco.h"
 
-static const struct disco *il_disco;
+static struct dispositivo_blocchi *dischi[MAX_DISCHI];
+static int quanti_dischi;
 
-void disco_iscrivi(const struct disco *d) {
-    if (!il_disco) il_disco = d;
+int disco_iscrivi(struct dispositivo_blocchi *d) {
+    if (quanti_dischi == MAX_DISCHI) return -1;
+    dischi[quanti_dischi] = d;
+    return quanti_dischi++;
 }
 
-int disco_prepara(void) { return il_disco != 0; }
-const char *disco_modello(void) { return il_disco ? il_disco->modello : "nessuno"; }
-unsigned int disco_settori(void) { return il_disco ? il_disco->settori : 0; }
+int disco_quanti(void) { return quanti_dischi; }
 
-int disco_leggi(unsigned int n, void *dati) {
-    if (!il_disco || n >= il_disco->settori) return -1;
-    return il_disco->leggi(n, dati);
+struct dispositivo_blocchi *disco_numero(int n) {
+    return n >= 0 && n < quanti_dischi ? dischi[n] : 0;
 }
 
-int disco_scrivi(unsigned int n, const void *dati) {
-    if (!il_disco || n >= il_disco->settori) return -1;
-    return il_disco->scrivi(n, dati);
+/* Dentro il disco? (Attenti al giro: primo + quanti potrebbe superare i 64 bit.) */
+static int dentro(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti) {
+    return d && quanti && primo < d->settori && quanti <= d->settori - primo;
+}
+
+int disco_leggi(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti,
+                void *dove) {
+    if (!dentro(d, primo, quanti)) return -1;
+    return d->leggi(d, primo, quanti, dove);
+}
+
+int disco_scrivi(struct dispositivo_blocchi *d, unsigned long long primo, unsigned int quanti,
+                 const void *da) {
+    if (!dentro(d, primo, quanti) || !d->scrivi) return -1;
+    return d->scrivi(d, primo, quanti, da);
 }

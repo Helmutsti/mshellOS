@@ -9,7 +9,7 @@ Si legge la seriale, dove il kernel racconta l'avvio. Si cercano le righe:
     Pagine  : 521835 libere = 2038 MB                                 (le pagine libere;
                                                                        ARM64 le dice in KB)
     RAM     : da 0x40000000, 512 MB                                   (solo ARM64)
-    mfs     : montato                                                 (il disco)
+    VFS     : / montato (ext4 su ..., sola lettura)                  (il disco)
 Le pagine libere devono essere poco meno della RAM data a QEMU (2048 MB sul PC se non si
 dice --ram, 512 MB su ARM64): il resto e' il kernel, le sue tabelle e il firmware.
 Che non ci siano PANICO ed errori lo controlla il collaudo dopo ogni prova.
@@ -29,7 +29,7 @@ def esegui(p):
     p.controlla(re.search(r"USB\s+:.*-- .*tastiera", s), "la tastiera USB non e' stata vista")
     p.controlla(re.search(r"USB\s+:.*mouse \(assoluto\)", s),
                 "la tavoletta USB (mouse assoluto) non e' stata vista")
-    p.controlla("mfs     : montato" in s, "il disco (mfs) non e' montato")
+    p.controlla("VFS     : / montato" in s, "il disco del sistema (ext4) non e' montato")
 
     pagine = re.search(r"Pagine\s+:\s+(\d+) libere = (\d+) (KB|MB)", s)
     p.controlla(pagine, "manca la riga 'Pagine : ... libere = ...'")

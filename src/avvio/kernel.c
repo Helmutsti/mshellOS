@@ -10,7 +10,9 @@
 #include "kmalloc.h"
 #include "paginazione.h"
 #include "disco.h"
-#include "mfs.h"
+#include "cache.h"
+#include "vfs_operazioni.h"
+#include "ext4.h"
 #include "compiti.h"
 
 void panico(const char *fmt, ...) {
@@ -45,18 +47,21 @@ void kernel_avvia(const struct schermo *s) {
      * Quali sono dipende dalla macchina (arch). Alla fine le interruzioni sono accese. */
     arch_dispositivi_prepara();
 
-    /* Il disco: qualche driver (ATA, virtio...) l'ha trovato e si e' iscritto? */
-    int c_e_il_disco = disco_prepara();
-    if (c_e_il_disco)
-        kprintf("Disco   : %s, %u settori (%u KB)\n",
-                disco_modello(), disco_settori(), disco_settori() / 2);
-    else
-        kprintf("Disco   : nessuno\n");
+    /* I dischi: quelli che i driver (ATA, virtio...) hanno trovato e iscritto. */
+    for (int n = 0; n < disco_quanti(); n++) {
+        struct dispositivo_blocchi *d = disco_numero(n);
+        kprintf("Disco   : %s, %lu settori (%lu MB)\n", d->nome, (unsigned long)d->settori,
+                (unsigned long)(d->settori * d->byte_settore >> 20));
+    }
+    if (!disco_quanti()) panico("nessun disco: non posso leggere /Sistema/init");
 
-    /* Il file system: si legge il superblocco e si controlla il numero magico. */
-    if (!c_e_il_disco) panico("nessun disco: non posso leggere /Sistema/init");
-    if (!mfs_monta()) panico("il disco non ha mfs: non posso leggere /Sistema/init");
-    kprintf("mfs     : montato\n");
+    /* IL FILE SYSTEM: "/" e' ext4 sul primo disco, tutto il disco (niente partizioni:
+     * vedi disco.h), in sola lettura. Tra ext4 e il disco, la cache dei blocchi. */
+    struct dispositivo_blocchi *sistema = cache_crea(disco_numero(0), CACHE_BLOCCHI);
+    int r = vfs_monta("/", &tipo_ext4, sistema, 1);
+    if (r < 0)
+        panico("non posso montare / (ext4 sul disco %s): %s", sistema->nome, vfs_messaggio(r));
+    kprintf("VFS     : / montato (ext4 su %s, sola lettura)\n", sistema->nome);
 
     /* Lo scheduler: da qui in poi questo codice e' il compito 0, "inattivo", e gli altri
      * compiti si alternano a ogni tick. */

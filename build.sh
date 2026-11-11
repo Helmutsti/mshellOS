@@ -11,7 +11,8 @@
 #   comune/     quello che kernel e programmi (e il caricatore) devono vedere uguale
 #   caricatore/ il caricatore UEFI del PC: il programma che il firmware fa partire, e
 #               che carica il kernel
-#   strumenti/  programmi che girano qui, sul computer che compila (crea_disco)
+#   strumenti/  programmi che girano qui, sul computer che compila
+#   file/       quello che si mette qui finisce nel disco, in /File
 #   build/      il compilato (si puo' cancellare, viene rifatto), una cartella per CPU:
 #               x86_64: build/x86_64/kernel, .../utente/..., .../disco.img, .../esp.img
 #               arm64:  build/arm64/kernel.img, .../utente/..., .../disco.img
@@ -54,14 +55,15 @@ x86_64)
     B=${USCITA:-build/x86_64}
     NUDO="--target=x86_64-elf -ffreestanding -O2 -Wall -Wextra -mno-red-zone -mno-sse -mno-sse2 -mno-mmx"
     KERNEL="-mcmodel=kernel"
-    # mtools serve a crea_esp.sh, che prepara il disco di avvio (FAT)
-    apk add --no-cache clang lld gcc musl-dev mtools >/dev/null
+    # mtools serve a crea_esp.sh, che prepara il disco di avvio (FAT); e2fsprogs (mkfs.ext4)
+    # prepara il disco del sistema
+    apk add --no-cache clang lld mtools e2fsprogs >/dev/null
     ;;
 arm64)
     B=${USCITA:-build/arm64}
     NUDO="--target=aarch64-none-elf -ffreestanding -O2 -Wall -Wextra -mgeneral-regs-only -mstrict-align"
     KERNEL=""
-    apk add --no-cache clang lld gcc musl-dev >/dev/null
+    apk add --no-cache clang lld e2fsprogs >/dev/null   # e2fsprogs: mkfs.ext4
     ;;
 *)
     echo "build.sh: CPU sconosciuta '$CPU' (x86_64 o arm64)"
@@ -110,11 +112,51 @@ LEGA="ld.lld -T utente/libreria/programma.ld --defsym=INIZIO_PROGRAMMI=$INIZIO_P
 for f in utente/libreria/*.c; do
     clang $NUDO $UTENTE -c "$f" -o "$B/utente/libreria/$(basename "$f" .c).o"
 done
-SUL_DISCO=""
+
+# Mentre si compilano, i programmi si mettono nell'ALBERO DEL DISCO: una cartella che e'
+# gia' come sara' il disco, con proprietari e permessi giusti (mkfs.ext4 la copia tale e
+# quale, al passo 3). Sta dentro il container, non in /w: la cartella condivisa con il
+# computer che compila (Windows, macOS) non sa tenere i proprietari Unix. Il build gira
+# come root (l'utente del container), quindi puo' dare ogni file a chi vuole.
+ALBERO=/tmp/albero-disco
+rm -rf "$ALBERO"
+mkdir -p "$ALBERO"
+chown 0:0 "$ALBERO"
+chmod 755 "$ALBERO"
+
+# cartelle_per /a/b/c: crea le cartelle che mancano lungo il percorso (/a, /a/b), del
+# sistema (uid 0), con 755
+cartelle_per() {
+    _parziale=""
+    for _pezzo in $(echo "${1%/*}" | tr / ' '); do
+        _parziale="$_parziale/$_pezzo"
+        if [ ! -d "$ALBERO$_parziale" ]; then
+            mkdir "$ALBERO$_parziale"
+            chown 0:0 "$ALBERO$_parziale"
+            chmod 755 "$ALBERO$_parziale"
+        fi
+    done
+}
+# metti_file FILE /percorso PERMESSI: un file del sistema (uid 0)
+metti_file() {
+    cartelle_per "$2"
+    cp "$1" "$ALBERO$2"
+    chown 0:0 "$ALBERO$2"
+    chmod "$3" "$ALBERO$2"
+    printf '  %-40s %7s byte  %s\n' "$2" "$(wc -c < "$1")" "$3"
+}
+# metti_cartella /percorso UID PERMESSI: una cartella di qualcuno
+metti_cartella() {
+    cartelle_per "$1/"
+    chown "$2:$2" "$ALBERO$1"
+    chmod "$3" "$ALBERO$1"
+    printf '  %-40s cartella  di %s, %s\n' "$1" "$2" "$3"
+}
+
 APPS=""
 
 # I programmi del sistema (utente/programmi): init in /Sistema, i servizi in
-# /Sistema/Servizi.
+# /Sistema/Servizi. Sono programmi: 755.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     clang $NUDO $UTENTE -c "$f" -o "$B/utente/$nome.o"
@@ -123,7 +165,7 @@ for f in utente/programmi/*.c; do
         init) posto=/Sistema/init ;;
         *)    posto=/Sistema/Servizi/$nome ;;
     esac
-    SUL_DISCO="$SUL_DISCO $posto=$B/utente/$nome"
+    metti_file "$B/utente/$nome" "$posto" 755
 done
 
 # Le applicazioni (utente/applicazioni/<Nome>/): ognuna diventa una cartella
@@ -140,10 +182,10 @@ for cartella in utente/applicazioni/*/; do
         oggetti="$oggetti $o"
     done
     $LEGA -o "$B/utente/applicazioni/$nome/$nome" "$B"/utente/libreria/*.o $oggetti
-    SUL_DISCO="$SUL_DISCO /Applicazioni/$nome/$nome=$B/utente/applicazioni/$nome/$nome"
+    metti_file "$B/utente/applicazioni/$nome/$nome" "/Applicazioni/$nome/$nome" 755
     for r in "$cartella"*; do
         case "$r" in *.c|*.h) continue ;; esac
-        [ -f "$r" ] && SUL_DISCO="$SUL_DISCO /Applicazioni/$nome/$(basename "$r")=$r:644"
+        [ -f "$r" ] && metti_file "$r" "/Applicazioni/$nome/$(basename "$r")" 644
     done
     APPS="$APPS $nome"
 done
@@ -151,20 +193,41 @@ done
 # L'utente (per ora uno solo, 1000): la sua cartella e' sua e di nessun altro (700). Le
 # applicazioni la vedono come /home: dentro, Apps/<Nome> per i dati di ognuna e Scrivania.
 UTENTE_UID=1000
-SUL_DISCO="$SUL_DISCO +/Utenti:0:755 +/Utenti/$UTENTE_UID:$UTENTE_UID:700"
-SUL_DISCO="$SUL_DISCO +/Utenti/$UTENTE_UID/Apps:$UTENTE_UID:700 +/Utenti/$UTENTE_UID/Scrivania:$UTENTE_UID:700"
+metti_cartella /Utenti 0 755
+metti_cartella /Utenti/$UTENTE_UID $UTENTE_UID 700
+metti_cartella /Utenti/$UTENTE_UID/Apps $UTENTE_UID 700
+metti_cartella /Utenti/$UTENTE_UID/Scrivania $UTENTE_UID 700
 for nome in $APPS; do
-    SUL_DISCO="$SUL_DISCO +/Utenti/$UTENTE_UID/Apps/$nome:$UTENTE_UID:700"
+    metti_cartella /Utenti/$UTENTE_UID/Apps/$nome $UTENTE_UID 700
 done
+
+# La cartella file/ del repository diventa /File: quello che ci si mette dentro si
+# ritrova nel sistema (tranne il suo LEGGIMI.md, che parla della cartella). Del sistema,
+# da leggere per tutti: cartelle 755, file 644.
+metti_cartella /File 0 755
+for r in file/* file/.[!.]*; do
+    if [ -e "$r" ] && [ "$r" != file/LEGGIMI.md ]; then cp -R "$r" "$ALBERO/File/"; fi
+done
+chown -R 0:0 "$ALBERO/File"
+find "$ALBERO/File" -type d -exec chmod 755 {} +
+find "$ALBERO/File" -type f -exec chmod 644 {} +
 echo "$B/utente pronto"
 
-# --- 3. il disco: un mfs con dentro i programmi ---
-# crea_disco gira qui (gcc normale, non per mkernel) ed e' compilato con lo stesso
-# src/fs/mfs.c del kernel: strumenti/finto/ sostituisce le parti del kernel che mancano.
-# Il formato del disco e' lo stesso per tutte le CPU; cambiano i programmi dentro.
-gcc -O2 -Wall -Istrumenti/finto -Isrc/dispositivi -Isrc/fs \
-    -o "$B/crea_disco" strumenti/crea_disco.c src/fs/mfs.c
-"./$B/crea_disco" "$B/disco.img" 32768 $SUL_DISCO   # 32768 settori = 16 MB
+# --- 3. il disco: ext4, fatto con l'albero del disco ---
+# mkfs.ext4 (di e2fsprogs, gli attrezzi di Linux per ext2/3/4) scrive un ext4 vuoto nel
+# file e, con -d, ci copia dentro l'albero, con proprietari, permessi e date. Il formato
+# del disco e' lo stesso per tutte le CPU; cambiano i programmi dentro.
+# 64 MB: tanti per i programmi di oggi, pochi da copiare (il collaudo copia il disco a
+# ogni prova). Il file e' "sparso": i pezzi mai scritti non occupano posto, dove il file
+# system del computer che compila lo sa fare.
+# -b 4096: blocchi da 4 KB, come quelli della cache dei blocchi del kernel (sotto i
+# 512 MB mkfs sceglierebbe blocchi da 1 KB). -L: il nome del disco.
+# Il formato occupa tutto il disco, senza tabella delle partizioni (vedi
+# src/dispositivi/disco.h).
+rm -f "$B/disco.img"
+truncate -s 64M "$B/disco.img"
+mkfs.ext4 -q -F -b 4096 -L mkernel -d "$ALBERO" "$B/disco.img"
+rm -rf "$ALBERO"
 echo "$B/disco.img pronto"
 
 # --- 4. (solo x86_64) il disco di avvio: il caricatore UEFI e il kernel ---

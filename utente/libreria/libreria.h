@@ -144,8 +144,8 @@ static inline int termina(int d) { return chiamata1(SIS_TERMINA, d); }
 
 /* --- i file e le cartelle (vedi chiamate.h) --- */
 
-/* Apre un file o una cartella: il descrittore, o -1. modo: APRI_LEGGERE, APRI_SCRIVERE,
- * APRI_CREARE, APRI_SVUOTARE, sommati. */
+/* Apre un file o una cartella: il descrittore, o un ERRORE_... (negativo). modo:
+ * APRI_LEGGERE, APRI_SCRIVERE, APRI_CREARE, APRI_SVUOTARE, sommati. */
 static inline int apri(const char *percorso, unsigned int modo) {
     return chiamata3(SIS_APRI, (parola)percorso, modo, 0);
 }
@@ -157,7 +157,11 @@ static inline int leggi(int d, void *dove, unsigned int byte) { return ricevi(d,
 /* Scrive 'byte' byte alla posizione del file (allungandolo se serve): quanti ne ha scritti. */
 static inline int scrivi_in(int d, const void *dati, unsigned int byte) { return manda(d, dati, byte); }
 
-static inline int posiziona(int d, unsigned int byte) { return chiamata3(SIS_POSIZIONA, d, byte, 0); }
+/* La prossima lettura o scrittura da 'byte' (per una cartella: dalla voce numero 'byte').
+ * La posizione nuova, o un errore. */
+static inline long long posiziona(int d, unsigned long long byte) {
+    return chiamata3(SIS_POSIZIONA, d, byte, 0);
+}
 
 static inline int info(const char *percorso, struct info_file *i) {
     return chiamata3(SIS_INFO, (parola)percorso, (parola)i, 0);

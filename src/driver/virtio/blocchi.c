@@ -6,9 +6,9 @@
  *   1. la DOMANDA (16 byte, la legge il dispositivo):
  *        tipo      0 = leggi, 1 = scrivi, 4 = svuota la cache (flush)
  *        riservato non serve, a zero
- *        settore   quale settore da 512 byte (64 bit)
- *   2. lo SPAZIO PER LA RISPOSTA (512 byte): per una lettura ci scrive il
- *      dispositivo, per una scrittura ce li mettiamo noi e li legge lui.
+ *        settore   da quale settore da 512 byte (64 bit)
+ *   2. lo SPAZIO PER I DATI (512 byte per ogni settore, di fila): per una lettura ci
+ *      scrive il dispositivo, per una scrittura ce li mettiamo noi e li legge lui.
  *      Per il flush questo pezzo non c'e'.
  *   3. la CASELLA "fatto/errore" (1 byte, la scrive il dispositivo):
  *      0 = tutto bene, altro = errore.
@@ -16,13 +16,18 @@
  * I tre pezzi sono una catena nella coda 0. Diamo il modulo al dispositivo, suoniamo
  * il campanello e aspettiamo (polling: niente interruzioni) che lo riporti indietro.
  *
- * Tutto il modulo sta in una nostra pagina di appoggio: cosi' non importa dove stia il
- * buffer di chi ci chiama, copiamo da/verso quello. Una richiesta alla volta, con le
- * interruzioni spente, cosi' nessuno tocca la coda a meta'. Il kernel scrive e legge la
- * pagina dalla mappa diretta; nelle catene va il suo indirizzo fisico (il dispositivo
- * non conosce le mappe).
+ * Il modulo sta in memoria nostra di appoggio: una pagina per domanda e casella, e
+ * dopo di lei APPOGGIO pagine per i dati (fino a 128 settori in un modulo; di piu' si
+ * divide in piu' moduli). Cosi' non importa dove stia il buffer di chi ci chiama:
+ * copiamo da/verso quello. Una richiesta alla volta, con le interruzioni spente, cosi'
+ * nessuno tocca la coda a meta'. Il kernel scrive e legge l'appoggio dalla mappa
+ * diretta; nelle catene va il suo indirizzo fisico (il dispositivo non conosce le mappe,
+ * e per questo le pagine dei dati devono essere CONSECUTIVE anche in memoria fisica).
  *
- * LA CONFIGURAZIONE: i primi 8 byte sono la capacita' in settori da 512 byte. */
+ * LA CONFIGURAZIONE: i primi 8 byte sono la capacita' in settori da 512 byte.
+ *
+ * Si iscrive allo sportello dei dischi (disco.h) come "virtio0". Per ora un solo disco
+ * virtio: lo stato del driver e' uno solo. */
 #include "kernel.h"
 #include "pagine.h"
 #include "driver.h"
@@ -37,10 +42,12 @@
 
 #define GIRI_MASSIMI  50000000u     /* poi rinunciamo: il dispositivo non risponde */
 
-/* Dove stanno i pezzi dentro la pagina di appoggio. */
+/* Dove stanno domanda e casella dentro la loro pagina. */
 #define POSTO_DOMANDA 0
 #define POSTO_STATO   16
-#define POSTO_DATI    512
+
+#define APPOGGIO      16            /* pagine per i dati: 64 KB = 128 settori */
+#define MAX_PER_MODULO (APPOGGIO * PAGINA / SETTORE)
 
 struct domanda {
     unsigned int tipo;
@@ -51,8 +58,10 @@ struct domanda {
 
 static struct virtio_dispositivo dev;
 static struct virtq coda;
-static unsigned char *pagina;       /* la pagina di appoggio, dove la vede il kernel */
+static unsigned char *pagina;       /* la pagina di domanda e casella, dove la vede il kernel */
 static indirizzo_t pagina_fisica;   /* ... e dove la vede il dispositivo */
+static unsigned char *dati;         /* le pagine dei dati, dove le vede il kernel */
+static indirizzo_t dati_fisici;     /* ... e dove le vede il dispositivo */
 static int ha_flush;
 static int trovato;
 
@@ -65,9 +74,11 @@ static const struct id_pci id_blocchi[] = {
     { 0, 0, 0 }
 };
 
-/* Compila il modulo, lo manda e aspetta. 'dati' = 1 se c'e' il pezzo dei 512 byte,
- * 'scrive' = 1 se il dispositivo ci scrive sopra (lettura). 0 bene, -1 errore. */
-static int richiesta(unsigned int tipo, unsigned int settore, int dati, int scrive) {
+/* Compila il modulo, lo manda e aspetta. 'settori': quanti ne passano nel pezzo dei
+ * dati (0: niente pezzo dei dati); 'scrive' = 1 se il dispositivo ci scrive sopra
+ * (lettura). 0 bene, -1 errore. */
+static int richiesta(unsigned int tipo, unsigned long long settore, unsigned int settori,
+                     int scrive) {
     struct virtq_pezzo pezzi[3];
     int n = 0;
     struct domanda *d = (struct domanda *)(pagina + POSTO_DOMANDA);
@@ -75,17 +86,17 @@ static int richiesta(unsigned int tipo, unsigned int settore, int dati, int scri
 
     d->tipo = tipo;
     d->riservato = 0;
-    d->settore_basso = settore;
-    d->settore_alto = 0;
+    d->settore_basso = (unsigned int)settore;
+    d->settore_alto = (unsigned int)(settore >> 32);
     *stato = 0xFF;                  /* "non ancora": il dispositivo la mettera' a 0 se va bene */
 
     pezzi[n].indirizzo = pagina_fisica + POSTO_DOMANDA;   /* al dispositivo: fisici */
     pezzi[n].byte = sizeof *d;
     pezzi[n].scrive_dispositivo = 0;
     n++;
-    if (dati) {
-        pezzi[n].indirizzo = pagina_fisica + POSTO_DATI;
-        pezzi[n].byte = SETTORE;
+    if (settori) {
+        pezzi[n].indirizzo = dati_fisici;
+        pezzi[n].byte = settori * SETTORE;
         pezzi[n].scrive_dispositivo = scrive;
         n++;
     }
@@ -111,25 +122,51 @@ static int richiesta(unsigned int tipo, unsigned int settore, int dati, int scri
     return -1;
 }
 
-static int blocchi_leggi(unsigned int n, void *dati) {
-    unsigned int s = interruzioni_spegni();
-    int r = richiesta(TIPO_LEGGI, n, 1, 1);
-    if (r == 0) memcpy(dati, pagina + POSTO_DATI, SETTORE);
-    interruzioni_ripristina(s);
-    return r;
+/* I settori da 'primo' in poi, MAX_PER_MODULO alla volta. */
+static int blocchi_leggi(struct dispositivo_blocchi *disco, unsigned long long primo,
+                         unsigned int quanti, void *dove) {
+    unsigned char *qui = dove;
+    (void)disco;
+    while (quanti) {
+        unsigned int n = quanti < MAX_PER_MODULO ? quanti : MAX_PER_MODULO;
+        unsigned int s = interruzioni_spegni();
+        int r = richiesta(TIPO_LEGGI, primo, n, 1);
+        if (r == 0) memcpy(qui, dati, n * SETTORE);
+        interruzioni_ripristina(s);
+        if (r < 0) return -1;
+        qui += n * SETTORE;
+        primo += n;
+        quanti -= n;
+    }
+    return 0;
 }
 
-static int blocchi_scrivi(unsigned int n, const void *dati) {
-    unsigned int s = interruzioni_spegni();
-    memcpy(pagina + POSTO_DATI, dati, SETTORE);
-    int r = richiesta(TIPO_SCRIVI, n, 1, 0);
+static int blocchi_scrivi(struct dispositivo_blocchi *disco, unsigned long long primo,
+                          unsigned int quanti, const void *da) {
+    const unsigned char *qui = da;
+    (void)disco;
+    while (quanti) {
+        unsigned int n = quanti < MAX_PER_MODULO ? quanti : MAX_PER_MODULO;
+        unsigned int s = interruzioni_spegni();
+        memcpy(dati, qui, n * SETTORE);
+        int r = richiesta(TIPO_SCRIVI, primo, n, 0);
+        interruzioni_ripristina(s);
+        if (r < 0) return -1;
+        qui += n * SETTORE;
+        primo += n;
+        quanti -= n;
+    }
     /* Come l'ATA: dopo aver scritto chiediamo al disco di svuotare la cache. */
-    if (r == 0 && ha_flush) r = richiesta(TIPO_FLUSH, 0, 0, 0);
+    if (!ha_flush) return 0;
+    unsigned int s = interruzioni_spegni();
+    int r = richiesta(TIPO_FLUSH, 0, 0, 0);
     interruzioni_ripristina(s);
     return r;
 }
 
-static struct disco disco = { "virtio-blk", 0, blocchi_leggi, blocchi_scrivi };
+static struct dispositivo_blocchi disco = {
+    .nome = "virtio0", .byte_settore = SETTORE, .leggi = blocchi_leggi, .scrivi = blocchi_scrivi,
+};
 
 static int prepara(const struct pci_scheda *s) {
     if (trovato) return 0;          /* un solo disco virtio */
@@ -141,18 +178,22 @@ static int prepara(const struct pci_scheda *s) {
     /* La capacita': 64 bit little-endian, letta in due meta'. */
     unsigned int basso = virtio_config_leggi32(&dev, 0);
     unsigned int alto = virtio_config_leggi32(&dev, 4);
-    disco.settori = alto ? 0xFFFFFFFFu : basso;
+    disco.settori = ((unsigned long long)alto << 32) | basso;
 
     if (!virtio_coda(&dev, 0, &coda)) return 0;
-    indirizzo_t p = pagina_chiedi();
+    /* l'appoggio tutto insieme: la prima pagina per domanda e casella, le altre per i dati */
+    indirizzo_t p = pagine_chiedi_consecutive(1 + APPOGGIO);
     if (!p) return 0;
     pagina_fisica = p;
     pagina = virt_da_fisico(p);
     memset(pagina, 0, PAGINA);
+    dati_fisici = p + PAGINA;
+    dati = pagina + PAGINA;
 
     virtio_pronto(&dev);
     trovato = 1;
-    kprintf("\nvirtio-blk: %u settori (%u KB)", disco.settori, disco.settori / 2);
+    kprintf("\nvirtio-blk: %lu settori (%lu KB)", (unsigned long)disco.settori,
+            (unsigned long)(disco.settori / 2));
     disco_iscrivi(&disco);
     return 1;
 }

@@ -18,7 +18,7 @@
 #include "timer.h"
 #include "pagine.h"
 #include "paginazione.h"
-#include "mfs.h"
+#include "vfs_operazioni.h"
 #include "elf.h"
 #include "chiamate.h"
 #include "compiti.h"
@@ -53,8 +53,9 @@ static void in_fila(struct compito *c) {
 
 #define MAX_PROGRAMMA (1024 * 1024)   /* il programma piu' grande che si carica: 1 MB */
 
-/* Legge il file ELF 'percorso' dal disco e mette i suoi pezzi nella mappa, ognuno in
- * pagine nuove al suo indirizzo virtuale. Restituisce l'indirizzo da cui il programma
+/* Legge il file ELF 'percorso' (dal file system virtuale: i suoi primi MAX_PROGRAMMA
+ * byte) e mette i suoi pezzi nella mappa, ognuno in pagine nuove al suo indirizzo
+ * virtuale. Restituisce l'indirizzo da cui il programma
  * parte, oppure 0 e in *errore il perche'.
  *
  * NON SI CREDE AL FILE: lo ha scritto chiunque. Ogni numero che contiene (dove sta un
@@ -66,8 +67,11 @@ static indirizzo_t carica_elf(indirizzo_t mappa, const char *percorso, const cha
     unsigned char *file = kmalloc(MAX_PROGRAMMA);
     if (!file) { *errore = "memoria finita"; return 0; }
 
-    int byte = mfs_leggi(percorso, 0, file, MAX_PROGRAMMA);
-    if (byte < 0) { *errore = mfs_messaggio(byte); goto fine; }
+    struct nodo_vfs nodo;
+    long long letti = vfs_cerca(percorso, 1, &nodo);
+    if (letti == 0) letti = vfs_leggi(&nodo, 0, file, MAX_PROGRAMMA);
+    if (letti < 0) { *errore = vfs_messaggio((int)letti); goto fine; }
+    int byte = (int)letti;
 
     /* 1. l'intestazione: e' davvero un eseguibile ELF per questa CPU? */
     struct elf_intestazione *e = (struct elf_intestazione *)file;

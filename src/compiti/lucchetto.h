@@ -1,4 +1,4 @@
-/* Il lucchetto (mutex): per le risorse usate a lungo (mfs, disco).
+/* Il lucchetto (mutex): per le risorse usate a lungo (il file system, i dischi).
  *
  * Come la chiave di un bagno: chi la prende entra, gli altri aspettano fuori
  * DORMENDO, in fila. Le interruzioni restano accese: chi non usa la risorsa
