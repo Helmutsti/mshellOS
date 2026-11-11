@@ -44,7 +44,9 @@
  * Qui: le TASTIERE le mettiamo in boot (ce l'hanno tutte, e il formato e' sempre
  * quello); i MOUSE e le TAVOLETTE (QEMU "usb-tablet", che da' la posizione assoluta
  * invece degli spostamenti) li lasciamo in report e leggiamo il loro descrittore:
- * cerchiamo X, Y e i pulsanti 1-3.
+ * cerchiamo X, Y, i pulsanti 1-3 e la ROTELLA (Wheel, e se c'e' quella orizzontale, che
+ * nell'HID si chiama "AC Pan" e sta nella pagina Consumer). La rotella e' sempre relativa:
+ * ogni rapporto dice di quanti scatti ha girato da quello prima.
  *
  * LA RIPETIZIONE. Le tastiere USB non ripetono il tasto tenuto giu' (lo fa il sistema):
  * dopo mezzo secondo lo ripetiamo noi, una volta ogni 30 ms, con un lavoro del timer. */
@@ -172,6 +174,7 @@ struct campo {
 
 struct puntatore {
     struct campo x, y, pulsante[3];
+    struct campo rotella, orizzontale;  /* la rotella, e quella orizzontale (se ci sono) */
     int usa_id;                 /* 1: ogni rapporto comincia con il suo ID */
     unsigned int id;            /* l'ID del rapporto con X e Y */
     int x_ora, y_ora;           /* tavoletta: l'ultima posizione mandata */
@@ -185,7 +188,8 @@ static int n_puntatori;
 /* Gli "usage" che ci interessano, come pagina << 16 | numero. */
 #define USAGE_X          0x00010030u    /* Generic Desktop, X */
 #define USAGE_Y          0x00010031u    /* Generic Desktop, Y */
-#define USAGE_ROTELLA    0x00010038u    /* Generic Desktop, Wheel: per ora nessun evento */
+#define USAGE_ROTELLA    0x00010038u    /* Generic Desktop, Wheel: la rotella */
+#define USAGE_PAN        0x000C0238u    /* Consumer, AC Pan: la rotella orizzontale */
 #define USAGE_PULSANTE1  0x00090001u    /* Button 1 (sinistro), 2 (destro), 3 (centrale) */
 
 /* Un campo trovato nel descrittore: se e' uno dei nostri, ce lo segniamo (il primo). */
@@ -194,6 +198,8 @@ static void segna(struct puntatore *p, unsigned int usage, unsigned int id, unsi
     struct campo *c = 0;
     if (usage == USAGE_X) c = &p->x;
     else if (usage == USAGE_Y) c = &p->y;
+    else if (usage == USAGE_ROTELLA) c = &p->rotella;
+    else if (usage == USAGE_PAN) c = &p->orizzontale;
     else if (usage >= USAGE_PULSANTE1 && usage < USAGE_PULSANTE1 + 3) c = &p->pulsante[usage - USAGE_PULSANTE1];
     if (!c || c->trovato || dimensione == 0 || dimensione > 32) return;
     c->trovato = 1;
@@ -297,6 +303,8 @@ static int analizza(struct puntatore *p, const unsigned char *r, unsigned int n)
     p->id = p->x.id;
     for (int b = 0; b < 3; b++)                 /* i pulsanti valgono se sono nello stesso rapporto */
         if (p->pulsante[b].id != p->id) p->pulsante[b].trovato = 0;
+    if (p->rotella.id != p->id) p->rotella.trovato = 0;           /* e anche le rotelle */
+    if (p->orizzontale.id != p->id) p->orizzontale.trovato = 0;
     return 1;
 }
 
@@ -339,25 +347,42 @@ static void ricevi_puntatore(void *privato, const unsigned char *dati, unsigned 
     for (int b = 0; b < 3; b++)
         if (p->pulsante[b].trovato && leggi(&p->pulsante[b], dati, byte)) pulsanti |= bit_pulsante[b];
 
+    /* prima lo spostamento (o la posizione), se e' cambiato qualcosa... */
     struct evento ev;
     memset(&ev, 0, sizeof ev);
     ev.pulsanti = pulsanti;
+    int cambiato;
     if (p->x.relativo) {
         ev.tipo = EVENTO_MOUSE;
         ev.dx = leggi(&p->x, dati, byte);
         ev.dy = leggi(&p->y, dati, byte);       /* anche per l'USB: positivo = in basso */
-        if (!ev.dx && !ev.dy && pulsanti == p->pulsanti) return;
+        cambiato = ev.dx || ev.dy || pulsanti != p->pulsanti;
     } else {
         ev.tipo = EVENTO_PUNTATORE;
         ev.dx = scala(&p->x, leggi(&p->x, dati, byte));
         ev.dy = scala(&p->y, leggi(&p->y, dati, byte));
-        if (p->mandato && ev.dx == p->x_ora && ev.dy == p->y_ora && pulsanti == p->pulsanti) return;
+        cambiato = !p->mandato || ev.dx != p->x_ora || ev.dy != p->y_ora || pulsanti != p->pulsanti;
         p->x_ora = ev.dx;
         p->y_ora = ev.dy;
         p->mandato = 1;
     }
     p->pulsanti = pulsanti;
-    eventi_metti(&ev);
+    if (cambiato) eventi_metti(&ev);
+
+    /* ...poi la rotella. Dopo, perche' chi la riceve guarda dov'e' il puntatore ADESSO.
+     * Nell'HID la rotella in avanti (lontano da se') e' positiva: noi contiamo come lo
+     * schermo, positivo = in basso, e quindi si cambia il segno. AC Pan e' gia' positivo
+     * a destra. */
+    int su = p->rotella.trovato ? leggi(&p->rotella, dati, byte) : 0;
+    int destra = p->orizzontale.trovato ? leggi(&p->orizzontale, dati, byte) : 0;
+    if (su || destra) {
+        memset(&ev, 0, sizeof ev);
+        ev.tipo = EVENTO_ROTELLA;
+        ev.dx = destra;
+        ev.dy = -su;
+        ev.pulsanti = pulsanti;
+        eventi_metti(&ev);
+    }
 }
 
 /* --- accogliere il dispositivo --- */

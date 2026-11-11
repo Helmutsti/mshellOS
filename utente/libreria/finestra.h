@@ -13,7 +13,11 @@
  * LE DUE IMMAGINI. finestra_tela da' sempre un'immagine che il compositore non sta
  * usando: se sono tutte e due sue, aspetta che ne restituisca una. Le notizie arrivate
  * nel frattempo (un clic, un tasto) si mettono da parte, e finestra_notizia le
- * consegnera' dopo, in ordine. */
+ * consegnera' dopo, in ordine.
+ *
+ * LE NOTIZIE per l'applicazione sono quelle di protocollo.h: PUNTATORE, USCITO, TASTO,
+ * FUOCO e ROTELLA (la rotella del mouse, con il punto della finestra in cui e' il
+ * puntatore: sta all'applicazione decidere cosa scorre li' sotto). */
 #ifndef FINESTRA_H
 #define FINESTRA_H
 

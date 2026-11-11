@@ -128,16 +128,22 @@ struct pong {
 #define SCHERMO    9   /* la risposta a CHIEDI_SCHERMO: lo schermo e' x per y pixel */
 #define FINESTRA_ATTIVA 10  /* (solo a un PANNELLO) ora ha il fuoco la finestra 'numero'
                              * (0: nessuna) */
+#define ROTELLA   11   /* la rotella del mouse ha girato di 'scatti_y' scatti (positivo: in
+                        * basso, il contenuto va su), e 'scatti_x' quella orizzontale
+                        * (positivo: a destra), con il puntatore in x, y. Va alla finestra
+                        * sotto il puntatore, anche se non ha il fuoco: come sul Mac e in
+                        * Wayland, si scorre quello che si guarda */
 
 struct notizia {
     unsigned int tipo;
     unsigned int immagine;   /* RILASCIATA */
-    int x, y;                /* PUNTATORE */
+    int x, y;                /* PUNTATORE, ROTELLA */
     unsigned int pulsanti;   /* PUNTATORE */
     unsigned int tasto;      /* TASTO */
     unsigned int fuoco;      /* FUOCO */
     unsigned int numero;     /* PING, FINESTRA_APERTA, FINESTRA_CHIUSA */
     char testo[MAX_PERCORSO];   /* FINESTRA_APERTA */
+    int scatti_x, scatti_y;  /* ROTELLA */
 };
 
 #endif

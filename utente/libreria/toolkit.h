@@ -46,7 +46,16 @@
  *
  * IL TEMPO. Un'applicazione che deve aggiornarsi da sola (un orologio, il task manager)
  * chiede al toolkit di chiamarla ogni tanto: finestra_tk_ogni(&finestra, 1000, f, dati).
- * Il ciclo allora non dorme senza limite: aspetta le notizie fino alla prossima scadenza.
+ * Il ciclo allora non dorme senza limite: aspetta le notizie fino alla prima scadenza.
+ * Le chiamate possono essere piu' d'una (fino a MAX_CHIAMATE): le usano anche i widget
+ * che si animano, come la barra di scorrimento, solo finche' l'animazione dura.
+ *
+ * LO SCORRIMENTO. Di un contenuto piu' alto del suo spazio (una lista, una tabella) se ne
+ * mostra un pezzo, la VISTA, e la rotella del mouse lo fa scorrere. Il toolkit da' due
+ * pezzi: 'struct scorrimento', i tre numeri (dove si e', quanto e' alto tutto, quanto se
+ * ne vede), e la BARRA DI SCORRIMENTO, un widget che sta sopra il contenuto, sul bordo
+ * destro, e si vede solo mentre si scorre (come sul Mac). La rotella va al widget sotto
+ * il puntatore, o al primo dei suoi genitori che la vuole (il campo 'rotella' del tipo).
  *
  * I WIDGET NASCOSTI non si misurano, non si disegnano e non sentono niente: e' cosi' che
  * si fanno le pagine (piu' contenuti nello stesso posto, se ne vede uno). Dopo averne
@@ -77,6 +86,12 @@ struct tipo_widget {
     void (*puntatore)(struct widget *w, int x, int y, unsigned int pulsanti);
     /* un tasto, se ha il fuoco (0: non prende il fuoco) */
     void (*tasto)(struct widget *w, unsigned int tasto);
+    /* la rotella del mouse, girata di 'sx', 'sy' scatti (sy positivo: in basso) con il
+     * puntatore sopra di lui o sopra uno dei suoi figli (0: non gli interessa) */
+    void (*rotella)(struct widget *w, int sx, int sy);
+    /* il puntatore e' appena arrivato sopra di lui, o se n'e' andato: 'sopra' e' gia'
+     * cambiato (0: basta il ridisegno che fa il toolkit) */
+    void (*sopra_cambiato)(struct widget *w);
 };
 
 #define MAX_FIGLI 16
@@ -134,6 +149,16 @@ static inline struct widget *widget_sotto(struct widget *w, int x, int y) {
         if (trovato) return trovato;
     }
     return w->tipo->puntatore ? w : 0;
+}
+
+/* Il widget piu' interno sotto (x, y), anche se non sente il puntatore, o 0. */
+static inline struct widget *widget_in(struct widget *w, int x, int y) {
+    if (w->disabilitato || w->nascosto || !widget_contiene(w, x, y)) return 0;
+    for (int i = w->quanti_figli - 1; i >= 0; i--) {
+        struct widget *trovato = widget_in(w->figli[i], x, y);
+        if (trovato) return trovato;
+    }
+    return w;
 }
 
 /* Un widget e' cambiato (un testo nuovo, un pulsante premuto): la finestra va
@@ -221,7 +246,7 @@ static inline void contenitore_disponi(struct widget *w) {
 }
 
 static const struct tipo_widget tipo_contenitore = {
-    contenitore_misura, contenitore_disponi, 0, 0, 0
+    contenitore_misura, contenitore_disponi, 0, 0, 0, 0, 0
 };
 
 static inline void riga_prepara(struct contenitore *c, int spazio) {
@@ -238,7 +263,7 @@ static inline void colonna_prepara(struct contenitore *c, int spazio) {
 
 struct spazio { struct widget base; };
 
-static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0 };
 
 static inline void spazio_prepara(struct spazio *s) {
     *s = (struct spazio){ .base = { .tipo = &tipo_spazio, .elastico = 1 } };
@@ -265,7 +290,7 @@ static inline void etichetta_disegna(struct widget *w, struct pennello *p) {
     testo_centrato(p, e->font, w->x, w->y, w->a, e->testo);
 }
 
-static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0 };
+static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0 };
 
 static inline void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font) {
     *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font,
@@ -378,7 +403,7 @@ static inline void pulsante_puntatore(struct widget *w, int x, int y, unsigned i
 }
 
 static const struct tipo_widget tipo_pulsante = {
-    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0
+    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0, 0, 0
 };
 
 /* Un pulsante neutro, di misura media. Per un pulsante solo icona, testo "". */
@@ -491,7 +516,7 @@ static inline void casella_puntatore(struct widget *w, int x, int y, unsigned in
 }
 
 static const struct tipo_widget tipo_casella = {
-    casella_misura, 0, casella_disegna, casella_puntatore, 0
+    casella_misura, 0, casella_disegna, casella_puntatore, 0, 0, 0
 };
 
 static inline void casella_prepara(struct casella *c, const char *testo, int valore,
@@ -597,7 +622,7 @@ static inline void campo_tasto(struct widget *w, unsigned int tasto) {
 }
 
 static const struct tipo_widget tipo_campo = {
-    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto
+    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto, 0, 0
 };
 
 static inline void campo_prepara(struct campo *c, const char *testo, const char *suggerimento,
@@ -615,6 +640,17 @@ static inline void campo_errore(struct campo *c, int errore) {
 
 /* --- la finestra: la radice dell'albero, con la barra del titolo --- */
 
+struct finestra_tk;
+
+/* Una chiamata "ogni tanto" (finestra_tk_ogni). */
+#define MAX_CHIAMATE 4
+struct chiamata_tk {
+    void (*funzione)(struct finestra_tk *f, void *dati);   /* 0: posto libero */
+    void *dati;
+    unsigned int ms;
+    unsigned int scadenza;             /* quando chiamarla, in tempo() */
+};
+
 struct finestra_tk {
     struct widget base;                /* il suo unico figlio e' il contenuto */
     char titolo[MAX_TITOLO];
@@ -629,15 +665,17 @@ struct finestra_tk {
     int riduci_premuto;
     int da_chiudere;
     unsigned int pulsanti_prima;
-    void (*ogni_funzione)(struct finestra_tk *f, void *dati);   /* il "chiamami ogni tanto" */
-    void *ogni_dati;
-    unsigned int ogni_ms;              /* 0: nessuno */
-    unsigned int scadenza;             /* quando chiamarla, in tempo() */
+    struct chiamata_tk chiamate[MAX_CHIAMATE];   /* i "chiamami ogni tanto" */
 };
 
-static inline void widget_cambiato(struct widget *w) {
+/* La finestra in cui sta un widget: la radice del suo albero. */
+static inline struct finestra_tk *widget_finestra(struct widget *w) {
     while (w->genitore) w = w->genitore;
-    ((struct finestra_tk *)w)->da_ridisegnare = 1;
+    return (struct finestra_tk *)w;
+}
+
+static inline void widget_cambiato(struct widget *w) {
+    widget_finestra(w)->da_ridisegnare = 1;
 }
 
 /* Dove stanno i due comandi nella barra: riduci e chiudi, a destra. */
@@ -716,7 +754,7 @@ static inline void finestra_tk_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_finestra_tk = {
-    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0
+    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0, 0, 0
 };
 
 static inline void finestra_tk_prepara(struct finestra_tk *f, const char *titolo,
@@ -736,19 +774,298 @@ static inline void finestra_tk_dimensione(struct finestra_tk *f, int l, int a) {
 }
 
 /* Chiama 'funzione' ogni 'ms' millisecondi, finche' la finestra e' aperta (0: smette).
- * La prima volta dopo 'ms'. */
+ * La prima volta dopo 'ms'. La stessa funzione con gli stessi dati e' la stessa chiamata:
+ * chiederla di nuovo cambia il suo ritmo (e la sua prossima volta), non ne aggiunge
+ * un'altra. Cosi' una funzione puo' anche decidere da se' quando essere richiamata. */
 static inline void finestra_tk_ogni(struct finestra_tk *f, unsigned int ms,
                                     void (*funzione)(struct finestra_tk *f, void *dati), void *dati) {
-    f->ogni_funzione = funzione;
-    f->ogni_dati = dati;
-    f->ogni_ms = ms;
-    f->scadenza = tempo() + ms;
+    struct chiamata_tk *posto = 0;
+    for (int i = 0; i < MAX_CHIAMATE; i++) {
+        struct chiamata_tk *c = &f->chiamate[i];
+        if (c->funzione == funzione && c->dati == dati) { posto = c; break; }
+        if (!c->funzione && !posto) posto = c;
+    }
+    if (!posto) return;                         /* tutte prese: non si puo' */
+    if (!ms) {
+        if (posto->funzione == funzione && posto->dati == dati) posto->funzione = 0;
+        return;
+    }
+    *posto = (struct chiamata_tk){ funzione, dati, ms, tempo() + ms };
+}
+
+/* La chiamata che scade per prima, o 0 se non ce ne sono. */
+static inline struct chiamata_tk *toolkit_prima_chiamata(struct finestra_tk *f) {
+    struct chiamata_tk *prima = 0;
+    for (int i = 0; i < MAX_CHIAMATE; i++) {
+        struct chiamata_tk *c = &f->chiamate[i];
+        if (c->funzione && (!prima || (int)(c->scadenza - prima->scadenza) < 0)) prima = c;
+    }
+    return prima;
+}
+
+/* Fa le chiamate scadute. Ognuna prima si rimette in fila (la prossima volta tra 'ms'),
+ * poi si chiama: cosi' puo' cambiare il suo ritmo, o smettere. */
+static inline void toolkit_chiamate_scadute(struct finestra_tk *f) {
+    unsigned int ora = tempo();
+    for (int i = 0; i < MAX_CHIAMATE; i++) {
+        struct chiamata_tk *c = &f->chiamate[i];
+        if (!c->funzione || (int)(c->scadenza - ora) > 0) continue;
+        c->scadenza = ora + c->ms;
+        c->funzione(f, c->dati);
+    }
 }
 
 /* Rifa' l'impaginazione dentro la finestra (dopo aver mostrato o nascosto dei widget). */
 static inline void toolkit_ridisponi(struct finestra_tk *f) {
     widget_disponi(&f->base);
     f->da_ridisegnare = 1;
+}
+
+/* --- lo scorrimento e la barra di scorrimento --- */
+
+/* Dove si e' in un contenuto piu' alto della sua vista, in pixel. Chi disegna il
+ * contenuto lo sposta in su di 'posizione'; chi riceve un clic gliela somma. Gli ultimi
+ * due campi servono alla rotella (scorrimento_rotella). */
+struct scorrimento {
+    int posizione;                     /* i pixel del contenuto passati sopra la vista */
+    int totale;                        /* l'altezza di tutto il contenuto */
+    int vista;                         /* l'altezza della parte che si vede */
+    unsigned int rotella_prima;        /* tempo() dello scatto di prima */
+    int raffica;                       /* gli scatti della raffica in corso (col segno del verso) */
+};
+
+/* Fin dove si puo' scorrere: 0 se il contenuto ci sta tutto. */
+static inline int scorrimento_massimo(const struct scorrimento *s) {
+    return s->totale > s->vista ? s->totale - s->vista : 0;
+}
+
+/* Va a 'posizione' (dentro i limiti). 1 se si e' spostato. */
+static inline int scorrimento_metti(struct scorrimento *s, int posizione) {
+    int massimo = scorrimento_massimo(s);
+    if (posizione > massimo) posizione = massimo;
+    if (posizione < 0) posizione = 0;
+    if (posizione == s->posizione) return 0;
+    s->posizione = posizione;
+    return 1;
+}
+
+/* Il contenuto o la vista hanno cambiato altezza: la posizione resta dentro i limiti. */
+static inline void scorrimento_misure(struct scorrimento *s, int totale, int vista) {
+    s->totale = totale;
+    s->vista = vista;
+    scorrimento_metti(s, s->posizione);
+}
+
+/* La rotella ha girato di 'scatti' (positivi: in basso, o a destra): si scorre come sul
+ * Mac, con l'accelerazione spiegata in stile.h (SCORRIMENTO_RIGA). Basta l'ora di ogni
+ * scatto: niente attese, niente chiamate "ogni tanto". 1 se si e' spostato. */
+static inline int scorrimento_rotella(struct scorrimento *s, int scatti) {
+    if (!scatti) return 0;
+    int verso = scatti > 0 ? 1 : -1;
+    unsigned int ora = tempo();
+    if (ora - s->rotella_prima >= SCORRIMENTO_PAUSA || s->raffica * verso <= 0)
+        s->raffica = 0;                /* dopo una pausa, o girando al contrario: da capo */
+    s->rotella_prima = ora;
+    int pixel = 0;
+    for (int i = 0; i < scatti * verso; i++) {
+        if (s->raffica * verso < SCORRIMENTO_SLANCIO) s->raffica += verso;
+        pixel += s->raffica * SCORRIMENTO_RIGA;   /* il k-esimo scatto vale k righe */
+    }
+    return scorrimento_metti(s, s->posizione + pixel);
+}
+
+/* LA BARRA DI SCORRIMENTO, dal file Figma (il componente "Barra di scorrimento"). Sta
+ * SOPRA il contenuto, in una striscia larga 14 pixel lungo il suo bordo destro, e:
+ *   - a riposo non si vede (e non si sente: i clic vanno al contenuto sotto);
+ *   - quando si scorre compare (in 100 ms): il cursore, sottile (6 pixel, a 4 dal bordo),
+ *     senza guida; resta un secondo dopo l'ultimo scatto, poi svanisce (in 300 ms);
+ *   - con il puntatore sopra, o mentre la si trascina, il cursore si allarga a 10 pixel
+ *     (in 150 ms) e dietro compare la guida, appena chiara. Finche' il puntatore e' sopra
+ *     non svanisce.
+ * Il cursore e' lungo quanto la parte che si vede, in proporzione (almeno 32 pixel), e sta
+ * dove si e' nel contenuto. Trascinandolo il contenuto scorre; un clic sulla guida porta
+ * li' il centro del cursore. Se il contenuto ci sta tutto, la barra non compare mai.
+ *
+ * LE ANIMAZIONI. A ogni passo si guarda quanto tempo e' passato, e opacita' e spessore si
+ * avvicinano al loro obiettivo di conseguenza: anche se un passo arriva in ritardo,
+ * l'animazione dura quanto deve. I passi li fa una chiamata "ogni tanto" del toolkit, che
+ * c'e' solo mentre qualcosa si muove: con la barra ferma, la finestra non si ridisegna.
+ * Mentre la barra aspetta il secondo prima di svanire, la chiamata e' una sola, alla fine.
+ *
+ * Per usarla: il widget che scorre la tiene tra i suoi figli (widget_aggiungi), le dice
+ * dov'e' la vista (barra_scorrimento_posto) e quanto e' alto il contenuto
+ * (scorrimento_misure su b->scorrimento), e le passa la rotella
+ * (barra_scorrimento_rotella). Disegnando, sposta il contenuto di b->scorrimento.posizione. */
+
+#define SCORRIMENTO_FOTOGRAMMA 20      /* ms tra un passo e l'altro dell'animazione */
+
+struct barra_scorrimento {
+    struct widget base;
+    struct scorrimento scorrimento;
+    int opacita;                       /* 0 nascosta, 255 del tutto visibile */
+    int spessore;                      /* 0 sottile (6 pixel), 255 spessa (10) */
+    unsigned int ultimo;               /* tempo() dell'ultimo scatto o trascinamento */
+    unsigned int passo_prima;          /* tempo() del passo di animazione di prima */
+    unsigned int attesa;               /* ogni quanti ms la si chiama ora (0: non la si chiama) */
+    int trascinata;                    /* il cursore e' preso con il mouse */
+    int presa;                         /* dove lo si e' preso, dal suo inizio */
+};
+
+/* Il cursore: dove comincia (y) e quanto e' lungo. */
+static inline void barra_scorrimento_cursore(const struct barra_scorrimento *b, int *y, int *lungo) {
+    const struct scorrimento *s = &b->scorrimento;
+    int corsa = b->base.a - 2 * SCORRIMENTO_MARGINE;     /* dove il cursore si muove */
+    int l = s->totale > 0 ? (int)((long long)corsa * s->vista / s->totale) : corsa;
+    if (l < SCORRIMENTO_MINIMO) l = SCORRIMENTO_MINIMO;
+    if (l > corsa) l = corsa;
+    int massimo = scorrimento_massimo(s);
+    *lungo = l;
+    *y = b->base.y + SCORRIMENTO_MARGINE +
+         (massimo ? (int)((long long)(corsa - l) * s->posizione / massimo) : 0);
+}
+
+static inline void barra_scorrimento_disegna(struct widget *w, struct pennello *p) {
+    struct barra_scorrimento *b = (struct barra_scorrimento *)w;
+    if (!b->opacita || !scorrimento_massimo(&b->scorrimento)) return;
+    pennello_opacita(p, b->opacita);
+    if (b->spessore) {                 /* la guida: tutta la striscia, compare allargandosi */
+        pennello_salva(p);
+        pennello_opacita(p, b->spessore);
+        pennello_colore(p, VETRO_PREMUTO);
+        riempi_tondo(p, w->x, w->y, w->l, w->a, w->l / 2);
+        pennello_ripristina(p);
+    }
+    int spesso = SCORRIMENTO_SOTTILE + (SCORRIMENTO_SPESSO - SCORRIMENTO_SOTTILE) * b->spessore / 255;
+    int y, lungo;
+    barra_scorrimento_cursore(b, &y, &lungo);
+    pennello_colore(p, b->trascinata ? SCORRIMENTO_CURSORE_TRASCINATO : CONTENUTO_SECONDARIO);
+    riempi_tondo(p, w->x + (w->l - spesso) / 2, y, spesso, lungo, spesso / 2);
+}
+
+/* Porta 'valore' verso 'obiettivo' (0 o 255) di quanto basta perche' tutta la strada
+ * duri 'durata' ms; 'passati' sono i ms dall'ultima volta. */
+static inline int avvicina(int valore, int obiettivo, unsigned int passati, int durata) {
+    int passo = (int)(255 * passati / (unsigned int)durata);
+    if (passo < 1) passo = 1;
+    if (valore < obiettivo) return valore + passo > obiettivo ? obiettivo : valore + passo;
+    return valore - passo < obiettivo ? obiettivo : valore - passo;
+}
+
+static inline void barra_scorrimento_passo(struct finestra_tk *f, void *dati);
+
+/* La prossima chiamata tra 'ms' millisecondi (0: nessuna). */
+static inline void barra_scorrimento_richiama(struct barra_scorrimento *b, unsigned int ms) {
+    if (b->attesa == ms && ms == SCORRIMENTO_FOTOGRAMMA) return;   /* gia' in moto */
+    b->attesa = ms;
+    finestra_tk_ogni(widget_finestra(&b->base), ms, barra_scorrimento_passo, b);
+}
+
+/* Qualcosa e' cambiato (uno scatto, il puntatore sopra): l'animazione riparte. */
+static inline void barra_scorrimento_sveglia(struct barra_scorrimento *b) {
+    if (b->attesa != SCORRIMENTO_FOTOGRAMMA) b->passo_prima = tempo();
+    barra_scorrimento_richiama(b, SCORRIMENTO_FOTOGRAMMA);
+}
+
+/* Un passo dell'animazione: e' la chiamata "ogni tanto". */
+static inline void barra_scorrimento_passo(struct finestra_tk *f, void *dati) {
+    (void)f;
+    struct barra_scorrimento *b = dati;
+    unsigned int ora = tempo(), passati = ora - b->passo_prima;
+    b->passo_prima = ora;
+    int spessa = b->trascinata || b->base.sopra;
+    int fresca = (int)(ora - b->ultimo) < SCORRIMENTO_RESTA;
+    int vista = (spessa || fresca) && scorrimento_massimo(&b->scorrimento);
+    int opacita = avvicina(b->opacita, vista ? 255 : 0, passati,
+                           vista ? SCORRIMENTO_COMPARE : SCORRIMENTO_SVANISCE);
+    int spessore = avvicina(b->spessore, spessa ? 255 : 0, passati, SCORRIMENTO_ALLARGA);
+    if (opacita != b->opacita || spessore != b->spessore) {
+        b->opacita = opacita;
+        b->spessore = spessore;
+        b->base.nascosto = !opacita;   /* nascosta non si disegna e non prende i clic */
+        widget_cambiato(&b->base);
+    }
+    if (opacita != (vista ? 255 : 0) || spessore != (spessa ? 255 : 0))
+        barra_scorrimento_richiama(b, SCORRIMENTO_FOTOGRAMMA);              /* ancora in moto */
+    else if (vista && fresca && !spessa)
+        barra_scorrimento_richiama(b, SCORRIMENTO_RESTA - (ora - b->ultimo)); /* poi svanisce */
+    else
+        barra_scorrimento_richiama(b, 0);   /* ferma: la risveglia uno scatto o il puntatore */
+}
+
+/* Il contenuto e' stato scorso (rotella o trascinamento): la barra si mostra. */
+static inline void barra_scorrimento_usata(struct barra_scorrimento *b, int spostato) {
+    b->ultimo = tempo();
+    if (spostato) widget_cambiato(&b->base);
+    barra_scorrimento_sveglia(b);
+}
+
+/* La rotella sopra il contenuto: scorre di 'scatti' (positivi: in basso). 0 se il
+ * contenuto ci sta tutto e non c'e' niente da scorrere. */
+static inline int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti) {
+    struct scorrimento *s = &b->scorrimento;
+    if (!scorrimento_massimo(s)) return 0;
+    barra_scorrimento_usata(b, scorrimento_rotella(s, scatti));
+    return 1;
+}
+
+/* Il cursore segue il puntatore, tenuto per il punto in cui lo si e' preso. */
+static inline void barra_scorrimento_segui(struct barra_scorrimento *b, int y) {
+    int inizio, lungo;
+    barra_scorrimento_cursore(b, &inizio, &lungo);
+    int corsa = b->base.a - 2 * SCORRIMENTO_MARGINE - lungo;
+    if (corsa <= 0) return;
+    int da_inizio = y - b->presa - (b->base.y + SCORRIMENTO_MARGINE);
+    int posizione = (int)((long long)da_inizio * scorrimento_massimo(&b->scorrimento) / corsa);
+    barra_scorrimento_usata(b, scorrimento_metti(&b->scorrimento, posizione));
+}
+
+/* Premuto sul cursore: lo si prende li'. Premuto sulla guida: il centro del cursore
+ * salta li', e lo si tiene per il centro. Poi segue il puntatore finche' non si lascia. */
+static inline void barra_scorrimento_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
+    struct barra_scorrimento *b = (struct barra_scorrimento *)w;
+    (void)x;
+    int giu = pulsanti & PULSANTE_SINISTRO;
+    if (giu && !b->trascinata) {
+        int inizio, lungo;
+        barra_scorrimento_cursore(b, &inizio, &lungo);
+        b->presa = y >= inizio && y < inizio + lungo ? y - inizio : lungo / 2;
+        b->trascinata = 1;
+        widget_cambiato(w);            /* il cursore cambia colore */
+        barra_scorrimento_segui(b, y);
+    } else if (giu) {
+        barra_scorrimento_segui(b, y);
+    } else if (b->trascinata) {
+        b->trascinata = 0;
+        widget_cambiato(w);
+        barra_scorrimento_usata(b, 0);  /* resta ancora un secondo, poi svanisce */
+    }
+}
+
+static inline void barra_scorrimento_su_rotella(struct widget *w, int sx, int sy) {
+    (void)sx;
+    barra_scorrimento_rotella((struct barra_scorrimento *)w, sy);
+}
+
+static inline void barra_scorrimento_sopra(struct widget *w) {
+    barra_scorrimento_sveglia((struct barra_scorrimento *)w);
+}
+
+static const struct tipo_widget tipo_barra_scorrimento = {
+    0, 0, barra_scorrimento_disegna, barra_scorrimento_puntatore, 0,
+    barra_scorrimento_su_rotella, barra_scorrimento_sopra
+};
+
+static inline void barra_scorrimento_prepara(struct barra_scorrimento *b) {
+    *b = (struct barra_scorrimento){ .base = { .tipo = &tipo_barra_scorrimento, .nascosto = 1 } };
+}
+
+/* La vista del contenuto e' il rettangolo (x, y, l, a): la barra va lungo il suo bordo
+ * destro. Da chiamare quando il widget che scorre viene disposto. */
+static inline void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, int a) {
+    b->base.x = x + l - SCORRIMENTO_LARGHEZZA;
+    b->base.y = y;
+    b->base.l = SCORRIMENTO_LARGHEZZA;
+    b->base.a = a;
 }
 
 /* --- il ciclo degli eventi --- */
@@ -768,9 +1085,19 @@ static inline int toolkit_ridisegna(struct finestra_tk *f) {
  * il nuovo. */
 static inline void toolkit_sotto(struct finestra_tk *f, struct widget *w) {
     if (w == f->sotto) return;
-    if (f->sotto) { f->sotto->sopra = 0; widget_cambiato(f->sotto); }
+    struct widget *prima = f->sotto;
+    if (prima) { prima->sopra = 0; widget_cambiato(prima); }
     f->sotto = w;
     if (w) { w->sopra = 1; widget_cambiato(w); }
+    if (prima && prima->tipo->sopra_cambiato) prima->tipo->sopra_cambiato(prima);
+    if (w && w->tipo->sopra_cambiato) w->tipo->sopra_cambiato(w);
+}
+
+/* La rotella: al widget sotto il puntatore, o al primo dei suoi genitori che la vuole. */
+static inline void toolkit_rotella(struct finestra_tk *f, int x, int y, int sx, int sy) {
+    if (y < BARRA_ALTEZZA) return;
+    for (struct widget *w = widget_in(&f->base, x, y); w; w = w->genitore)
+        if (w->tipo->rotella) { w->tipo->rotella(w, sx, sy); return; }
 }
 
 static inline void toolkit_fuoco(struct finestra_tk *f, struct widget *w) {
@@ -832,14 +1159,14 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
 
     struct notizia n;
     for (;;) {
-        /* Con il "chiamami ogni tanto": se non c'e' niente da parte si aspetta il
-         * compositore solo fino alla scadenza. Scaduta, si chiama l'applicazione. */
-        if (f->ogni_ms && !f->finestra.quante) {
-            int resta = (int)(f->scadenza - tempo());
+        /* Con i "chiamami ogni tanto": se non c'e' niente da parte si aspetta il
+         * compositore solo fino alla prima scadenza. Scaduta, si chiama chi l'ha chiesto. */
+        struct chiamata_tk *prima = toolkit_prima_chiamata(f);
+        if (prima && !f->finestra.quante) {
+            int resta = (int)(prima->scadenza - tempo());
             struct da_guardare g = { .descrittore = f->finestra.collegamento };
             if (resta <= 0 || aspetta(&g, 1, resta) == 0) {
-                f->scadenza = tempo() + f->ogni_ms;
-                f->ogni_funzione(f, f->ogni_dati);
+                toolkit_chiamate_scadute(f);
                 if (f->da_chiudere) return 0;
                 if (f->da_ridisegnare && !toolkit_ridisegna(f)) return 1;
                 continue;
@@ -860,6 +1187,8 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
             f->riduci_premuto = 0;
             f->pulsanti_prima = 0;
             toolkit_sotto(f, 0);
+        } else if (n.tipo == ROTELLA) {
+            toolkit_rotella(f, n.x, n.y, n.scatti_x, n.scatti_y);
         } else if (n.tipo == TASTO && f->con_fuoco) {
             f->con_fuoco->tipo->tasto(f->con_fuoco, n.tasto);
         } else if (n.tipo == FUOCO) {

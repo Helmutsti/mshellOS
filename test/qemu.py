@@ -344,6 +344,17 @@ class Macchina:
     def pulsante(self, giu, quale="left"):
         self._eventi([{"type": "btn", "data": {"down": giu, "button": quale}}])
 
+    def rotella(self, scatti, pausa=0.05):
+        """Gira la rotella di 'scatti' (positivi: in basso, verso di se'), uno alla volta.
+        Per QEMU la rotella e' fatta di due "pulsanti", wheel-down e wheel-up: premuto e
+        lasciato e' uno scatto. La tavoletta USB lo manda nel campo Wheel del rapporto."""
+        quale = "wheel-down" if scatti > 0 else "wheel-up"
+        for _ in range(abs(scatti)):
+            self.pulsante(True, quale)
+            time.sleep(pausa)
+            self.pulsante(False, quale)
+            time.sleep(pausa)
+
     def clic(self, x, y, pausa=0.15):
         """Va in (x, y), preme e lascia. Le pause lasciano al kernel il tempo di vedere
         il movimento e il clic come due rapporti USB separati."""

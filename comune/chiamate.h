@@ -233,6 +233,11 @@ struct info_schermo {
 #define EVENTO_PUNTATORE 3 /* una tavoletta: il puntatore e' in (dx, dy), da 0 a PUNTATORE_MAX
                             * su ogni asse (lo schermo intero), e questi sono i pulsanti */
 #define PUNTATORE_MAX 32767
+#define EVENTO_ROTELLA 4   /* la rotella del mouse ha girato di dy "scatti" (dx per quella
+                            * orizzontale, se c'e'). Come gli spostamenti, dy positivo = verso
+                            * il basso: la rotella girata verso di se', per vedere il contenuto
+                            * che sta piu' sotto. Non dice dov'e' il puntatore: lo sa il
+                            * compositore, dagli eventi di prima */
 
 #define PULSANTE_SINISTRO 1   /* i bit di 'pulsanti': quelli tenuti premuti adesso */
 #define PULSANTE_DESTRO   2
@@ -242,8 +247,10 @@ struct evento {
     unsigned int tipo;
     unsigned int tasto;      /* EVENTO_TASTO: il carattere (code page 437) */
     int dx, dy;              /* EVENTO_MOUSE: lo spostamento in pixel; dy positivo = in basso.
-                              * EVENTO_PUNTATORE: la posizione, da 0 a PUNTATORE_MAX */
-    unsigned int pulsanti;   /* EVENTO_MOUSE, EVENTO_PUNTATORE: PULSANTE_... tenuti premuti */
+                              * EVENTO_PUNTATORE: la posizione, da 0 a PUNTATORE_MAX.
+                              * EVENTO_ROTELLA: gli scatti; dy positivo = in basso */
+    unsigned int pulsanti;   /* EVENTO_MOUSE, EVENTO_PUNTATORE, EVENTO_ROTELLA: PULSANTE_...
+                              * tenuti premuti */
 };
 
 /* Dove vivono i programmi nella loro mappa. Gli indirizzi sono divisi in due meta', come

@@ -16,6 +16,7 @@ lettura (`snapshot=on`): `build/` non si tocca.
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
 | `attivita`     | la pagina Memoria di Attività dice 2041 MB (PC con 2 GB; 8185 con 8 GB) o 512 MB (ARM64); "Termina processo" chiude Contatore |
+| `scorrimento`  | con 4 applicazioni aperte la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
 Dopo ogni prova si controlla anche che nella seriale non ci siano `PANICO`, `ERRORE` o
@@ -83,7 +84,7 @@ def esegui(p):
     p.controlla(..., "cosa non va")
 ```
 
-Gli strumenti stanno in `test/qemu.py` (accendere, foto, `clic`, `trascina`, `cerchio`,
+Gli strumenti stanno in `test/qemu.py` (accendere, foto, `clic`, `trascina`, `rotella`, `cerchio`,
 `premi`, `tasto_giu`/`tasto_su`, `hmp`, `aspetta_che`, `aspetta_schermo_fermo`) e in
 `test/scrivania.py` (dove sono l'isola e le finestre: se cambia il disegno, si cambia lì).
 Meglio **aspettare una condizione** (`aspetta_che`) che dormire un tempo fisso.

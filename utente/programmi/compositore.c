@@ -1036,6 +1036,20 @@ static void al_mouse(const struct evento *e) {
     if (!premuto) presa = -1;
 }
 
+/* La rotella va alla finestra sotto il puntatore (non a quella con il fuoco), con il
+ * punto in cui e' il puntatore: l'applicazione scorre quello che c'e' li' sotto. Come il
+ * puntatore, mentre un pulsante e' premuto va a quella presa; mentre una finestra si
+ * sposta, a nessuno. Non cambia niente sullo schermo: se l'applicazione scorre,
+ * ridisegnera' lei. */
+static void alla_rotella(const struct evento *e) {
+    if (trascinata >= 0) return;
+    int i = presa >= 0 ? presa : finestra_sotto(px, py);
+    if (i < 0) return;
+    const struct finestra *f = &finestre[i];
+    avvisa(i, (struct notizia){ .tipo = ROTELLA, .x = px - f->x, .y = py - f->y,
+                                .scatti_x = e->dx, .scatti_y = e->dy });
+}
+
 static void al_tasto(const struct evento *e) {
     if (fuoco >= 0) avvisa(fuoco, (struct notizia){ .tipo = TASTO, .tasto = e->tasto });
 }
@@ -1060,6 +1074,7 @@ static int servi(int ms) {
         struct evento e;
         if (ricevi(eventi, &e, sizeof e) != sizeof e) return -1;
         if (e.tipo == EVENTO_MOUSE || e.tipo == EVENTO_PUNTATORE) al_mouse(&e);
+        else if (e.tipo == EVENTO_ROTELLA) alla_rotella(&e);
         else if (e.tipo == EVENTO_TASTO) al_tasto(&e);
     }
     /* prima i messaggi, poi i collegamenti nuovi: un collegamento nuovo potrebbe

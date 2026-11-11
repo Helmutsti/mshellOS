@@ -51,6 +51,11 @@
 #define STATO_ERRORE_VELO       VELATO(0xEF4444, 115)    /* 45% */
 #define STATO_ATTIVO            OPACO(0x3B82F6)
 
+/* --- la barra di scorrimento ---
+ * Il cursore a riposo e sotto il puntatore e' CONTENUTO_SECONDARIO, la guida (che si vede
+ * solo sotto il puntatore) VETRO_PREMUTO; mentre lo si trascina, il cursore e' questo. */
+#define SCORRIMENTO_CURSORE_TRASCINATO VELATO(0xFFFFFF, 204)   /* 80% */
+
 /* --- i colori dei pulsanti: normale, sopra, premuto --- */
 #define BLU_NORMALE     OPACO(0x3B82F6)
 #define BLU_SOPRA       OPACO(0x5B9BFF)
@@ -84,6 +89,39 @@
 #define SPAZIO_TRA        14    /* tra un widget e l'altro, in colonna */
 #define CONTROLLO_LATO    18    /* il quadratino della casella, il tondo della scelta */
 #define CAMPO_ALTEZZA     36
+#define SCORRIMENTO_LARGHEZZA  14   /* la striscia della barra di scorrimento, sopra il contenuto */
+#define SCORRIMENTO_SOTTILE     6   /* il cursore mentre si scorre, a 4 pixel dal bordo */
+#define SCORRIMENTO_SPESSO     10   /* il cursore sotto il puntatore o trascinato, a 2 */
+#define SCORRIMENTO_MARGINE     2   /* "spazio/2": tra i capi della striscia e il cursore */
+#define SCORRIMENTO_MINIMO     32   /* il cursore non e' mai piu' corto di cosi' */
+
+/* --- i tempi (in millisecondi) --- */
+#define SCORRIMENTO_COMPARE   100   /* la barra compare quando si comincia a scorrere */
+#define SCORRIMENTO_RESTA    1000   /* resta ancora un secondo dopo l'ultimo scatto */
+#define SCORRIMENTO_SVANISCE  300   /* poi svanisce */
+#define SCORRIMENTO_ALLARGA   150   /* sotto il puntatore il cursore si allarga */
+
+/* --- la rotella: quanto scorre uno scatto (come sul Mac) ---
+ * Il Mac, con un mouse a scatti, ACCELERA: uno scatto lento sposta il contenuto di poco,
+ * girando in fretta ogni scatto sposta di piu'. Apple non pubblica la sua curva; questa
+ * e' un'imitazione semplice, con tre numeri:
+ *   - uno scatto DA SOLO sposta di SCORRIMENTO_RIGA pixel. Sul Mac uno scatto lento vale
+ *     "una riga", e una riga sono 10 pixel (il valore normale di Quartz, la grafica del
+ *     Mac: CGEventSourceGetPixelsPerLine). Qui sono poco piu' di mezza riga di testo
+ *     (FONT_TESTO e' alto 18) e un terzo di una riga di tabella (30): poco, apposta, per
+ *     poter scorrere con precisione;
+ *   - gli scatti che arrivano a meno di SCORRIMENTO_PAUSA ms l'uno dall'altro, nello stesso
+ *     verso, sono una RAFFICA: il primo vale 1 riga, il secondo 2, il terzo 3... fino a
+ *     SCORRIMENTO_SLANCIO righe a scatto. Quattro scatti veloci fanno 10+20+30+40 = 100
+ *     pixel; quattro lenti, uno ogni mezzo secondo, 40;
+ *   - una pausa piu' lunga, o un giro al contrario, chiude la raffica: lo scatto dopo
+ *     riparte da una riga.
+ * Gli scatti che arrivano insieme (il compositore li somma, se l'applicazione e' indietro)
+ * sono stati girati in fretta: contano come scatti di una raffica. Vale lo stesso per la
+ * rotella orizzontale. */
+#define SCORRIMENTO_RIGA       10   /* pixel di uno scatto da solo */
+#define SCORRIMENTO_SLANCIO     8   /* al massimo uno scatto vale 8 righe (80 pixel) */
+#define SCORRIMENTO_PAUSA     200   /* ms senza scatti che chiudono una raffica */
 
 /* --- i font --- */
 #define FONT_TESTO        (&inter_14)

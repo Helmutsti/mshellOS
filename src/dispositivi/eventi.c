@@ -11,7 +11,9 @@
  * GLI SPOSTAMENTI SI SOMMANO. Il mouse manda decine di spostamenti al secondo. Se il
  * compositore e' lento a prenderli, non serve tenerli tutti: se l'ultimo evento in fila
  * e' uno spostamento con gli stessi pulsanti, il nuovo si somma a quello. Il puntatore
- * arriva nello stesso posto, con meno lavoro. (Linux fa lo stesso.) */
+ * arriva nello stesso posto, con meno lavoro. (Linux fa lo stesso.)
+ * Anche gli scatti della rotella si sommano allo stesso modo: tre scatti in fila sono uno
+ * scorrimento di tre. */
 #include "kernel.h"
 #include "descrittori.h"
 #include "eventi.h"
@@ -24,9 +26,9 @@ static struct aperto aperto;   /* la fila come cosa aperta: una sola, di un solo
 static int presa;
 
 void eventi_metti(const struct evento *e) {
-    if (testa != coda && e->tipo == EVENTO_MOUSE) {
+    if (testa != coda && (e->tipo == EVENTO_MOUSE || e->tipo == EVENTO_ROTELLA)) {
         struct evento *ultimo = &fila[(testa + DIM_FILA - 1) % DIM_FILA];
-        if (ultimo->tipo == EVENTO_MOUSE && ultimo->pulsanti == e->pulsanti) {
+        if (ultimo->tipo == e->tipo && ultimo->pulsanti == e->pulsanti) {
             ultimo->dx += e->dx;
             ultimo->dy += e->dy;
             return;   /* chi aspetta e' gia' stato svegliato dal primo */

@@ -54,7 +54,11 @@ static const char *nome_stato(unsigned int stato) {
     }
 }
 
-/* --- la tabella dei processi: un widget fatto qui, per questa applicazione --- */
+/* --- la tabella dei processi: un widget fatto qui, per questa applicazione ---
+ *
+ * Le righe che non ci stanno si vedono SCORRENDO: con la rotella sopra la tabella, o
+ * trascinando la barra di scorrimento del toolkit, che sta sopra le righe, sul bordo
+ * destro. La testata resta ferma; le righe scorrono sotto di lei, pixel per pixel. */
 
 #define TABELLA_TESTATA 34
 #define TABELLA_RIGA    30
@@ -66,7 +70,19 @@ struct tabella {
     int quante;
     int scelto;                        /* il numero del processo scelto, o -1 */
     void (*al_cambio)(struct tabella *t);
+    struct barra_scorrimento barra;    /* sua figlia: sa anche dove si e' scorso */
 };
+
+/* Le righe stanno sotto la testata, a partire da 2 pixel, e si vedono fino a 4 pixel dal
+ * fondo (il bordo arrotondato). */
+#define RIGHE_SOPRA (TABELLA_TESTATA + 2)
+
+static int tabella_vista(const struct widget *w) { return w->a - TABELLA_TESTATA - 4; }
+
+/* Quanto sono alte tutte le righe, e quanto se ne vede: lo deve sapere lo scorrimento. */
+static void tabella_misure(struct tabella *t) {
+    scorrimento_misure(&t->barra.scorrimento, 2 + t->quante * TABELLA_RIGA, tabella_vista(&t->base));
+}
 
 /* dove comincia ogni colonna (la memoria e' allineata a destra) */
 static int colonna_x(const struct widget *w, int i) {
@@ -100,12 +116,14 @@ static void tabella_disegna(struct widget *w, struct pennello *p) {
     pennello_colore(p, CAMPO_BORDO);
     riempi_rettangolo(p, w->x + 1, w->y + TABELLA_TESTATA - 1, w->l - 2, 1);
 
-    /* le righe: quelle che ci stanno */
+    /* le righe: spostate in su di quanto si e' scorso, e ritagliate nella vista */
     pennello_salva(p);
-    pennello_ritaglia(p, w->x, w->y + TABELLA_TESTATA, w->l, w->a - TABELLA_TESTATA - 4);
+    pennello_ritaglia(p, w->x, w->y + TABELLA_TESTATA, w->l, tabella_vista(w));
+    int scorso = t->barra.scorrimento.posizione;
     for (int r = 0; r < t->quante; r++) {
         const struct info_processo *pr = &t->righe[r];
-        int y = w->y + TABELLA_TESTATA + 2 + r * TABELLA_RIGA;
+        int y = w->y + RIGHE_SOPRA + r * TABELLA_RIGA - scorso;
+        if (y + TABELLA_RIGA <= w->y + TABELLA_TESTATA || y >= w->y + w->a) continue;   /* fuori */
         if (pr->numero == t->scelto) {
             pennello_colore(p, BLU_NORMALE);
             riempi_tondo(p, w->x + 4, y, w->l - 8, TABELLA_RIGA - 2, RAGGIO_PICCOLO);
@@ -125,21 +143,37 @@ static void tabella_disegna(struct widget *w, struct pennello *p) {
     pennello_ripristina(p);
 }
 
-/* Un clic su una riga la sceglie. */
+/* Un clic su una riga la sceglie. La riga e' quella che si vede li': si conta anche
+ * quanto si e' scorso. */
 static void tabella_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
     struct tabella *t = (struct tabella *)w;
     (void)x;
     if (!(pulsanti & PULSANTE_SINISTRO)) return;
-    int r = (y - w->y - TABELLA_TESTATA - 2) / TABELLA_RIGA;
-    if (y < w->y + TABELLA_TESTATA + 2 || r >= t->quante) return;
+    if (y < w->y + TABELLA_TESTATA || y >= w->y + TABELLA_TESTATA + tabella_vista(w)) return;
+    int nel_contenuto = y - w->y - RIGHE_SOPRA + t->barra.scorrimento.posizione;
+    if (nel_contenuto < 0) return;
+    int r = nel_contenuto / TABELLA_RIGA;
+    if (r >= t->quante) return;
     if (t->righe[r].numero == t->scelto) return;
     t->scelto = t->righe[r].numero;
     widget_cambiato(w);
     if (t->al_cambio) t->al_cambio(t);
 }
 
+/* La barra di scorrimento sta sopra le righe (sotto la testata, fino al fondo). */
+static void tabella_disponi(struct widget *w) {
+    struct tabella *t = (struct tabella *)w;
+    barra_scorrimento_posto(&t->barra, w->x, w->y + TABELLA_TESTATA, w->l, w->a - TABELLA_TESTATA);
+    tabella_misure(t);
+}
+
+static void tabella_rotella(struct widget *w, int sx, int sy) {
+    (void)sx;
+    barra_scorrimento_rotella(&((struct tabella *)w)->barra, sy);
+}
+
 static const struct tipo_widget tipo_tabella = {
-    tabella_misura, 0, tabella_disegna, tabella_puntatore, 0
+    tabella_misura, tabella_disponi, tabella_disegna, tabella_puntatore, 0, tabella_rotella, 0
 };
 
 /* --- la memoria: la barra a pezzi e la legenda --- */
@@ -191,7 +225,7 @@ static void barra_disegna(struct widget *w, struct pennello *p) {
     contorna_forma(p, &t, 256);
 }
 
-static const struct tipo_widget tipo_barra = { barra_misura, 0, barra_disegna, 0, 0 };
+static const struct tipo_widget tipo_barra = { barra_misura, 0, barra_disegna, 0, 0, 0, 0 };
 
 #define LEGENDA_RIGA 30
 
@@ -222,7 +256,7 @@ static void legenda_disegna(struct widget *w, struct pennello *p) {
     }
 }
 
-static const struct tipo_widget tipo_legenda = { legenda_misura, 0, legenda_disegna, 0, 0 };
+static const struct tipo_widget tipo_legenda = { legenda_misura, 0, legenda_disegna, 0, 0, 0, 0 };
 
 /* --- la finestra --- */
 
@@ -262,6 +296,7 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     (void)f; (void)dati;
     int n = elenco_processi(tabella.righe, MAX_PROCESSI);
     tabella.quante = n < 0 ? 0 : n;
+    tabella_misure(&tabella);                         /* le righe possono essere di piu' o di meno */
     for (int i = 0; i < tabella.quante; i++)          /* noi: vedi "chi siamo" */
         if (tabella.righe[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)tabella.righe[i].uid;
 
@@ -343,6 +378,8 @@ int main(void) {
     pagina_processi.base.elastico = 1;
     tabella = (struct tabella){ .base = { .tipo = &tipo_tabella, .elastico = 1, .largo = 1 },
                                 .scelto = -1, .al_cambio = scelta_cambiata };
+    barra_scorrimento_prepara(&tabella.barra);
+    widget_aggiungi(&tabella.base, &tabella.barra.base);
     riga_prepara(&azioni, 8);
     etichetta_prepara(&messaggio, "", FONT_TESTO);
     messaggio.colore = STATO_ERRORE;

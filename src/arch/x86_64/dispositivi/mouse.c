@@ -15,7 +15,16 @@
  *           il segno di x (bit 4) e di y (bit 5), "troppo veloce" (bit 6 e 7)
  *   byte 1: lo spostamento in x (gli 8 bit bassi; il segno e' nel byte 0)
  *   byte 2: lo spostamento in y, positivo VERSO L'ALTO (sullo schermo e' il contrario)
- * Il mouse non sa dov'e' il puntatore: dice solo di quanto si e' mosso. */
+ * Il mouse non sa dov'e' il puntatore: dice solo di quanto si e' mosso.
+ *
+ * LA ROTELLA. Il mouse PS/2 di base non ce l'ha: e' venuta dopo, con l'IntelliMouse di
+ * Microsoft, e per non confondere i sistemi vecchi resta spenta finche' non la si chiede
+ * con una "parola d'ordine": tre cambi della frequenza di campionamento di fila, 200, 100
+ * e 80 volte al secondo. Poi si chiede al mouse chi e' (0xF2): se risponde 3 invece di 0,
+ * ha capito, e da li' i pacchetti sono di 4 byte:
+ *   byte 3: gli scatti della rotella, con segno (da -8 a 7, nei 4 bit bassi); positivo =
+ *           verso di se', cioe' in basso, come contiamo noi.
+ * Un mouse senza rotella ignora la parola d'ordine, risponde 0 e resta a 3 byte. */
 #include "io.h"
 #include "pic.h"
 #include "idt.h"
@@ -38,7 +47,10 @@
 
 #define MOUSE_FABBRICA 0xF6
 #define MOUSE_MANDA    0xF4
+#define MOUSE_FREQUENZA 0xF3  /* il prossimo byte e' la frequenza di campionamento */
+#define MOUSE_CHI_SEI  0xF2   /* risponde "ricevuto", poi il suo numero: 0 base, 3 con rotella */
 #define MOUSE_RICEVUTO 0xFA
+#define ID_INTELLIMOUSE 3
 
 #define PACCHETTO_UNO  0x08   /* il bit 3 del primo byte e' sempre acceso */
 #define PACCHETTO_TROPPO 0xC0 /* "troppo veloce": lo spostamento non e' affidabile */
@@ -63,10 +75,12 @@ static int al_mouse(unsigned char byte) {
     return puo_leggere() && inb(PORTA_DATI) == MOUSE_RICEVUTO;
 }
 
-/* --- il gestore: un byte per interruzione, tre fanno un pacchetto --- */
+/* --- il gestore: un byte per interruzione, tre (o quattro) fanno un pacchetto --- */
 
-static unsigned char pacchetto[3];
+static unsigned char pacchetto[4];
 static int quanti;
+static int lungo = 3;         /* i byte di un pacchetto: 4 se la rotella e' accesa */
+static unsigned int pulsanti_prima;
 
 static void al_mouse_irq(struct registri *r) {
     (void)r;
@@ -83,7 +97,7 @@ static void al_mouse_irq(struct registri *r) {
      * un "primo byte" senza e' un byte di mezzo, e lo si salta per ritrovare il passo. */
     if (quanti == 0 && !(b & PACCHETTO_UNO)) return;
     pacchetto[quanti++] = b;
-    if (quanti < 3) return;
+    if (quanti < lungo) return;
     quanti = 0;
 
     unsigned char primo = pacchetto[0];
@@ -98,7 +112,25 @@ static void al_mouse_irq(struct registri *r) {
         .dy = -dy,   /* il mouse conta in su, lo schermo in giu' */
         .pulsanti = primo & (PULSANTE_SINISTRO | PULSANTE_DESTRO | PULSANTE_CENTRALE),
     };
-    eventi_metti(&e);
+    /* un pacchetto con la sola rotella non e' uno spostamento: non lo si manda */
+    if (dx || dy || e.pulsanti != pulsanti_prima) eventi_metti(&e);
+    pulsanti_prima = e.pulsanti;
+
+    /* la rotella: i 4 bit bassi, con segno (quelli alti sono pulsanti in piu', non usati) */
+    int scatti = lungo == 4 ? (int)(signed char)(unsigned char)(pacchetto[3] << 4) >> 4 : 0;
+    if (scatti) {
+        struct evento r = { .tipo = EVENTO_ROTELLA, .dy = scatti, .pulsanti = e.pulsanti };
+        eventi_metti(&r);
+    }
+}
+
+/* La parola d'ordine dell'IntelliMouse: 1 se ora il mouse ha la rotella. */
+static int accendi_rotella(void) {
+    static const unsigned char frequenze[3] = { 200, 100, 80 };
+    for (int i = 0; i < 3; i++)
+        if (!al_mouse(MOUSE_FREQUENZA) || !al_mouse(frequenze[i])) return 0;
+    if (!al_mouse(MOUSE_CHI_SEI) || !puo_leggere()) return 0;
+    return inb(PORTA_DATI) == ID_INTELLIMOUSE;
 }
 
 int mouse_prepara(void) {
@@ -112,7 +144,9 @@ int mouse_prepara(void) {
     al_controller(CTRL_SCRIVI_CONFIG);
     dati(config);
 
-    if (!al_mouse(MOUSE_FABBRICA) || !al_mouse(MOUSE_MANDA)) return 0;
+    if (!al_mouse(MOUSE_FABBRICA)) return 0;
+    if (accendi_rotella()) lungo = 4;
+    if (!al_mouse(MOUSE_MANDA)) return 0;
 
     irq_collega(IRQ_MOUSE, al_mouse_irq);
     pic_apri(IRQ_MOUSE);
