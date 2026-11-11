@@ -183,12 +183,13 @@ void arch_dispositivi_prepara(void) {
      * su x86: prima chi le gestisce, poi le si lascia arrivare. */
     titolo("Interruzioni");
     gic_prepara();
-    timer_prepara(100);
+    timer_prepara(TIMER_HZ);
     unsigned long frequenza;
     __asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frequenza));
     interruzioni_accendi();   /* il rubinetto I di DAIF: da qui arrivano le IRQ */
-    kprintf("GIC versione %d (distributore a %p), timer generico a 100 Hz (%u colpi al secondo), "
-            "interruzioni accese\n", gic_versione(), (void *)gic_distributore(), (unsigned int)frequenza);
+    kprintf("GIC versione %d (distributore a %p), timer generico a %u Hz (%u colpi al secondo), "
+            "interruzioni accese\n", gic_versione(), (void *)gic_distributore(), TIMER_HZ,
+            (unsigned int)frequenza);
 
     /* Il bus PCI e la libreria dei driver. */
     titolo("PCI");

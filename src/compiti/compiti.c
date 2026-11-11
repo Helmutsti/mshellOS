@@ -206,7 +206,16 @@ void compiti_prepara(void) {
     interruzioni_ripristina(s);
 }
 
-/* --- lo scheduler: gira dentro l'interruzione, a interruzioni spente --- */
+/* --- lo scheduler: gira dentro l'interruzione, a interruzioni spente ---
+ *
+ * A giro (round robin): ogni compito pronto ha un tick, poi tocca al successivo; tutti
+ * lo stesso tempo, nessuno davanti agli altri.
+ *
+ * DA IMPLEMENTARE: le priorita'. Chi deve rispondere subito (il compositore, chi viene
+ * svegliato da un evento) aspetta il suo turno come chi fa un lavoro lungo: quando
+ * un'applicazione lavora molto, il compositore perde fotogrammi. I sistemi veri fanno
+ * passare prima chi si e' appena svegliato (Linux), o danno piu' priorita' a chi
+ * disegna lo schermo (macOS) o alla finestra in primo piano (Windows). */
 
 indirizzo_t scheduler(indirizzo_t sp) {
     if (!acceso) return sp;
@@ -281,7 +290,7 @@ void cedi(void) {
 
 void dormi(unsigned int ms) {
     unsigned int s = interruzioni_spegni();
-    unsigned int tick = (ms + 9) / 10;            /* 1 tick = 10 ms, arrotondato in su */
+    unsigned int tick = ms_in_tick(ms);
     attuale->sveglia = timer_tick() + (tick ? tick : 1);
     attuale->stato = DORME;
     cedi();                                        /* si riparte da qui al risveglio */

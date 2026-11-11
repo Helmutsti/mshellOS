@@ -70,8 +70,8 @@
 #define MAX_TASTIERE    4
 #define MAX_PUNTATORI   4
 
-#define RIPETI_DOPO     50      /* tick (10 ms): mezzo secondo prima di ripetere */
-#define RIPETI_OGNI     3       /* tick: poi una volta ogni 30 ms */
+#define RIPETI_DOPO     ms_in_tick(500)   /* mezzo secondo prima di ripetere */
+#define RIPETI_OGNI     ms_in_tick(30)    /* poi una volta ogni 30 ms */
 
 /* --- dal numero HID del tasto al KEY_... di Linux (come hid_keyboard[] in Linux) --- */
 

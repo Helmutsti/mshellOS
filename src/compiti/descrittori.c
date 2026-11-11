@@ -82,9 +82,9 @@ int descrittori_aspetta(struct da_guardare *elenco, int quanti, int ms) {
     for (int i = 0; i < quanti; i++)
         if (!(cose[i] = descrittore(elenco[i].descrittore))) return -1;
 
-    /* il tick a cui smettere di aspettare (1 tick = 10 ms, arrotondato in su) */
+    /* il tick a cui smettere di aspettare (arrotondato in su) */
     unsigned int scadenza = 0;
-    if (ms >= 0) scadenza = timer_tick() + (ms + 9) / 10;
+    if (ms >= 0) scadenza = timer_tick() + ms_in_tick((unsigned int)ms);
 
     for (;;) {
         int pronti = 0;

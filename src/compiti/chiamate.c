@@ -417,7 +417,7 @@ indirizzo_t chiamata_di_sistema(struct registri *r) {
         chiamata_risultato(r, memoria_rottura(arg[1]));
         break;
     case SIS_TEMPO:
-        chiamata_risultato(r, timer_tick() * 10);   /* il timer va a 100 Hz: un tick ogni 10 ms */
+        chiamata_risultato(r, tick_in_ms(timer_tick()));
         break;
     case SIS_TERMINA: {
         struct compito *c = socket_altro(arg[1]);

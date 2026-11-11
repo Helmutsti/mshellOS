@@ -183,7 +183,12 @@ static indirizzo_t anello_metti(struct anello *a, unsigned long long parametro,
 #define MAX_CONTROLLORI  2
 #define MAX_DISPOSITIVI  8      /* per controllore */
 #define MAX_ENDPOINT     4      /* interrupt, per dispositivo */
-#define BUFFER_EP        8      /* rapporti in attesa per endpoint */
+/* Quante richieste ("buste vuote") lasciamo al controllore per ogni endpoint interrupt.
+ * UNA, come Linux per tastiere e mouse: un rapporto dice "come sta adesso", non serve
+ * una scorta; arrivato, lo si legge e si rimette la busta (al piu' un tick dopo). Un
+ * tasto o un clic durano decine di millisecondi: in quel momento non si perdono. Con 8
+ * buste il mouse virtuale di QEMU a volte smetteva di rispondere. */
+#define BUFFER_EP        1
 #define MAX_RAPPORTO     512    /* byte per rapporto (8 x 512 = una pagina) */
 
 struct xhci;
@@ -248,14 +253,14 @@ static void w64(volatile unsigned char *b, unsigned int o, unsigned long long v)
 
 /* Aspetta 'ms' millisecondi (almeno un tick). Il timer gira gia' quando partono i driver. */
 static void aspetta_ms(unsigned int ms) {
-    unsigned int inizio = timer_tick(), tick = (ms + 9) / 10 + 1;
+    unsigned int inizio = timer_tick(), tick = ms_in_tick(ms) + 1;
     while (timer_tick() - inizio < tick) cpu_riposa();
 }
 
 /* Aspetta che (registro & maschera) == valore, fino a 'ms' millisecondi. */
 static int aspetta_bit(volatile unsigned char *b, unsigned int o, unsigned int maschera,
                        unsigned int valore, unsigned int ms) {
-    unsigned int inizio = timer_tick(), tick = ms / 10 + 2;
+    unsigned int inizio = timer_tick(), tick = ms_in_tick(ms) + 2;
     while ((r32(b, o) & maschera) != valore)
         if (timer_tick() - inizio > tick) return 0;
     return 1;
@@ -397,7 +402,7 @@ static unsigned int comando(struct xhci *hc, unsigned long long parametro, unsig
     unsigned int inizio = timer_tick();
     while (!hc->cmd_fatto) {
         processa(hc);
-        if (timer_tick() - inizio > 100) return 0;
+        if (timer_tick() - inizio > ms_in_tick(1000)) return 0;
     }
     return hc->cmd_cc;
 }
@@ -439,7 +444,7 @@ int usb_controllo(struct usb_dispositivo *d, unsigned char tipo, unsigned char r
     unsigned int inizio = timer_tick();
     while (!d->ep0_fatto) {
         processa(hc);
-        if (timer_tick() - inizio > 100) return -1;
+        if (timer_tick() - inizio > ms_in_tick(1000)) return -1;
     }
     if (d->ep0_cc == CC_STALLO) { ep0_ripristina(d); return -1; }
     if (d->ep0_cc != CC_OK && d->ep0_cc != CC_CORTO) return -1;

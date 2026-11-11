@@ -102,12 +102,12 @@ void arch_dispositivi_prepara(void) {
      * vuota della IDT (o, col PIC non riprogrammato, sulla riga 8: "doppio errore"). */
     titolo("Interruzioni");
     pic_prepara();
-    timer_prepara(100);
+    timer_prepara(TIMER_HZ);
     int c_e_il_mouse = mouse_prepara();   /* prima della tastiera: lei poi svuota la porta */
     tastiera_prepara();
     interruzioni_accendi();   /* da qui la CPU ascolta */
-    kprintf("PIC sulle righe %d-%d, timer a 100 Hz, tastiera, %s, interruzioni accese\n",
-            IRQ_BASE, IRQ_BASE + 15, c_e_il_mouse ? "mouse" : "nessun mouse");
+    kprintf("PIC sulle righe %d-%d, timer a %u Hz, tastiera, %s, interruzioni accese\n",
+            IRQ_BASE, IRQ_BASE + 15, TIMER_HZ, c_e_il_mouse ? "mouse" : "nessun mouse");
 
     /* Il bus PCI: si bussa a tutte le stanze e si stampa chi c'e'. Da qui i driver
      * delle schede moderne (USB, ...) trovano la loro. */

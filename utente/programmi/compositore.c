@@ -7,7 +7,7 @@
  * condivisa, e dice "mostra". Il compositore:
  *   - COMPONE, a strati: lo sfondo (una superficie della scrivania), le finestre dal
  *     fondo al primo piano, ognuna con la sua ombra morbida intorno, l'isola (un'altra
- *     superficie della scrivania), poi il puntatore. Le finestre sono di VETRO SMERIGLIATO:
+ *     superficie della scrivania), poi, solo sullo schermo, il puntatore. Le finestre sono di VETRO SMERIGLIATO:
  *     sotto ognuna il compositore sfoca quello che c'e' dietro, e ci mescola sopra
  *     l'immagine dell'applicazione (i suoi pixel hanno un'opacita'). Dentro le finestre
  *     non disegna niente, neanche la barra del titolo: ogni applicazione si disegna da
@@ -29,8 +29,12 @@
  *
  * IL DOPPIO BUFFER. Non si disegna direttamente sullo schermo: se no, a ogni movimento
  * si vedrebbe lo sfondo cancellare per un attimo le finestre (lo schermo "sfarfalla").
- * Si compone tutta la scena in una memoria nostra, 'disegno', e poi la si copia sullo
- * schermo in un colpo.
+ * Si compone la scena in una memoria nostra, 'disegno', e poi la si copia sullo
+ * schermo in un colpo. E non si rifa' mai tutta: solo i pezzi che sono cambiati davvero
+ * (vedi cosa_rifare), come fanno Wayland, macOS e Windows ("le zone rovinate").
+ * Il puntatore non sta in 'disegno': lo si disegna solo sullo schermo, dopo la copia.
+ * Cosi' quando si muove solo il mouse non si compone niente: si rimette sullo schermo
+ * il pezzetto di scena dove stava la freccia, e la si disegna dove sta adesso.
  *
  * NON SI ASPETTA MAI UN'APPLICAZIONE. Il compositore manda i suoi messaggi senza
  * aspettare (manda_subito), e non si fida di quello che riceve: misure, immagini e
@@ -62,14 +66,20 @@ static unsigned char *memoria = (unsigned char *)SCHERMO_PROGRAMMA;
 static int larghezza, altezza;
 
 /* La scena, prima dello schermo: pixel premoltiplicati, come quelli delle finestre.
- * Ci si disegna con la libreria di disegno, come in una finestra. */
+ * Ci si disegna con la libreria di disegno, come in una finestra. C'e' tutto tranne il
+ * puntatore: e' sempre la scena intera di adesso, senza la freccia. */
 static unsigned int disegno[MAX_LARGHEZZA * MAX_ALTEZZA];
 static struct tela scena;
 static struct pennello pennello;
 
-/* LA ZONA DA RIFARE, in pixel dello schermo: si disegna e si copia solo con
- * zx0 <= x < zx1, zy0 <= y < zy1. Fuori, 'disegno' e lo schermo hanno gia' quello giusto
- * (vedi cosa_rifare). */
+/* LE ZONE DA RIFARE, in pixel dello schermo: rettangoli che non si toccano (vedi
+ * cosa_rifare). Fuori, 'disegno' e lo schermo hanno gia' quello giusto. Mentre si
+ * compone, quella su cui si sta lavorando e' in zx0..zy1: si disegna solo con
+ * zx0 <= x < zx1, zy0 <= y < zy1. */
+struct zona { int x0, y0, x1, y1; };   /* x0 <= x < x1, y0 <= y < y1 */
+#define MAX_ZONE 16
+static struct zona zone[MAX_ZONE];
+static int quante_zone;
 static int zx0, zy0, zx1, zy1;
 
 /* LO SFONDO NON E' SUO: e' una superficie della scrivania (RUOLO_SFONDO). Finche' la
@@ -195,8 +205,9 @@ static void disegna_ombra(int i) {
  *      costo non dipende da quanto e' larga la sfocatura;
  *   3. tre medie una dopo l'altra danno una sfocatura morbida quasi uguale a quella
  *      "vera" (gaussiana) del disegno: qui, circa 20 pixel;
- *   4. la si rifa' solo quando cambia qualcosa sotto (vedi componi): se si muove solo
- *      il mouse, si riusa quella gia' fatta.
+ *   4. la si rifa' solo quando cambia qualcosa in quello che guarda (la finestra si
+ *      sposta, o cambia qualcosa sotto di lei li' intorno: vedi cosa_rifare); se no si
+ *      riusa quella gia' fatta.
  * Poi, a ogni composizione, la si ingrandisce di nuovo (ogni pixel e' la media pesata
  * dei quattro vicini di quella piccola) dentro la forma arrotondata della finestra. */
 #define SCALA          4    /* la copia rimpicciolita: un pixel ogni 4x4 */
@@ -234,14 +245,30 @@ static void media_fila(unsigned int *fila, int n, int salto) {
     }
 }
 
+/* Dove sta la copia piccola della finestra f, in pixel rimpiccioliti. */
+static void posto_sfocata(const struct finestra *f, int *x, int *y, int *l, int *a) {
+    *x = (f->x < 0 ? f->x - SCALA + 1 : f->x) / SCALA - BORDO_PICCOLO;
+    *y = (f->y < 0 ? f->y - SCALA + 1 : f->y) / SCALA - BORDO_PICCOLO;
+    *l = f->l / SCALA + 2 * BORDO_PICCOLO + 2;
+    *a = f->a / SCALA + 2 * BORDO_PICCOLO + 2;
+}
+
+/* QUELLO CHE GUARDA lo smerigliato della finestra f: i pixel della scena che
+ * prepara_sfocatura legge (fuori dallo schermo legge il bordo, quindi si taglia). */
+static int dentro(int v, int min, int max) { return v < min ? min : v > max ? max : v; }
+
+static struct zona guardata(const struct finestra *f) {
+    int x, y, l, a;
+    posto_sfocata(f, &x, &y, &l, &a);
+    return (struct zona){ dentro(x * SCALA, 0, larghezza - 1), dentro(y * SCALA, 0, altezza - 1),
+                          dentro((x + l) * SCALA - 1, 0, larghezza - 1) + 1,
+                          dentro((y + a) * SCALA - 1, 0, altezza - 1) + 1 };
+}
+
 /* Sfoca quello che c'e' adesso nella scena dietro la finestra i (e un po' intorno). */
-static void prepara_sfocatura(int i) {
+static void prepara_sfocatura(int i, struct sfocata *s) {
     const struct finestra *f = &finestre[i];
-    struct sfocata *s = &sfocate[i];
-    s->x = (f->x < 0 ? f->x - SCALA + 1 : f->x) / SCALA - BORDO_PICCOLO;
-    s->y = (f->y < 0 ? f->y - SCALA + 1 : f->y) / SCALA - BORDO_PICCOLO;
-    s->l = f->l / SCALA + 2 * BORDO_PICCOLO + 2;
-    s->a = f->a / SCALA + 2 * BORDO_PICCOLO + 2;
+    posto_sfocata(f, &s->x, &s->y, &s->l, &s->a);
     /* 1. rimpicciolire: ogni pixel piccolo e' la media di 4x4 pixel della scena */
     for (int v = 0; v < s->a; v++)
         for (int u = 0; u < s->l; u++) {
@@ -263,9 +290,8 @@ static void prepara_sfocatura(int i) {
 }
 
 /* Mette la sfocatura dentro la forma della finestra, ingrandendola di nuovo. */
-static void metti_sfocatura(int i) {
+static void metti_sfocatura(int i, const struct sfocata *s) {
     const struct finestra *f = &finestre[i];
-    const struct sfocata *s = &sfocate[i];
     struct tondo forma = tondo(f->x, f->y, f->l, f->a, f->raggio);
     int y0 = f->y > zy0 ? f->y : zy0, y1 = f->y + f->a < zy1 ? f->y + f->a : zy1;
     int x0 = f->x > zx0 ? f->x : zx0, x1 = f->x + f->l < zx1 ? f->x + f->l : zx1;
@@ -346,22 +372,54 @@ static void barra_non_risponde(const struct finestra *f) {
     contorna_forma(p, &tutta, 256);
 }
 
-static void disegna_finestra(int i, int ricalcola) {
+/* Quanto occupa una finestra sullo schermo, con l'ombra (lo sfondo non ne ha). */
+static struct zona con_ombra(unsigned int ruolo, int x, int y, int l, int a) {
+    if (ruolo == RUOLO_SFONDO) return (struct zona){ x, y, x + l, y + a };
+    return (struct zona){ x - OMBRA_MARGINE, y - OMBRA_MARGINE,
+                          x + l + OMBRA_MARGINE, y + a + OMBRA_MARGINE + FINESTRA_OMBRA_GIU };
+}
+
+static int si_toccano(struct zona p, struct zona q) {
+    return p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1;
+}
+
+/* Lavora sulla zona k: da adesso si disegna solo li' (anche il pennello). */
+static void nella_zona(int k) {
+    zx0 = zone[k].x0; zy0 = zone[k].y0; zx1 = zone[k].x1; zy1 = zone[k].y1;
+    pennello.s.rx = zx0; pennello.s.ry = zy0;
+    pennello.s.rx2 = zx1; pennello.s.ry2 = zy1;
+}
+
+static int nella_zona_si_vede(const struct finestra *f) {
+    struct zona z = { zx0, zy0, zx1, zy1 };
+    return si_toccano(con_ombra(f->ruolo, f->x, f->y, f->l, f->a), z);
+}
+
+/* UNA FINESTRA, in tutte le zone da rifare. In due tempi, come in una composizione
+ * intera: prima l'ombra in tutte le zone, poi (se va rifatta) la sfocatura, che guarda
+ * la scena fatta fin qui (ombra compresa), poi vetro, immagine e barra in tutte le zone.
+ * La sfocatura 's' e' quella da usare (quella tenuta da parte, di solito). */
+static void disegna_finestra(int i, int ricalcola, struct sfocata *s) {
     const struct finestra *f = &finestre[i];
-    /* tutta fuori dalla zona da rifare, ombra compresa: niente da fare (la sfocatura,
-     * quando va rifatta, si rifa' sempre: la zona allora e' tutto lo schermo) */
-    if (f->x - OMBRA_MARGINE >= zx1 || f->x + f->l + OMBRA_MARGINE <= zx0 ||
-        f->y - OMBRA_MARGINE >= zy1 || f->y + f->a + OMBRA_MARGINE + FINESTRA_OMBRA_GIU <= zy0)
-        return;
     if (f->ruolo == RUOLO_SFONDO) {           /* sotto tutto: niente ombra, niente vetro */
-        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], 0);
+        for (int k = 0; k < quante_zone; k++) {
+            nella_zona(k);
+            if (nella_zona_si_vede(f)) immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], 0);
+        }
         return;
     }
-    disegna_ombra(i);
-    if (ricalcola) prepara_sfocatura(i);
-    metti_sfocatura(i);
-    immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? BARRA_ALTEZZA : 0);
-    if (f->non_risponde && f->ruolo == RUOLO_FINESTRA) barra_non_risponde(f);
+    for (int k = 0; k < quante_zone; k++) {
+        nella_zona(k);
+        if (nella_zona_si_vede(f)) disegna_ombra(i);
+    }
+    if (ricalcola) prepara_sfocatura(i, s);
+    for (int k = 0; k < quante_zone; k++) {
+        nella_zona(k);
+        if (!nella_zona_si_vede(f)) continue;
+        metti_sfocatura(i, s);
+        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? BARRA_ALTEZZA : 0);
+        if (f->non_risponde && f->ruolo == RUOLO_FINESTRA) barra_non_risponde(f);
+    }
 }
 
 /* Un messaggio a un'applicazione, senza aspettare. Se non si puo', la sua casella e'
@@ -671,16 +729,52 @@ static const char *const freccia[] = {
     "       XX   ",
 };
 
-static void disegna_puntatore(void) {
-    for (int r = 0; r < (int)(sizeof freccia / sizeof freccia[0]); r++)
-        for (int k = 0; freccia[r][k]; k++) {
-            if (freccia[r][k] == ' ') continue;
-            pennello_colore(&pennello, OPACO(freccia[r][k] == 'X' ? 0x000000 : 0xFFFFFF));
-            copri(&pennello, px + k, py + r, 256);
-        }
+#define FRECCIA_L 12
+#define FRECCIA_A ((int)(sizeof freccia / sizeof freccia[0]))
+
+/* --- dalla scena allo schermo --- */
+
+/* Un pixel della scena (o della freccia) come lo vuole lo schermo. La scena e' tutta
+ * opaca: i colori sono gia' quelli veri. Se lo schermo li vuole in un altro ordine, si
+ * spostano. */
+static unsigned int per_lo_schermo(unsigned int c) {
+    if (schermo.rosso == 16 && schermo.verde == 8 && schermo.blu == 0) return c & 0xFFFFFF;
+    return ((c >> 16) & 0xFF) << schermo.rosso | ((c >> 8) & 0xFF) << schermo.verde |
+           (c & 0xFF) << schermo.blu;
 }
 
-/* --- la scena intera, poi sullo schermo --- */
+/* Copia sullo schermo un rettangolo della scena (tagliato dentro lo schermo). */
+static void copia(int x0, int y0, int x1, int y1) {
+    if (x0 < 0) x0 = 0;
+    if (y0 < 0) y0 = 0;
+    if (x1 > larghezza) x1 = larghezza;
+    if (y1 > altezza) y1 = altezza;
+    int stesso_ordine = schermo.rosso == 16 && schermo.verde == 8 && schermo.blu == 0;
+    for (int y = y0; y < y1; y++) {
+        unsigned int *da = &disegno[y * larghezza];
+        unsigned int *a = (unsigned int *)(memoria + y * schermo.passo);
+        if (stesso_ordine) {
+            for (int x = x0; x < x1; x++) a[x] = da[x] & 0xFFFFFF;
+        } else {
+            for (int x = x0; x < x1; x++) a[x] = per_lo_schermo(da[x]);
+        }
+    }
+}
+
+/* La freccia, direttamente sullo schermo (non nella scena): e' fatta solo di pixel
+ * opachi, quindi non si mescola con niente, si scrive e basta. */
+static void disegna_puntatore(void) {
+    unsigned int nero = per_lo_schermo(0x000000), bianco = per_lo_schermo(0xFFFFFF);
+    for (int r = 0; r < FRECCIA_A; r++) {
+        int y = py + r;
+        if (y >= altezza) break;
+        unsigned int *riga = (unsigned int *)(memoria + y * schermo.passo);
+        for (int k = 0; freccia[r][k] && px + k < larghezza; k++)
+            if (freccia[r][k] != ' ') riga[px + k] = freccia[r][k] == 'X' ? nero : bianco;
+    }
+}
+
+/* --- la scena, poi sullo schermo --- */
 
 /* L'ELENCO DI QUELLE DA DISEGNARE, nell'ordine in cui si disegnano: gli strati dal
  * basso (sfondo, finestre, pannelli), e dentro ogni strato dal fondo al primo piano. */
@@ -695,118 +789,193 @@ static void fai_lista(void) {
         }
 }
 
-/* L'IMPRONTA di una finestra nel fotogramma: tutto quello che decide come appare. */
+/* L'IMPRONTA di una finestra nel fotogramma: tutto quello che decide come appare.
+ * 'posto' e' dove sta in 'lista' (0 la piu' in fondo); 'id' dice se e' ancora lei (un
+ * posto in 'finestre' si puo' riusare per un'altra). */
 struct impronta {
     int vista, x, y, l, a, posto, col_fuoco, non_risponde;
-    unsigned int ruolo, generazione;
+    unsigned int ruolo, generazione, id;
 };
 static struct impronta impronte_prima[MAX_FINESTRE];
 static int px_prima, py_prima, prima_volta = 1;
 
-#define FRECCIA_L 12
-#define FRECCIA_A ((int)(sizeof freccia / sizeof freccia[0]))
+/* Le zone da rifare: si aggiunge un rettangolo alla volta. Le zone non devono mai
+ * toccarsi (in una parte comune a due zone si disegnerebbe due volte, e le cose
+ * semitrasparenti, come le ombre, verrebbero piu' scure): se il nuovo ne tocca una, la
+ * si unisce a lui (il rettangolo che le contiene tutte e due), e si ricontrolla. Le si
+ * unisce anche se sono vicine e l'unione costa poco in piu'. Se le zone sono troppe,
+ * una sola che le contiene tutte. */
+static int area(struct zona z) { return (z.x1 - z.x0) * (z.y1 - z.y0); }
 
-static void zona_aggiungi(int x, int y, int l, int a) {
-    if (l <= 0 || a <= 0) return;
-    if (zx0 >= zx1 || zy0 >= zy1) { zx0 = x; zy0 = y; zx1 = x + l; zy1 = y + a; return; }
-    if (x < zx0) zx0 = x;
-    if (y < zy0) zy0 = y;
-    if (x + l > zx1) zx1 = x + l;
-    if (y + a > zy1) zy1 = y + a;
+static struct zona unione(struct zona p, struct zona q) {
+    return (struct zona){ p.x0 < q.x0 ? p.x0 : q.x0, p.y0 < q.y0 ? p.y0 : q.y0,
+                          p.x1 > q.x1 ? p.x1 : q.x1, p.y1 > q.y1 ? p.y1 : q.y1 };
 }
 
-static int si_toccano(int ax, int ay, int al, int aa, int bx, int by, int bl, int ba) {
-    return ax < bx + bl && bx < ax + al && ay < by + ba && by < ay + aa;
+static void zona_aggiungi(struct zona z) {
+    if (z.x0 < 0) z.x0 = 0;
+    if (z.y0 < 0) z.y0 = 0;
+    if (z.x1 > larghezza) z.x1 = larghezza;
+    if (z.y1 > altezza) z.y1 = altezza;
+    if (z.x0 >= z.x1 || z.y0 >= z.y1) return;
+    for (int k = 0; k < quante_zone; k++) {
+        struct zona u = unione(z, zone[k]);
+        int poco_di_piu = (area(u) - area(z) - area(zone[k])) * 4 <= area(z) + area(zone[k]);
+        if (si_toccano(z, zone[k]) || poco_di_piu) {
+            z = u;
+            zone[k] = zone[--quante_zone];
+            k = -1;                     /* la nuova, piu' grande, puo' toccarne altre */
+        }
+    }
+    if (quante_zone == MAX_ZONE) {
+        for (int k = 0; k < quante_zone; k++) z = unione(z, zone[k]);
+        quante_zone = 0;
+    }
+    zone[quante_zone++] = z;
 }
 
-/* COSA RIFARE, confrontando con il fotogramma prima. Mette la zona in zx0..zy1.
- *   2: TUTTO, sfocature comprese: una finestra e' comparsa, sparita, spostata, e' passata
- *      davanti, ha preso o perso il fuoco (cambia l'ombra), non risponde piu'...
- *   1: SOLO LA ZONA: e' cambiato il disegno dentro qualche finestra (la zona e' il suo
- *      rettangolo), e/o si e' mosso il puntatore (la freccia di prima e quella di adesso);
- *   0: niente.
- * Il disegno dentro una finestra non cambia niente fuori da lei, tranne il VETRO di
- * quelle sopra: lo smerigliato e' fatto di quello che c'e' sotto. Se sopra c'e' una
- * finestra di vetro che la sfiora, si rifa' tutto. */
-static int cosa_rifare(void) {
+/* COSA E' CAMBIATO dall'ultimo fotogramma, finestra per finestra: i rettangoli dove i
+ * suoi pixel non sono piu' quelli di prima ('danni'). */
+#define MAX_DANNI 3
+static struct zona danni[MAX_FINESTRE][MAX_DANNI];
+static int quanti_danni[MAX_FINESTRE];
+static int da_sfocare[MAX_FINESTRE];   /* il suo smerigliato va rifatto */
+
+static void danno(int i, struct zona z) {
+    if (quanti_danni[i] < MAX_DANNI) danni[i][quanti_danni[i]++] = z;
+}
+
+static int danni_toccano(int i, struct zona z) {
+    for (int d = 0; d < quanti_danni[i]; d++)
+        if (si_toccano(danni[i][d], z)) return 1;
+    return 0;
+}
+
+static struct zona impronta_con_ombra(const struct impronta *p) {
+    return con_ombra(p->ruolo, p->x, p->y, p->l, p->a);
+}
+
+static struct zona impronta_dentro(const struct impronta *p) {
+    return (struct zona){ p->x, p->y, p->x + p->l, p->y + p->a };
+}
+
+/* COSA RIFARE, confrontando con il fotogramma prima. Riempie le zone (zone[]) e dice
+ * di quali finestre va rifatto lo smerigliato (da_sfocare[]).
+ *
+ * 1. Ogni finestra, da sola: cosa e' cambiato in lei e dove.
+ *      comparsa, sparita, spostata:  il posto di prima e quello di adesso, ombra compresa
+ *      ha preso o perso il fuoco:    lei con l'ombra (cambia il colore dell'ombra)
+ *      immagine nuova, non risponde: solo il suo rettangolo
+ * 2. LO SMERIGLIATO. Quello di una finestra e' fatto della scena SOTTO di lei, li'
+ *    intorno (guardata). Va rifatto se la finestra si e' spostata o e' nuova, se e'
+ *    cambiata la sua ombra (la guarda anche lei), o se qualcosa di quello che guarda e'
+ *    cambiato in una finestra che le sta sotto (prima o adesso). Anche se due finestre
+ *    si sono scambiate di posto (una e' passata davanti): quella che prima stava sotto e
+ *    adesso no, o il contrario, cambia quello che c'e' dietro. Si guarda dal basso in
+ *    alto: uno smerigliato rifatto e' un cambiamento anche lui (dentro la finestra), e
+ *    puo' far rifare quello delle finestre sopra, a catena.
+ * 3. Le zone: tutti i danni, i pezzi dove due finestre scambiate si sovrappongono, e
+ *    tutto quello che guarda ogni smerigliato da rifare: per rifarlo bisogna ricomporre
+ *    li' la scena, dal fondo fino a lei.
+ * Il risultato e' lo stesso, pixel per pixel, che si avrebbe ricomponendo tutto. */
+static void cosa_rifare(void) {
     struct impronta adesso[MAX_FINESTRE] = { 0 };
     for (int k = 0; k < in_lista; k++) {
         int i = lista[k];
         const struct finestra *f = &finestre[i];
         adesso[i] = (struct impronta){ 1, f->x, f->y, f->l, f->a, k, i == fuoco, f->non_risponde,
-                                       f->ruolo, f->generazione };
+                                       f->ruolo, f->generazione, f->id };
     }
-    int tutto = prima_volta;
-    prima_volta = 0;
-    for (int i = 0; i < MAX_FINESTRE; i++) {
-        const struct impronta *p = &impronte_prima[i], *q = &adesso[i];
-        if (p->vista != q->vista || p->x != q->x || p->y != q->y || p->l != q->l || p->a != q->a ||
-            p->posto != q->posto || p->col_fuoco != q->col_fuoco ||
-            p->non_risponde != q->non_risponde || p->ruolo != q->ruolo)
-            tutto = 1;
+    quante_zone = 0;
+    for (int i = 0; i < MAX_FINESTRE; i++) quanti_danni[i] = da_sfocare[i] = 0;
+
+    if (prima_volta) {                  /* tutto, sfocature comprese */
+        prima_volta = 0;
+        zona_aggiungi((struct zona){ 0, 0, larghezza, altezza });
+        for (int i = 0; i < MAX_FINESTRE; i++) da_sfocare[i] = adesso[i].vista;
+        for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
+        return;
     }
 
-    zx0 = zy0 = zx1 = zy1 = 0;
-    for (int k = 0; k < in_lista && !tutto; k++) {
+    /* 1. ognuna da sola */
+    int stessa[MAX_FINESTRE];   /* c'era e c'e', la stessa finestra, nello stesso posto */
+    for (int i = 0; i < MAX_FINESTRE; i++) {
+        const struct impronta *p = &impronte_prima[i], *q = &adesso[i];
+        stessa[i] = p->vista && q->vista && p->id == q->id && p->x == q->x && p->y == q->y &&
+                    p->l == q->l && p->a == q->a && p->ruolo == q->ruolo;
+        if (!p->vista && !q->vista) continue;
+        if (!stessa[i]) {
+            if (p->vista) danno(i, impronta_con_ombra(p));
+            if (q->vista) { danno(i, impronta_con_ombra(q)); da_sfocare[i] = 1; }
+        } else if (p->col_fuoco != q->col_fuoco) {
+            danno(i, impronta_con_ombra(q));
+            da_sfocare[i] = 1;
+        } else if (p->non_risponde != q->non_risponde || p->generazione != q->generazione) {
+            danno(i, impronta_dentro(q));
+        }
+    }
+
+    /* 2. gli smerigliati, dal basso */
+    for (int k = 0; k < in_lista; k++) {
         int i = lista[k];
-        if (adesso[i].generazione == impronte_prima[i].generazione) continue;
-        const struct finestra *f = &finestre[i];
-        zona_aggiungi(f->x, f->y, f->l, f->a);
-        int b = (BORDO_PICCOLO + 2) * SCALA;   /* quanto intorno a se' guarda lo smerigliato */
-        for (int j = k + 1; j < in_lista; j++) {
-            const struct finestra *g = &finestre[lista[j]];
-            if (g->ruolo != RUOLO_SFONDO &&
-                si_toccano(f->x, f->y, f->l, f->a, g->x - b, g->y - b, g->l + 2 * b, g->a + 2 * b))
-                tutto = 1;
+        const struct impronta *q = &adesso[i];
+        if (q->ruolo == RUOLO_SFONDO || da_sfocare[i]) continue;
+        struct zona vista = guardata(&finestre[i]);
+        for (int j = 0; j < MAX_FINESTRE && !da_sfocare[i]; j++) {
+            if (j == i) continue;
+            const struct impronta *pj = &impronte_prima[j], *qj = &adesso[j];
+            int sotto_prima = pj->vista && pj->posto < impronte_prima[i].posto;
+            int sotto_ora = qj->vista && qj->posto < q->posto;
+            if (stessa[j] && sotto_prima != sotto_ora)    /* scambiate di posto */
+                da_sfocare[i] = si_toccano(impronta_con_ombra(qj), vista);
+            else if (sotto_prima || sotto_ora)
+                da_sfocare[i] = danni_toccano(j, vista);
+        }
+        if (da_sfocare[i]) danno(i, impronta_dentro(q));
+    }
+
+    /* 3. le zone */
+    for (int i = 0; i < MAX_FINESTRE; i++) {
+        for (int d = 0; d < quanti_danni[i]; d++) zona_aggiungi(danni[i][d]);
+        if (da_sfocare[i] && adesso[i].ruolo != RUOLO_SFONDO) zona_aggiungi(guardata(&finestre[i]));
+        for (int j = i + 1; j < MAX_FINESTRE; j++) {
+            if (!stessa[i] || !stessa[j]) continue;
+            int prima = impronte_prima[i].posto < impronte_prima[j].posto;
+            int ora = adesso[i].posto < adesso[j].posto;
+            struct zona a = impronta_con_ombra(&adesso[i]), b = impronta_con_ombra(&adesso[j]);
+            if (prima != ora && si_toccano(a, b))
+                zona_aggiungi((struct zona){ a.x0 > b.x0 ? a.x0 : b.x0, a.y0 > b.y0 ? a.y0 : b.y0,
+                                             a.x1 < b.x1 ? a.x1 : b.x1, a.y1 < b.y1 ? a.y1 : b.y1 });
         }
     }
     for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
+}
 
-    if (tutto) {
-        zx0 = 0; zy0 = 0; zx1 = larghezza; zy1 = altezza;
-        return 2;
-    }
-    if (px != px_prima || py != py_prima) {
-        zona_aggiungi(px_prima, py_prima, FRECCIA_L, FRECCIA_A);
-        zona_aggiungi(px, py, FRECCIA_L, FRECCIA_A);
-    }
-    /* dentro lo schermo */
-    if (zx0 < 0) zx0 = 0;
-    if (zy0 < 0) zy0 = 0;
-    if (zx1 > larghezza) zx1 = larghezza;
-    if (zy1 > altezza) zy1 = altezza;
-    return zx0 < zx1 && zy0 < zy1;
+/* La composizione delle zone: si puliscono, poi ci si disegnano le finestre, una alla
+ * volta dal fondo, in tutte le zone (disegna_finestra): quando tocca a una finestra di
+ * rifare lo smerigliato, la scena sotto di lei e' gia' pronta in tutto quello che guarda. */
+static void componi_zone(void) {
+    for (int k = 0; k < quante_zone; k++)
+        for (int y = zone[k].y0; y < zone[k].y1; y++)
+            for (int x = zone[k].x0; x < zone[k].x1; x++) disegno[y * larghezza + x] = SENZA_SFONDO;
+    for (int k = 0; k < in_lista; k++) disegna_finestra(lista[k], da_sfocare[lista[k]], &sfocate[lista[k]]);
 }
 
 static void componi(void) {
     fai_lista();
-    int rifare = cosa_rifare();
-    if (!rifare) return;
+    cosa_rifare();
+    int mosso = px != px_prima || py != py_prima;
+    if (!quante_zone && !mosso) return;
+
+    componi_zone();
+
+    /* sullo schermo: le zone, poi dove stava la freccia (la scena senza freccia), poi
+     * la freccia dove sta adesso (sopra le zone appena copiate) */
+    for (int k = 0; k < quante_zone; k++) copia(zone[k].x0, zone[k].y0, zone[k].x1, zone[k].y1);
+    if (mosso) copia(px_prima, py_prima, px_prima + FRECCIA_L, py_prima + FRECCIA_A);
+    disegna_puntatore();
     px_prima = px;
     py_prima = py;
-
-    /* il pennello disegna solo nella zona */
-    pennello.s.rx = zx0; pennello.s.ry = zy0;
-    pennello.s.rx2 = zx1; pennello.s.ry2 = zy1;
-    for (int y = zy0; y < zy1; y++)
-        for (int x = zx0; x < zx1; x++) disegno[y * larghezza + x] = SENZA_SFONDO;
-    for (int k = 0; k < in_lista; k++) disegna_finestra(lista[k], rifare == 2);
-    disegna_puntatore();
-
-    /* la copia, solo la zona. La scena e' tutta opaca: i colori sono gia' quelli veri.
-     * Se lo schermo li vuole in un altro ordine, si spostano. */
-    int stesso_ordine = schermo.rosso == 16 && schermo.verde == 8 && schermo.blu == 0;
-    for (int y = zy0; y < zy1; y++) {
-        unsigned int *da = &disegno[y * larghezza];
-        unsigned int *a = (unsigned int *)(memoria + y * schermo.passo);
-        if (stesso_ordine) {
-            for (int x = zx0; x < zx1; x++) a[x] = da[x] & 0xFFFFFF;
-        } else {
-            for (int x = zx0; x < zx1; x++)
-                a[x] = ((da[x] >> 16) & 0xFF) << schermo.rosso | ((da[x] >> 8) & 0xFF) << schermo.verde |
-                       (da[x] & 0xFF) << schermo.blu;
-        }
-    }
 }
 
 /* --- gli eventi del kernel: mouse e tastiera --- */
