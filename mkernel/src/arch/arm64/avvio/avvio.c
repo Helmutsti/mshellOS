@@ -27,6 +27,7 @@
 #include "pagine.h"
 #include "pci.h"
 #include "driver.h"
+#include "ramfb.h"
 
 extern char kernel_start[], kernel_end[];   /* da linker.ld */
 extern unsigned long avvio_albero, avvio_livello;   /* da kernel_head.s */
@@ -167,9 +168,14 @@ void kernel_main(void) {
     if (albero) pagine_proteggi(albero, albero + albero_dimensione());
     kprintf("Pagine  : %u libere = %u KB\n", pagine_libere(), pagine_libere() * 4);
 
-    /* Lo schermo non c'e' ancora: la console scrive solo sulla seriale. */
-    static struct schermo nessuno;
-    kernel_avvia(&nessuno);   /* da qui, il kernel neutro: non torna */
+    /* Lo schermo: ramfb (QEMU, UTM). Se non c'e', la console scrive solo sulla seriale. */
+    static struct schermo schermo;
+    if (ramfb_prepara(&schermo, 1280, 800) && console_prepara(&schermo))
+        kprintf("Schermo : %ux%u, ramfb a %p\n", schermo.larghezza, schermo.altezza,
+                (void *)schermo.indirizzo);
+    else
+        kprintf("Schermo : nessuno (solo la seriale)\n");
+    kernel_avvia(&schermo);   /* da qui, il kernel neutro: non torna */
 }
 
 void arch_dispositivi_prepara(void) {
