@@ -17,6 +17,8 @@
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
 #   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c e il manifest)
+#   utente/prove/      programmi che servono solo alle prove automatiche (test/): vanno
+#                      solo in disco_prove.img, mai nel disco normale
 #   file/              quello che si mette qui finisce nel disco, nella casa della persona
 #                      (/data/users/1000/home, che i programmi vedono come /home)
 #   strumenti/         programmi che girano qui, sul computer che compila (la grafica)
@@ -28,6 +30,8 @@
 #       riga_kernel.txt (solo ARM) la riga di comando del kernel, per QEMU -append
 #       disco.img      IL DISCO, uno solo, con una tabella delle partizioni GPT e tre
 #                      partizioni (vedi IL DISCO qui sotto)
+#       disco_prove.img  il disco delle prove automatiche: lo stesso, con in piu' i
+#                      programmi di utente/prove in /data/tests (vedi in fondo al passo 6)
 #   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
@@ -345,6 +349,17 @@ for r in file/* file/.[!.]*; do
 done
 echo "programmi pronti"
 
+# I programmi delle prove (utente/prove): servono SOLO alle prove automatiche (test/), e
+# nel disco normale non ci vanno. Per ora c'e' riempitivo, che dorme per sempre: in
+# disco_prove.img (passo 6) ce ne sono RIEMPITIVI copie, e init le fa partire tutte.
+mkdir -p "$B/oggetti/prove"
+for f in utente/prove/*.c; do
+    nome=$(basename "$f" .c)
+    $CC $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
+    lega "$B/oggetti/prove/$nome" $LIBRERIA "$B/oggetti/prove/$nome.o"
+done
+RIEMPITIVI=6
+
 # --- 3. l'archivio di avvio (initramfs) ---
 # Un archivio cpio (formato "newc", quello che legge il kernel) compresso con gzip, con
 # avvio come /init, i moduli e il loro ordine (vedi utente/avvio/avvio.c).
@@ -468,8 +483,21 @@ mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$ALBERO
     "$B/disco.img" $((MISURA_SISTEMA * MB / 4096))
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco.img" $((MISURA_DATI * MB / 4096))
-rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco.img pronto: GPT con avvio ($MISURA_AVVIO MB, FAT32), system ($MISURA_SISTEMA MB, ext4) e data ($MISURA_DATI MB, ext4)"
+
+# IL DISCO DELLE PROVE: una copia di disco.img in cui la partizione data ha in piu' la
+# cartella /data/tests, con i programmi delle prove (init fa partire tutto quello che c'e'
+# li'). Le altre due partizioni sono le stesse; data si riscrive da capo, dallo stesso
+# albero piu' la cartella. Lo usano solo le prove che lo chiedono (DISCO in test/prove/);
+# acceso a mano (run.sh), il sistema usa sempre disco.img.
+cp "$B/disco.img" "$B/disco_prove.img"
+metti_cartella /data/tests 0 755 >/dev/null
+for i in $(seq $RIEMPITIVI); do
+    metti_file "$B/oggetti/prove/riempitivo" "/data/tests/riempitivo-$i" 755 >/dev/null
+done
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_prove.img" $((MISURA_DATI * MB / 4096))
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+echo "$B/disco_prove.img pronto: con $RIEMPITIVI riempitivi in /data/tests"
 
 rm -rf "$B/oggetti"
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"

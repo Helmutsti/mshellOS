@@ -150,6 +150,10 @@ int rinomina(const char *da, const char *a);
 /* Cambia proprietario e permessi (il proprietario lo cambia solo il sistema). */
 int cambia_permessi(const char *percorso, unsigned int proprietario, unsigned int permessi);
 
+/* Quanto e' grande, e quanto e' libera, la partizione in cui sta 'percorso'. 0, o un
+ * errore. */
+int stato_disco(const char *percorso, struct info_disco *d);
+
 /* --- i processi e la memoria (vedi chiamate.h) --- */
 
 /* I processi che ci sono (al massimo 'max'): quanti sono, o -1. */

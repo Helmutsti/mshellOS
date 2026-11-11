@@ -173,11 +173,14 @@ class Macchina:
     # La RAM di ARM64 e' fissa (512 MB, come run.sh); quella del PC si sceglie (--ram).
     RAM_ARM64 = 512
 
-    def __init__(self, cpu, build, lavoro, porta, ram=2048):
+    def __init__(self, cpu, build, lavoro, porta, ram=2048, disco="disco.img"):
         self.cpu = cpu
         self.ram = self.RAM_ARM64 if cpu == "arm64" else ram     # in MB
         self.build = Path(build) / cpu      # build.sh compila in build/<cpu>/
         self.lavoro = Path(lavoro)          # qui vanno seriale, disco copiato, foto
+        # il disco da copiare: disco.img, o disco_prove.img (con i programmi delle prove
+        # in /data/tests, che init fa partire: vedi build.sh) se la prova lo chiede
+        self.disco = disco
         self.porta_qmp = porta
         self.porta_hmp = porta + 1
         self.processo = None
@@ -223,7 +226,7 @@ class Macchina:
 
     def accendi(self):
         self.lavoro.mkdir(parents=True, exist_ok=True)
-        origine = self.build / "disco.img"
+        origine = self.build / self.disco
         avvio = ["linux", "avvio.img", "riga_kernel.txt"] if self.cpu == "arm64" else []
         for f in [origine] + [self.build / n for n in avvio]:
             if not f.exists():

@@ -2,8 +2,8 @@
  *
  * Le partizioni del disco sono ext4 (system, "/", in sola lettura; data, /data, che si
  * scrive: vedi chiamate.h), che Linux legge e scrive: le funzioni qui sono quasi
- * sempre una chiamata di Linux sola (open, read, write, stat, mkdir, unlink, rename,
- * chmod, chown), con i percorsi controllati da percorso_vero e gli errori tradotti da
+ * sempre una chiamata di Linux sola (open, read, write, stat, statvfs, mkdir, unlink,
+ * rename, chmod, chown), con i percorsi controllati da percorso_vero e gli errori tradotti da
  * errore_file (libreria.c).
  *
  * LE CARTELLE. Linux da' le voci di una cartella in un ordine suo (per ext4, quello di una
@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/syscall.h>
 #include <unistd.h>
 
@@ -192,6 +193,21 @@ int info(const char *percorso, struct info_file *i) {
     *i = (struct info_file){ .tipo = tipo_di(s.st_mode), .permessi = s.st_mode & 07777,
                              .proprietario = s.st_uid, .collegamenti = (unsigned int)s.st_nlink,
                              .dimensione = (unsigned long long)s.st_size, .modificato = s.st_mtime };
+    return 0;
+}
+
+/* LO SPAZIO DI UNA PARTIZIONE. statvfs chiede al file system in cui sta il percorso
+ * quanti blocchi ha in tutto e quanti liberi (come "df"). I liberi sono f_bfree, tutti:
+ * anche quelli che ext4 tiene da parte per il sistema (f_bavail sono solo quelli che puo'
+ * usare chiunque). */
+int stato_disco(const char *percorso, struct info_disco *d) {
+    char vero[MAX_VERO];
+    int e = percorso_vero(percorso, vero);
+    if (e < 0) return e;
+    struct statvfs s;
+    if (statvfs(vero, &s) < 0) return errore_file(errno);
+    d->totale = (unsigned long long)s.f_blocks * s.f_frsize;
+    d->libero = (unsigned long long)s.f_bfree * s.f_frsize;
     return 0;
 }
 

@@ -17,6 +17,12 @@ accende un mshell NUOVO in QEMU (senza finestra: vedi qemu.py), si aspetta la sc
 e si chiama la funzione 'esegui' della prova, che muove il mouse, preme tasti, fotografa
 lo schermo e controlla. Ogni prova parte da zero: se una si rompe, non trascina le altre.
 
+IL DISCO. Ogni prova parte dal disco normale (disco.img), lo stesso di run.sh. Una prova
+che scrive DISCO = "disco_prove.img" parte invece dal disco delle prove: lo stesso, con
+in piu' i programmi di utente/prove/ in /data/tests, che init fa partire (per esempio
+qualche "riempitivo", un processo che dorme e basta: vedi build.sh). Le altre prove non
+li vedono, e i loro conti (righe, processi, foto di riferimento) restano quelli.
+
 Una prova FALLISCE se solleva ErroreProva (o qualsiasi altro errore), oppure se alla fine
 nella seriale c'e' un "Kernel panic" o un messaggio d'errore. Le foto e la seriale di
 una prova fallita restano in test/risultati/<cpu>/<prova>/; quelle delle prove riuscite
@@ -156,7 +162,8 @@ def esegui_una(modulo, cpu, args):
     cartella = RISULTATI / cpu / modulo.NOME
     shutil.rmtree(cartella, ignore_errors=True)
     cartella.mkdir(parents=True)
-    m = Macchina(cpu, args.build, cartella, args.porte, args.ram)
+    m = Macchina(cpu, args.build, cartella, args.porte, args.ram,
+                 getattr(modulo, "DISCO", "disco.img"))
     p = Prova(modulo.NOME, cpu, m, cartella, args.riferimenti)
     inizio = time.time()
     riuscita, messaggio = True, ""

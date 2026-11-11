@@ -203,6 +203,8 @@ static int larghezza_ora(void) {
 #define ISOLA_DALL_ALTO 12
 
 static struct finestra isola;
+static int voce_sopra = -1;     /* l'applicazione con il puntatore sopra, o -1 */
+static int voce_premuta = -1;   /* quella su cui si e' premuto (finche' non si lascia), o -1 */
 static int isola_l, spazio_ora;
 static char ora_mostrata[32];   /* il testo dell'ora che si vede adesso nell'isola */
 
@@ -212,21 +214,50 @@ static int calcola_isola(void) {
     return 2 * ISOLA_MARGINE + VOCE_LATO + ISOLA_SPAZIO + voci + 1 + ISOLA_SPAZIO + spazio_ora;
 }
 
-/* Un tondo come "Icona app" del disegno: colorato (con ombra e luce) o di vetro. */
-static void voce(struct pennello *p, int x, int y, unsigned int colore, int icona_voce) {
+/* Gli stati di una voce, come quelli di un pulsante */
+#define VOCE_NORMALE 0
+#define VOCE_SOPRA   1   /* il puntatore e' sopra */
+#define VOCE_PREMUTA 2   /* premuta, e il puntatore e' ancora sopra */
+
+/* Il colore di una voce colorata nei tre stati: normale, sopra, premuta. */
+static const unsigned int colori_voce[][3] = {
+    { BLU_NORMALE,     BLU_SOPRA,     BLU_PREMUTO     },
+    { VERDE_NORMALE,   VERDE_SOPRA,   VERDE_PREMUTO   },
+    { ROSSO_NORMALE,   ROSSO_SOPRA,   ROSSO_PREMUTO   },
+    { ARANCIO_NORMALE, ARANCIO_SOPRA, ARANCIO_PREMUTO },
+};
+
+static unsigned int colore_voce(unsigned int colore, int stato) {
+    for (unsigned int i = 0; i < sizeof colori_voce / sizeof colori_voce[0]; i++)
+        if (colori_voce[i][0] == colore) return colori_voce[i][stato];
+    return colore;
+}
+
+/* Un tondo come "Icona app" del disegno: colorato (con ombra e luce) o di vetro. Premuta,
+ * la voce "scende": spariscono l'ombra e la luce, come in un pulsante. */
+static void voce(struct pennello *p, int x, int y, unsigned int colore, int icona_voce, int stato) {
     struct tondo t = tondo(x, y, VOCE_LATO, VOCE_LATO, VOCE_LATO / 2);
     if (colore) {
-        pennello_colore(p, VOCE_OMBRA);
-        ombra_forma(p, &t, 0, 2, 3);
-        pennello_colore(p, colore);
+        if (stato != VOCE_PREMUTA) {
+            pennello_colore(p, VOCE_OMBRA);
+            ombra_forma(p, &t, 0, 2, 3);
+        }
+        pennello_colore(p, colore_voce(colore, stato));
         riempi_forma(p, &t);
         pennello_colore(p, PULSANTE_BORDO_COLORATO);
         contorna_forma(p, &t, 256);
-        pennello_colore(p, VOCE_LUCE);
-        luce_sopra(p, &t);
+        if (stato != VOCE_PREMUTA) {
+            pennello_colore(p, VOCE_LUCE);
+            luce_sopra(p, &t);
+        }
     } else {
-        pennello_colore(p, VETRO_SOPRA);
+        /* di vetro: sotto il puntatore uno strato di vetro in piu', premuta piu' scura */
+        pennello_colore(p, stato == VOCE_PREMUTA ? VETRO_SUPERFICIE : VETRO_SOPRA);
         riempi_forma(p, &t);
+        if (stato == VOCE_SOPRA) {
+            pennello_colore(p, VETRO_PREMUTO);
+            riempi_forma(p, &t);
+        }
         pennello_colore(p, VETRO_BORDO);
         contorna_forma(p, &t, 256);
     }
@@ -251,11 +282,12 @@ static int disegna_isola(void) {
     contorna_forma(&p, &forma, 256);
 
     int x = ISOLA_MARGINE, y = ISOLA_MARGINE;
-    voce(&p, x, y, BLU_NORMALE, ICONA_LAYOUT_GRID);          /* il pulsante del menu */
+    voce(&p, x, y, BLU_NORMALE, ICONA_LAYOUT_GRID, VOCE_NORMALE);          /* il pulsante del menu */
     x += VOCE_LATO + ISOLA_SPAZIO;
 
     for (int i = 0; i < quante_app; i++) {                   /* le applicazioni */
-        voce(&p, x, y, app[i].colore, app[i].icona);
+        int stato = voce_sopra != i ? VOCE_NORMALE : voce_premuta == i ? VOCE_PREMUTA : VOCE_SOPRA;
+        voce(&p, x, y, app[i].colore, app[i].icona, stato);
         if (in_primo_piano(&app[i])) {                       /* la lineetta: in primo piano */
             pennello_colore(&p, CONTENUTO_PRINCIPALE);
             riempi_tondo(&p, x + VOCE_LATO / 2 - 7, y + VOCE_LATO + 2, 14, 4, 2);
@@ -301,16 +333,28 @@ static void clic_su(const struct app *a) {
 
 /* Il puntatore sull'isola. Come un pulsante: scatta quando si LASCIA, sulla stessa voce
  * su cui si era premuto. Allora si chiede al launcher di aprire quell'applicazione. */
-static void puntatore(const struct notizia *n) {
+static int puntatore(const struct notizia *n) {
     static unsigned int pulsanti_prima;
-    static int premuta = -1;
     int giu = n->pulsanti & PULSANTE_SINISTRO, prima = pulsanti_prima & PULSANTE_SINISTRO;
+    int sopra_prima = voce_sopra, premuta_prima = voce_premuta;
     pulsanti_prima = n->pulsanti;
-    if (giu && !prima) premuta = app_sotto(n->x, n->y);
+    voce_sopra = app_sotto(n->x, n->y);
+    if (giu && !prima) voce_premuta = voce_sopra;
     if (!giu && prima) {
-        if (premuta >= 0 && app_sotto(n->x, n->y) == premuta) clic_su(&app[premuta]);
-        premuta = -1;
+        if (voce_premuta >= 0 && voce_sopra == voce_premuta) clic_su(&app[voce_premuta]);
+        voce_premuta = -1;
     }
+    return voce_sopra != sopra_prima || voce_premuta != premuta_prima;   /* da ridisegnare */
+}
+
+/* Le notizie del puntatore: dove e' (PUNTATORE) o che e' uscito dall'isola (USCITO, come
+ * un puntatore fuori da tutto: nessuna voce resta accesa). Le altre non lo riguardano.
+ * Vale anche per quelle messe da parte mentre l'isola si ridisegnava: un USCITO perso
+ * lascerebbe accesa l'ultima voce toccata. */
+static int notizia_puntatore(const struct notizia *n) {
+    if (n->tipo == PUNTATORE) return puntatore(n);
+    if (n->tipo == USCITO) return puntatore(&(struct notizia){ .tipo = PUNTATORE, .x = -1, .y = -1 });
+    return 0;
 }
 
 /* --- lo sfondo --- */
@@ -385,15 +429,14 @@ int main(void) {
         if (g[0].pronto && !finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
         if (g[1].pronto) {
             if (!finestra_ricevi(&isola, &n)) return 1;
-            if (n.tipo == PUNTATORE) puntatore(&n);
-            else if (n.tipo == USCITO) puntatore(&(struct notizia){ .tipo = PUNTATORE, .x = -1, .y = -1 });
+            ridisegna |= notizia_puntatore(&n);
             ridisegna |= notizia(&n);
         }
         if (ridisegna) {
             if (!disegna_isola()) return 1;
             /* mentre aspettava una tela libera, la libreria ha messo da parte le notizie */
             for (int i = 0; i < isola.quante; i++) {
-                if (isola.messe_da_parte[i].tipo == PUNTATORE) puntatore(&isola.messe_da_parte[i]);
+                notizia_puntatore(&isola.messe_da_parte[i]);
                 notizia(&isola.messe_da_parte[i]);
             }
             if (isola.quante) { isola.quante = 0; if (!disegna_isola()) return 1; }

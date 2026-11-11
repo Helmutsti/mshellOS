@@ -1,15 +1,23 @@
 """scorrimento: la rotella fa scorrere la tabella dei processi di Attivita, e la barra di
 scorrimento compare, si allarga sotto il puntatore, si trascina e poi sparisce.
 
+I PROCESSI IN PIU'. Questa prova accende il sistema con il disco delle prove
+(DISCO = "disco_prove.img", vedi collaudo.py e build.sh): init fa partire anche 6
+"riempitivi" (da /data/tests), processi che dormono e basta (righe 5..10, subito dopo
+quelli del sistema), e la tabella ha abbastanza righe da traboccare. Le applicazioni si aprono una sola volta
+ciascuna: senza i riempitivi le righe sarebbero 9, e nella tabella ne stanno 9 giuste.
+
 Si aprono Contatore, Esempio e Impostazioni, e per ultima Attivita (quarto posto, angolo
-in 260,250): con i 5 processi del sistema le righe sono 9, e nella tabella ne stanno 8.
-Le righe sono alte 30 pixel; nella vista ne entrano 244, il contenuto ne e' alto 272:
-si puo' scorrere di 28 pixel. La rotella accelera come sul Mac (stile.h): uno scatto da
-solo fa 10 pixel; due scatti di fila, veloci, 10 + 20, cioe' (fermandosi in fondo) 28.
+in 260,250). Le righe sono 15: 0..4 il sistema (init, eventi, compositore, launcher,
+scrivania), 5..10 i riempitivi, 11 Contatore, 12 Esempio, 13 Impostazioni, 14 Attivita.
+Sono alte 30 pixel; nella vista ne entrano 272 (9 righe), il contenuto ne e' alto
+2 + 15 * 30 = 452: si puo' scorrere di 180 pixel. La rotella accelera come sul Mac
+(stile.h): uno scatto da solo fa 10 pixel; due scatti di fila, veloci, 10 + 20 = 30.
 
 Dove sono le cose, dall'angolo della finestra di Attivita:
-  - la tabella: x 20..620, y 108..390; la testata e' alta 34, le righe cominciano a y 144;
-  - la striscia della barra di scorrimento: x 606..620, y 142..390, sopra le righe.
+  - la tabella: x 20..620, y 98..408; la testata e' alta 34, le righe cominciano a y 134;
+  - la striscia della barra di scorrimento: x 606..620, y 132..408, sopra le righe. Il
+    cursore e' lungo 272 * 272 / 452 = 163 pixel: in cima va da y 134 a 297.
 
 Le righe si confrontano solo nella colonna dei numeri dei processi: lo stato e la
 memoria li aggiorna Attivita ogni secondo, e possono cambiare da una foto all'altra.
@@ -23,13 +31,14 @@ Cosa si controlla:
      nuovo identica, pixel per pixel, a prima di scorrere (a riposo la barra non lascia
      segni);
   4. UNA RAFFICA: due scatti veloci spostano le righe piu' di due scatti da soli (20
-     pixel): fino in fondo, 28. Due scatti veloci in su le riportano in cima;
+     pixel): 30. Due scatti veloci in su le riportano in cima. Poi tanti scatti portano
+     le righe in fondo (180 pixel, non di piu'), e tanti in su di nuovo in cima;
   5. TRASCINARE: uno scatto fa ricomparire la barra; il puntatore sopra il cursore lo
      allarga, e finche' resta sopra la barra non svanisce (anche dopo il secondo);
-     premuto e trascinato in giu', le righe scorrono come con la rotella;
-  6. CLIC DOPO LO SCORRIMENTO: scorse le righe in fondo, un clic a y 340 cade sulla riga
-     7, Impostazioni (senza scorrere sarebbe la 6, Esempio). "Termina processo" deve
-     chiudere proprio Impostazioni.
+     premuto e trascinato fino in fondo, le righe sono come scorse in fondo con la rotella;
+  6. CLIC DOPO LO SCORRIMENTO: scorse le righe in fondo, un clic a y 359 cade sulla riga
+     13, Impostazioni (senza scorrere sarebbe la 7, un riempitivo). "Termina processo" (la
+     X nella barra degli strumenti) deve chiudere proprio Impostazioni.
 Le foto 'visibile', 'sopra' e 'trascinata' mostrano la barra nei suoi stati.
 """
 
@@ -41,15 +50,18 @@ from qemu import pixel_diversi
 NOME = "scorrimento"
 ORDINE = 65
 DESCRIZIONE = "Attivita: la rotella scorre i processi; la barra compare, si trascina, sparisce"
+DISCO = "disco_prove.img"             # con i riempitivi: vedi sopra
 
-STRISCIA = (606, 143, 620, 388)       # la barra di scorrimento (dentro la finestra)
-RIGHE = (21, 144, 100, 386)           # le righe, ma solo la colonna dei numeri: le altre
+STRISCIA = (606, 133, 620, 406)       # la barra di scorrimento (dentro la finestra)
+RIGHE = (21, 134, 100, 402)           # le righe, ma solo la colonna dei numeri: le altre
                                       # (stato, memoria) Attivita le aggiorna da sola
 DENTRO = (300, 250)                   # un punto sopra le righe, lontano dalla barra
-CURSORE = (613, 253)                  # il centro del cursore, quando si e' in cima
-RIGA_IMPOSTAZIONI = 340               # la y della riga 7 quando si e' scorso in fondo
+CURSORE = (613, 215)                  # il centro del cursore, quando si e' in cima
+RIGA_IMPOSTAZIONI = 359               # la y della riga 13 quando si e' scorso in fondo
 SCATTO = 10                           # i pixel di uno scatto da solo (SCORRIMENTO_RIGA)
-IN_FONDO = 28                         # fin dove si puo' scorrere
+RAFFICA = 30                          # due scatti veloci: 10 + 20
+IN_FONDO = 180                        # fin dove si puo' scorrere: 452 - 272
+TERMINA = (616, 58)                   # "Termina processo", la X nella barra degli strumenti
 
 
 def zona(x, y, r):
@@ -77,6 +89,15 @@ def spostamento(dopo, prima, r):
                for d in range(41)}
     d = min(diversi, key=diversi.get)
     return d if diversi[d] <= 20 else None
+
+
+def salite_di(dopo, prima, r, d):
+    """Vero se le righe di 'dopo' sono quelle di 'prima' salite di d pixel esatti (come
+    spostamento, per una d sola, anche grande: si confronta il pezzo che resta in vista
+    tutte e due le volte)."""
+    a, b = scritte(dopo, r), scritte(prima, r)
+    l, h = a.size
+    return pixel_diversi(a.crop((0, 0, l, h - d)), b.crop((0, d, l, h)), None, 0) <= 20
 
 
 def esegui(p):
@@ -121,13 +142,24 @@ def esegui(p):
 
     # --- 4. una raffica: due scatti veloci scorrono piu' di due scatti da soli ---
     m.rotella(2, pausa=0.02)          # uno ogni 40 ms: ben sotto la pausa che chiude la raffica
-    in_fondo = m.aspetta_che(lambda f: spostamento(f, prima, righe) == IN_FONDO, 3.0,
-                             cosa=f"due scatti veloci portare le righe in fondo ({IN_FONDO} "
-                                  f"pixel, piu' dei {2 * SCATTO} di due scatti da soli)")
-    p.nota(f"due scatti veloci: {IN_FONDO} pixel (in fondo)")
+    m.aspetta_che(lambda f: spostamento(f, prima, righe) == RAFFICA, 3.0,
+                  cosa=f"due scatti veloci spostare le righe di {RAFFICA} pixel "
+                       f"(piu' dei {2 * SCATTO} di due scatti da soli)")
+    p.nota(f"due scatti veloci: {RAFFICA} pixel")
     m.rotella(-2, pausa=0.02)
     m.aspetta_che(lambda f: uguali(f, prima, striscia) and uguali(f, prima, righe), 4.0,
                   pausa=0.1, cosa="due scatti veloci in su riportare le righe in cima")
+
+    # in fondo: 20 scatti fanno almeno 200 pixel (anche se Attivita, su una macchina
+    # emulata lenta, li vedesse tutti da soli, 10 pixel ciascuno), piu' dei 180 che si
+    # possono scorrere: le righe devono essere salite di 180 esatti, non di piu'
+    m.rotella(20, pausa=0.02)
+    m.aspetta_che(lambda f: salite_di(f, prima, righe, IN_FONDO), 8.0,
+                  cosa=f"tanti scatti portare le righe in fondo ({IN_FONDO} pixel)")
+    in_fondo = m.foto("in_fondo")
+    m.rotella(-20, pausa=0.02)
+    m.aspetta_che(lambda f: uguali(f, prima, striscia) and uguali(f, prima, righe), 8.0,
+                  pausa=0.1, cosa="tanti scatti in su riportare le righe in cima")
 
     # --- 5. trascinare il cursore ---
     m.rotella(-1)                     # in cima gia': non scorre, ma la barra si mostra
@@ -148,23 +180,24 @@ def esegui(p):
                 "con il puntatore sopra, dopo un secondo la barra e' cambiata (svanisce?)")
     m.pulsante(True)
     time.sleep(0.2)
-    for i in range(1, 11):
-        m.muovi(x + CURSORE[0], y + CURSORE[1] + 4 * i)
+    for i in range(1, 11):            # 150 pixel: piu' dei 109 che il cursore puo' fare
+        m.muovi(x + CURSORE[0], y + CURSORE[1] + 15 * i)
         time.sleep(0.05)
-    time.sleep(0.3)
+    # Attivita ridisegna dopo ogni spostamento del puntatore: su una macchina emulata
+    # resta un po' indietro. Si aspetta che arrivi in fondo (con il pulsante ancora giu')
+    m.aspetta_che(lambda f: uguali(f, in_fondo, righe), 3.0,
+                  cosa="trascinato il cursore in fondo, le righe come scorse in fondo con la rotella")
     trascinata = m.foto("trascinata")
     m.pulsante(False)
     p.controlla(not uguali(trascinata, sopra, striscia),
                 "trascinata, la barra e' uguale a quando ci si era solo sopra")
-    p.controlla(uguali(trascinata, in_fondo, righe),
-                "trascinato il cursore in fondo, le righe non sono come scorse con la rotella")
     m.muovi(x + DENTRO[0], y + DENTRO[1])
     m.aspetta_che(lambda f: uguali(f, prima, striscia), 4.0, cosa="la barra sparire dopo il trascinamento")
 
     # --- 6. un clic sulla riga dopo lo scorrimento ---
     m.clic(x + DENTRO[0], y + RIGA_IMPOSTAZIONI)
     time.sleep(0.3)
-    m.clic(x + 533, y + 421)          # "Termina processo"
+    m.clic(x + TERMINA[0], y + TERMINA[1])
     m.muovi(x + DENTRO[0], y + DENTRO[1])
     m.aspetta_che(lambda f: s.segno_sotto(f, "Impostazioni") == 0, 5.0,
                   cosa="Impostazioni chiusa (il clic dopo lo scorrimento ha scelto un'altra riga?)")

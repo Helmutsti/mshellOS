@@ -46,6 +46,19 @@
 #define FINESTRA_OMBRA_GIU      18
 #define FINESTRA_OMBRA_SFOCATA  24
 
+/* --- la barra degli strumenti ---
+ * Il fondo e' lo stesso vetro della barra del titolo (BARRA_ATTIVA, o BARRA_INATTIVA
+ * quando la finestra non e' in primo piano): titolo e strumenti sono un pezzo solo, e il
+ * corpo comincia sotto. La pillola dei pulsanti e' di VETRO_SUPERFICIE. I pulsanti della pillola nel disegno vanno "al contrario" di quelli
+ * normali: sotto il puntatore appena velati, premuti (o accesi) piu' chiari. */
+#define SEGMENTO_SOPRA          VETRO_PREMUTO            /*  8% */
+#define SEGMENTO_PREMUTO        VETRO_SOPRA              /* 22%, anche quello acceso */
+
+/* --- gli elementi di un elenco (le righe di una tabella, i file) ---
+ * Quello scelto e' di vetro chiaro, non blu; quello sotto il puntatore appena velato. */
+#define ELEMENTO_SCELTO         VETRO_SOPRA              /* 22% */
+#define ELEMENTO_SOPRA          VELATO(0xFFFFFF, 20)     /*  8% */
+
 /* --- gli stati --- */
 #define STATO_ERRORE            OPACO(0xEF4444)
 #define STATO_ERRORE_VELO       VELATO(0xEF4444, 115)    /* 45% */
@@ -95,6 +108,29 @@
 #define SCORRIMENTO_MARGINE     2   /* "spazio/2": tra i capi della striscia e il cursore */
 #define SCORRIMENTO_MINIMO     32   /* il cursore non e' mai piu' corto di cosi' */
 
+/* la barra degli strumenti: sotto la barra del titolo, larga quanto la finestra */
+#define STRUMENTI_ALTEZZA      40   /* 6 sopra + 28 di contenuto + 6 sotto */
+#define STRUMENTI_CONTENUTO    28   /* l'altezza delle cose dentro (centrate in altezza) */
+#define STRUMENTI_MARGINE      10   /* a sinistra e a destra */
+#define STRUMENTI_SPAZIO        8   /* tra una cosa e l'altra */
+/* la pillola: un gruppo di pulsanti solo icona, attaccati */
+#define PILLOLA_MARGINE         2   /* tra il bordo della pillola e i pulsanti */
+#define PILLOLA_SPAZIO          2   /* tra un pulsante e l'altro */
+#define SEGMENTO_LATO          24   /* il pulsante della pillola, quadrato */
+#define SEGMENTO_ICONA         16
+#define RAGGIO_SEGMENTO        (RAGGIO_PICCOLO - PILLOLA_MARGINE)   /* 4: segue la pillola */
+#define SEGMENTO_TESTO_MARGINE 10   /* il pulsante con un testo (le schede): a sinistra e a destra */
+/* la ricerca piccola: un campo di testo basso, senza bordo, con la lente */
+#define RICERCA_LARGHEZZA     180
+#define RICERCA_ALTEZZA        28
+#define RICERCA_MARGINE         8   /* a sinistra e a destra, dentro */
+#define RICERCA_SPAZIO          6   /* tra la lente e il testo */
+#define RICERCA_ICONA          14
+/* il percorso: la casetta, poi i nomi delle cartelle separati da una freccetta */
+#define PERCORSO_SPAZIO         4
+#define PERCORSO_CASA          16   /* l'icona della casetta */
+#define PERCORSO_FRECCIA       14   /* la freccetta tra un nome e l'altro */
+
 /* --- i tempi (in millisecondi) --- */
 #define SCORRIMENTO_COMPARE   100   /* la barra compare quando si comincia a scorrere */
 #define SCORRIMENTO_RESTA    1000   /* resta ancora un secondo dopo l'ultimo scatto */
@@ -127,5 +163,13 @@
 #define FONT_TESTO        (&inter_14)
 #define FONT_TITOLO       (&inter_semigrassetto_15)
 #define FONT_BARRA        (&inter_semigrassetto_13)
+/* La barra degli strumenti, come nel disegno: Inter normale a 13 per il testo dei campi e
+ * i nomi del percorso; l'ultimo nome (la cartella in cui si e') e' semigrassetto a 13. */
+#define FONT_STRUMENTI    (&inter_13)
+#define FONT_PERCORSO_QUI (&inter_semigrassetto_13)
+/* le schede della barra degli strumenti (i pulsanti della pillola con un testo) */
+#define FONT_SEGMENTO     (&inter_medio_13)
+/* le note piccole, in grigio (per esempio il riassunto sotto una tabella) */
+#define FONT_PICCOLO      (&inter_13)
 
 #endif

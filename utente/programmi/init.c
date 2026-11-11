@@ -55,6 +55,34 @@ static void avvia_servizio(struct servizio *s) {
     }
 }
 
+/* I PROGRAMMI DELLE PROVE. Se sul disco c'e' la cartella /data/tests, init fa partire
+ * una volta ogni programma che ci trova dentro. C'e' solo nel disco delle prove
+ * automatiche (disco_prove.img, vedi build.sh: la sua partizione data ha questa cartella
+ * in piu'): nel disco normale non c'e', e qui non succede niente. Questi programmi non
+ * sono servizi: init non li sorveglia, e se finiscono non li fa ripartire. */
+#define CARTELLA_PROVE "/data/tests"
+
+static void avvia_prove(void) {
+    int d = apri(CARTELLA_PROVE, APRI_LEGGERE);
+    if (d < 0) return;                       /* il disco normale: niente prove */
+    struct voce_cartella v;
+    while (leggi(d, &v, sizeof v) == sizeof v) {
+        if (v.tipo != TIPO_FILE) continue;
+        v.nome[MAX_NOME_FILE - 1] = 0;
+        char percorso[MAX_PERCORSO];
+        int n = 0;
+        for (const char *s = CARTELLA_PROVE "/"; *s; s++) percorso[n++] = *s;
+        for (const char *s = v.nome; *s && n < MAX_PERCORSO - 1; s++) percorso[n++] = *s;
+        percorso[n] = 0;
+        if (avvia(percorso) < 0) {
+            scrivi_testo("init: non riesco ad avviare ");
+            scrivi_testo(percorso);
+            scrivi_testo("\n");
+        }
+    }
+    chiudi(d);
+}
+
 int main(void) {
     scrivi_testo("ciao come va\n");
 
@@ -74,6 +102,7 @@ int main(void) {
     }
 
     for (int i = 0; i < QUANTI_SERVIZI; i++) avvia_servizio(&servizi[i]);
+    avvia_prove();
 
     /* Le applicazioni non le fa partire init: le apre il launcher, quando la scrivania
      * glielo chiede (un clic sull'isola). */

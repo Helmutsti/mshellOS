@@ -20,8 +20,8 @@ occhio una volta.
 
 TERMINARE. Nella scheda "Processi" si sceglie la riga di Contatore (il primo processo
 dopo quelli del sistema: init, eventi, compositore, launcher, scrivania) e si preme
-"Termina processo": la finestra di Contatore deve sparire, e nell'isola Contatore non
-deve piu' risultare aperta.
+"Termina processo" (la X a destra nella barra degli strumenti): la finestra di Contatore
+deve sparire, e nell'isola Contatore non deve piu' risultare aperta.
 """
 
 import time
@@ -90,9 +90,9 @@ def esegui(p):
     x, y = s.angolo(1)
 
     # --- la memoria ---
-    m.clic(x + 157, y + 75)                    # la scheda "Memoria"
+    m.clic(x + 125, y + 58)                    # la scheda "Memoria", nella barra degli strumenti
     m.muovi(*PUNTO_VUOTO)
-    riga = (x + 20, y + 105, x + 620, y + 130)
+    riga = (x + 20, y + 95, x + 620, y + 120)
     # la riga compare quando Attivita ha ridisegnato: si aspetta che ci sia testo
     f = m.aspetta_che(lambda f: inchiostro(f, riga).getbbox() is not None, 5.0,
                       cosa="la riga 'In uso ... su ...' nella scheda Memoria")
@@ -105,11 +105,11 @@ def esegui(p):
         raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
                           "memoria_totale_ottenuta.png e la foto 'memoria'") from None
     # --- terminare Contatore ---
-    m.clic(x + 63, y + 75)                     # la scheda "Processi"
+    m.clic(x + 49, y + 58)                     # la scheda "Processi"
     time.sleep(0.5)
-    m.clic(x + 150, y + 157 + 30 * RIGA_CONTATORE)
+    m.clic(x + 150, y + 147 + 30 * RIGA_CONTATORE)
     time.sleep(0.3)
-    m.clic(x + 533, y + 421)                   # "Termina processo"
+    m.clic(x + 616, y + 58)                    # "Termina processo": la X nella barra
     m.muovi(*PUNTO_VUOTO)
     cx, cy = s.angolo(0)
     # la barra di Contatore, sopra Attivita (e lontano dalla sua ombra)

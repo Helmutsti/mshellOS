@@ -25,6 +25,7 @@ USCITA = sys.argv[2]
 
 # I font dell'interfaccia (dal file Figma): nome C, file, misura in pixel
 FONT_USATI = [
+    ('inter_13',            'Inter-Regular.ttf',  13),
     ('inter_14',            'Inter-Regular.ttf',  14),
     ('inter_medio_13',      'Inter-Medium.ttf',   13),
     ('inter_medio_14',      'Inter-Medium.ttf',   14),
@@ -34,10 +35,12 @@ FONT_USATI = [
 ]
 
 # code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
-CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á'}
+CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á',
+         0xFA: '·'}   # il punto a mezza altezza, per separare ("8 processi · 34,6 MB")
 CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
 
-ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity']
+ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity',
+         'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right']
 LATI = [12, 14, 16, 20, 24]
 
 def svg_in_png(file, l, a):

@@ -167,6 +167,11 @@ struct info_memoria {              /* in byte, a 64 bit: la RAM puo' superare i 
     unsigned long long condivisa;  /* byte dei fogli condivisi: le immagini delle finestre */
 };
 
+struct info_disco {                /* una partizione, in byte */
+    unsigned long long totale;     /* quanto e' grande il suo file system */
+    unsigned long long libero;     /* quanto non e' usato (anche la riserva del sistema) */
+};
+
 struct data_ora {
     unsigned int anno, mese, giorno;   /* mese da 1 a 12 */
     unsigned int giorno_settimana;     /* 0 domenica, 1 lunedi'... */

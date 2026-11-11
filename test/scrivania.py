@@ -28,7 +28,7 @@ SEGNO_Y = 57          # il puntino / trattino sotto le applicazioni aperte
 
 # Le misure delle finestre (larghezza, altezza), senza l'ombra.
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),
-          "Impostazioni": (460, 380)}
+          "Impostazioni": (460, 420)}
 
 BARRA = 36            # l'altezza della barra del titolo delle finestre del toolkit
 

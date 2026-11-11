@@ -16,11 +16,32 @@ viene copiato prima di ogni prova: `build/` non si tocca.
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
 | `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Contatore |
-| `scorrimento`  | con 4 applicazioni aperte la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
+| `scorrimento`  | con 4 applicazioni aperte e 6 processi "riempitivi" (vedi sotto) la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
 Dopo ogni prova si controlla anche che nella seriale non ci siano `Kernel panic`, `PANICO`,
 `ERRORE` o `non riesco`.
+
+## Il disco delle prove
+
+Ogni prova accende il sistema con il disco normale (`disco.img`, lo stesso di `run.sh`).
+`build.sh` prepara anche un secondo disco, `disco_prove.img`: uguale, ma nella partizione
+data c'è in più la cartella `/data/tests`, con i programmi di `utente/prove/`. Init,
+all'accensione, fa partire tutto quello che trova in quella cartella (nel disco normale
+non c'è, e non succede niente).
+
+Per ora dentro ci sono 6 copie di `riempitivo` (`riempitivo-1` ... `riempitivo-6`): un
+programma che dorme e basta, senza finestra, e serve solo ad allungare l'elenco dei
+processi. Lo usa `scorrimento`, perché la tabella di Attività abbia più righe di quante ne
+stanno (ogni applicazione si apre una volta sola, quindi da sola la prova non ne può
+aggiungere). Una prova sceglie il disco delle prove scrivendo nel suo file:
+
+```python
+DISCO = "disco_prove.img"
+```
+
+Le altre prove non vedono i riempitivi: i loro conti (righe, processi, foto di
+riferimento) non cambiano.
 
 ## Come si lancia
 

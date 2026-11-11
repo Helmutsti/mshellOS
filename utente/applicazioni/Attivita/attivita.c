@@ -1,13 +1,16 @@
-/* Attivita': il task manager. Due pagine:
+/* Attivita': il task manager. Nella barra degli strumenti tre schede, per tre pagine:
  *   - Processi: i programmi che girano (numero, nome, utente, stato, memoria), aggiornati
- *     ogni secondo. Se ne sceglie uno con un clic e lo si puo' terminare.
+ *     ogni secondo. Se ne sceglie uno con un clic e lo si puo' terminare con la X a
+ *     destra nella barra. Sotto la tabella, quanti sono e quanta memoria usano.
  *   - Memoria: com'e' usata la RAM, come la pagina "Archiviazione" del Mac: una barra
  *     divisa in pezzi colorati, e sotto la legenda con quanto pesa ogni pezzo.
+ *   - Disco: lo stesso per i file: quanto pesano il sistema, le applicazioni, gli utenti,
+ *     e quanto e' libero.
  *
- * Tutto quello che mostra lo chiede al kernel (elenco_processi, memoria): e' come /proc
- * in Linux, ma con chiamate di sistema invece di file. Terminare segue la regola di Unix:
- * Attivita' gira come utente "applicazioni", quindi puo' terminare solo le applicazioni;
- * i servizi del sistema no. */
+ * Tutto quello che mostra lo chiede alla libreria (elenco_processi, stato_memoria,
+ * stato_disco, le cartelle), che lo legge da Linux (/proc, statvfs). Terminare segue la
+ * regola di Unix: Attivita' gira come utente "applicazioni", quindi puo' terminare solo
+ * le applicazioni; i servizi del sistema no. */
 #include "toolkit.h"
 
 #define MAX_PROCESSI 64
@@ -125,7 +128,7 @@ static void tabella_disegna(struct widget *w, struct pennello *p) {
         int y = w->y + RIGHE_SOPRA + r * TABELLA_RIGA - scorso;
         if (y + TABELLA_RIGA <= w->y + TABELLA_TESTATA || y >= w->y + w->a) continue;   /* fuori */
         if (pr->numero == t->scelto) {
-            pennello_colore(p, BLU_NORMALE);
+            pennello_colore(p, ELEMENTO_SCELTO);     /* vetro chiaro, non blu */
             riempi_tondo(p, w->x + 4, y, w->l - 8, TABELLA_RIGA - 2, RAGGIO_PICCOLO);
         }
         char numero[12], memoria[16];
@@ -176,24 +179,28 @@ static const struct tipo_widget tipo_tabella = {
     tabella_misura, tabella_disponi, tabella_disegna, tabella_puntatore, 0, tabella_rotella, 0
 };
 
-/* --- la memoria: la barra a pezzi e la legenda --- */
+/* --- i grafici: la barra a pezzi e la legenda, per la memoria e per il disco ---
+ *
+ * Un grafico e' un elenco di pezzi (nome, colore, quanti byte). La barra e la legenda
+ * sono due widget che leggono lo stesso grafico: la pagina Memoria e la pagina Disco ne
+ * hanno uno ciascuna, con gli stessi widget. */
 
-enum { KERNEL, SISTEMA, APPLICAZIONI, CONDIVISA, LIBERA, PEZZI };
+#define MAX_PEZZI 6
+#define NESSUNO   (-1)
 
-static const char *nomi_pezzi[PEZZI] = {
-    "Kernel", "Servizi del sistema", "Applicazioni", "Memoria condivisa (finestre)", "Libera"
-};
-static const unsigned int colori_pezzi[PEZZI] = {
-    OPACO(0x94A3B8), BLU_NORMALE, VERDE_SOPRA, ARANCIO_SOPRA, VETRO_SUPERFICIE
-};
-
-struct grafico {                       /* la barra e la legenda leggono gli stessi numeri */
-    unsigned long long byte[PEZZI];
+struct grafico {
+    int quanti;
+    const char *const *nomi;
+    const unsigned int *colori;
+    unsigned long long byte[MAX_PEZZI];
+    /* la barra intera, in byte; 0: la somma dei pezzi (la barra e' piena di loro) */
     unsigned long long totale;
+    /* il pezzo che e' "il resto" (la memoria libera): non si disegna sopra la barra, ne
+     * e' il fondo; nella legenda il suo pallino ha il bordo. NESSUNO se non c'e'. */
+    int resto;
 };
-static struct grafico grafico;
 
-struct barra { struct widget base; };
+struct barra { struct widget base; struct grafico *grafico; };
 
 static void barra_misura(struct widget *w, int *l, int *a) {
     (void)w;
@@ -202,24 +209,31 @@ static void barra_misura(struct widget *w, int *l, int *a) {
 }
 
 /* Ogni pezzo e' la barra intera ritagliata nella sua striscia: cosi' gli angoli tondi
- * restano solo ai due capi. */
+ * restano solo ai due capi. La striscia di un pezzo va da dove finisce la somma dei
+ * pezzi prima di lui a dove finisce la somma con lui, in proporzione al totale. */
 static void barra_disegna(struct widget *w, struct pennello *p) {
+    const struct grafico *g = ((struct barra *)w)->grafico;
     struct tondo t = tondo(w->x, w->y, w->l, w->a, RAGGIO_MEDIO);
-    pennello_colore(p, colori_pezzi[LIBERA]);
+    pennello_colore(p, g->resto != NESSUNO ? g->colori[g->resto] : VETRO_SUPERFICIE);
     riempi_forma(p, &t);
-    if (!grafico.totale) return;
-    int x = w->x;
-    unsigned long long somma = 0, totale = grafico.totale;
-    for (int i = 0; i < LIBERA; i++) {
-        somma += grafico.byte[i];
-        int fine = w->x + (int)(somma * (unsigned int)w->l / totale);
-        if (fine <= x) continue;
-        pennello_salva(p);
-        pennello_ritaglia(p, x, w->y, fine - x, w->a);
-        pennello_colore(p, colori_pezzi[i]);
-        riempi_forma(p, &t);
-        pennello_ripristina(p);
-        x = fine;
+    unsigned long long totale = g->totale;
+    if (!totale)
+        for (int i = 0; i < g->quanti; i++) totale += g->byte[i];
+    if (totale) {
+        int x = w->x;
+        unsigned long long somma = 0;
+        for (int i = 0; i < g->quanti; i++) {
+            if (i == g->resto) continue;
+            somma += g->byte[i];
+            int fine = w->x + (int)(somma * (unsigned int)w->l / totale);
+            if (fine <= x) continue;
+            pennello_salva(p);
+            pennello_ritaglia(p, x, w->y, fine - x, w->a);
+            pennello_colore(p, g->colori[i]);
+            riempi_forma(p, &t);
+            pennello_ripristina(p);
+            x = fine;
+        }
     }
     pennello_colore(p, CAMPO_BORDO);
     contorna_forma(p, &t, 256);
@@ -229,27 +243,27 @@ static const struct tipo_widget tipo_barra = { barra_misura, 0, barra_disegna, 0
 
 #define LEGENDA_RIGA 30
 
-struct legenda { struct widget base; };
+struct legenda { struct widget base; struct grafico *grafico; };
 
 static void legenda_misura(struct widget *w, int *l, int *a) {
-    (void)w;
     *l = 400;
-    *a = PEZZI * LEGENDA_RIGA;
+    *a = ((struct legenda *)w)->grafico->quanti * LEGENDA_RIGA;
 }
 
 static void legenda_disegna(struct widget *w, struct pennello *p) {
-    for (int i = 0; i < PEZZI; i++) {
+    const struct grafico *g = ((struct legenda *)w)->grafico;
+    for (int i = 0; i < g->quanti; i++) {
         int y = w->y + i * LEGENDA_RIGA;
-        pennello_colore(p, colori_pezzi[i]);
+        pennello_colore(p, g->colori[i]);
         riempi_tondo(p, w->x, y + (LEGENDA_RIGA - 12) / 2, 12, 12, 6);
-        if (i == LIBERA) {
+        if (i == g->resto) {
             pennello_colore(p, CONTROLLO_BORDO);
             contorna_tondo(p, w->x, y + (LEGENDA_RIGA - 12) / 2, 12, 12, 6, 256);
         }
         char quanto[16];
-        metti_byte(quanto, grafico.byte[i]);
+        metti_byte(quanto, g->byte[i]);
         pennello_colore(p, CONTENUTO_PRINCIPALE);
-        testo_centrato(p, FONT_TESTO, w->x + 24, y, LEGENDA_RIGA, nomi_pezzi[i]);
+        testo_centrato(p, FONT_TESTO, w->x + 24, y, LEGENDA_RIGA, g->nomi[i]);
         pennello_colore(p, CONTENUTO_SECONDARIO);
         testo_centrato(p, FONT_TESTO, w->x + w->l - larghezza_testo(FONT_TESTO, quanto), y,
                        LEGENDA_RIGA, quanto);
@@ -258,16 +272,110 @@ static void legenda_disegna(struct widget *w, struct pennello *p) {
 
 static const struct tipo_widget tipo_legenda = { legenda_misura, 0, legenda_disegna, 0, 0, 0, 0 };
 
+/* Una pagina con un grafico: il riassunto in alto (un titolo), la barra, la legenda. */
+struct pagina_grafico {
+    struct contenitore colonna;
+    struct etichetta riassunto;
+    struct barra barra;
+    struct legenda legenda;
+    struct grafico grafico;
+};
+
+static void pagina_grafico_prepara(struct pagina_grafico *pg, int quanti, const char *const *nomi,
+                                   const unsigned int *colori, int resto) {
+    colonna_prepara(&pg->colonna, SPAZIO_TRA + 4);
+    pg->colonna.base.elastico = 1;
+    pg->colonna.base.nascosto = 1;
+    pg->grafico = (struct grafico){ .quanti = quanti, .nomi = nomi, .colori = colori, .resto = resto };
+    etichetta_prepara(&pg->riassunto, "", FONT_TITOLO);
+    pg->riassunto.base.largo = 1;
+    pg->barra = (struct barra){ .base = { .tipo = &tipo_barra, .largo = 1 }, .grafico = &pg->grafico };
+    pg->legenda = (struct legenda){ .base = { .tipo = &tipo_legenda, .largo = 1 },
+                                    .grafico = &pg->grafico };
+    widget_aggiungi(&pg->colonna.base, &pg->riassunto.base);
+    widget_aggiungi(&pg->colonna.base, &pg->barra.base);
+    widget_aggiungi(&pg->colonna.base, &pg->legenda.base);
+}
+
+/* I numeri sono cambiati: si ridisegnano barra e legenda. */
+static void pagina_grafico_cambiata(struct pagina_grafico *pg) {
+    widget_cambiato(&pg->barra.base);
+    widget_cambiato(&pg->legenda.base);
+}
+
+/* La memoria: il kernel, i servizi del sistema, le applicazioni, la parte condivisa, e
+ * la libera (il resto della barra). */
+enum { KERNEL, SISTEMA, APPLICAZIONI, CONDIVISA, LIBERA, PEZZI_MEMORIA };
+static const char *const nomi_memoria[PEZZI_MEMORIA] = {
+    "Kernel", "Servizi del sistema", "Applicazioni", "Memoria condivisa (finestre)", "Libera"
+};
+static const unsigned int colori_memoria[PEZZI_MEMORIA] = {
+    OPACO(0x94A3B8), BLU_NORMALE, VERDE_SOPRA, ARANCIO_SOPRA, VETRO_SUPERFICIE
+};
+
+/* Il disco: le due partizioni con i file, system ("/", in sola lettura) e data (/data),
+ * viste come una cosa sola. Il TOTALE e il LIBERO li dice Linux (stato_disco, cioe'
+ * statvfs, per tutte e due); quanto pesano il sistema, le applicazioni e gli utenti si
+ * conta camminando nelle loro cartelle:
+ *   - Sistema: tutto /system, tranne le applicazioni;
+ *   - Applicazioni: /system/apps (quelle del sistema) e /data/apps (quelle installate);
+ *   - Utenti: /data/users (le case, i dati delle applicazioni, le preferenze);
+ *   - Altro: il resto di quello che e' in uso. Sono le tabelle e il giornale di ext4 (il
+ *     posto che il file system usa per se'), e i file che Attivita' non ha il permesso
+ *     di vedere (per esempio quelli dei servizi, in /data/services). Come "Kernel" per la
+ *     memoria;
+ *   - Libero: il fondo della barra (come per la memoria). */
+enum { DISCO_SISTEMA, DISCO_APPLICAZIONI, DISCO_UTENTI, DISCO_ALTRO, DISCO_LIBERO, PEZZI_DISCO };
+static const char *const nomi_disco[PEZZI_DISCO] = {
+    "Sistema", "Applicazioni", "Utenti (home)", "Altro (file system)", "Libero"
+};
+static const unsigned int colori_disco[PEZZI_DISCO] = {
+    BLU_NORMALE, VERDE_SOPRA, ARANCIO_SOPRA, OPACO(0x94A3B8), VETRO_SUPERFICIE
+};
+static const char *const partizioni[] = { "/system", "/data" };
+
+/* Quanto pesano i file di una cartella, contando anche quelli delle cartelle dentro.
+ * 'percorso' e' lungo 'lungo' lettere, in un posto di MAX_PERCORSO: ci si aggiungono i
+ * nomi delle sottocartelle (e poi si tolgono). Una cartella che non si puo' aprire (non
+ * si ha il permesso di leggerla) conta 0: si somma quello che si puo' vedere. Oltre
+ * PROFONDITA_DISCO cartelle una dentro l'altra non si scende. */
+#define PROFONDITA_DISCO 8
+
+static unsigned long long peso_cartella(char *percorso, int lungo, int profondita) {
+    int d = apri(percorso, APRI_LEGGERE);
+    if (d < 0) return 0;
+    unsigned long long somma = 0;
+    struct voce_cartella v;
+    while (leggi(d, &v, sizeof v) == sizeof v) {
+        v.nome[MAX_NOME_FILE - 1] = 0;
+        if (v.tipo == TIPO_FILE) {
+            somma += v.dimensione;
+            continue;
+        }
+        if (v.tipo != TIPO_CARTELLA || profondita >= PROFONDITA_DISCO) continue;
+        if (v.nome[0] == '.' && (!v.nome[1] || (v.nome[1] == '.' && !v.nome[2]))) continue;
+        int n = lunghezza(v.nome);
+        if (lungo + 1 + n >= MAX_PERCORSO) continue;      /* il percorso sarebbe troppo lungo */
+        percorso[lungo] = '/';
+        metti_testo(percorso + lungo + 1, v.nome);
+        somma += peso_cartella(percorso, lungo + 1 + n, profondita + 1);
+        percorso[lungo] = 0;
+    }
+    chiudi(d);
+    return somma;
+}
+
 /* --- la finestra --- */
 
 static struct finestra_tk finestra;
-static struct contenitore colonna, schede, pagina_processi, azioni, pagina_memoria;
-static struct pulsante scheda_processi, scheda_memoria, pulsante_termina;
+static struct barra_strumenti strumenti;
+static struct pillola schede, azioni;
+static struct pulsante_barra scheda_processi, scheda_memoria, scheda_disco, pulsante_termina;
 static struct spazio dopo_schede;
-static struct etichetta messaggio, riassunto;
+static struct contenitore colonna, pagina_processi, piede;
+static struct etichetta messaggio, riassunto_processi;
 static struct tabella tabella;
-static struct barra barra;
-static struct legenda legenda;
+static struct pagina_grafico memoria, disco;
 
 /* CHI SIAMO. Per sapere quali processi si possono terminare serve il proprio uid. Non
  * c'e' una chiamata apposta, ma l'elenco dei processi lo dice gia': mentre il kernel lo
@@ -282,7 +390,8 @@ static int si_puo_terminare(const struct info_processo *pr) {
     return (unsigned int)mio_uid == UID_SISTEMA || pr->uid == (unsigned int)mio_uid;
 }
 
-/* "Termina processo" si accende solo se il processo scelto si puo' terminare davvero. */
+/* "Termina processo" (la X nella barra) si accende solo se il processo scelto si puo'
+ * terminare davvero. */
 static void aggiorna_termina(void) {
     int si_puo = 0;
     for (int i = 0; i < tabella.quante; i++)
@@ -291,7 +400,22 @@ static void aggiorna_termina(void) {
     widget_disabilita(&pulsante_termina.base, !si_puo);
 }
 
-/* Rilegge processi e memoria dal kernel. */
+/* Sotto la tabella: "8 processi \xFA 34,6 MB in uso" (\xFA e' il punto a mezza
+ * altezza). L'etichetta e' larga quanto il suo testo quando si e' fatta l'impaginazione:
+ * se il testo cambia larghezza, la si rifa'. */
+static void aggiorna_riassunto_processi(void) {
+    unsigned long long in_uso = 0;
+    for (int i = 0; i < tabella.quante; i++) in_uso += tabella.righe[i].memoria;
+    char testo[MAX_TESTO_WIDGET], *d = metti_numero(testo, (unsigned int)tabella.quante);
+    d = metti_testo(d, tabella.quante == 1 ? " processo \xFA " : " processi \xFA ");
+    d = metti_byte(d, in_uso);
+    metti_testo(d, " in uso");
+    int prima = larghezza_testo(riassunto_processi.font, riassunto_processi.testo);
+    etichetta_testo(&riassunto_processi, testo);
+    if (larghezza_testo(riassunto_processi.font, testo) != prima) toolkit_ridisponi(&finestra);
+}
+
+/* Rilegge processi e memoria dal kernel (ogni secondo). */
 static void aggiorna(struct finestra_tk *f, void *dati) {
     (void)f; (void)dati;
     int n = elenco_processi(tabella.righe, MAX_PROCESSI);
@@ -307,6 +431,7 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     if (!trovato) tabella.scelto = -1;
     aggiorna_termina();                               /* anche il suo stato puo' cambiare */
     widget_cambiato(&tabella.base);
+    aggiorna_riassunto_processi();
 
     /* la memoria: quello che sanno i processi, la parte condivisa, la libera; il resto
      * e' del kernel (il suo codice, le sue tabelle, le pile dei compiti...) */
@@ -318,19 +443,60 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
         else applicazioni += tabella.righe[i].memoria;
     }
     unsigned long long contati = m.libera + m.condivisa + sistema + applicazioni;
-    grafico.totale = m.totale;
-    grafico.byte[KERNEL] = m.totale > contati ? m.totale - contati : 0;
-    grafico.byte[SISTEMA] = sistema;
-    grafico.byte[APPLICAZIONI] = applicazioni;
-    grafico.byte[CONDIVISA] = m.condivisa;
-    grafico.byte[LIBERA] = m.libera;
+    struct grafico *g = &memoria.grafico;
+    g->totale = m.totale;
+    g->byte[KERNEL] = m.totale > contati ? m.totale - contati : 0;
+    g->byte[SISTEMA] = sistema;
+    g->byte[APPLICAZIONI] = applicazioni;
+    g->byte[CONDIVISA] = m.condivisa;
+    g->byte[LIBERA] = m.libera;
 
     char testo[64], *d = metti_testo(testo, "In uso ");
     d = metti_byte(d, m.totale - m.libera);
     d = metti_testo(d, " su ");
     metti_byte(d, m.totale);
-    etichetta_testo(&riassunto, testo);
-    widget_cambiato(&barra.base);
+    etichetta_testo(&memoria.riassunto, testo);
+    pagina_grafico_cambiata(&memoria);
+}
+
+/* Rifa' i conti del disco, camminando nelle cartelle: quando si apre la pagina Disco e
+ * poi ogni 5 secondi, finche' la si guarda (i file cambiano di rado, e camminare costa
+ * piu' che chiedere i processi). */
+#define OGNI_DISCO 5000
+
+static unsigned long long peso(const char *cartella) {
+    char percorso[MAX_PERCORSO];
+    int lungo = (int)(metti_testo(percorso, cartella) - percorso);
+    return peso_cartella(percorso, lungo, 0);
+}
+
+static void aggiorna_disco(struct finestra_tk *f, void *dati) {
+    (void)f; (void)dati;
+    unsigned long long totale = 0, libero = 0;
+    for (int i = 0; i < (int)(sizeof partizioni / sizeof partizioni[0]); i++) {
+        struct info_disco d;
+        if (stato_disco(partizioni[i], &d) < 0) continue;
+        totale += d.totale;
+        libero += d.libero;
+    }
+    unsigned long long *b = disco.grafico.byte;
+    unsigned long long app_sistema = peso("/system/apps");
+    unsigned long long tutto_sistema = peso("/system");
+    b[DISCO_SISTEMA] = tutto_sistema > app_sistema ? tutto_sistema - app_sistema : 0;
+    b[DISCO_APPLICAZIONI] = app_sistema + peso("/data/apps");
+    b[DISCO_UTENTI] = peso("/data/users");
+    unsigned long long in_uso = totale - libero;
+    unsigned long long contati = b[DISCO_SISTEMA] + b[DISCO_APPLICAZIONI] + b[DISCO_UTENTI];
+    b[DISCO_ALTRO] = in_uso > contati ? in_uso - contati : 0;
+    b[DISCO_LIBERO] = libero;
+    disco.grafico.totale = totale;
+
+    char testo[64], *d = metti_testo(testo, "In uso ");
+    d = metti_byte(d, in_uso);
+    d = metti_testo(d, " su ");
+    metti_byte(d, totale);
+    etichetta_testo(&disco.riassunto, testo);
+    pagina_grafico_cambiata(&disco);
 }
 
 static void scelta_cambiata(struct tabella *t) {
@@ -339,8 +505,8 @@ static void scelta_cambiata(struct tabella *t) {
     aggiorna_termina();
 }
 
-static void premi_termina(struct pulsante *p, void *dati) {
-    (void)p; (void)dati;
+static void premi_termina(struct pulsante_barra *b, void *dati) {
+    (void)b; (void)dati;
     if (tabella.scelto < 0) return;
     if (termina_processo(tabella.scelto) < 0) {
         etichetta_testo(&messaggio, "Questo processo non si pu\x95 terminare");
@@ -350,65 +516,73 @@ static void premi_termina(struct pulsante *p, void *dati) {
     aggiorna(&finestra, 0);
 }
 
-/* Le due schede: quella scelta e' blu, e si vede la sua pagina. */
-static void mostra_pagina(struct pulsante *p, void *dati) {
+/* Le schede: si vede la pagina di quella scelta (la pillola la accende da sola). La X
+ * per terminare c'e' solo con i processi; i conti del disco si fanno solo mentre lo si
+ * guarda. */
+static void mostra_pagina(struct pulsante_barra *b, void *dati) {
     (void)dati;
-    int memoria_scelta = p == &scheda_memoria;
-    widget_nascondi(&pagina_processi.base, memoria_scelta);
-    widget_nascondi(&pagina_memoria.base, !memoria_scelta);
-    pulsante_stile(&scheda_processi, memoria_scelta ? NEUTRO : BLU, MEDIO);
-    pulsante_stile(&scheda_memoria, memoria_scelta ? BLU : NEUTRO, MEDIO);
+    int processi = b == &scheda_processi, su_disco = b == &scheda_disco;
+    widget_nascondi(&pagina_processi.base, !processi);
+    widget_nascondi(&memoria.colonna.base, b != &scheda_memoria);
+    widget_nascondi(&disco.colonna.base, !su_disco);
+    widget_nascondi(&azioni.base, !processi);
+    if (su_disco) aggiorna_disco(&finestra, 0);
+    finestra_tk_ogni(&finestra, su_disco ? OGNI_DISCO : 0, aggiorna_disco, 0);
     toolkit_ridisponi(&finestra);
 }
 
 int main(void) {
+    /* la barra degli strumenti: a sinistra le schede, a destra (solo con i processi) la X
+     * per terminare il processo scelto */
+    barra_strumenti_prepara(&strumenti);
+    pillola_prepara(&schede, 1);
+    pulsante_barra_testo(&scheda_processi, "Processi", mostra_pagina, 0);
+    pulsante_barra_testo(&scheda_memoria, "Memoria", mostra_pagina, 0);
+    pulsante_barra_testo(&scheda_disco, "Disco", mostra_pagina, 0);
+    pillola_aggiungi(&schede, &scheda_processi);
+    pillola_aggiungi(&schede, &scheda_memoria);
+    pillola_aggiungi(&schede, &scheda_disco);
+    pulsante_barra_accendi(&scheda_processi, 1);
+    spazio_prepara(&dopo_schede);
+    pillola_prepara(&azioni, 0);
+    pulsante_barra_prepara(&pulsante_termina, ICONA_X, premi_termina, 0);
+    pulsante_termina.base.disabilitato = 1;
+    pillola_aggiungi(&azioni, &pulsante_termina);
+    barra_strumenti_aggiungi(&strumenti, &schede.base);
+    barra_strumenti_aggiungi(&strumenti, &dopo_schede.base);
+    barra_strumenti_aggiungi(&strumenti, &azioni.base);
+
     colonna_prepara(&colonna, SPAZIO_TRA);
 
-    riga_prepara(&schede, 8);
-    pulsante_prepara(&scheda_processi, "Processi", NESSUNA_ICONA, mostra_pagina, 0);
-    pulsante_prepara(&scheda_memoria, "Memoria", NESSUNA_ICONA, mostra_pagina, 0);
-    pulsante_stile(&scheda_processi, BLU, MEDIO);
-    spazio_prepara(&dopo_schede);
-    widget_aggiungi(&schede.base, &scheda_processi.base);
-    widget_aggiungi(&schede.base, &scheda_memoria.base);
-    widget_aggiungi(&schede.base, &dopo_schede.base);
-
-    /* la pagina dei processi: la tabella, e sotto il messaggio e "Termina processo" */
+    /* la pagina dei processi: la tabella, e sotto il messaggio (se terminare non riesce)
+     * e il riassunto */
     colonna_prepara(&pagina_processi, SPAZIO_TRA);
     pagina_processi.base.elastico = 1;
     tabella = (struct tabella){ .base = { .tipo = &tipo_tabella, .elastico = 1, .largo = 1 },
                                 .scelto = -1, .al_cambio = scelta_cambiata };
     barra_scorrimento_prepara(&tabella.barra);
     widget_aggiungi(&tabella.base, &tabella.barra.base);
-    riga_prepara(&azioni, 8);
+    riga_prepara(&piede, 8);
     etichetta_prepara(&messaggio, "", FONT_TESTO);
     messaggio.colore = STATO_ERRORE;
     messaggio.base.elastico = 1;
-    pulsante_prepara(&pulsante_termina, "Termina processo", ICONA_X, premi_termina, 0);
-    pulsante_stile(&pulsante_termina, ROSSO, MEDIO);
-    pulsante_termina.base.disabilitato = 1;
-    widget_aggiungi(&azioni.base, &messaggio.base);
-    widget_aggiungi(&azioni.base, &pulsante_termina.base);
+    etichetta_prepara(&riassunto_processi, "", FONT_PICCOLO);
+    riassunto_processi.colore = CONTENUTO_SECONDARIO;
+    widget_aggiungi(&piede.base, &messaggio.base);
+    widget_aggiungi(&piede.base, &riassunto_processi.base);
     widget_aggiungi(&pagina_processi.base, &tabella.base);
-    widget_aggiungi(&pagina_processi.base, &azioni.base);
+    widget_aggiungi(&pagina_processi.base, &piede.base);
 
-    /* la pagina della memoria: il riassunto, la barra, la legenda */
-    colonna_prepara(&pagina_memoria, SPAZIO_TRA + 4);
-    pagina_memoria.base.elastico = 1;
-    pagina_memoria.base.nascosto = 1;
-    etichetta_prepara(&riassunto, "", FONT_TITOLO);
-    riassunto.base.largo = 1;
-    barra = (struct barra){ .base = { .tipo = &tipo_barra, .largo = 1 } };
-    legenda = (struct legenda){ .base = { .tipo = &tipo_legenda, .largo = 1 } };
-    widget_aggiungi(&pagina_memoria.base, &riassunto.base);
-    widget_aggiungi(&pagina_memoria.base, &barra.base);
-    widget_aggiungi(&pagina_memoria.base, &legenda.base);
+    /* le pagine della memoria e del disco: il riassunto, la barra, la legenda */
+    pagina_grafico_prepara(&memoria, PEZZI_MEMORIA, nomi_memoria, colori_memoria, LIBERA);
+    pagina_grafico_prepara(&disco, PEZZI_DISCO, nomi_disco, colori_disco, DISCO_LIBERO);
 
-    widget_aggiungi(&colonna.base, &schede.base);
     widget_aggiungi(&colonna.base, &pagina_processi.base);
-    widget_aggiungi(&colonna.base, &pagina_memoria.base);
+    widget_aggiungi(&colonna.base, &memoria.colonna.base);
+    widget_aggiungi(&colonna.base, &disco.colonna.base);
 
     finestra_tk_prepara(&finestra, "Attivit\x85", &colonna.base);
+    finestra_tk_barra(&finestra, &strumenti.base);
     finestra_tk_dimensione(&finestra, 640, 460);
     aggiorna(&finestra, 0);
     finestra_tk_ogni(&finestra, 1000, aggiorna, 0);
