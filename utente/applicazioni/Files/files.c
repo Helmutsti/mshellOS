@@ -388,13 +388,19 @@ static void avvisa_errore(const char *cosa, int errore) {
 
 /* --- la barra laterale --- */
 
-#define LATERALE_LARGHEZZA 180
-#define LATERALE_MARGINE     8   /* intorno alle righe */
-#define LATERALE_TRA         4   /* tra una riga e l'altra */
-#define LATERALE_TITOLO     27   /* un titolo di sezione: 6 + il testo (12) + 6 */
-#define LATERALE_RIGA       30   /* una riga: 6 + l'icona (18) + 6 */
-#define LATERALE_DENTRO     10   /* nella riga, prima dell'icona e tra icona e testo */
-#define LATERALE_ICONA      18
+/* Le misure vengono dal disegno Figma di Files ("Disegno - Files"), ridotte ai token: una
+ * colonna larga 200 con 8 di margine ai lati e 12 in cima; i titoli delle sezioni (8 sopra,
+ * il testo "etichetta" alto 16, 4 sotto) e le voci S da 32, a 4 l'una dall'altra (due
+ * fondi arrotondati non si toccano mai). Dentro la voce: 12, il simbolo da 16, 8, il nome. */
+#define LATERALE_LARGHEZZA 200
+#define LATERALE_MARGINE   SPAZIO_8    /* ai lati delle voci */
+#define LATERALE_CIMA      SPAZIO_12   /* sopra la prima */
+#define LATERALE_TRA       SPAZIO_4    /* tra una voce e l'altra */
+#define LATERALE_TITOLO    (SPAZIO_8 + INTERLINEA_ETICHETTA + SPAZIO_4)   /* 28 */
+#define LATERALE_RIGA      ALTEZZA_S
+#define LATERALE_DENTRO    PADDING_S   /* nella voce, prima del simbolo */
+#define LATERALE_GAP       GAP_M       /* tra simbolo e nome */
+#define LATERALE_ICONA     ICONA_S
 
 enum { TITOLO, SCORCIATOIA, FILTRO };
 
@@ -426,7 +432,7 @@ static struct laterale laterale;
 
 /* Dove comincia la riga i, e quanto e' alta. */
 static int riga_laterale_y(const struct widget *w, int i, int *alta) {
-    int y = w->y + LATERALE_MARGINE;
+    int y = w->y + LATERALE_CIMA;
     for (int k = 0; k < i; k++)
         y += (righe_laterali[k].tipo == TITOLO ? LATERALE_TITOLO : LATERALE_RIGA) + LATERALE_TRA;
     *alta = righe_laterali[i].tipo == TITOLO ? LATERALE_TITOLO : LATERALE_RIGA;
@@ -458,27 +464,29 @@ static void laterale_misura(struct widget *w, int *l, int *a) {
 
 static void laterale_disegna(struct widget *w, struct pennello *p) {
     struct laterale *lt = (struct laterale *)w;
-    /* il fondo, un po' piu' scuro del contenuto; in basso a sinistra segue l'angolo
-     * arrotondato della finestra */
-    struct tondo fondo = { w->x, w->y, w->l, w->a, { 0, 0, 0, RAGGIO_FINESTRA_NUOVO } };
-    pennello_colore(p, VETRO_PREMUTO);
-    riempi_forma(p, &fondo);
+    /* niente fondo proprio (sotto c'e' il vetro della finestra, come per il contenuto): la
+     * divide dal contenuto una linea di un pixel, come il titolo dal corpo */
+    pennello_colore(p, BORDO_SEPARATORE);
+    riempi_rettangolo(p, w->x + w->l - 1, w->y, 1, w->a);
     for (int i = 0; i < RIGHE_LATERALI; i++) {
         const struct riga_laterale *r = &righe_laterali[i];
         int alta, y = riga_laterale_y(w, i, &alta);
         int x = w->x + LATERALE_MARGINE, largo = w->l - 2 * LATERALE_MARGINE;
         if (r->tipo == TITOLO) {
-            pennello_colore(p, CONTENUTO_SECONDARIO);
-            testo_centrato(p, FONT_SEZIONE, x + LATERALE_DENTRO, y, alta, r->testo);
+            pennello_colore(p, TESTO_SECONDARIO);
+            testo(p, FONT_ETICHETTA, x + LATERALE_DENTRO,
+                  y + SPAZIO_8 + (INTERLINEA_ETICHETTA - FONT_ETICHETTA->altezza) / 2, r->testo);
             continue;
         }
+        /* accesa (la cartella in cui si e', il filtro acceso) come una riga scelta, sotto il
+         * puntatore come una riga "sopra": piatte, con il fondo dei controlli */
         if (riga_accesa(i) || lt->sopra == i) {
-            pennello_colore(p, riga_accesa(i) ? VETRO_SOPRA : ELEMENTO_SOPRA);
-            riempi_tondo(p, x, y, largo, alta, RAGGIO_MEDIO);
+            pennello_colore(p, riga_accesa(i) ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
+            riempi_tondo(p, x, y, largo, alta, RAGGIO_CONTROLLO_NUOVO);
         }
-        pennello_colore(p, CONTENUTO_PRINCIPALE);
+        pennello_colore(p, TESTO_PRIMARIO);
         icona(p, r->icona, LATERALE_ICONA, x + LATERALE_DENTRO, y + (alta - LATERALE_ICONA) / 2);
-        testo_centrato(p, FONT_TESTO, x + 2 * LATERALE_DENTRO + LATERALE_ICONA, y, alta, r->testo);
+        testo_centrato(p, FONT_CORPO, x + LATERALE_DENTRO + LATERALE_ICONA + LATERALE_GAP, y, alta, r->testo);
     }
 }
 
@@ -516,21 +524,65 @@ static void laterale_sopra(struct widget *w) {
 }
 
 static const struct tipo_widget tipo_laterale = {
-    laterale_misura, 0, laterale_disegna, laterale_puntatore, 0, 0, laterale_sopra, laterale_movimento
+    laterale_misura, 0, laterale_disegna, laterale_puntatore, 0, 0, laterale_sopra, laterale_movimento, 0
 };
 
 /* --- il contenuto: i file, a icone o a elenco --- */
 
-#define CONTENUTO_MARGINE 20       /* intorno ai file */
-#define ELENCO_TESTATA    27       /* i titoli delle colonne: 6 + il testo (12) + 6 */
-#define COLONNA_TIPO      90
-#define COLONNA_DIMENSIONE 80
-#define COLONNA_MODIFICATO 110
-#define COLONNA_TRA       10
-#define TESTATA_ICONA     20       /* nella testata, lo spazio dell'icona (come nel disegno) */
-#define STATO_LARGHEZZA  320       /* lo stato della cartella (vuota, errore...): largo cosi' */
-#define STATO_ICONA       32
-#define CAMPO_NOME_DENTRO  4       /* il campo del nome nuovo: a sinistra e a destra del testo */
+/* LA VISTA A ICONE: la "Griglia" del file Figma (Componenti complessi). Ogni file e' un
+ * TILE largo 96 e alto 116 (fisso: due righe di nome), senza fondo proprio:
+ *
+ *     +----------------+   4 sopra
+ *     |   +--------+   |   il riquadro dell'icona, 64x64, raggio 12: si colora sotto il
+ *     |   | icona  |   |   puntatore (CONTROLLO_SFONDO) e se scelto (CONTROLLO_SFONDO_SOPRA)
+ *     |   +--------+   |   4
+ *     |  nome del file |   il nome, "corpo" (14/20), centrato, al massimo su due righe; se
+ *     |  lungo...      |   scelto ha un fondo suo (AZIONE_SFONDO, raggio 6, testo AZIONE_TESTO)
+ *     +----------------+
+ *
+ * Tra un tile e l'altro 8; intorno alla griglia 16. L'icona del file resta l'immagine di
+ * grafica_dati.h (icone_file), centrata nel riquadro. */
+#define GRIGLIA_MARGINE   SPAZIO_16
+#define GRIGLIA_TRA       SPAZIO_8
+#define TILE_ALTEZZA      116
+#define TILE_CIMA         SPAZIO_4    /* sopra il riquadro */
+#define TILE_RIQUADRO     64
+#define TILE_SPAZIO       SPAZIO_4    /* tra riquadro e nome */
+#define TILE_RIGHE        2
+#define TILE_TESTO_DENTRO SPAZIO_4    /* il fondo del nome scelto: a sinistra e a destra del testo */
+#define TILE_NOME_LARGO   (TILE_LARGHEZZA - 2 * TILE_TESTO_DENTRO)
+
+/* LA VISTA A ELENCO: la "Tabella" del file Figma. L'intestazione di colonna (alta 32, testo
+ * "etichetta" in TESTO_SECONDARIO), una linea, poi le righe da 40, a 4 l'una dall'altra, con
+ * 8 di margine dentro e 12 in ogni cella. Colonne: Nome (il resto), Tipo 120, Dimensione 100
+ * (allineata a destra), Modificato 140. Righe piatte: solo quella sotto il puntatore
+ * (CONTROLLO_SFONDO) e quella scelta (CONTROLLO_SFONDO_SOPRA) hanno un fondo, raggio 12. */
+#define ELENCO_MARGINE     SPAZIO_8    /* intorno alla tabella */
+#define ELENCO_TESTATA     ALTEZZA_S
+#define ELENCO_LINEA       1
+#define ELENCO_SOPRA_RIGHE SPAZIO_4    /* tra la linea e la prima riga */
+#define RIGA_ALTA          ALTEZZA_M
+#define RIGA_TRA           SPAZIO_4
+#define RIGA_DENTRO        SPAZIO_8    /* a sinistra e a destra della riga */
+#define CELLA_DENTRO       SPAZIO_12   /* a sinistra e a destra di ogni cella */
+#define NOME_GAP           GAP_M       /* tra l'icona piccola e il nome */
+#define COLONNA_TIPO       120
+#define COLONNA_DIMENSIONE 100
+#define COLONNA_MODIFICATO 140
+
+/* Lo stato della cartella (vuota, errore...) al centro: icona 48, 12, il titolo (corpo
+ * medio), 12, la spiegazione (piccolo), su una colonna larga 280. */
+#define STATO_LARGHEZZA   280
+#define STATO_ICONA       ICONA_OGGETTO
+#define STATO_TRA         SPAZIO_12
+
+/* Il campo del nome nuovo (rinomina): come un campo di testo del toolkit, incassato e con il
+ * fuoco. Nell'elenco e' un campo S (alto 32, raggio 10); nel tile prende il posto del nome
+ * (alto 24, raggio 6 come il fondo del nome scelto). */
+#define NOME_CAMPO_DENTRO SPAZIO_8     /* nel campo, a sinistra e a destra del testo */
+#define NOME_CAMPO_TILE   (INTERLINEA_CORPO + SPAZIO_4)   /* 24 */
+#define CURSORE_SPAZIO    1            /* tra l'ultima lettera e il cursore */
+#define CURSORE_LARGO     2
 
 struct contenuto {
     struct widget base;
@@ -539,49 +591,39 @@ struct contenuto {
     int sopra;                       /* quello sotto il puntatore (indice in elementi), o -1 */
     int rinomina;                    /* quello di cui si sta cambiando il nome, o -1 */
     char nome_nuovo[MAX_NOME_FILE];
-    /* la vista a icone: dove sta ogni elemento visibile (nel contenuto, prima di
-     * scorrere: rispetto all'angolo del widget) e quanto e' alta la sua riga */
-    int ex[MAX_ELEMENTI], ey[MAX_ELEMENTI], ea[MAX_ELEMENTI];
+    /* la vista a icone: dove sta ogni tile visibile (nel contenuto, prima di scorrere:
+     * rispetto all'angolo del widget) */
+    int ex[MAX_ELEMENTI], ey[MAX_ELEMENTI];
     unsigned int clic_prima;         /* tempo() della pressione di prima, per il doppio clic */
     int clic_su;                     /* e su quale elemento */
 };
 
 static struct contenuto contenuto;
 
-/* Dove cominciano i file (sotto la testata, nella vista a elenco), sullo schermo. */
+/* Dove cominciano le righe (sotto l'intestazione e la linea), sullo schermo. */
 static int righe_y(const struct widget *w) {
-    return w->y + CONTENUTO_MARGINE + (vista == A_ELENCO ? ELENCO_TESTATA : 0);
+    return w->y + ELENCO_MARGINE + ELENCO_TESTATA + ELENCO_LINEA + ELENCO_SOPRA_RIGHE;
 }
 
-/* La riga k dell'elenco: dove comincia, nel contenuto (prima di scorrere). */
-static int riga_elenco_y(int k) { return RIGA_FILE_TRA + k * (RIGA_FILE_ALTEZZA + RIGA_FILE_TRA); }
+/* La riga k dell'elenco: dove comincia, nelle righe (prima di scorrere). */
+static int riga_elenco_y(int k) { return k * (RIGA_ALTA + RIGA_TRA); }
 
-/* Rifa' il posto degli elementi (vista a icone) e l'altezza di tutto, per lo scorrimento. */
+/* Rifa' il posto dei tile (vista a icone) e l'altezza di tutto, per lo scorrimento. */
 static void contenuto_impagina(struct contenuto *c) {
     struct widget *w = &c->base;
-    int totale;
     if (vista == A_ICONE) {
-        int largo = w->l - 2 * CONTENUTO_MARGINE;
-        int per_riga = (largo + ELEMENTO_TRA) / (ELEMENTO_LARGHEZZA + ELEMENTO_TRA);
+        int largo = w->l - 2 * GRIGLIA_MARGINE;
+        int per_riga = (largo + GRIGLIA_TRA) / (TILE_LARGHEZZA + GRIGLIA_TRA);
         if (per_riga < 1) per_riga = 1;
-        int y = CONTENUTO_MARGINE;
-        for (int inizio = 0; inizio < quanti_visibili; inizio += per_riga) {
-            int alta = 0;
-            for (int k = inizio; k < quanti_visibili && k < inizio + per_riga; k++) {
-                int a = elemento_altezza(elementi[visibili[k]].nome);
-                if (a > alta) alta = a;
-            }
-            for (int k = inizio; k < quanti_visibili && k < inizio + per_riga; k++) {
-                c->ex[k] = CONTENUTO_MARGINE + (k - inizio) * (ELEMENTO_LARGHEZZA + ELEMENTO_TRA);
-                c->ey[k] = y;
-                c->ea[k] = alta;
-            }
-            y += alta + ELEMENTO_TRA;
+        for (int k = 0; k < quanti_visibili; k++) {
+            c->ex[k] = GRIGLIA_MARGINE + k % per_riga * (TILE_LARGHEZZA + GRIGLIA_TRA);
+            c->ey[k] = GRIGLIA_MARGINE + k / per_riga * (TILE_ALTEZZA + GRIGLIA_TRA);
         }
-        totale = (quanti_visibili ? y - ELEMENTO_TRA : y) + CONTENUTO_MARGINE;
+        int righe = (quanti_visibili + per_riga - 1) / per_riga;
+        int totale = 2 * GRIGLIA_MARGINE + (righe ? righe * (TILE_ALTEZZA + GRIGLIA_TRA) - GRIGLIA_TRA : 0);
         scorrimento_misure(&c->barra.scorrimento, totale, w->a);
     } else {
-        totale = riga_elenco_y(quanti_visibili) + CONTENUTO_MARGINE;
+        int totale = (quanti_visibili ? riga_elenco_y(quanti_visibili) - RIGA_TRA : 0) + ELENCO_MARGINE;
         scorrimento_misure(&c->barra.scorrimento, totale, w->y + w->a - righe_y(w));
     }
 }
@@ -593,14 +635,14 @@ static int visibile_in(const struct contenuto *c, int x, int y) {
     if (vista == A_ICONE) {
         for (int k = 0; k < quanti_visibili; k++) {
             int ex = w->x + c->ex[k], ey = w->y + c->ey[k] - scorso;
-            if (x >= ex && x < ex + ELEMENTO_LARGHEZZA && y >= ey && y < ey + c->ea[k]) return k;
+            if (x >= ex && x < ex + TILE_LARGHEZZA && y >= ey && y < ey + TILE_ALTEZZA) return k;
         }
         return -1;
     }
-    if (y < righe_y(w) || x < w->x + CONTENUTO_MARGINE || x >= w->x + w->l - CONTENUTO_MARGINE) return -1;
+    if (y < righe_y(w) || x < w->x + ELENCO_MARGINE || x >= w->x + w->l - ELENCO_MARGINE) return -1;
     int dentro = y - righe_y(w) + scorso;
-    int k = dentro / (RIGA_FILE_ALTEZZA + RIGA_FILE_TRA);
-    if (dentro - riga_elenco_y(k) < 0 || dentro - riga_elenco_y(k) >= RIGA_FILE_ALTEZZA) return -1;
+    int k = dentro / (RIGA_ALTA + RIGA_TRA);
+    if (dentro - riga_elenco_y(k) >= RIGA_ALTA) return -1;
     return k < quanti_visibili ? k : -1;
 }
 
@@ -622,28 +664,30 @@ static void contenuto_disponi(struct widget *w) {
     contenuto_impagina(c);
 }
 
-/* Il campo del nome nuovo (rinomina): un rettangolo di vetro con il bordo blu, con dentro
- * il testo e il cursore in fondo. Largo 'l' (o quanto il testo, se 'l' e' 0); il testo
- * centrato se 'centrato'. */
-static void campo_nome(struct pennello *p, const struct font *f, int x, int y, int l,
+/* Il campo del nome nuovo (rinomina), largo 'l' e alto 'a', raggio 'raggio': incassato con il
+ * fuoco come campo_disegna del toolkit (ombre "focus", SUPERFICIE_INCASSATA, bordo
+ * BORDO_FOCUS), con dentro il testo e il cursore in fondo. Il testo centrato se 'centrato';
+ * se e' piu' lungo del campo, si vede la fine (dove si scrive). */
+static void campo_nome(struct pennello *p, int x, int y, int l, int a, int raggio,
                        const char *testo_nome, int centrato) {
-    int largo = larghezza_testo(f, testo_nome) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
-    if (!l) l = largo + 2 * CAMPO_NOME_DENTRO + 2;
-    int alto = f->altezza + 2 * 2 + 2;
-    struct tondo t = tondo(x, y, l, alto, RAGGIO_CONTROLLO);
-    pennello_colore(p, CAMPO_SFONDO_ATTIVO);
+    const struct font *f = FONT_CORPO;
+    struct tondo t = tondo(x, y, l, a, raggio);
+    ombre_strati_fuori(p, &t, OMBRA_TAB(focus), OMBRA_N(focus));
+    pennello_colore(p, SUPERFICIE_INCASSATA);
     riempi_forma(p, &t);
-    pennello_colore(p, STATO_ATTIVO);
-    contorna_forma(p, &t, 256);
+    ombre_strati_dentro(p, &t, OMBRA_TAB(focus), OMBRA_N(focus));
+    pennello_colore(p, BORDO_FOCUS);
+    contorna_forma(p, &t, BORDO_FOCUS_SPESSORE);
+    int dentro = a < ALTEZZA_S ? TILE_TESTO_DENTRO : NOME_CAMPO_DENTRO;
+    int largo = larghezza_testo(f, testo_nome) + CURSORE_SPAZIO + CURSORE_LARGO;   /* il cursore compreso */
+    int spazio = l - 2 * dentro;
+    int tx = centrato && largo < spazio ? x + (l - largo) / 2 : x + dentro;
+    if (largo > spazio) tx = x + l - dentro - largo;
     pennello_salva(p);
-    pennello_ritaglia(p, x + 1, y + 1, l - 2, alto - 2);
-    int tx = centrato && largo < l - 2 * CAMPO_NOME_DENTRO ? x + (l - largo) / 2
-                                                           : x + 1 + CAMPO_NOME_DENTRO;
-    /* se il nome e' piu' lungo del campo, si vede la fine (dove si scrive) */
-    if (largo > l - 2 - 2 * CAMPO_NOME_DENTRO) tx = x + l - 1 - CAMPO_NOME_DENTRO - largo;
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    int fine = testo(p, f, tx, y + 3, testo_nome);
-    riempi_rettangolo(p, fine + CAMPO_CURSORE_SPAZIO, y + 3, 2, f->altezza);
+    pennello_ritaglia(p, x + 2, y + 1, l - 4, a - 2);
+    pennello_colore(p, TESTO_PRIMARIO);
+    int fine = testo_centrato(p, f, tx, y, a, testo_nome);
+    riempi_rettangolo(p, fine + CURSORE_SPAZIO, y + (a - f->altezza) / 2, CURSORE_LARGO, f->altezza);
     pennello_ripristina(p);
 }
 
@@ -665,21 +709,22 @@ static void testo_tagliato(struct pennello *p, const struct font *f, int x, int 
 static void disegna_stato(struct pennello *p, const struct widget *w, int icona_stato,
                           const char *titolo, const char *spiegazione) {
     char righe_t[3][MAX_RIGA_NOME], righe_s[3][MAX_RIGA_NOME];
-    int largo = STATO_LARGHEZZA - 2 * CONTENUTO_MARGINE;
-    int nt = testo_a_capo(FONT_STATO, titolo, largo, righe_t, 3);
-    int ns = testo_a_capo(FONT_DETTAGLIO, spiegazione, largo, righe_s, 3);
-    int alto = STATO_ICONA + 8 + nt * FONT_STATO->altezza + (ns ? 8 + ns * FONT_DETTAGLIO->altezza : 0);
+    int nt = testo_a_capo(FONT_CORPO_MEDIO, titolo, STATO_LARGHEZZA, righe_t, 3);
+    int ns = testo_a_capo(FONT_PICCOLO_NUOVO, spiegazione, STATO_LARGHEZZA, righe_s, 3);
+    int alto = STATO_ICONA + STATO_TRA + nt * INTERLINEA_CORPO + (ns ? STATO_TRA + ns * INTERLINEA_PICCOLO : 0);
     int y = w->y + (w->a - alto) / 2, centro = w->x + w->l / 2;
-    pennello_colore(p, CONTENUTO_SECONDARIO);
+    pennello_colore(p, TESTO_SECONDARIO);
     icona(p, icona_stato, STATO_ICONA, centro - STATO_ICONA / 2, y);
-    y += STATO_ICONA + 8;
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    for (int i = 0; i < nt; i++, y += FONT_STATO->altezza)
-        testo(p, FONT_STATO, centro - larghezza_testo(FONT_STATO, righe_t[i]) / 2, y, righe_t[i]);
-    y += 8;
-    pennello_colore(p, CONTENUTO_SECONDARIO);
-    for (int i = 0; i < ns; i++, y += FONT_DETTAGLIO->altezza)
-        testo(p, FONT_DETTAGLIO, centro - larghezza_testo(FONT_DETTAGLIO, righe_s[i]) / 2, y, righe_s[i]);
+    y += STATO_ICONA + STATO_TRA;
+    pennello_colore(p, TESTO_PRIMARIO);
+    for (int i = 0; i < nt; i++, y += INTERLINEA_CORPO)
+        testo_centrato(p, FONT_CORPO_MEDIO, centro - larghezza_testo(FONT_CORPO_MEDIO, righe_t[i]) / 2, y,
+                       INTERLINEA_CORPO, righe_t[i]);
+    y += STATO_TRA;
+    pennello_colore(p, TESTO_SECONDARIO);
+    for (int i = 0; i < ns; i++, y += INTERLINEA_PICCOLO)
+        testo_centrato(p, FONT_PICCOLO_NUOVO, centro - larghezza_testo(FONT_PICCOLO_NUOVO, righe_s[i]) / 2, y,
+                       INTERLINEA_PICCOLO, righe_s[i]);
 }
 
 /* Perche' la cartella non si vede: vuota, permesso negato, errore. */
@@ -704,8 +749,46 @@ static void disegna_stato_cartella(struct pennello *p, const struct widget *w) {
     }
 }
 
+enum { NORMALE, SOPRA, SCELTO };
+
+/* Come si vede un elemento: scelto (anche quello che si sta rinominando), sotto il
+ * puntatore, o normale. */
 static int stato_elemento(const struct contenuto *c, int e) {
-    return e == c->scelto ? ELEMENTO_STATO_SCELTO : e == c->sopra ? ELEMENTO_STATO_SOPRA : ELEMENTO_NORMALE;
+    return e == c->scelto || e == c->rinomina ? SCELTO : e == c->sopra ? SOPRA : NORMALE;
+}
+
+/* Un tile con l'angolo in (x, y). */
+static void disegna_tile(struct pennello *p, struct contenuto *c, int x, int y, int e) {
+    const struct elemento *el = &elementi[e];
+    int stato = stato_elemento(c, e);
+    int rx = x + (TILE_LARGHEZZA - TILE_RIQUADRO) / 2, ry = y + TILE_CIMA;
+    if (stato != NORMALE) {
+        pennello_colore(p, stato == SCELTO ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
+        riempi_tondo(p, rx, ry, TILE_RIQUADRO, TILE_RIQUADRO, RAGGIO_CONTROLLO_NUOVO);
+    }
+    const struct immagine *im = icone_file[el->genere][0];
+    disegna_immagine(p, im, rx + (TILE_RIQUADRO - im->l) / 2, ry + (TILE_RIQUADRO - im->a) / 2);
+    int ny = ry + TILE_RIQUADRO + TILE_SPAZIO;
+    if (e == c->rinomina) {                  /* rinomina: al posto del nome, il campo */
+        campo_nome(p, x, ny, TILE_LARGHEZZA, NOME_CAMPO_TILE, RAGGIO_CASELLA, c->nome_nuovo, 1);
+        return;
+    }
+    char righe[TILE_RIGHE][MAX_RIGA_NOME];
+    int n = testo_a_capo(FONT_CORPO, el->nome, TILE_NOME_LARGO, righe, TILE_RIGHE);
+    if (stato == SCELTO && n) {              /* il nome scelto ha un fondo suo, largo quanto il testo */
+        int largo = 0;
+        for (int i = 0; i < n; i++) {
+            int l = larghezza_testo(FONT_CORPO, righe[i]);
+            if (l > largo) largo = l;
+        }
+        largo += 2 * TILE_TESTO_DENTRO;
+        pennello_colore(p, AZIONE_SFONDO);
+        riempi_tondo(p, x + (TILE_LARGHEZZA - largo) / 2, ny, largo, n * INTERLINEA_CORPO, RAGGIO_CASELLA);
+    }
+    pennello_colore(p, stato == SCELTO ? AZIONE_TESTO : TESTO_PRIMARIO);
+    for (int i = 0; i < n; i++)
+        testo_centrato(p, FONT_CORPO, x + (TILE_LARGHEZZA - larghezza_testo(FONT_CORPO, righe[i])) / 2,
+                       ny + i * INTERLINEA_CORPO, INTERLINEA_CORPO, righe[i]);
 }
 
 static void disegna_icone(struct pennello *p, struct contenuto *c) {
@@ -713,98 +796,93 @@ static void disegna_icone(struct pennello *p, struct contenuto *c) {
     int scorso = c->barra.scorrimento.posizione;
     for (int k = 0; k < quanti_visibili; k++) {
         int x = w->x + c->ex[k], y = w->y + c->ey[k] - scorso;
-        if (y + c->ea[k] <= w->y || y >= w->y + w->a) continue;     /* fuori dalla vista */
-        const struct elemento *e = &elementi[visibili[k]];
-        const struct immagine *im = icone_file[e->genere][0];
-        if (visibili[k] != c->rinomina) {
-            elemento_disegna(p, x, y, c->ea[k], im, e->nome, stato_elemento(c, visibili[k]));
-            continue;
-        }
-        /* rinomina: al posto del nome, il campo (largo quanto l'elemento meno i margini) */
-        elemento_fondo(p, x, y, c->ea[k], ELEMENTO_STATO_SCELTO);
-        elemento_icona(p, x, y, im);
-        campo_nome(p, FONT_DETTAGLIO, x + ELEMENTO_MARGINE, elemento_nome_y(y) - 3,
-                   ELEMENTO_LARGHEZZA - 2 * ELEMENTO_MARGINE, c->nome_nuovo, 1);
+        if (y + TILE_ALTEZZA + SPAZIO_4 <= w->y || y - SPAZIO_4 >= w->y + w->a) continue;   /* fuori dalla vista */
+        disegna_tile(p, c, x, y, visibili[k]);
     }
 }
 
 static void disegna_elenco(struct pennello *p, struct contenuto *c) {
     struct widget *w = &c->base;
-    int sinistra = w->x + CONTENUTO_MARGINE, destra = w->x + w->l - CONTENUTO_MARGINE;
+    int sinistra = w->x + ELENCO_MARGINE, destra = w->x + w->l - ELENCO_MARGINE;
     /* le colonne, da destra: Modificato, Dimensione, Tipo; il nome prende il resto */
-    int fine_modificato = destra - RIGA_FILE_MARGINE;
-    int fine_dimensione = fine_modificato - COLONNA_MODIFICATO - COLONNA_TRA;
-    int tipo_x = fine_dimensione - COLONNA_DIMENSIONE - COLONNA_TRA - COLONNA_TIPO;
-    int nome_x = sinistra + RIGA_FILE_MARGINE + RIGA_FILE_ICONA + COLONNA_TRA;
-    int nome_largo = tipo_x - COLONNA_TRA - nome_x;
+    int modificato_x = destra - RIGA_DENTRO - COLONNA_MODIFICATO;
+    int dimensione_x = modificato_x - COLONNA_DIMENSIONE;
+    int tipo_x = dimensione_x - COLONNA_TIPO;
+    int icona_x = sinistra + RIGA_DENTRO + CELLA_DENTRO;
+    int nome_x = icona_x + icone_file[0][1]->l + NOME_GAP;
+    int nome_largo = tipo_x - CELLA_DENTRO - nome_x;
 
-    int ty = w->y + CONTENUTO_MARGINE;      /* la testata resta ferma */
-    pennello_colore(p, CONTENUTO_SECONDARIO);
-    testo_centrato(p, FONT_SEZIONE, sinistra + RIGA_FILE_MARGINE + TESTATA_ICONA + COLONNA_TRA, ty,
-                   ELENCO_TESTATA, "Nome");
-    testo_centrato(p, FONT_SEZIONE, tipo_x, ty, ELENCO_TESTATA, "Tipo");
-    testo_a_destra(p, FONT_SEZIONE, fine_dimensione, ty, ELENCO_TESTATA, "Dimensione");
-    testo_a_destra(p, FONT_SEZIONE, fine_modificato, ty, ELENCO_TESTATA, "Modificato");
+    /* l'intestazione e la linea restano ferme */
+    int ty = w->y + ELENCO_MARGINE;
+    pennello_colore(p, TESTO_SECONDARIO);
+    testo_centrato(p, FONT_ETICHETTA, icona_x, ty, ELENCO_TESTATA, "Nome");
+    testo_centrato(p, FONT_ETICHETTA, tipo_x + CELLA_DENTRO, ty, ELENCO_TESTATA, "Tipo");
+    testo_a_destra(p, FONT_ETICHETTA, modificato_x - CELLA_DENTRO, ty, ELENCO_TESTATA, "Dimensione");
+    testo_centrato(p, FONT_ETICHETTA, modificato_x + CELLA_DENTRO, ty, ELENCO_TESTATA, "Modificato");
+    int linea = ty + ELENCO_TESTATA;
+    pennello_colore(p, BORDO_SEPARATORE);
+    riempi_rettangolo(p, sinistra, linea, destra - sinistra, ELENCO_LINEA);
 
     pennello_salva(p);
     int sopra = righe_y(w);
-    pennello_ritaglia(p, w->x, sopra, w->l, w->y + w->a - sopra);
+    pennello_ritaglia(p, w->x, linea + ELENCO_LINEA, w->l, w->y + w->a - (linea + ELENCO_LINEA));
     int scorso = c->barra.scorrimento.posizione;
     for (int k = 0; k < quanti_visibili; k++) {
         int y = sopra + riga_elenco_y(k) - scorso;
-        if (y + RIGA_FILE_ALTEZZA <= sopra || y >= w->y + w->a) continue;
-        const struct elemento *e = &elementi[visibili[k]];
-        int stato = visibili[k] == c->rinomina ? ELEMENTO_STATO_SCELTO : stato_elemento(c, visibili[k]);
-        if (stato != ELEMENTO_NORMALE) {
-            pennello_colore(p, stato == ELEMENTO_STATO_SCELTO ? ELEMENTO_SCELTO : ELEMENTO_SOPRA);
-            riempi_tondo(p, sinistra, y, destra - sinistra, RIGA_FILE_ALTEZZA, RAGGIO_MEDIO);
+        if (y + RIGA_ALTA + SPAZIO_4 <= linea || y - SPAZIO_4 >= w->y + w->a) continue;
+        int e = visibili[k];
+        const struct elemento *el = &elementi[e];
+        int stato = stato_elemento(c, e);
+        if (stato != NORMALE) {
+            pennello_colore(p, stato == SCELTO ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
+            riempi_tondo(p, sinistra, y, destra - sinistra, RIGA_ALTA, RAGGIO_CONTROLLO_NUOVO);
         }
-        disegna_immagine(p, icone_file[e->genere][1], sinistra + RIGA_FILE_MARGINE,
-                         y + (RIGA_FILE_ALTEZZA - RIGA_FILE_ICONA) / 2);
-        if (visibili[k] == c->rinomina) {
-            pennello_salva(p);
-            pennello_ritaglia(p, nome_x, y, nome_largo, RIGA_FILE_ALTEZZA);
-            campo_nome(p, FONT_TESTO, nome_x, y + (RIGA_FILE_ALTEZZA - FONT_TESTO->altezza - 6) / 2, 0,
-                       c->nome_nuovo, 0);
-            pennello_ripristina(p);
+        const struct immagine *im = icone_file[el->genere][1];
+        disegna_immagine(p, im, icona_x, y + (RIGA_ALTA - im->a) / 2);
+        if (e == c->rinomina) {
+            campo_nome(p, nome_x - NOME_CAMPO_DENTRO, y + (RIGA_ALTA - ALTEZZA_S) / 2,
+                       nome_largo + 2 * NOME_CAMPO_DENTRO, ALTEZZA_S, RAGGIO_CAMPO_S, c->nome_nuovo, 0);
         } else {
-            pennello_colore(p, CONTENUTO_PRINCIPALE);
-            testo_tagliato(p, FONT_TESTO, nome_x, y, RIGA_FILE_ALTEZZA, nome_largo, e->nome);
+            pennello_colore(p, TESTO_PRIMARIO);
+            testo_tagliato(p, FONT_CORPO, nome_x, y, RIGA_ALTA, nome_largo, el->nome);
         }
         char dimensione[24], data[32];
-        scrivi_dimensione(dimensione, e);
-        scrivi_data(data, e->modificato);
-        pennello_colore(p, CONTENUTO_SECONDARIO);
-        testo_centrato(p, FONT_DETTAGLIO, tipo_x, y, RIGA_FILE_ALTEZZA, nomi_generi[e->genere]);
-        testo_a_destra(p, FONT_DETTAGLIO, fine_dimensione, y, RIGA_FILE_ALTEZZA, dimensione);
-        testo_a_destra(p, FONT_DETTAGLIO, fine_modificato, y, RIGA_FILE_ALTEZZA, data);
+        scrivi_dimensione(dimensione, el);
+        scrivi_data(data, el->modificato);
+        pennello_colore(p, TESTO_SECONDARIO);
+        testo_tagliato(p, FONT_CORPO, tipo_x + CELLA_DENTRO, y, RIGA_ALTA, COLONNA_TIPO - 2 * CELLA_DENTRO,
+                       nomi_generi[el->genere]);
+        testo_a_destra(p, FONT_CORPO, modificato_x - CELLA_DENTRO, y, RIGA_ALTA, dimensione);
+        testo_tagliato(p, FONT_CORPO, modificato_x + CELLA_DENTRO, y, RIGA_ALTA,
+                       COLONNA_MODIFICATO - 2 * CELLA_DENTRO, data);
     }
     pennello_ripristina(p);
 }
 
-/* L'avviso in basso: una pillola di vetro scuro con il triangolo e il testo. */
+/* L'AVVISO in basso: una pillola che sta sopra il contenuto (livello sovrapposto), con i
+ * colori del suggerimento: il triangolo e il testo. */
+#define AVVISO_ALTEZZA ALTEZZA_S
+#define AVVISO_DENTRO  PADDING_S
+#define AVVISO_ICONA   ICONA_S
+#define AVVISO_GAP     GAP_M
+#define AVVISO_BASSO   SPAZIO_16    /* dal fondo del contenuto */
+
 static void disegna_avviso(struct pennello *p, const struct widget *w) {
-    int largo = larghezza_testo(FONT_STRUMENTI, avviso) + 3 * 12 + 16;
-    int alto = 32, x = w->x + (w->l - largo) / 2, y = w->y + w->a - alto - 16;
-    struct tondo t = tondo(x, y, largo, alto, RAGGIO_GRANDE);
-    pennello_colore(p, MENU_OMBRA);
-    ombra_forma(p, &t, 0, 4, 8);
-    pennello_colore(p, VETRO_FONDO);
+    int largo = 2 * AVVISO_DENTRO + AVVISO_ICONA + AVVISO_GAP + larghezza_testo(FONT_CORPO, avviso);
+    int x = w->x + (w->l - largo) / 2, y = w->y + w->a - AVVISO_ALTEZZA - AVVISO_BASSO;
+    struct tondo t = tondo(x, y, largo, AVVISO_ALTEZZA, AVVISO_ALTEZZA / 2);
+    ombre_strati_fuori(p, &t, OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
+    pennello_colore(p, SUGGERIMENTO_SFONDO);
     riempi_forma(p, &t);
-    pennello_colore(p, VETRO_SUPERFICIE);
-    riempi_forma(p, &t);
-    pennello_colore(p, VETRO_BORDO);
-    contorna_forma(p, &t, 256);
-    pennello_colore(p, STATO_ERRORE);
-    icona(p, ICONA_TRIANGLE_ALERT, 16, x + 12, y + (alto - 16) / 2);
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    testo_centrato(p, FONT_STRUMENTI, x + 12 + 16 + 12, y, alto, avviso);
+    pennello_colore(p, SUGGERIMENTO_TESTO_SECONDARIO);
+    icona(p, ICONA_TRIANGLE_ALERT, AVVISO_ICONA, x + AVVISO_DENTRO, y + (AVVISO_ALTEZZA - AVVISO_ICONA) / 2);
+    pennello_colore(p, SUGGERIMENTO_TESTO);
+    testo_centrato(p, FONT_CORPO, x + AVVISO_DENTRO + AVVISO_ICONA + AVVISO_GAP, y, AVVISO_ALTEZZA, avviso);
 }
 
 static void contenuto_disegna(struct widget *w, struct pennello *p) {
     struct contenuto *c = (struct contenuto *)w;
     pennello_salva(p);
-    /* in basso a destra, l'angolo arrotondato della finestra */
     pennello_ritaglia(p, w->x, w->y, w->l, w->a);
     if (errore_qui || !quanti_visibili) disegna_stato_cartella(p, w);
     else if (vista == A_ICONE) disegna_icone(p, c);
@@ -1005,18 +1083,37 @@ struct menu {
 
 static struct menu menu;
 
+/* IL MENU: il "Menu" del file Figma (Componenti complessi), livello sovrapposto. Un pannello
+ * largo 240, raggio 20, fondo SUPERFICIE_ELEVATA con l'ombra "sovrapposto"; 8 sopra e sotto;
+ * le voci M (alte 40, larghe 224: rientrate di 8 ai lati, raggio 12, concentrico) una sotto
+ * l'altra; i separatori sono una linea BORDO_SEPARATORE da bordo a bordo, con 4 sopra e sotto.
+ * Nella voce: 12, il simbolo (18), 8, il testo ("corpo"), la scorciatoia ("piccolo",
+ * TESTO_SECONDARIO) o la freccia del sottomenu o la spunta (16) a destra, 12. Sotto il
+ * puntatore la voce ha il fondo CONTROLLO_SFONDO; spenta e' tutta TESTO_DISABILITATO. */
+#define MENU_LARGO         240
+#define MENU_PADDING       SPAZIO_8     /* sopra, sotto, e a sinistra e a destra delle voci */
+#define VOCE_ALTA          ALTEZZA_M
+#define VOCE_DENTRO        PADDING_S    /* 12 */
+#define VOCE_GAP           GAP_M        /* 8 */
+#define VOCE_SIMBOLO       ICONA_M      /* 18 */
+#define VOCE_DESTRA        ICONA_S      /* 16: la freccia del sottomenu, la spunta */
+#define SEPARA_ALTO        (SPAZIO_4 + 1 + SPAZIO_4)
+#define SOTTOMENU_STACCO   SPAZIO_4     /* tra il menu e il sottomenu */
+#define MENU_BORDO         SPAZIO_4     /* il menu non va piu' vicino di cosi' al bordo della finestra */
+
+static int alta_voce(const struct voce_menu *v) { return v->azione == SEPARATORE ? SEPARA_ALTO : VOCE_ALTA; }
+
 static int altezza_pannello(const struct pannello *pn) {
-    int a = 2 * MENU_MARGINE + (pn->quante - 1) * MENU_SPAZIO;
-    for (int i = 0; i < pn->quante; i++) a += pn->voci[i].azione == SEPARATORE ? MENU_SEPARA : MENU_VOCE;
+    int a = 2 * MENU_PADDING;
+    for (int i = 0; i < pn->quante; i++) a += alta_voce(&pn->voci[i]);
     return a;
 }
 
 /* Dove comincia la voce i del pannello (y), e quanto e' alta. */
 static int voce_y(const struct pannello *pn, int i, int *alta) {
-    int y = pn->y + MENU_MARGINE;
-    for (int k = 0; k < i; k++)
-        y += (pn->voci[k].azione == SEPARATORE ? MENU_SEPARA : MENU_VOCE) + MENU_SPAZIO;
-    *alta = pn->voci[i].azione == SEPARATORE ? MENU_SEPARA : MENU_VOCE;
+    int y = pn->y + MENU_PADDING;
+    for (int k = 0; k < i; k++) y += alta_voce(&pn->voci[k]);
+    *alta = alta_voce(&pn->voci[i]);
     return y;
 }
 
@@ -1037,123 +1134,69 @@ static int voce_spuntata(int azione) {
            (azione == ORDINA_DIMENSIONE && ordine == PER_DIMENSIONE) || (azione == ORDINA_DATA && ordine == PER_DATA);
 }
 
-/* IL VETRO SMERIGLIATO DENTRO LA FINESTRA. Il compositore sfoca quello che c'e' SOTTO una
- * finestra (lo sfondo, le altre finestre); un pannello che sta DENTRO la finestra, come il
- * menu, deve invece sfocare il contenuto della finestra stessa (i file sotto di lui), se
- * no il testo di sotto si confonderebbe con le voci. Lo si fa qui, sui pixel gia'
- * disegnati: tre passate di "media mobile" (ogni pixel diventa la media dei suoi vicini
- * entro 'raggio'), in orizzontale e poi in verticale; tre medie di fila somigliano molto
- * a una sfocatura gaussiana. I pixel sono premoltiplicati: si media ogni byte per conto
- * suo, trasparenza compresa. Dentro la forma il risultato sostituisce quello che c'era;
- * sul bordo (gli angoli arrotondati) si mescola, per non avere scalini. */
-static void media_mobile(const unsigned int *da, unsigned int *a, int quanti, int passo, int raggio) {
-    for (int b = 0; b < 32; b += 8) {
-        int somma = 0, finestra_media = 2 * raggio + 1;
-        for (int i = -raggio; i <= raggio; i++) {
-            int k = i < 0 ? 0 : i >= quanti ? quanti - 1 : i;
-            somma += (da[k * passo] >> b) & 0xFF;
-        }
-        for (int i = 0; i < quanti; i++) {
-            unsigned int v = (unsigned int)(somma / finestra_media);
-            a[i * passo] = (b ? a[i * passo] : 0) | v << b;
-            int esce = i - raggio < 0 ? 0 : i - raggio;
-            int entra = i + raggio + 1 >= quanti ? quanti - 1 : i + raggio + 1;
-            somma += (int)((da[entra * passo] >> b) & 0xFF) - (int)((da[esce * passo] >> b) & 0xFF);
-        }
-    }
-}
-
-static void sfoca_sotto(struct pennello *p, const struct tondo *t, int raggio) {
-    int x0 = t->x > p->s.rx ? t->x : p->s.rx, y0 = t->y > p->s.ry ? t->y : p->s.ry;
-    int x1 = t->x + t->l < p->s.rx2 ? t->x + t->l : p->s.rx2;
-    int y1 = t->y + t->a < p->s.ry2 ? t->y + t->a : p->s.ry2;
-    int l = x1 - x0, a = y1 - y0;
-    if (l <= 0 || a <= 0) return;
-    unsigned int *uno = malloc((unsigned long)l * a * 4), *due = malloc((unsigned long)l * a * 4);
-    if (!uno || !due) { free(uno); free(due); return; }
-    unsigned int *tela = p->tela->pixel;
-    int larga = p->tela->larghezza;
-    for (int y = 0; y < a; y++)
-        for (int x = 0; x < l; x++) uno[y * l + x] = tela[(y0 + y) * larga + x0 + x];
-    for (int volta = 0; volta < 3; volta++) {
-        for (int y = 0; y < a; y++) media_mobile(uno + y * l, due + y * l, l, 1, raggio);
-        for (int x = 0; x < l; x++) media_mobile(due + x, uno + x, a, l, raggio);
-    }
-    for (int y = 0; y < a; y++)
-        for (int x = 0; x < l; x++) {
-            int c = coperto(distanza(t, x0 + x, y0 + y));
-            if (!c) continue;
-            unsigned int *d = &tela[(y0 + y) * larga + x0 + x], s = uno[y * l + x], r = 0;
-            for (int b = 0; b < 32; b += 8)
-                r |= (unsigned int)((((s >> b) & 0xFF) * c + ((*d >> b) & 0xFF) * (256 - c)) >> 8) << b;
-            *d = r;
-        }
-    free(uno);
-    free(due);
-}
-
-#define MENU_SFOCATURA 10   /* il raggio di ogni media: tre di fila sfocano come Figma a 30 */
-
-/* Il fondo dei pannelli: l'ombra, il contenuto di sotto sfocato, il vetro, il bordo. */
+/* Il fondo dei pannelli (il menu, la scheda delle informazioni): sovrapposto, cioe' l'ombra a
+ * strati fuori, il fondo pieno SUPERFICIE_ELEVATA, poi gli strati interni (il filo di luce
+ * del tema scuro). E' opaco: il contenuto di sotto non si vede, e non serve sfocarlo. */
 static void fondo_pannello(struct pennello *p, int x, int y, int l, int a) {
-    struct tondo t = tondo(x, y, l, a, RAGGIO_GRANDE);
-    pennello_colore(p, MENU_OMBRA);
-    ombra_forma(p, &t, 0, 10, 15);
-    sfoca_sotto(p, &t, MENU_SFOCATURA);
-    pennello_colore(p, VETRO_SUPERFICIE);
+    struct tondo t = tondo(x, y, l, a, RAGGIO_PANNELLO);
+    ombre_strati_fuori(p, &t, OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
+    pennello_colore(p, SUPERFICIE_ELEVATA);
     riempi_forma(p, &t);
-    pennello_colore(p, VETRO_BORDO);
-    contorna_forma(p, &t, 256);
+    ombre_strati_dentro(p, &t, OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
 }
 
 static void disegna_pannello(struct pennello *p, const struct pannello *pn, int numero) {
-    fondo_pannello(p, pn->x, pn->y, MENU_LARGHEZZA, altezza_pannello(pn));
-    int x = pn->x + MENU_MARGINE, largo = MENU_LARGHEZZA - 2 * MENU_MARGINE;
+    fondo_pannello(p, pn->x, pn->y, MENU_LARGO, altezza_pannello(pn));
+    int x = pn->x + MENU_PADDING, largo = MENU_LARGO - 2 * MENU_PADDING;
     for (int i = 0; i < pn->quante; i++) {
         const struct voce_menu *v = &pn->voci[i];
         int alta, y = voce_y(pn, i, &alta);
         if (v->azione == SEPARATORE) {
-            pennello_colore(p, MENU_SEPARATORE);
-            riempi_rettangolo(p, x + MENU_VOCE_MARGINE, y + MENU_SEPARA / 2, largo - 2 * MENU_VOCE_MARGINE, 1);
+            pennello_colore(p, BORDO_SEPARATORE);
+            riempi_rettangolo(p, pn->x, y + SPAZIO_4, MENU_LARGO, 1);
             continue;
         }
         int attiva = voce_attiva(v->azione);
         int accesa = attiva && (menu.sopra == numero * 100 + i ||
                                 (v->azione == ORDINA && menu.quanti > 1));
         if (accesa) {
-            pennello_colore(p, VETRO_SOPRA);
-            riempi_tondo(p, x, y, largo, alta, RAGGIO_PICCOLO);
+            pennello_colore(p, CONTROLLO_SFONDO_NUOVO);
+            riempi_tondo(p, x, y, largo, alta, RAGGIO_CONTROLLO_NUOVO);
         }
-        pennello_salva(p);
-        if (!attiva) pennello_opacita(p, OPACITA_DISABILITATO);
-        int tx = x + MENU_VOCE_MARGINE;
-        pennello_colore(p, CONTENUTO_PRINCIPALE);
+        int tx = x + VOCE_DENTRO;
+        pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_DISABILITATO);
         if (v->icona != NESSUNA_ICONA) {
-            icona(p, v->icona, MENU_ICONA, tx, y + (alta - MENU_ICONA) / 2);
-            tx += MENU_ICONA + MENU_VOCE_MARGINE;
+            icona(p, v->icona, VOCE_SIMBOLO, tx, y + (alta - VOCE_SIMBOLO) / 2);
+            tx += VOCE_SIMBOLO + VOCE_GAP;
         }
-        testo_centrato(p, FONT_STRUMENTI, tx, y, alta, v->testo);
-        int destra = x + largo - MENU_VOCE_MARGINE;
-        pennello_colore(p, CONTENUTO_SECONDARIO);
-        if (v->scorciatoia) testo_a_destra(p, FONT_DETTAGLIO, destra, y, alta, v->scorciatoia);
+        testo_centrato(p, FONT_CORPO, tx, y, alta, v->testo);
+        int destra = x + largo - VOCE_DENTRO;
         if (v->azione == ORDINA)
-            icona(p, ICONA_CHEVRON_RIGHT, MENU_ICONA, destra - MENU_ICONA, y + (alta - MENU_ICONA) / 2);
+            icona(p, ICONA_CHEVRON_RIGHT, VOCE_DESTRA, destra - VOCE_DESTRA, y + (alta - VOCE_DESTRA) / 2);
         if (voce_spuntata(v->azione))
-            icona(p, ICONA_CHECK, MENU_ICONA, destra - MENU_ICONA, y + (alta - MENU_ICONA) / 2);
-        pennello_ripristina(p);
+            icona(p, ICONA_CHECK, VOCE_DESTRA, destra - VOCE_DESTRA, y + (alta - VOCE_DESTRA) / 2);
+        if (v->scorciatoia) {
+            pennello_colore(p, attiva ? TESTO_SECONDARIO : TESTO_DISABILITATO);
+            testo_a_destra(p, FONT_PICCOLO_NUOVO, destra, y, alta, v->scorciatoia);
+        }
     }
 }
 
-/* LA SCHEDA DELLE INFORMAZIONI: un pannello al centro della finestra, con l'icona, il nome
- * e sotto, a due colonne, quello che si sa del file. Un clic ovunque la chiude. */
-#define SCHEDA_LARGHEZZA 300
-#define SCHEDA_RIGA       22
+/* LA SCHEDA DELLE INFORMAZIONI: un pannello al centro della finestra, come il menu
+ * (sovrapposto, raggio 20), con 24 di margine: l'icona, il nome (sezione) e sotto, a due
+ * colonne, quello che si sa del file (titoli in TESTO_SECONDARIO, valori a destra). Un clic
+ * ovunque la chiude. */
+#define SCHEDA_LARGHEZZA 320
+#define SCHEDA_DENTRO    SPAZIO_24
+#define SCHEDA_RIGA      (ALTEZZA_S - SPAZIO_8)   /* 24: una riga di "corpo" con un po' d'aria */
+#define SCHEDA_TITOLI    90                     /* la colonna dei titoli */
 
 static const char *const titoli_scheda[] = { "Tipo", "Dimensione", "Modificato", "Permessi", "Dove" };
 #define RIGHE_SCHEDA 5
 
 static int altezza_scheda(void) {
-    return 20 + ELEMENTO_ICONA + 8 + FONT_STATO->altezza + 14 + RIGHE_SCHEDA * SCHEDA_RIGA + 16;
+    return 2 * SCHEDA_DENTRO + icone_file[0][0]->a + SPAZIO_8 + INTERLINEA_SEZIONE + SPAZIO_16 +
+           RIGHE_SCHEDA * (SCHEDA_RIGA);
 }
 
 static void disegna_scheda(struct pennello *p, const struct widget *w) {
@@ -1165,26 +1208,29 @@ static void disegna_scheda(struct pennello *p, const struct widget *w) {
     int corpo_y = finestra_tk_corpo(&finestra);
     int y = corpo_y + (w->a - corpo_y - alta) / 2;
     fondo_pannello(p, x, y, SCHEDA_LARGHEZZA, alta);
-    disegna_immagine(p, icone_file[el->genere][0], x + (SCHEDA_LARGHEZZA - ELEMENTO_ICONA) / 2, y + 20);
-    int ny = y + 20 + ELEMENTO_ICONA + 8;
+    const struct immagine *im = icone_file[el->genere][0];
+    disegna_immagine(p, im, x + (SCHEDA_LARGHEZZA - im->l) / 2, y + SCHEDA_DENTRO);
+    int ny = y + SCHEDA_DENTRO + im->a + SPAZIO_8;
+    int largo = SCHEDA_LARGHEZZA - 2 * SCHEDA_DENTRO;
     char nome[1][MAX_RIGA_NOME];
-    testo_a_capo(FONT_STATO, el->nome, SCHEDA_LARGHEZZA - 40, nome, 1);
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    testo(p, FONT_STATO, x + (SCHEDA_LARGHEZZA - larghezza_testo(FONT_STATO, nome[0])) / 2, ny, nome[0]);
+    testo_a_capo(FONT_SEZIONE_NUOVO, el->nome, largo, nome, 1);
+    pennello_colore(p, TESTO_PRIMARIO);
+    testo_centrato(p, FONT_SEZIONE_NUOVO, x + (SCHEDA_LARGHEZZA - larghezza_testo(FONT_SEZIONE_NUOVO, nome[0])) / 2,
+                   ny, INTERLINEA_SEZIONE, nome[0]);
     char valori[RIGHE_SCHEDA][MAX_LUNGO];
     copia_testo(valori[0], nomi_generi[el->genere], MAX_LUNGO);
     scrivi_dimensione(valori[1], el);
     scrivi_data(valori[2], el->modificato);
     scrivi_permessi(valori[3], el->permessi);
     copia_testo(valori[4], qui, MAX_LUNGO);
-    int ry = ny + FONT_STATO->altezza + 14;
+    int ry = ny + INTERLINEA_SEZIONE + SPAZIO_16;
     for (int i = 0; i < RIGHE_SCHEDA; i++, ry += SCHEDA_RIGA) {
-        pennello_colore(p, CONTENUTO_SECONDARIO);
-        testo_centrato(p, FONT_DETTAGLIO, x + 20, ry, SCHEDA_RIGA, titoli_scheda[i]);
-        pennello_colore(p, CONTENUTO_PRINCIPALE);
+        pennello_colore(p, TESTO_SECONDARIO);
+        testo_centrato(p, FONT_CORPO, x + SCHEDA_DENTRO, ry, SCHEDA_RIGA, titoli_scheda[i]);
+        pennello_colore(p, TESTO_PRIMARIO);
         char riga[1][MAX_RIGA_NOME];
-        testo_a_capo(FONT_DETTAGLIO, valori[i], SCHEDA_LARGHEZZA - 40 - 90, riga, 1);
-        testo_a_destra(p, FONT_DETTAGLIO, x + SCHEDA_LARGHEZZA - 20, ry, SCHEDA_RIGA, riga[0]);
+        testo_a_capo(FONT_CORPO, valori[i], largo - SCHEDA_TITOLI, riga, 1);
+        testo_a_destra(p, FONT_CORPO, x + SCHEDA_LARGHEZZA - SCHEDA_DENTRO, ry, SCHEDA_RIGA, riga[0]);
     }
 }
 
@@ -1199,10 +1245,10 @@ static void menu_disegna(struct widget *w, struct pennello *p) {
 static int voce_in(const struct menu *m, int x, int y) {
     for (int n = m->quanti - 1; n >= 0; n--) {
         const struct pannello *pn = &m->pannelli[n];
-        if (x < pn->x || x >= pn->x + MENU_LARGHEZZA || y < pn->y || y >= pn->y + altezza_pannello(pn)) continue;
+        if (x < pn->x || x >= pn->x + MENU_LARGO || y < pn->y || y >= pn->y + altezza_pannello(pn)) continue;
         for (int i = 0; i < pn->quante; i++) {
             int alta, vy = voce_y(pn, i, &alta);
-            if (y >= vy && y < vy + alta && x >= pn->x + MENU_MARGINE && x < pn->x + MENU_LARGHEZZA - MENU_MARGINE)
+            if (y >= vy && y < vy + alta && x >= pn->x + MENU_PADDING && x < pn->x + MENU_LARGO - MENU_PADDING)
                 return pn->voci[i].azione == SEPARATORE ? -2 : n * 100 + i;
         }
         return -2;
@@ -1220,11 +1266,11 @@ static void apri_sottomenu(struct menu *m, int i) {
     const struct pannello *pn = &m->pannelli[0];
     int alta, vy = voce_y(pn, i, &alta);
     struct pannello *sotto = &m->pannelli[1];
-    *sotto = (struct pannello){ menu_ordina, QUANTE(menu_ordina), pn->x + MENU_LARGHEZZA + 2, vy - MENU_MARGINE };
-    if (sotto->x + MENU_LARGHEZZA > m->base.l - 4) sotto->x = pn->x - MENU_LARGHEZZA - 2;
-    if (sotto->x < 4) sotto->x = 4;
+    *sotto = (struct pannello){ menu_ordina, QUANTE(menu_ordina), pn->x + MENU_LARGO + SOTTOMENU_STACCO, vy - MENU_PADDING };
+    if (sotto->x + MENU_LARGO > m->base.l - MENU_BORDO) sotto->x = pn->x - MENU_LARGO - SOTTOMENU_STACCO;
+    if (sotto->x < MENU_BORDO) sotto->x = MENU_BORDO;
     int a = altezza_pannello(sotto);
-    if (sotto->y + a > m->base.a - 4) sotto->y = m->base.a - 4 - a;
+    if (sotto->y + a > m->base.a - MENU_BORDO) sotto->y = m->base.a - MENU_BORDO - a;
     m->quanti = 2;
 }
 
@@ -1295,7 +1341,7 @@ static void menu_movimento(struct widget *w, int x, int y) {
     widget_cambiato(w);
 }
 
-static const struct tipo_widget tipo_menu = { 0, 0, menu_disegna, menu_puntatore, 0, 0, 0, menu_movimento };
+static const struct tipo_widget tipo_menu = { 0, 0, menu_disegna, menu_puntatore, 0, 0, 0, menu_movimento, 0 };
 
 /* Apre un menu con l'angolo nel punto (x, y) della finestra (dove si e' cliccato),
  * spostandolo quanto basta perche' stia tutto nella finestra. */
@@ -1311,9 +1357,9 @@ static void apri_menu(const struct voce_menu *voci, int quante, int x, int y, in
     struct pannello *pn = &m->pannelli[0];
     *pn = (struct pannello){ voci, quante, x, y };
     int a = altezza_pannello(pn);
-    if (pn->x + MENU_LARGHEZZA > m->base.l - 4) pn->x = m->base.l - 4 - MENU_LARGHEZZA;
-    if (pn->y + a > m->base.a - 4) pn->y = m->base.a - 4 - a;
-    if (pn->x < 4) pn->x = 4;
+    if (pn->x + MENU_LARGO > m->base.l - MENU_BORDO) pn->x = m->base.l - MENU_BORDO - MENU_LARGO;
+    if (pn->y + a > m->base.a - MENU_BORDO) pn->y = m->base.a - MENU_BORDO - a;
+    if (pn->x < MENU_BORDO) pn->x = MENU_BORDO;
     if (pn->y < TITOLO_ALTEZZA) pn->y = TITOLO_ALTEZZA;
     widget_nascondi(&m->base, 0);
 }
@@ -1397,7 +1443,7 @@ static void contenuto_sopra(struct widget *w) {
 
 static const struct tipo_widget tipo_contenuto = {
     contenuto_misura, contenuto_disponi, contenuto_disegna, contenuto_puntatore, contenuto_tasto,
-    contenuto_rotella, contenuto_sopra, contenuto_movimento
+    contenuto_rotella, contenuto_sopra, contenuto_movimento, 0
 };
 
 /* --- andare in una cartella --- */
