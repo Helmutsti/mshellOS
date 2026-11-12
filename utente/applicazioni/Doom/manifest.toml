@@ -22,8 +22,8 @@ funzioni = []
 # nei due temi. Le PNG piccole sono la stessa faccia, a 32 pixel per pixel e a 18 rimpicciolita.
 [icone.chiaro]
 svg = "resources/icona-chiara.svg"
-png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png" }
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png", 48 = "resources/icona-chiara-48.png" }
 
 [icone.scuro]
 svg = "resources/icona-scura.svg"
-png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png" }
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png", 48 = "resources/icona-scura-48.png" }

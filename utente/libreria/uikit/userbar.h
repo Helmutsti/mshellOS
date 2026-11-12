@@ -26,8 +26,9 @@
  * nel pulsante tondo. Due modi, con USERBAR_ICONE_TONDE qui sotto:
  *   1 (scelto per ora): l'icona e' TONDA, ritagliata a cerchio, e riempie il posto del
  *     pulsante: niente cerchio dietro. Sopra il puntatore e premuta si scurisce con un velo
- *     tondo trasparente. Serve la PNG di 32 pixel (48 nel
- *     vassoio: se non c'e' si usa la piu' vicina, al suo posto, senza ingrandirla).
+ *     tondo trasparente. Serve la PNG di 32 pixel nella
+ *     userbar e quella di 48 nel vassoio (le icone delle app le hanno: se manca si usa la
+ *     piu' vicina, al suo posto e centrata, senza ingrandirla).
  *   0 (il vecchio): l'icona piccola (16 nella userbar, 20 nel vassoio) dentro il pulsante tondo.
  *
  * LE OMBRE ESTERNE. Sulla scrivania la userbar e il vassoio sono pannelli del compositore

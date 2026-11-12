@@ -24,8 +24,8 @@ funzioni = []
 # Le PNG sono le versioni semplificate a 32 e 18.
 [icone.chiaro]
 svg = "resources/icona-chiara.svg"
-png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png" }
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png", 48 = "resources/icona-chiara-48.png" }
 
 [icone.scuro]
 svg = "resources/icona-scura.svg"
-png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png" }
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png", 48 = "resources/icona-scura-48.png" }
