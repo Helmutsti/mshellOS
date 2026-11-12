@@ -150,7 +150,11 @@
 #define TITOLO_COMANDI_LARGHEZZA (2 * ALTEZZA_S + 3 * TITOLO_MARGINE)   /* riduci e chiudi, con i margini: 76 */
 #define OPACITA_COMANDI_INATTIVI 128   /* i comandi di una finestra sullo sfondo: 50% */
 /* la barra degli strumenti e il gruppo di pulsanti (la pillola) */
-#define STRUMENTI_MARGINE_LATI  SPAZIO_12   /* ai lati della barra (sopra e sotto c'e' TITOLO_MARGINE) */
+/* La barra degli strumenti delle schermate di Figma (Files, Attivita): alta 48, con 8 di padding
+ * su tutti i lati intorno ai controlli S (8 + 32 + 8) e 8 tra un controllo e l'altro. */
+#define STRUMENTI_ALTEZZA       48
+#define STRUMENTI_MARGINE_LATI  SPAZIO_8    /* a sinistra e a destra */
+#define STRUMENTI_MARGINE_SOPRA SPAZIO_8    /* sopra e sotto: (48 - 32) / 2 */
 #define GRUPPO_ELEMENTO         24   /* l'altezza di una voce dentro il gruppo: ALTEZZA_S - 2 * GRUPPO_PADDING */
 #define SCORRIMENTO_CURSORE_MARGINE 2   /* tra il binario e il cursore, per lato */
 
@@ -423,7 +427,6 @@ static const struct strato_ombra ombra_puntatore_scuro[] = {
 #define SCORRIMENTO_MINIMO     32   /* il cursore non e' mai piu' corto di cosi' */
 
 /* la barra degli strumenti: sotto la barra del titolo, larga quanto la finestra */
-#define STRUMENTI_ALTEZZA      40   /* 6 sopra + 28 di contenuto + 6 sotto */
 #define STRUMENTI_CONTENUTO    28   /* l'altezza delle cose dentro (centrate in altezza) */
 #define STRUMENTI_MARGINE      10   /* a sinistra e a destra */
 #define STRUMENTI_SPAZIO        8   /* tra una cosa e l'altra */

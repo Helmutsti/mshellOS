@@ -1,0 +1,7 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Oggetto">
+<path id="retro" d="M3 5C3 4.46957 3.21071 3.96086 3.58579 3.58579C3.96086 3.21071 4.46957 3 5 3H9L11 5H19C19.5304 5 20.0391 5.21071 20.4142 5.58579C20.7893 5.96086 21 6.46957 21 7V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V5Z" fill="#E3E3E5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#77777B"/>
+<path id="fronte" d="M3 10C3 9.60218 3.15804 9.22064 3.43934 8.93934C3.72064 8.65804 4.10218 8.5 4.5 8.5H19.5C19.8978 8.5 20.2794 8.65804 20.5607 8.93934C20.842 9.22064 21 9.60218 21 10V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V10Z" fill="#F2F2F3" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#77777B"/>
+<path id="simbolo" d="M10.7146 14.7499H13.2856M10.7146 16.3569H13.2856M9.42857 10.8929H12.9646L14.5716 12.4999V18.6069H9.42857V10.8929Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" stroke="#77777B"/>
+</g>
+</svg>

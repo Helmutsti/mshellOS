@@ -18,10 +18,12 @@ permessi = ["file.scrivere"]
 deviazioni = []
 funzioni = ["file.apri_cartella", "file.mostra"]
 
-# Icone provvisorie (un quadrato colorato con un'icona Lucide): quelle vere arriveranno dal
-# disegno in Figma. Niente PNG per ora: il sistema rimpicciolira' l'SVG.
+# Le icone dell'app, dal disegno in Figma (pagina "App - Files", "Icona dell'app"): l'SVG
+# 96 x 96 e le PNG semplificate da 32 e 18, una serie per tema.
 [icone.chiaro]
 svg = "resources/icona-chiara.svg"
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png" }
 
 [icone.scuro]
 svg = "resources/icona-scura.svg"
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png" }

@@ -6,28 +6,35 @@ sulla casa, /home, dove build.sh ha copiato la cartella file/ del repository:
     Immagini/    due .png
     Scrivania/   contatore.app (il pacchetto di Contatore, da installare: build.sh)
     dati.bin, leggimi.txt
-Nella vista a icone gli elementi stanno in righe da 6, larghi 84 a 92 pixel l'uno
-dall'altro: il primo con l'angolo in (+200, +98) dalla finestra, l'icona al centro in
-(+242, +134). Prima le cartelle, poi i file, per nome.
+La finestra e' come nel disegno di Figma: la barra del titolo (40 + 1), la barra degli
+strumenti (48: indietro/avanti, icone/elenco, il percorso, la ricerca, che cominciano dove
+finisce la barra laterale, a x +208), sotto la barra laterale (larga 200) e il pannello chiaro
+(da x +208, y +89). Nella vista a icone i tile sono larghi 96 a 8 l'uno dall'altro, in righe da
+5: l'icona del k-esimo al centro in (+264 + 104 * (k % 5), +133 + 124 * (k // 5)). Prima le
+cartelle, poi i file, per nome.
 
 Si prova, una cosa dopo l'altra:
-  - la casa a icone e a elenco (la pillola nella barra: +562 e +588, y +58), confrontate
-    con le foto di riferimento;
-  - il doppio clic su Documenti ci entra, "indietro" (+24, +58) torna alla casa;
+  - la casa a icone e a elenco (il gruppo nella barra: +282 e +308, y +65), confrontate
+    con le foto di riferimento; nell'elenco un clic sull'intestazione "Nome" gira l'ordine
+    (la freccia in giu'), un altro lo rimette;
+  - il doppio clic su Documenti ci entra, "indietro" (+216, +65) torna alla casa;
   - nella Scrivania (barra laterale) c'e' contatore.app: il doppio clic NON lo avvia (non
     e' installato): si apre lo Store con la richiesta di installazione, e lo si chiude;
   - in Documenti, la cartella col nome lungo non si apre (il suo percorso supera i 63
     caratteri della libreria): lo stato "errore";
-  - /data/system (del sistema, 700) non si puo' aprire: lo stato "permesso negato". Ci si
-    arriva come farebbe una persona: Apps nella barra laterale, "Disco" nel percorso (la
-    radice), e poi la ricerca per trovare "data" e "system";
   - il tasto destro su un file apre il menu del file; sul vuoto il menu della cartella,
     e sopra "Ordina per" il suo sottomenu;
   - Nuova cartella: compare "Nuova cartella" con il nome da scrivere; si scrive "Prova",
-    poi la si rinomina "Esempi" (dal menu) e la si elimina: la casa torna com'era;
+    Invio, e un altro Invio la apre: lo stato "vuota"; indietro, la si rinomina "Esempi" (dal
+    menu) e la si elimina: la casa torna com'era;
   - eliminare Documenti (non e' vuota) non si puo': compare l'avviso in basso;
+  - le informazioni di un file (dal menu) si aprono in una mini finestra; Esc la chiude;
+  - un filtro (Testi) e la tastiera: Invio apre la cartella scelta; le scorciatoie scritte
+    nei menu (Ctrl+Maiusc+N, F2, Ctrl+D, Ctrl+I, Canc, Esc);
   - il doppio clic sulla Home della scrivania apre un'altra finestra di Files (secondo
     posto) sulla casa.
+Lo stato "permesso negato" non si prova piu': il disegno non ha la scorciatoia Apps nella
+barra laterale, e dalla casa non si arriva alle cartelle del sistema.
 Le foto di riferimento sono in riferimenti/<cpu>/files_*.png (l'ora coperta).
 """
 
@@ -38,16 +45,22 @@ from qemu import PUNTO_VUOTO
 
 NOME = "files"
 ORDINE = 65
-DESCRIZIONE = "Files: viste, cartelle, stati, menu, nuova/rinomina/elimina; la Home sulla scrivania"
+DESCRIZIONE = "Files: viste, ordine, cartelle, stati, menu, scorciatoie, informazioni; la Home sulla scrivania"
 RIFERIMENTI = True
 
 # dentro la finestra di Files (dall'angolo in alto a sinistra)
-INDIETRO = (24, 58)
-A_ICONE, A_ELENCO = (562, 58), (588, 58)
-RICERCA = (700, 58)
-RADICE = (88, 58)               # il primo nome del percorso fuori dalla casa ("Disco")
-HOME, SCRIVANIA, APPS = (60, 141), (60, 177), (60, 213)
-VUOTO = (520, 420)             # un punto del contenuto dove non c'e' niente (sotto i file)
+INDIETRO = (216, 65)
+A_ICONE, A_ELENCO = (282, 65), (308, 65)
+RICERCA = (700, 65)
+HOME, SCRIVANIA = (60, 145), (60, 181)
+TESTI = (60, 285)
+INTESTAZIONE_NOME = (240, 105)  # l'intestazione della colonna Nome, nella vista a elenco
+VUOTO = (520, 420)              # un punto del pannello dove non c'e' niente (sotto i file)
+CORPO_Y = 89                    # sotto le barre
+
+# il menu (voci S da 32, padding 10 sopra): il centro della voce n (contando i separatori, 9)
+def voce(n, separatori=0):
+    return 10 + n * 32 + separatori * 9 + 16
 
 
 def elemento(k):
@@ -96,12 +109,25 @@ def cancella(m, quante):
         time.sleep(0.03)
 
 
+def insieme(m, *tasti):
+    """Una scorciatoia: i modificatori giu', il tasto, poi su."""
+    for t in tasti[:-1]:
+        m.tasto_giu(t)
+        time.sleep(0.05)
+    m.premi(tasti[-1])
+    time.sleep(0.05)
+    for t in reversed(tasti[:-1]):
+        m.tasto_su(t)
+        time.sleep(0.05)
+
+
 def esegui(p):
     m = p.m
     wx, wy = s.angolo(0)
     l, a = s.MISURE["Files"]
     finestra = (wx, wy, wx + l, wy + a)
-    corpo = (wx + 1, wy + 79, wx + l - 1, wy + a - 1)     # sotto le barre
+    corpo = (wx + 1, wy + CORPO_Y, wx + l - 1, wy + a - 1)
+    schermo = (0, 70, 1280, 800)                           # tutto, tranne l'isola (l'ora)
 
     def clic(punto):
         """Un clic nella finestra; poi il puntatore va nell'angolo (niente resta acceso)."""
@@ -120,7 +146,10 @@ def esegui(p):
         s.aspetta_zona(m, prima, zona, uguale=False, attesa=10.0, cosa=cosa)
         return m.aspetta_schermo_fermo()
 
-    # --- dall'isola: la casa, a icone e a elenco ---
+    def torna(foto, cosa, zona=corpo):
+        return s.aspetta_zona(m, foto, zona, attesa=10.0, cosa=cosa)
+
+    # --- dall'isola: la casa, a icone e a elenco; l'ordine dall'intestazione ---
     s.apri(m, "Files")
     casa = ferma("casa_icone")
     p.riferimento("files_icone", casa)
@@ -128,21 +157,25 @@ def esegui(p):
     elenco = cambia(casa, "la vista a elenco")
     m.foto("casa_elenco")
     p.riferimento("files_elenco", elenco)
+    clic(INTESTAZIONE_NOME)
+    girato = cambia(elenco, "l'ordine per nome girato (freccia in giu')")
+    m.foto("elenco_nome_decrescente")
+    clic(INTESTAZIONE_NOME)
+    torna(elenco, "l'ordine per nome di nuovo crescente")
+    p.controlla(not s.zona_uguale(girato, elenco, corpo), "girare l'ordine non cambia niente")
     clic(A_ICONE)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="di nuovo la vista a icone")
+    torna(casa, "di nuovo la vista a icone")
 
     # --- dentro Documenti, e indietro ---
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])          # Documenti
     documenti = cambia(casa, "Documenti aperta (doppio clic)")
     m.foto("documenti")
     clic(INDIETRO)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa dopo 'indietro'")
+    torna(casa, "la casa dopo 'indietro'")
 
     # --- la Scrivania, con il pacchetto contatore.app: aprirlo non lo avvia ---
-    # (prima era vuota e serviva per lo stato "vuota": ora lo stato vuoto non si prova,
-    # finche' non si sceglie un'altra cartella vuota da mettere nella casa)
     clic(SCRIVANIA)
-    scrivania_files = cambia(casa, "la Scrivania (con contatore.app)")
+    cambia(casa, "la Scrivania (con contatore.app)")
     m.foto("scrivania")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])           # contatore.app
     # si apre lo Store con la richiesta di installazione (nel secondo posto, 560 x 480): lo
@@ -156,66 +189,45 @@ def esegui(p):
     sx, sy = s.angolo(1)
     m.clic(*s.comandi(sx, sy, 560)[1])
     m.muovi(*PUNTO_VUOTO)
-    # (non si confronta il corpo con com'era: dopo il doppio clic contatore.app resta scelto)
     m.aspetta_che(lambda f: s.segno_sotto(f, "Store") == 0, 10.0, cosa="lo Store chiuso")
     p.controlla(s.segno_sotto(m.aspetta_schermo_fermo(), "Files") > 0, "Files non e' piu' aperta")
 
     # --- errore: la cartella dal nome troppo lungo, in Documenti ---
     clic(HOME)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa dalla barra laterale")
+    torna(casa, "la casa dalla barra laterale")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])
-    s.aspetta_zona(m, documenti, corpo, attesa=10.0, cosa="di nuovo Documenti")
+    torna(documenti, "di nuovo Documenti")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])          # la cartella lunga
     errore = cambia(documenti, "lo stato 'errore'")
     m.foto("errore")
     p.riferimento("files_errore", errore)
 
-    # --- permesso negato: /data/system, da Apps -> Disco -> data -> system ---
-    clic(APPS)
-    apps = cambia(errore, "Apps")
-    m.foto("apps")
-    clic(RADICE)
-    radice = cambia(apps, "la radice (Disco)")
-    m.foto("radice")
-    clic(RICERCA)
-    scrivi(m, "data")
-    trovata = cambia(radice, "la ricerca di 'data'")
-    doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])
-    dati = cambia(trovata, "/data")
-    m.foto("data")
-    clic(RICERCA)
-    scrivi(m, "system")
-    trovata = cambia(dati, "la ricerca di 'system'")
-    doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])
-    negato = cambia(trovata, "lo stato 'permesso negato'")
-    m.foto("permesso")
-    p.riferimento("files_permesso", negato)
-
     # --- i menu del tasto destro ---
     clic(HOME)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa dalla barra laterale")
+    torna(casa, "la casa dalla barra laterale")
     x, y = elemento(4)                                                  # leggimi.txt
     clic_destro(m, wx + x, wy + y)
     menu_file = cambia(casa, "il menu del file", finestra)
     m.foto("menu_file")
     p.riferimento("files_menu_file", menu_file)
-    clic(VUOTO)                     # un clic fuori lo chiude (e finisce li': leggimi.txt resta scelto)
-    clic(VUOTO)                     # un altro clic sul vuoto: niente e' scelto
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="il menu chiuso (clic fuori)")
+    m.premi("esc")                  # Esc lo chiude (leggimi.txt resta scelto)
+    time.sleep(0.3)
+    clic(VUOTO)                     # un clic sul vuoto: niente e' scelto
+    torna(casa, "il menu chiuso (Esc)")
 
     mx, my = 250, 300                                                   # sul vuoto (sotto la prima riga)
     clic_destro(m, wx + mx, wy + my)
     menu_cartella = cambia(casa, "il menu della cartella", finestra)
-    m.muovi(wx + mx + 100, wy + my + 8 + 40 + 9 + 19)           # sopra "Ordina per"
+    m.muovi(wx + mx + 100, wy + my + voce(1, 1) - 1)            # sopra "Ordina per"
     time.sleep(0.3)
-    m.muovi(wx + mx + 100, wy + my + 8 + 40 + 9 + 20)
+    m.muovi(wx + mx + 100, wy + my + voce(1, 1))
     sottomenu = m.aspetta_schermo_fermo()
     m.foto("menu_cartella")
     p.controlla(not s.zona_uguale(menu_cartella, sottomenu, finestra), "il sottomenu 'Ordina per' non si apre")
     p.riferimento("files_menu_cartella", sottomenu, maschera=[(695, 25, 845, 50)])
 
-    # --- nuova cartella, rinomina, elimina ---
-    m.clic(wx + mx + 100, wy + my + 8 + 20)                             # "Nuova cartella"
+    # --- nuova cartella, la cartella vuota, rinomina, elimina ---
+    m.clic(wx + mx + 100, wy + my + voce(0))                           # "Nuova cartella"
     m.muovi(*PUNTO_VUOTO)
     nuova = cambia(casa, "la cartella nuova")
     m.foto("nuova_cartella")
@@ -225,11 +237,17 @@ def esegui(p):
     time.sleep(0.5)
     prova = ferma("prova")
     p.controlla(not s.zona_uguale(nuova, prova, corpo), "il nome della cartella nuova non cambia")
+    m.premi("ret")                                                      # Invio la apre: e' vuota
+    vuota = cambia(prova, "la cartella vuota (Invio)")
+    m.foto("vuota")
+    p.riferimento("files_vuota", vuota)
+    clic(INDIETRO)
+    prova = cambia(vuota, "la casa con Prova, dopo 'indietro'")
     # Documenti, Immagini, Prova, Scrivania: Prova e' la terza
     x, y = elemento(2)
     clic_destro(m, wx + x, wy + y)
     cambia(prova, "il menu su Prova", finestra)
-    m.clic(wx + x + 80, wy + y + 8 + 40 + 9 + 20)               # "Rinomina"
+    m.clic(wx + x + 80, wy + y + voce(1))                               # "Rinomina"
     m.muovi(*PUNTO_VUOTO)
     time.sleep(0.5)
     cancella(m, len("Prova"))
@@ -242,49 +260,82 @@ def esegui(p):
     x, y = elemento(1)
     clic_destro(m, wx + x, wy + y)
     cambia(esempi, "il menu su Esempi", finestra)
-    m.clic(wx + x + 80, wy + y + 8 + 4 * 40 + 2 * 9 + 20)       # "Elimina"
+    m.clic(wx + x + 80, wy + y + voce(4, 1))                            # "Elimina"
     m.muovi(*PUNTO_VUOTO)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa com'era, dopo Elimina")
+    torna(casa, "la casa com'era, dopo Elimina")
 
     # --- eliminare una cartella piena: l'avviso ---
     x, y = elemento(0)                                                  # Documenti
     clic_destro(m, wx + x, wy + y)
     cambia(casa, "il menu su Documenti", finestra)
-    m.clic(wx + x + 80, wy + y + 8 + 4 * 40 + 2 * 9 + 20)
+    m.clic(wx + x + 80, wy + y + voce(4, 1))
     m.muovi(*PUNTO_VUOTO)
     avviso = cambia(casa, "l'avviso 'solo le cartelle vuote'")
     m.foto("avviso")
     p.riferimento("files_avviso", avviso)
 
-    # --- le informazioni di un file (dal menu), poi un clic le chiude ---
-    clic(VUOTO)                                                         # via l'avviso
-    clic(VUOTO)                                                         # niente scelto
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa senza l'avviso")
+    # --- le informazioni di un file (dal menu): una mini finestra; Esc la chiude ---
+    clic(VUOTO)                                                         # via l'avviso, niente scelto
+    torna(casa, "la casa senza l'avviso")
     x, y = elemento(4)                                                  # leggimi.txt
     clic_destro(m, wx + x, wy + y)
-    cambia(casa, "il menu su leggimi.txt", finestra)
-    m.clic(wx + x + 80, wy + y + 8 + 3 * 40 + 9 + 20)           # "Informazioni"
+    menu = cambia(casa, "il menu su leggimi.txt", finestra)
+    m.clic(wx + x + 80, wy + y + voce(3))                               # "Informazioni"
     m.muovi(*PUNTO_VUOTO)
-    scheda = cambia(casa, "la scheda delle informazioni", finestra)
+    informazioni = cambia(menu, "la mini finestra delle informazioni", schermo)
     m.foto("informazioni")
-    p.riferimento("files_informazioni", scheda)
+    p.riferimento("files_informazioni", informazioni)
+    m.premi("esc")
+    m.muovi(*PUNTO_VUOTO)
+    s.aspetta_zona(m, informazioni, schermo, uguale=False, attesa=10.0, cosa="la mini finestra chiusa (Esc)")
     clic(VUOTO)
-    clic(VUOTO)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la scheda chiusa")
+    torna(casa, "la casa dopo le informazioni")
 
     # --- un filtro (Testi): resta solo leggimi.txt; un altro clic lo spegne ---
-    clic((60, 317))
-    testi = cambia(casa, "il filtro Testi")
+    clic(TESTI)
+    cambia(casa, "il filtro Testi")
     m.foto("filtro_testi")
-    clic((60, 317))
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="il filtro spento")
+    clic(TESTI)
+    torna(casa, "il filtro spento")
 
     # --- la tastiera: Documenti scelta, Invio la apre ---
     clic(elemento(0))
     m.premi("ret")
-    s.aspetta_zona(m, documenti, corpo, attesa=10.0, cosa="Documenti aperta con Invio")
+    torna(documenti, "Documenti aperta con Invio")
     clic(HOME)
-    s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa dalla barra laterale")
+    torna(casa, "la casa dalla barra laterale")
+
+    # --- le scorciatoie dei menu ---
+    insieme(m, "ctrl", "shift", "n")                                    # Ctrl+Maiusc+N: una cartella nuova
+    nuova = cambia(casa, "la cartella nuova con Ctrl+Maiusc+N")
+    m.premi("esc")                                                      # Esc: il nome resta quello
+    time.sleep(0.3)
+    clic(elemento(2))                                                   # Documenti, Immagini, Nuova cartella
+    m.premi("f2")                                                       # F2: si rinomina
+    time.sleep(0.3)
+    cancella(m, len("Nuova cartella"))
+    scrivi(m, "Tasti")
+    m.premi("ret")
+    tasti = cambia(nuova, "il nome nuovo con F2")
+    m.foto("scorciatoie_f2")
+    m.premi("delete")                                                   # Canc: via (e' vuota)
+    torna(casa, "la cartella eliminata con Canc")
+    clic(elemento(4))                                                   # leggimi.txt
+    scelto = m.aspetta_schermo_fermo()
+    insieme(m, "ctrl", "d")                                             # Ctrl+D: "leggimi copia.txt"
+    copia = cambia(scelto, "la copia con Ctrl+D")
+    m.foto("scorciatoie_ctrl_d")
+    m.premi("delete")                                                   # la copia e' scelta: Canc la toglie
+    torna(casa, "la copia eliminata con Canc")
+    clic(elemento(4))
+    insieme(m, "ctrl", "i")                                             # Ctrl+I: le informazioni
+    informazioni = cambia(scelto, "le informazioni con Ctrl+I", schermo)
+    m.premi("esc")
+    s.aspetta_zona(m, informazioni, schermo, uguale=False, attesa=10.0, cosa="la mini finestra chiusa")
+    clic(elemento(4))                                                   # di nuovo in Files, leggimi.txt scelto
+    m.premi("esc")                                                      # Esc: niente e' scelto
+    torna(casa, "la scelta tolta con Esc")
+    p.controlla(not s.zona_uguale(tasti, copia, corpo), "le scorciatoie non hanno fatto niente")
 
     # --- dalla scrivania: il doppio clic sulla Home apre Files (un'altra finestra) ---
     prima = m.aspetta_schermo_fermo()

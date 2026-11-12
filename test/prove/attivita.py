@@ -90,9 +90,9 @@ def esegui(p):
     x, y = s.angolo(1)
 
     # --- la memoria ---
-    m.clic(x + 383, y + 60)                    # la scheda "Memoria" (tre schede larghe uguali nella barra)
+    m.clic(x + 384, y + 65)                    # la scheda "Memoria" (tre schede larghe uguali nella barra)
     m.muovi(*PUNTO_VUOTO)
-    riga = (x + 20, y + 105, x + 620, y + 128)
+    riga = (x + 20, y + 112, x + 620, y + 135)
     # la riga compare quando Attivita ha ridisegnato: si aspetta che ci sia testo
     f = m.aspetta_che(lambda f: inchiostro(f, riga).getbbox() is not None, 5.0,
                       cosa="la riga 'In uso ... su ...' nella scheda Memoria")
@@ -105,11 +105,11 @@ def esegui(p):
         raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
                           "memoria_totale_ottenuta.png e la foto 'memoria'") from None
     # --- terminare Esempio ---
-    m.clic(x + 134, y + 60)                    # la scheda "Processi"
+    m.clic(x + 132, y + 65)                    # la scheda "Processi"
     time.sleep(0.5)
-    m.clic(x + 150, y + 154 + 44 * RIGA_ESEMPIO)    # le righe sono a 44 l'una dall'altra, la prima ha il centro a 154
+    m.clic(x + 150, y + 162 + 44 * RIGA_ESEMPIO)    # le righe sono a 44 l'una dall'altra, la prima ha il centro a 162
     time.sleep(0.3)
-    m.clic(x + 680, y + 60)                    # "Termina processo", in fondo a destra nella barra (compare con la riga scelta)
+    m.clic(x + 684, y + 65)                    # "Termina processo", in fondo a destra nella barra (compare con la riga scelta)
     m.muovi(*PUNTO_VUOTO)
     cx, cy = s.angolo(0)
     # la barra di Esempio, sopra Attivita (e lontano dalla sua ombra)

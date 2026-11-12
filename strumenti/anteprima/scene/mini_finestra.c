@@ -1,30 +1,16 @@
-/* La mini finestra: "Informazioni" su un file, con tre righe etichetta / valore.
+/* La mini finestra delle informazioni di un file (informazioni.h), con tre righe etichetta /
+ * valore, come nel disegno ("Finestra mini - Informazioni").
  * Uso: TEMA=scuro anteprima.sh mini_finestra 2 */
 #include "uikit/uikit.h"
 
 static struct finestra_tk finestra;
-static struct contenitore colonna, righe[3];
-static struct etichetta nomi[3], valori[3];
-static struct spazio vuoti[3];
-
-static const char *etichette[3] = { "Tipo", "Dimensione", "Posizione" };
-static const char *dati[3] = { "immagine PNG", "412 KB", "Home" };
+static struct informazioni_tk informazioni;
 
 int main(void) {
-    colonna_prepara(&colonna, SPAZIO_8);
-    for (int i = 0; i < 3; i++) {
-        riga_prepara(&righe[i], SPAZIO_8);
-        etichetta_prepara(&nomi[i], etichette[i], FONT_PICCOLO_NUOVO);
-        nomi[i].colore = TESTO_SECONDARIO;
-        spazio_prepara(&vuoti[i]);
-        etichetta_prepara(&valori[i], dati[i], FONT_PICCOLO_NUOVO);
-        widget_aggiungi(&righe[i].base, &nomi[i].base);
-        widget_aggiungi(&righe[i].base, &vuoti[i].base);
-        widget_aggiungi(&righe[i].base, &valori[i].base);
-        widget_aggiungi(&colonna.base, &righe[i].base);
-    }
-    finestra_tk_prepara(&finestra, "Informazioni - foto-mare.png", &colonna.base);
-    finestra_tk_mini(&finestra);
-    finestra_tk_dimensione(&finestra, 320, 133);
+    informazioni_prepara(&finestra, &informazioni);
+    informazioni_riga(&informazioni, "Tipo immagine", "PNG");
+    informazioni_riga(&informazioni, "Dimensione", "412 KB");
+    informazioni_riga(&informazioni, "Posizione", "Home");
+    copia_testo(finestra.titolo, "Informazioni - foto-mare.png", MAX_TITOLO);
     return uikit_esegui(&finestra);
 }

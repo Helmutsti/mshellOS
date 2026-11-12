@@ -83,6 +83,7 @@
 #include "gkit/gkit_disegno.h"
 #include "stile.h"           /* con i temi (tema.h) e i materiali (materiali.h) */
 #include "elemento_file.h"   /* testo_a_capo, per il messaggio dell'avviso */
+#include "tasti.h"           /* i codici dei tasti fisici e gli ascoltatori delle scorciatoie */
 
 /* --- il widget in generale --- */
 
@@ -289,6 +290,21 @@ static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static inline void spazio_prepara(struct spazio *s) {
     *s = (struct spazio){ .base = { .tipo = &tipo_spazio, .elastico = 1 } };
+}
+
+/* Lo SPAZIO FISSO: vuoto, largo 'larghezza' (in una riga) o alto (in una colonna). Serve ad
+ * allineare: per esempio i controlli della barra degli strumenti di Files cominciano dove
+ * finisce la barra laterale. */
+struct spazio_fisso { struct widget base; int misura; };
+
+static inline void spazio_fisso_misura(struct widget *w, int *l, int *a) {
+    *l = *a = ((struct spazio_fisso *)w)->misura;
+}
+
+static const struct tipo_widget tipo_spazio_fisso = { spazio_fisso_misura, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+static inline void spazio_fisso_prepara(struct spazio_fisso *s, int misura) {
+    *s = (struct spazio_fisso){ .base = { .tipo = &tipo_spazio_fisso }, .misura = misura };
 }
 
 /* --- l'etichetta: un testo --- */
@@ -622,6 +638,7 @@ struct campo {
     int errore;                            /* bordo del fuoco + triangolo di avviso (stato di errore) */
     int piccolo;                           /* 1: la RICERCA (pillola, 180 di larghezza, altezza S) */
     int misura;                            /* MISURA_S, _M (default) o _L: altezza, margini, font */
+    int larghezza;                         /* 0: quella del disegno (280, la ricerca 180); se no questa */
     al_cambio_campo al_cambio;
     void *dati;
 };
@@ -642,7 +659,7 @@ static const struct misure_campo misure_campo[] = {
 
 static inline void campo_misura(struct widget *w, int *l, int *a) {
     struct campo *c = (struct campo *)w;
-    *l = c->piccolo ? RICERCA_LARGHEZZA_NUOVA : CAMPO_LARGHEZZA_NORMALE;   /* il campo normale di solito si allarga */
+    *l = c->larghezza ? c->larghezza : c->piccolo ? RICERCA_LARGHEZZA_NUOVA : CAMPO_LARGHEZZA_NORMALE;   /* il campo normale di solito si allarga */
     *a = misure_campo[c->misura].altezza;
 }
 
@@ -1071,6 +1088,14 @@ struct finestra_tk {
     struct chiamata_tk chiamate[MAX_CHIAMATE];   /* i "chiamami ogni tanto" */
     struct avviso *avviso;             /* l'avviso della finestra (finestra_tk_avviso), o 0 */
     int mini;                          /* 1: mini finestra (finestra_tk_mini) */
+    /* la tastiera fisica (tasti.h): chi ascolta le scorciatoie, e i modificatori premuti */
+    struct ascoltatore_tk ascoltatori[MAX_ASCOLTATORI];
+    unsigned int modificatori;         /* MOD_CTRL | MOD_MAIUSC | MOD_ALT, tenuti giu' adesso */
+    /* L'ALTRA FINESTRA dell'applicazione (una sola, per le cose secondarie: le informazioni di
+     * un file in una mini finestra), aperta con finestra_tk_apri_altra: il ciclo degli eventi
+     * di questa finestra serve anche lei. 0 se non c'e'. */
+    struct finestra_tk *altra;
+    int aperta;                        /* 1 mentre la finestra c'e' sullo schermo */
 };
 
 /* L'altezza della testata: TITOLO_ALTEZZA (40), o ALTEZZA_BARRA_MINI (28) nella mini finestra. */
@@ -1149,7 +1174,7 @@ static inline int su_comando(const struct finestra_tk *f, int chiudi, int x, int
  * e' nascosta), sotto la barra degli strumenti. */
 static inline int finestra_tk_corpo(const struct finestra_tk *f) {
     return testata_altezza(f) + TITOLO_DIVISORE +
-           (f->strumenti && !f->strumenti->nascosto ? ALTEZZA_BARRA : 0);
+           (f->strumenti && !f->strumenti->nascosto ? STRUMENTI_ALTEZZA : 0);
 }
 
 /* Il contenuto, piu' il padding e le barre; abbastanza larga per il titolo e i comandi, e
@@ -1180,7 +1205,7 @@ static inline void finestra_tk_disponi(struct widget *w) {
         f->strumenti->x = 0;
         f->strumenti->y = testata_altezza(f) + TITOLO_DIVISORE;
         f->strumenti->l = w->l;
-        f->strumenti->a = ALTEZZA_BARRA;
+        f->strumenti->a = STRUMENTI_ALTEZZA;
     }
     int corpo = finestra_tk_corpo(f);
     int margine = f->senza_margine ? 0 : finestra_padding(f);
@@ -1376,12 +1401,12 @@ static inline void uikit_ridisponi(struct finestra_tk *f) {
 
 /* --- la barra degli strumenti --- */
 
-/* LA BARRA DEGLI STRUMENTI, dal file Figma. Una riga alta ALTEZZA_BARRA (40) sotto la
+/* LA BARRA DEGLI STRUMENTI, dal file Figma. Una riga alta STRUMENTI_ALTEZZA (48) sotto la
  * testata, DENTRO la finestra: e' parte del contenuto e non ha un fondo suo (si vede il
  * vetro della finestra), larga quanto tutta la finestra (non sta nel padding del
  * contenuto), come nel Finder del Mac. Dentro, da sinistra a destra, le sue cose: controlli
- * S (32 di altezza) con TITOLO_MARGINE (4) sopra e sotto, centrati in altezza, a GAP_M (8)
- * l'una dall'altra, a STRUMENTI_MARGINE_LATI dai bordi. Una cosa 'elastica' (il percorso, o
+ * S (32 di altezza) con STRUMENTI_MARGINE_SOPRA (8) sopra e sotto, a GAP_M (8) l'una
+ * dall'altra, a STRUMENTI_MARGINE_LATI (8) dai bordi: come nelle schermate di Figma. Una cosa 'elastica' (il percorso, o
  * uno spazio) prende la larghezza che avanza.
  *
  * Un clic sullo spazio vuoto della barra trascina la finestra, come sulla testata (cosi'
@@ -1403,13 +1428,13 @@ static inline void barra_strumenti_misura(struct widget *w, int *l, int *a) {
     struct barra_strumenti *b = (struct barra_strumenti *)w;
     widget_misura(&b->riga.base, l, a);
     *l += 2 * STRUMENTI_MARGINE_LATI;
-    *a = ALTEZZA_BARRA;
+    *a = STRUMENTI_ALTEZZA;
 }
 
 static inline void barra_strumenti_disponi(struct widget *w) {
     struct barra_strumenti *b = (struct barra_strumenti *)w;
     b->riga.base.x = w->x + STRUMENTI_MARGINE_LATI;
-    b->riga.base.y = w->y + TITOLO_MARGINE;
+    b->riga.base.y = w->y + STRUMENTI_MARGINE_SOPRA;
     b->riga.base.l = w->l - 2 * STRUMENTI_MARGINE_LATI;
     b->riga.base.a = ALTEZZA_S;
 }
@@ -1614,8 +1639,9 @@ static inline void pillola_aggiungi(struct pillola *p, struct pulsante_barra *b)
     widget_aggiungi(&p->base, &b->base);
 }
 
-/* IL PERCORSO: dove si e', come nel Finder. La casetta, poi i nomi delle cartelle, dalla
- * piu' esterna a quella in cui si e', separati da una freccetta. I nomi sono in
+/* IL PERCORSO: dove si e', come nel Finder. I nomi delle cartelle, dalla piu' esterna a
+ * quella in cui si e', separati da una barra "/" (FONT_CORPO, TESTO_SECONDARIO), con
+ * PERCORSO_SPAZIO (4) prima e dopo, come nella barra di Files del file Figma. I nomi sono in
  * FONT_CORPO e TESTO_SECONDARIO, e TESTO_PRIMARIO sotto il puntatore: un clic su un nome
  * chiama al_clic con il suo numero (0 il primo). L'ultimo, la cartella in cui si e', e' in
  * FONT_CORPO_MEDIO e TESTO_PRIMARIO, e non si clicca.
@@ -1641,7 +1667,6 @@ struct percorso {
     struct widget base;
     struct nome_percorso nomi[MAX_NOMI_PERCORSO];
     int quanti;
-    int senza_casa;                    /* 1: senza la casetta (fuori dalla casa: percorso_casa) */
     al_clic_percorso al_clic;
     void *dati;
 };
@@ -1654,12 +1679,11 @@ static inline int percorso_largo(const struct percorso *p, int i) {
     return larghezza_testo(percorso_font(p, i), p->nomi[i].nome);
 }
 
-/* Lo spazio della casetta, con quello dopo di lei (0 senza la casetta). */
-static inline int percorso_inizio(const struct percorso *p) {
-    return p->senza_casa ? 0 : PERCORSO_CASA + PERCORSO_SPAZIO;
-}
+/* Il separatore tra un nome e l'altro, e quanto e' largo. */
+#define PERCORSO_SEPARATORE "/"
+static inline int percorso_separatore(void) { return larghezza_testo(FONT_CORPO, PERCORSO_SEPARATORE); }
 
-/* Al minimo: la casetta e il nome dell'ultima cartella (ma non piu' di
+/* Al minimo: il nome dell'ultima cartella (ma non piu' di
  * PERCORSO_ULTIMO_MINIMO: un nome lunghissimo si taglia, invece di spingere fuori dalla
  * barra le cose dopo di lui). Il resto viene dall'elastico. */
 #define PERCORSO_ULTIMO_MINIMO 120
@@ -1668,7 +1692,7 @@ static inline void percorso_misura(struct widget *w, int *l, int *a) {
     struct percorso *p = (struct percorso *)w;
     int ultimo = p->quanti ? percorso_largo(p, p->quanti - 1) : 0;
     if (ultimo > PERCORSO_ULTIMO_MINIMO) ultimo = PERCORSO_ULTIMO_MINIMO;
-    *l = percorso_inizio(p) + ultimo;
+    *l = ultimo;
     *a = ALTEZZA_S;
 }
 
@@ -1676,15 +1700,15 @@ static inline void percorso_misura(struct widget *w, int *l, int *a) {
  * spazio davanti: l'inizio lo comprende gia'.) */
 static inline void percorso_disponi(struct widget *w) {
     struct percorso *p = (struct percorso *)w;
-    int resta = w->l - percorso_inizio(p) + PERCORSO_SPAZIO, primo = p->quanti;
+    int resta = w->l + PERCORSO_SPAZIO, primo = p->quanti;
     for (int i = p->quanti - 1; i >= 0; i--) {
         int serve = PERCORSO_SPAZIO + percorso_largo(p, i) +
-                    (i < p->quanti - 1 ? PERCORSO_FRECCIA + PERCORSO_SPAZIO : 0);
+                    (i < p->quanti - 1 ? percorso_separatore() + PERCORSO_SPAZIO : 0);
         if (serve > resta && i < p->quanti - 1) break;   /* l'ultimo resta sempre */
         resta -= serve;
         primo = i;
     }
-    int x = w->x + percorso_inizio(p);
+    int x = w->x;
     for (int i = 0; i < p->quanti; i++) {
         struct widget *n = &p->nomi[i].base;
         n->nascosto = i < primo;
@@ -1695,20 +1719,18 @@ static inline void percorso_disponi(struct widget *w) {
         n->y = w->y;
         n->l = x + largo > fine ? fine - x : largo;      /* l'ultimo, se non ci sta, si taglia */
         n->a = w->a;
-        x += largo + PERCORSO_SPAZIO + PERCORSO_FRECCIA + PERCORSO_SPAZIO;
+        x += largo + PERCORSO_SPAZIO + percorso_separatore() + PERCORSO_SPAZIO;
     }
 }
 
-/* La casetta e le freccette; i nomi si disegnano da se'. */
+/* I separatori; i nomi si disegnano da se'. */
 static inline void percorso_disegna(struct widget *w, struct pennello *p) {
     struct percorso *pc = (struct percorso *)w;
     pennello_colore(p, TESTO_SECONDARIO);
-    if (!pc->senza_casa) icona(p, ICONA_HOUSE, PERCORSO_CASA, w->x, w->y + (w->a - PERCORSO_CASA) / 2);
     for (int i = 0; i < pc->quanti - 1; i++) {
         struct widget *n = &pc->nomi[i].base;
         if (n->nascosto) continue;
-        icona(p, ICONA_CHEVRON_RIGHT, PERCORSO_FRECCIA, n->x + n->l + PERCORSO_SPAZIO,
-              w->y + (w->a - PERCORSO_FRECCIA) / 2);
+        testo_centrato(p, FONT_CORPO, n->x + n->l + PERCORSO_SPAZIO, w->y, w->a, PERCORSO_SEPARATORE);
     }
 }
 
@@ -1746,11 +1768,6 @@ static inline void percorso_prepara(struct percorso *p, al_clic_percorso al_clic
     *p = (struct percorso){ .base = { .tipo = &tipo_percorso, .elastico = 1 },
                             .al_clic = al_clic, .dati = dati };
 }
-
-/* Con o senza la casetta davanti: la casetta dice "sei dentro la tua casa" (il primo nome
- * e' allora la casa), senza si e' altrove nel disco. Va chiamata prima di percorso_metti,
- * che rifa' il posto dei nomi. */
-static inline void percorso_casa(struct percorso *p, int casa) { p->senza_casa = !casa; }
 
 /* Cambia il percorso: 'quanti' nomi, dal piu' esterno a quello in cui si e'. Si puo'
  * chiamare anche con la finestra aperta (per esempio dopo un clic su un nome). */
@@ -2192,8 +2209,116 @@ static inline void avviso_chiudi(struct avviso *v) {
     widget_cambiato(&v->base);
 }
 
+/* --- la tastiera fisica: le scorciatoie (tasti.h) --- */
+
+/* Aggiunge un ascoltatore dei tasti fisici della finestra: lo sentira' prima di quelli
+ * aggiunti prima di lui. Di nuovo la stessa funzione con gli stessi dati: niente. */
+static inline void finestra_tk_ascolta_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati) {
+    for (int i = 0; i < MAX_ASCOLTATORI; i++)
+        if (f->ascoltatori[i].funzione == funzione && f->ascoltatori[i].dati == dati) return;
+    for (int i = 0; i < MAX_ASCOLTATORI; i++)
+        if (!f->ascoltatori[i].funzione) { f->ascoltatori[i] = (struct ascoltatore_tk){ funzione, dati }; return; }
+}
+
+static inline void finestra_tk_smetti_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati) {
+    for (int i = 0; i < MAX_ASCOLTATORI; i++)
+        if (f->ascoltatori[i].funzione == funzione && f->ascoltatori[i].dati == dati) {
+            for (int k = i; k < MAX_ASCOLTATORI - 1; k++) f->ascoltatori[k] = f->ascoltatori[k + 1];
+            f->ascoltatori[MAX_ASCOLTATORI - 1] = (struct ascoltatore_tk){ 0, 0 };
+            return;
+        }
+}
+
+/* Un tasto fisico premuto o lasciato: i modificatori si contano; un tasto premuto va agli
+ * ascoltatori, dall'ultimo al primo, finche' uno lo usa. */
+static inline void uikit_tasto_fisico(struct finestra_tk *f, unsigned int codice, int premuto) {
+    unsigned int mod = codice == TASTO_CTRL || codice == TASTO_CTRL_DX ? MOD_CTRL
+                     : codice == TASTO_MAIUSC || codice == TASTO_MAIUSC_DX ? MOD_MAIUSC
+                     : codice == TASTO_ALT ? MOD_ALT : 0;
+    if (mod) {
+        if (premuto) f->modificatori |= mod; else f->modificatori &= ~mod;
+        return;
+    }
+    if (!premuto || finestra_tk_bloccata(f)) return;
+    for (int i = MAX_ASCOLTATORI - 1; i >= 0; i--) {
+        struct ascoltatore_tk a = f->ascoltatori[i];
+        if (a.funzione && a.funzione(f, codice, f->modificatori, a.dati)) return;
+    }
+}
+
+/* --- l'altra finestra (una mini finestra per le cose secondarie) --- */
+
+static inline void finestra_tk_chiudi_altra(struct finestra_tk *f);
+
+/* Misura 'altra' (preparata come ogni finestra: finestra_tk_prepara, di solito anche
+ * finestra_tk_mini), la apre sullo schermo e la fa servire dal ciclo degli eventi di 'f'. Se
+ * c'e' gia' un'altra finestra aperta, prima la si chiude. 0 se fatto, -1 se no. */
+static inline int finestra_tk_apri_altra(struct finestra_tk *f, struct finestra_tk *altra) {
+    if (f->altra) finestra_tk_chiudi_altra(f);
+    int l, a;
+    widget_misura(&altra->base, &l, &a);
+    altra->base.x = altra->base.y = 0;
+    altra->base.l = l;
+    altra->base.a = a;
+    widget_disponi(&altra->base);
+    altra->da_chiudere = 0;
+    altra->attiva = 1;
+    if (finestra_apri_come(&altra->finestra, l, a, altra->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0)
+        return -1;
+    finestra_tasti_fisici(&altra->finestra);
+    altra->aperta = 1;
+    f->altra = altra;
+    return uikit_ridisegna(altra) ? 0 : -1;
+}
+
+/* Chiude l'altra finestra (se c'e'): sparisce dallo schermo, la memoria torna libera. */
+static inline void finestra_tk_chiudi_altra(struct finestra_tk *f) {
+    struct finestra_tk *a = f->altra;
+    if (!a) return;
+    f->altra = 0;
+    a->aperta = 0;
+    chiudi(a->finestra.collegamento);
+    if (a->finestra.immagini[0]) togli(a->finestra.immagini[0]);
+    chiudi(a->finestra.foglio);
+    a->catturato = a->sotto = a->con_fuoco = 0;
+    a->modificatori = a->pulsanti_prima = 0;
+    a->chiudi_premuto = a->riduci_premuto = a->comando_sopra = 0;
+}
+
+/* Una notizia del compositore per la finestra 'f' (la principale o l'altra). */
+static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n) {
+    if (n->tipo == PUNTATORE) {
+        uikit_puntatore(f, n->x, n->y, n->pulsanti);
+    } else if (n->tipo == USCITO) {
+        /* il puntatore non e' piu' nostro (per esempio, il compositore ha cominciato
+         * a spostare la finestra): una pressione in corso si annulla, senza scattare */
+        if (f->catturato) f->catturato->tipo->puntatore(f->catturato, -1, -1, 0);
+        f->catturato = 0;
+        f->chiudi_premuto = 0;
+        f->riduci_premuto = 0;
+        f->pulsanti_prima = 0;
+        if (f->comando_sopra) { f->comando_sopra = 0; f->da_ridisegnare = 1; }
+        uikit_sotto(f, 0);
+    } else if (n->tipo == ROTELLA) {
+        uikit_rotella(f, n->x, n->y, n->scatti_x, n->scatti_y);
+    } else if (n->tipo == TASTO_FISICO) {
+        uikit_tasto_fisico(f, n->tasto, n->premuto);
+    } else if (n->tipo == TASTO && (f->modificatori & (MOD_CTRL | MOD_ALT))) {
+        /* Ctrl+D, Alt+...: e' una scorciatoia, non un carattere da scrivere */
+    } else if (n->tipo == TASTO && finestra_tk_bloccata(f)) {
+        avviso_tasto(&f->avviso->base, n->tasto);   /* sotto un avviso bloccante: solo lui */
+    } else if (n->tipo == TASTO && f->con_fuoco) {
+        f->con_fuoco->tipo->tasto(f->con_fuoco, n->tasto);
+    } else if (n->tipo == FUOCO) {
+        f->attiva = n->fuoco;
+        if (!n->fuoco) f->modificatori = 0;    /* i tasti lasciati altrove non li sentiremo */
+        f->da_ridisegnare = 1;
+    }
+}
+
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il
- * compositore la chiude (1). */
+ * compositore la chiude (1). Serve anche l'altra finestra, se c'e' (finestra_tk_apri_altra):
+ * quando si chiude lei (la sua X), si chiude solo lei. */
 static inline int uikit_esegui(struct finestra_tk *f) {
     int l, a;
     widget_misura(&f->base, &l, &a);
@@ -2203,58 +2328,61 @@ static inline int uikit_esegui(struct finestra_tk *f) {
     widget_disponi(&f->base);
     if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);   /* aperto prima di avere una misura */
     if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
+    finestra_tasti_fisici(&f->finestra);        /* per le scorciatoie (tasti.h) */
+    f->aperta = 1;
     if (!uikit_ridisegna(f)) return 1;
 
     struct notizia n;
     for (;;) {
-        /* Con i "chiamami ogni tanto": se non c'e' niente da parte si aspetta il
-         * compositore solo fino alla prima scadenza. Scaduta, si chiama chi l'ha chiesto.
-         * Ma prima le notizie gia' arrivate: se mentre si ridisegnava e' arrivato un clic o
-         * uno scatto della rotella, si serve prima lui e poi l'animazione (come in GTK, dove
-         * l'input passa davanti ai ridisegni). Cosi' due scatti veloci restano una raffica
-         * anche quando ridisegnare costa. */
-        struct chiamata_tk *prima = uikit_prima_chiamata(f);
-        if (prima && !f->finestra.quante) {
-            int resta = (int)(prima->scadenza - tempo());
-            struct da_guardare g = { .descrittore = f->finestra.collegamento };
-            if (aspetta(&g, 1, resta > 0 ? resta : 0) == 0) {
+        /* Prima le notizie gia' arrivate e messe da parte (mentre si aspettava un'immagine
+         * libera per ridisegnare); poi si aspetta il compositore, su tutte e due le finestre,
+         * fino alla prima scadenza dei "chiamami ogni tanto". Scaduta, si chiama chi l'ha
+         * chiesto. Se mentre si ridisegnava e' arrivato un clic o uno scatto della rotella, si
+         * serve prima lui e poi l'animazione (come in GTK, dove l'input passa davanti ai
+         * ridisegni): cosi' due scatti veloci restano una raffica anche quando ridisegnare
+         * costa. */
+        struct finestra_tk *da = f->finestra.quante ? f : f->altra && f->altra->finestra.quante ? f->altra : 0;
+        if (da) {
+            finestra_notizia(&da->finestra, &n);
+        } else {
+            struct chiamata_tk *prima = uikit_prima_chiamata(f);
+            int resta = prima ? (int)(prima->scadenza - tempo()) : -1;
+            if (prima && resta < 0) resta = 0;
+            struct da_guardare g[2] = { { .descrittore = f->finestra.collegamento },
+                                        { .descrittore = f->altra ? f->altra->finestra.collegamento : -1 } };
+            int pronti = aspetta(g, f->altra ? 2 : 1, resta);
+            if (pronti == 0) {
                 uikit_chiamate_scadute(f);
                 if (f->da_chiudere) return 0;
                 if (f->da_ridisegnare && !uikit_ridisegna(f)) return 1;
                 continue;
             }
-            if (!finestra_ricevi(&f->finestra, &n)) return 1;
+            if (pronti < 0) continue;
+            da = g[0].pronto || !f->altra ? f : f->altra;
+            if (!finestra_ricevi(&da->finestra, &n)) {
+                if (da == f) return 1;
+                finestra_tk_chiudi_altra(f);           /* il compositore ha chiuso l'altra */
+                continue;
+            }
             if (finestra_di_servizio(&n)) continue;
-        } else if (!finestra_notizia(&f->finestra, &n)) {
-            return 1;
         }
-        if (n.tipo == PUNTATORE) {
-            uikit_puntatore(f, n.x, n.y, n.pulsanti);
-        } else if (n.tipo == USCITO) {
-            /* il puntatore non e' piu' nostro (per esempio, il compositore ha cominciato
-             * a spostare la finestra): una pressione in corso si annulla, senza scattare */
-            if (f->catturato) f->catturato->tipo->puntatore(f->catturato, -1, -1, 0);
-            f->catturato = 0;
-            f->chiudi_premuto = 0;
-            f->riduci_premuto = 0;
-            f->pulsanti_prima = 0;
-            if (f->comando_sopra) { f->comando_sopra = 0; f->da_ridisegnare = 1; }
-            uikit_sotto(f, 0);
-        } else if (n.tipo == ROTELLA) {
-            uikit_rotella(f, n.x, n.y, n.scatti_x, n.scatti_y);
-        } else if (n.tipo == TASTO && finestra_tk_bloccata(f)) {
-            avviso_tasto(&f->avviso->base, n.tasto);   /* sotto un avviso bloccante: solo lui */
-        } else if (n.tipo == TASTO && f->con_fuoco) {
-            f->con_fuoco->tipo->tasto(f->con_fuoco, n.tasto);
-        } else if (n.tipo == FUOCO) {
-            f->attiva = n.fuoco;
-            f->da_ridisegnare = 1;
-        }
+        uikit_consegna(da, &n);
+        if (f->altra && f->altra->da_chiudere) finestra_tk_chiudi_altra(f);
         if (f->da_chiudere) return 0;
         if (f->da_ridisegnare && !uikit_ridisegna(f)) return 1;
+        if (f->altra && f->altra->da_ridisegnare && !uikit_ridisegna(f->altra)) finestra_tk_chiudi_altra(f);
     }
 }
 
+/* I componenti che stanno ognuno nel suo file (vedi LIBRERIE.md). */
+#include "oggetti.h"          /* le icone di file e cartelle (l'"Oggetto" di Figma) */
+#include "menu.h"             /* il menu: voce, intestazione, separatore, sottomenu */
+#include "barra_laterale.h"   /* la barra laterale e le sue voci */
+#include "tabella.h"          /* la tabella: intestazioni di colonna con l'ordine, righe */
+#include "griglia.h"          /* la griglia di icone: i tile */
+#include "pannello.h"         /* il pannello chiaro incassato del contenuto (Files) */
+#include "informazioni.h"     /* il pannello delle informazioni, in una mini finestra */
+/* i componenti di Attivita' e dello Store */
 #include "paragrafo.h"
 #include "pagina.h"
 #include "schede.h"

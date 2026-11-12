@@ -38,7 +38,7 @@ CHIUDI_CONTATORE = (393, 190)   # la X di Contatore, aperta nel secondo posto
 
 # L'elenco: lo Store (760 x 600) nel secondo posto; il dettaglio con la barra degli strumenti
 RIGA_CONTATORE = (266, 289)     # la prima riga di "Le tue app"
-SVUOTA, TOGLI = (760, 315), (869, 315)   # nell'intestazione dell'app, a destra
+SVUOTA, TOGLI = (760, 323), (869, 323)   # nell'intestazione dell'app, a destra
 CONFERMA_SVUOTA = (684, 526)    # nell'avviso di UIKit: il pulsante "Svuota dati" (Annulla a sinistra)
 CONFERMA_TOGLI = (705, 516)     # nell'avviso a tre scelte: "Togli app e dati", il piu' a destra
 

@@ -15,7 +15,7 @@
  * L'ASPETTO e' quello della pagina "App - Attivita'" del file Figma, fatto con i componenti di
  * UIKit: le schede nella barra degli strumenti, i pulsanti, l'area dei contenuti chiara (la
  * pagina), la barra di utilizzo con la legenda, l'avviso del riavvio. La tabella dei processi e'
- * ancora disegnata qui: il suo componente arriva in UIKit con il lavoro su Files.
+ * quella di UIKit (tabella.h), con l'ordinamento per colonna.
  *
  * LA SPAZIATURA (la regola: un solo livello con il margine, uguale in x e in y). Processi: la
  * pagina della tabella ha 16 di margine, le righe hanno 8 di margine interno perche' hanno un
@@ -58,166 +58,67 @@ static const char *nome_stato(unsigned int stato) {
     }
 }
 
-/* --- la tabella dei processi: un widget fatto qui, per questa applicazione ---
+/* --- la tabella dei processi: la tabella di UIKit (tabella.h), con le righe "Processo" ---
  *
- * DA PASSARE A UIKIT: tabella (intestazione di colonna con la freccia dell'ordinamento, riga
- * di tabella nella variante "Processo"). I componenti li fa il lavoro su Files; finche' non
- * ci sono, la tabella e' disegnata qui, con le misure del disegno "Attivita' - Processi":
- *   - l'INTESTAZIONE, alta ALTEZZA_S (32), con i titoli in FONT_ETICHETTA e TESTO_SECONDARIO;
- *     sotto una linea di 1 pixel BORDO_SEPARATORE da bordo a bordo. (La freccia "crescente"
- *     sulla colonna Numero e il clic per ordinare arriveranno con il componente: l'elenco e'
- *     gia' in ordine di numero.)
- *   - le RIGHE, alte ALTEZZA_M (40), a SPAZIO_4 l'una dall'altra (e dalla linea), raggio
- *     RAGGIO_CONTROLLO_NUOVO, con SPAZIO_8 di margine interno ai lati (hanno un fondo: sotto il
- *     puntatore CONTROLLO_SFONDO, scelta CONTROLLO_SFONDO_SOPRA). Testo FONT_CORPO: il nome in
- *     TESTO_PRIMARIO, il resto in TESTO_SECONDARIO.
- *   - le COLONNE: Numero 96, Processo quello che avanza, Utente 120, Stato 120, Memoria 100 (a
- *     destra), a SPAZIO_24 l'una dall'altra; l'intestazione ha lo stesso margine delle righe.
- * Le righe che non ci stanno si vedono scorrendo (rotella, o la barra di scorrimento di UIKit). */
+ * Le colonne del disegno "Attivita' - Processi": Numero 96, Processo (prende quello che avanza,
+ * in TESTO_PRIMARIO), Utente 120, Stato 120, Memoria 100 (a destra). All'inizio e' ordinata per
+ * Numero, crescente (la freccia in su sull'intestazione); un clic su un'intestazione ordina per
+ * quella colonna, un altro clic gira il verso. Un clic su una riga la sceglie. */
 
-#define TABELLA_TESTATA   ALTEZZA_S
-#define TABELLA_LINEA     1
-#define TABELLA_RIGA      ALTEZZA_M
-#define TABELLA_TRA       SPAZIO_4
-#define TABELLA_PASSO     (TABELLA_RIGA + TABELLA_TRA)
-#define TABELLA_LATI      SPAZIO_8                  /* il margine interno delle righe */
-#define TABELLA_COLONNE_TRA SPAZIO_24
-#define COLONNE           5
-
-struct tabella {
-    struct widget base;
-    struct info_processo righe[MAX_PROCESSI];
-    int quante;
-    int scelto;                        /* il numero del processo scelto, o -1 */
-    int sotto;                         /* la riga sotto il puntatore (indice), o -1 */
-    void (*al_cambio)(struct tabella *t);
-    struct barra_scorrimento barra;
+static const struct colonna_tk colonne[] = {
+    { "Numero", 96, 0, 0, 1 },
+    { "Processo", 0, 0, 1, 1 },
+    { "Utente", 120, 0, 0, 1 },
+    { "Stato", 120, 0, 0, 1 },
+    { "Memoria", 100, 1, 0, 1 },
 };
+enum { COL_NUMERO, COL_PROCESSO, COL_UTENTE, COL_STATO, COL_MEMORIA };
 
-#define RIGHE_SOPRA (TABELLA_TESTATA + TABELLA_LINEA)
+static struct tabella_tk tabella;
+static struct info_processo processi[MAX_PROCESSI];
+static int quanti_processi;
+static int scelto = -1;                /* il numero del processo scelto, o -1 */
 
-static int tabella_vista(const struct widget *w) { return w->a - RIGHE_SOPRA; }
-
-static void tabella_misure(struct tabella *t) {
-    scorrimento_misure(&t->barra.scorrimento, t->quante * TABELLA_PASSO, tabella_vista(&t->base));
+static int confronta_testi(const char *a, const char *b) {
+    while (*a && *a == *b) { a++; b++; }
+    return (unsigned char)*a - (unsigned char)*b;
 }
 
-static const char *const titoli[COLONNE] = { "Numero", "Processo", "Utente", "Stato", "Memoria" };
-static const int larghezze[COLONNE] = { 96, 0, 120, 120, 100 };   /* 0: quello che avanza */
-
-static void cella(const struct widget *w, int i, int *x, int *l) {
-    int inizio = w->x + TABELLA_LATI, fine = w->x + w->l - TABELLA_LATI;
-    int fisse = 0;
-    for (int k = 0; k < COLONNE; k++) fisse += larghezze[k];
-    int resto = fine - inizio - fisse - (COLONNE - 1) * TABELLA_COLONNE_TRA;
-    *x = inizio;
-    for (int k = 0; k < i; k++) *x += (larghezze[k] ? larghezze[k] : resto) + TABELLA_COLONNE_TRA;
-    *l = larghezze[i] ? larghezze[i] : resto;
-}
-
-static void testo_cella(struct pennello *p, const struct widget *w, int i, const struct font *f,
-                        int y, int a, const char *s) {
-    int x, l;
-    cella(w, i, &x, &l);
-    pennello_salva(p);
-    pennello_ritaglia(p, x, y, l, a);
-    int tx = i == COLONNE - 1 ? x + l - larghezza_testo(f, s) : x;
-    testo_centrato(p, f, tx, y, a, s);
-    pennello_ripristina(p);
-}
-
-static void tabella_misura(struct widget *w, int *l, int *a) {
-    (void)w;
-    *l = 0;
-    *a = RIGHE_SOPRA + 4 * TABELLA_PASSO;
-}
-
-static void tabella_disegna(struct widget *w, struct pennello *p) {
-    struct tabella *t = (struct tabella *)w;
-    pennello_colore(p, TESTO_SECONDARIO);
-    for (int i = 0; i < COLONNE; i++)
-        testo_cella(p, w, i, FONT_ETICHETTA, w->y, TABELLA_TESTATA, titoli[i]);
-    pennello_colore(p, BORDO_SEPARATORE);
-    riempi_rettangolo(p, w->x, w->y + TABELLA_TESTATA, w->l, TABELLA_LINEA);
-
-    pennello_salva(p);
-    pennello_ritaglia(p, w->x, w->y + RIGHE_SOPRA, w->l, tabella_vista(w));
-    int scorso = t->barra.scorrimento.posizione;
-    for (int r = 0; r < t->quante; r++) {
-        const struct info_processo *pr = &t->righe[r];
-        int y = w->y + RIGHE_SOPRA + TABELLA_TRA + r * TABELLA_PASSO - scorso;
-        if (y + TABELLA_RIGA <= w->y + RIGHE_SOPRA || y >= w->y + w->a) continue;
-        int scelta = pr->numero == t->scelto;
-        if (scelta || r == t->sotto) {
-            pennello_colore(p, scelta ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
-            riempi_tondo(p, w->x, y, w->l, TABELLA_RIGA, RAGGIO_CONTROLLO_NUOVO);
-        }
-        char numero[12], memoria[24];
-        metti_numero(numero, (unsigned int)pr->numero);
-        testo_byte(memoria, pr->memoria);
-        pennello_colore(p, TESTO_SECONDARIO);
-        testo_cella(p, w, 0, FONT_CORPO, y, TABELLA_RIGA, numero);
-        testo_cella(p, w, 2, FONT_CORPO, y, TABELLA_RIGA, nome_utente(pr->uid));
-        testo_cella(p, w, 3, FONT_CORPO, y, TABELLA_RIGA, nome_stato(pr->stato));
-        testo_cella(p, w, 4, FONT_CORPO, y, TABELLA_RIGA, memoria);
-        pennello_colore(p, TESTO_PRIMARIO);
-        testo_cella(p, w, 1, FONT_CORPO, y, TABELLA_RIGA, pr->nome);
+static int confronta(const struct info_processo *a, const struct info_processo *b) {
+    int c;
+    switch (tabella.ordinata) {
+    case COL_PROCESSO: c = confronta_testi(a->nome, b->nome); break;
+    case COL_UTENTE:   c = confronta_testi(nome_utente(a->uid), nome_utente(b->uid)); break;
+    case COL_STATO:    c = confronta_testi(nome_stato(a->stato), nome_stato(b->stato)); break;
+    case COL_MEMORIA:  c = a->memoria < b->memoria ? -1 : a->memoria > b->memoria; break;
+    default:           c = 0; break;
     }
-    pennello_ripristina(p);
+    if (!c) c = a->numero - b->numero;            /* a pari valore, per numero */
+    return tabella.verso == ORDINE_DECRESCENTE ? -c : c;
 }
 
-static int tabella_riga_in(const struct tabella *t, int y) {
-    const struct widget *w = &t->base;
-    if (y < w->y + RIGHE_SOPRA || y >= w->y + RIGHE_SOPRA + tabella_vista(w)) return -1;
-    int nel_contenuto = y - w->y - RIGHE_SOPRA - TABELLA_TRA + t->barra.scorrimento.posizione;
-    if (nel_contenuto < 0) return -1;
-    int r = nel_contenuto / TABELLA_PASSO;
-    if (r >= t->quante || nel_contenuto % TABELLA_PASSO >= TABELLA_RIGA) return -1;
-    return r;
+/* In ordine (pochi processi: per inserimento), e la riga scelta segue il suo processo. */
+static void ordina(void) {
+    for (int i = 1; i < quanti_processi; i++) {
+        struct info_processo p = processi[i];
+        int j = i;
+        while (j > 0 && confronta(&processi[j - 1], &p) > 0) { processi[j] = processi[j - 1]; j--; }
+        processi[j] = p;
+    }
+    int riga = -1;
+    for (int i = 0; i < quanti_processi; i++) if (processi[i].numero == scelto) riga = i;
+    tabella_tk_scegli(&tabella, riga);
 }
 
-static void tabella_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct tabella *t = (struct tabella *)w;
-    (void)x;
-    if (!(pulsanti & PULSANTE_SINISTRO)) return;
-    int r = tabella_riga_in(t, y);
-    if (r < 0 || t->righe[r].numero == t->scelto) return;
-    t->scelto = t->righe[r].numero;
-    widget_cambiato(w);
-    if (t->al_cambio) t->al_cambio(t);
+static void dati_riga(struct tabella_tk *t, int k, struct riga_tk *r, void *dati) {
+    (void)t; (void)dati;
+    const struct info_processo *pr = &processi[k];
+    metti_numero(r->testi[COL_NUMERO], (unsigned int)pr->numero);
+    copia_testo(r->testi[COL_PROCESSO], pr->nome, MAX_CELLA);
+    copia_testo(r->testi[COL_UTENTE], nome_utente(pr->uid), MAX_CELLA);
+    copia_testo(r->testi[COL_STATO], nome_stato(pr->stato), MAX_CELLA);
+    testo_byte(r->testi[COL_MEMORIA], pr->memoria);
 }
-
-static void tabella_movimento(struct widget *w, int x, int y) {
-    struct tabella *t = (struct tabella *)w;
-    (void)x;
-    int r = tabella_riga_in(t, y);
-    if (r == t->sotto) return;
-    t->sotto = r;
-    widget_cambiato(w);
-}
-
-static void tabella_sopra_cambiato(struct widget *w) {
-    struct tabella *t = (struct tabella *)w;
-    if (!w->sopra && t->sotto >= 0) { t->sotto = -1; widget_cambiato(w); }
-}
-
-static void tabella_disponi(struct widget *w) {
-    struct tabella *t = (struct tabella *)w;
-    barra_scorrimento_posto(&t->barra, w->x, w->y + RIGHE_SOPRA, w->l, tabella_vista(w));
-    tabella_misure(t);
-}
-
-static void tabella_rotella(struct widget *w, int sx, int sy) {
-    struct tabella *t = (struct tabella *)w;
-    (void)sx;
-    barra_scorrimento_rotella(&t->barra, sy);
-    if (t->sotto >= 0) { t->sotto = -1; widget_cambiato(w); }
-}
-
-static const struct tipo_widget tipo_tabella = {
-    tabella_misura, tabella_disponi, tabella_disegna, tabella_puntatore, 0, tabella_rotella,
-    tabella_sopra_cambiato, tabella_movimento, 0
-};
 
 /* --- le pagine Memoria e Disco: il riepilogo, la barra di utilizzo e la legenda di UIKit --- */
 
@@ -320,7 +221,6 @@ static struct pagina area;                    /* l'area dei contenuti, chiara */
 static struct pagina pagina_tabella, piede;
 static struct contenitore riga_piede;
 static struct paragrafo messaggio, riassunto_processi;
-static struct tabella tabella;
 static struct pagina_grafico memoria, disco;
 
 enum { SCHEDA_PROCESSI, SCHEDA_MEMORIA, SCHEDA_DISCO };
@@ -335,8 +235,8 @@ static int si_puo_terminare(const struct info_processo *pr) {
 }
 
 static const struct info_processo *processo_scelto(void) {
-    for (int i = 0; i < tabella.quante; i++)
-        if (tabella.righe[i].numero == tabella.scelto) return &tabella.righe[i];
+    for (int i = 0; i < quanti_processi; i++)
+        if (processi[i].numero == scelto) return &processi[i];
     return 0;
 }
 
@@ -361,9 +261,9 @@ static void aggiorna_azioni(void) {
 /* Sotto la tabella: "8 processi \xFA 34,6 MB in uso" (\xFA e' il punto a mezza altezza). */
 static void aggiorna_riassunto_processi(void) {
     unsigned long long in_uso = 0;
-    for (int i = 0; i < tabella.quante; i++) in_uso += tabella.righe[i].memoria;
-    char testo[MAX_TESTO_WIDGET], *d = metti_numero(testo, (unsigned int)tabella.quante);
-    d = metti_testo(d, tabella.quante == 1 ? " processo \xFA " : " processi \xFA ");
+    for (int i = 0; i < quanti_processi; i++) in_uso += processi[i].memoria;
+    char testo[MAX_TESTO_WIDGET], *d = metti_numero(testo, (unsigned int)quanti_processi);
+    d = metti_testo(d, quanti_processi == 1 ? " processo \xFA " : " processi \xFA ");
     d = testo_byte(d, in_uso);
     metti_testo(d, " in uso");
     int prima = larghezza_testo(riassunto_processi.font, riassunto_processi.testo);
@@ -376,24 +276,25 @@ static void scrivi_messaggio(const char *testo) { paragrafo_testo(&messaggio, te
 /* Rilegge processi e memoria dal kernel (ogni secondo). */
 static void aggiorna(struct finestra_tk *f, void *dati) {
     (void)f; (void)dati;
-    int n = elenco_processi(tabella.righe, MAX_PROCESSI);
-    tabella.quante = n < 0 ? 0 : n;
-    tabella_misure(&tabella);
-    if (tabella.sotto >= tabella.quante) tabella.sotto = -1;
-    for (int i = 0; i < tabella.quante; i++)
-        if (tabella.righe[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)tabella.righe[i].uid;
-    if (!processo_scelto()) tabella.scelto = -1;   /* e' finito: non e' piu' scelto */
+    int n = elenco_processi(processi, MAX_PROCESSI);
+    quanti_processi = n < 0 ? 0 : n;
+    for (int i = 0; i < quanti_processi; i++)
+        if (processi[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)processi[i].uid;
+    if (!processo_scelto()) scelto = -1;           /* e' finito: non e' piu' scelto */
+    int sopra = tabella.sopra;
+    tabella_tk_aggiorna(&tabella, quanti_processi);
+    tabella.sopra = sopra < quanti_processi ? sopra : -1;   /* la riga sotto il puntatore resta accesa */
+    ordina();
     aggiorna_azioni();
-    widget_cambiato(&tabella.base);
     aggiorna_riassunto_processi();
 
     /* la memoria: quello che sanno i processi, la condivisa, la libera; il resto e' del kernel */
     struct info_memoria m;
     if (stato_memoria(&m) < 0) return;
     unsigned long long sistema = 0, applicazioni = 0;
-    for (int i = 0; i < tabella.quante; i++) {
-        if (tabella.righe[i].uid == UID_SISTEMA) sistema += tabella.righe[i].memoria;
-        else applicazioni += tabella.righe[i].memoria;
+    for (int i = 0; i < quanti_processi; i++) {
+        if (processi[i].uid == UID_SISTEMA) sistema += processi[i].memoria;
+        else applicazioni += processi[i].memoria;
     }
     unsigned long long contati = m.libera + m.condivisa + sistema + applicazioni;
     struct grafico *g = &memoria.grafico;
@@ -441,16 +342,25 @@ static void aggiorna_disco(struct finestra_tk *f, void *dati) {
     pagina_grafico_cambiata(&disco);
 }
 
-static void scelta_cambiata(struct tabella *t) {
-    (void)t;
+/* Un clic su una riga la sceglie (sul vuoto, o col tasto destro, non cambia niente). */
+static void al_clic_tabella_processi(struct tabella_tk *t, int k, int come, int x, int y, void *dati) {
+    (void)x; (void)y; (void)dati;
+    if (k < 0 || come == CLIC_DESTRO) return;
+    scelto = processi[k].numero;
+    tabella_tk_scegli(t, k);
     scrivi_messaggio("");
     aggiorna_azioni();
 }
 
+static void al_ordine_processi(struct tabella_tk *t, void *dati) {
+    (void)t; (void)dati;
+    ordina();
+}
+
 static void premi_termina(struct pulsante *b, void *dati) {
     (void)b; (void)dati;
-    if (tabella.scelto < 0) return;
-    if (termina_processo(tabella.scelto) < 0) {
+    if (scelto < 0) return;
+    if (termina_processo(scelto) < 0) {
         scrivi_messaggio("Questo processo non si pu\x95 terminare");
         return;
     }
@@ -474,7 +384,7 @@ static void premi_riavvia(struct pulsante *b, void *dati) {
     (void)b; (void)dati;
     const struct info_processo *pr = processo_scelto();
     if (!pr) return;
-    da_riavviare = tabella.scelto;
+    da_riavviare = scelto;
     copia_testo(id_da_riavviare, pr->nome, sizeof id_da_riavviare);
     char titolo[MAX_TESTO_WIDGET];
     char *d = metti_testo(titolo, "Riavviare \"");
@@ -520,10 +430,11 @@ int main(void) {
     pagina_prepara(&area, SPAZIO_0, SPAZIO_0, SPAZIO_0, SPAZIO_0);
     area.fondo = 1;
     pagina_prepara(&pagina_tabella, SPAZIO_0, SPAZIO_16, SPAZIO_16, SPAZIO_0);
-    tabella = (struct tabella){ .base = { .tipo = &tipo_tabella, .elastico = 1, .largo = 1 },
-                                .scelto = -1, .sotto = -1, .al_cambio = scelta_cambiata };
-    barra_scorrimento_prepara(&tabella.barra);
-    widget_aggiungi(&tabella.base, &tabella.barra.base);
+    tabella_tk_prepara(&tabella, colonne, (int)(sizeof colonne / sizeof colonne[0]), dati_riga,
+                       al_clic_tabella_processi, 0);
+    tabella.al_ordine = al_ordine_processi;
+    tabella.ordinata = COL_NUMERO;
+    tabella.verso = ORDINE_CRESCENTE;
     pagina_aggiungi(&pagina_tabella, &tabella.base);
 
     pagina_prepara(&piede, SPAZIO_0, SPAZIO_24, SPAZIO_16, SPAZIO_24);
