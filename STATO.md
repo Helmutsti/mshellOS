@@ -379,30 +379,61 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
    l'ordine nel vassoio, il pulsante App premuto mentre il vassoio è aperto, quali app sono
    fissate (oggi quelle del sistema).
 
-## 9. Da fare (in ordine di importanza)
+## 9. Da fare
 
-1. **Avvio su un PC vero** da chiavetta USB o da disco. Il file UKI è pronto; manca la
-   firma per Secure Boot.
-2. **Caricare i moduli del kernel in base all'hardware trovato** (modalias), invece di un
-   elenco fisso.
-3. **Firmware**: con `NUCLEO=lts` mettere in `/system/firmware` solo quello che serve.
-4. **Il servizio eventi**: cosa succede se si blocca o si chiude (oggi non è gestito).
-5. **Libreria condivisa** in `/system/lib`.
-6. **Terminale** (vedi le decisioni) e la scelta di shell e comandi.
-7. **Visore di immagini JPG/PNG**: stb_image c'è già (solo PNG, per le icone delle app); per il
-   visore basta togliere `STBI_ONLY_PNG` in `esterni/stb/stb_image.c`.
-8. **Pulsante a griglia nel launcher** (rimandato).
-9. **Isolamento delle app** con namespaces, cgroups e seccomp di Linux (dal progetto di prima).
-10. **Internet** (più avanti).
-11. **Sistema in sola lettura come immagine erofs + dm-verity, con aggiornamenti A/B** (futuro).
-12. **Prove più veloci sul PC Windows** con l'accelerazione hardware (WHPX, vedi la sezione 3).
-13. ~~**Definire meglio il confine tra libreria grafica che parla con il composer e il toolkit.**~~
-    Fatto: GKit e UIKit, vedi `LIBRERIE.md`.
-14. **Integrazione a pannelli.**
-15. **Ragionare sulla title bar.**
-16. **Spostare tutte le risorse su disco** (font, icone, immagini), invece di compilarle dentro i
-    programmi. Fino ad allora le icone SVG dei pacchetti non si disegnano (lo Store mostra un
-    segnaposto) e la scelta della libreria per gli SVG è rimandata.
+Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
+persona sono nella sezione 8.
+
+**In corso**
+- I tasti speciali (Ctrl, Maiusc, Alt, Cmd) non arrivano alle app: Doom non funziona. Anche Esc
+  non chiude le domande di conferma (avviso di UIKit).
+- Spostare le risorse su disco (caratteri, icone, immagini) in `/system/resources`, invece di
+  compilarle dentro ogni programma.
+
+**App e interfaccia**
+1. **Impostazioni** da rifare da zero sul disegno Figma: scelta del tema Chiaro/Scuro (scrive il
+   file delle preferenze; i servizi già accesi devono accorgersene), pagina dei permessi.
+2. **Visore di immagini JPG/PNG** (rimandato): serve il disegno in Figma e la regola di come Files
+   sceglie l'app che apre un file (tipi di file nel manifesto, app predefinita...). stb_image c'è
+   già: basta togliere `STBI_ONLY_PNG` in `esterni/stb/stb_image.c`.
+3. **Store**: le icone delle app (oggi un quadrato) leggendole dai pacchetti; "Installa da file",
+   la ricerca degli aggiornamenti.
+4. **La scrivania legge le app solo all'avvio**: un'app installata o tolta compare o sparisce solo
+   quando riparte.
+5. **La conferma di eliminazione in Files** non è disegnata in Figma (testo scelto dall'agente).
+6. **Pezzi della libreria che mancano**: interruttore, menu a tendina, suggerimento al passaggio
+   del puntatore, barra di scorrimento orizzontale, gruppo di azioni, forme del puntatore
+   (collegamento, testo, non disponibile, attesa), testo con spaziatura delle lettere.
+7. **Togliere la vecchia grafica** (vetro scuro, Inter) da codice e Figma.
+8. **Controllo sulla lunghezza** del percorso del programma di un'app (`MAX_PERCORSO_PROGRAMMA`
+   contro `MAX_ID`): un controllo in compilazione, se la persona lo vuole.
+
+**Prove**
+9. Rifare le immagini di confronto vecchie (Files, Attività, scrivania) dopo averle guardate.
+10. La prova `scorrimento` fallisce ("la barra non compare"), anche prima degli ultimi lavori.
+11. La prova `attivita` nella sandbox non può controllare i 2 GB (vede la memoria del PC).
+
+**Regole delle app** (APPLICAZIONI.md)
+12. Permessi chiesti al primo avvio e rivedibili in Impostazioni; chiavi (un canale per servizio).
+13. **Isolamento delle app** con namespaces, cgroups e seccomp di Linux.
+14. Firme e registro con scadenze; versione minima del sistema; tipi di file che un'app apre;
+    ruoli; moduli aggiuntivi.
+
+**Sistema**
+15. **Avvio su un PC vero** da chiavetta USB o da disco. Il file UKI è pronto; manca la firma per
+    Secure Boot.
+16. **Caricare i moduli del kernel in base all'hardware trovato** (modalias).
+17. **Firmware**: con `NUCLEO=lts` mettere in `/system/firmware` solo quello che serve.
+18. **Il servizio eventi**: cosa succede se si blocca o si chiude.
+19. **Libreria condivisa** in `/system/lib`.
+20. **Terminale** e la scelta di shell e comandi.
+21. **Internet**.
+22. **Sistema in sola lettura** come immagine erofs + dm-verity, con aggiornamenti A/B.
+23. **Prove più veloci su Windows**: accelerazione WHPX; con `-smp 4` QEMU su Windows si blocca
+    con la finestra (le prove senza finestra usano già 4 processori).
+24. **Integrazione a pannelli**; **ragionare sulla barra del titolo**; pulsante a griglia nel
+    launcher (rimandato).
+25. **ARM**: alla fine, tutte le prove sul Mac (sezione 10).
 
 Non servono più: priorità e tempo reale (li dà Linux); la chiamata "chi sono io" (su Linux
 c'è `getuid`).
