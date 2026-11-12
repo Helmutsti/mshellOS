@@ -17,6 +17,7 @@
  * "Riga di tabella" e "Intestazione di colonna" del file Figma; la barra e la legenda la
  * pagina "Disegno - Attivita'" (una barra sottile in scala di grigi, pallini di 8). */
 #include "uikit/uikit.h"
+#include "launcher.h"     /* Riavvia: riaprire l'app */
 
 #define MAX_PROCESSI 64
 
@@ -458,7 +459,10 @@ static unsigned long long peso_cartella(char *percorso, int lungo, int profondit
 static struct finestra_tk finestra;
 static struct barra_strumenti strumenti;
 static struct pillola schede;
-static struct pulsante_barra scheda_processi, scheda_memoria, scheda_disco, pulsante_termina;
+static struct pulsante_barra scheda_processi, scheda_memoria, scheda_disco, pulsante_termina, pulsante_riavvia;
+static struct avviso avviso_riavvia;
+static char id_da_riavviare[MAX_NOME_FILE];   /* l'app da riavviare (il nome del processo e' il suo id) */
+static int da_riavviare = -1;                 /* e il suo processo */
 static struct spazio dopo_schede;
 static struct contenitore colonna, pagina_processi, piede;
 static struct etichetta messaggio, riassunto_processi;
@@ -486,6 +490,17 @@ static void aggiorna_termina(void) {
         if (tabella.righe[i].numero == tabella.scelto) si_puo = si_puo_terminare(&tabella.righe[i]);
     if (pulsante_termina.base.disabilitato == !si_puo) return;   /* niente di nuovo */
     widget_disabilita(&pulsante_termina.base, !si_puo);
+}
+
+/* "Riavvia" (accanto alla X) vale solo per le app: i processi dell'utente "applicazioni", il
+ * cui nome e' l'id dell'app. Si accende con le stesse regole della X. */
+static void aggiorna_riavvia(void) {
+    int si_puo = 0;
+    for (int i = 0; i < tabella.quante; i++)
+        if (tabella.righe[i].numero == tabella.scelto)
+            si_puo = si_puo_terminare(&tabella.righe[i]) && tabella.righe[i].uid == UID_APPLICAZIONI;
+    if (pulsante_riavvia.base.disabilitato == !si_puo) return;
+    widget_disabilita(&pulsante_riavvia.base, !si_puo);
 }
 
 /* Sotto la tabella: "8 processi \xFA 34,6 MB in uso" (\xFA e' il punto a mezza
@@ -518,6 +533,7 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     for (int i = 0; i < tabella.quante; i++)
         if (tabella.righe[i].numero == tabella.scelto) trovato = 1;
     if (!trovato) tabella.scelto = -1;
+    aggiorna_riavvia();
     aggiorna_termina();                               /* anche il suo stato puo' cambiare */
     widget_cambiato(&tabella.base);
     aggiorna_riassunto_processi();
@@ -592,6 +608,7 @@ static void scelta_cambiata(struct tabella *t) {
     (void)t;
     etichetta_testo(&messaggio, "");
     aggiorna_termina();
+    aggiorna_riavvia();
 }
 
 static void premi_termina(struct pulsante_barra *b, void *dati) {
@@ -605,6 +622,34 @@ static void premi_termina(struct pulsante_barra *b, void *dati) {
     aggiorna(&finestra, 0);
 }
 
+/* Riavvia: l'avviso (bloccante) chiede conferma; se si conferma, si termina il processo e si
+ * apre di nuovo la stessa app con il launcher. */
+static void risposta_riavvia(struct avviso *a, int scelta, void *dati) {
+    (void)a; (void)dati;
+    if (scelta != AVVISO_CONFERMA || da_riavviare < 0) return;
+    int chiuso = termina_processo(da_riavviare) == 0;
+    if (!chiuso) etichetta_testo(&messaggio, "Questo processo non si pu\x95 riavviare");
+    else if (apri_applicazione(id_da_riavviare) < 0) etichetta_testo(&messaggio, "Non si riesce a riaprire l'app");
+    else etichetta_testo(&messaggio, "");
+    aggiorna(&finestra, 0);
+}
+
+static void premi_riavvia(struct pulsante_barra *b, void *dati) {
+    (void)b; (void)dati;
+    for (int i = 0; i < tabella.quante; i++) {
+        if (tabella.righe[i].numero != tabella.scelto) continue;
+        da_riavviare = tabella.scelto;
+        copia_testo(id_da_riavviare, tabella.righe[i].nome, sizeof id_da_riavviare);
+        char titolo[MAX_TESTO_WIDGET];
+        char *d = metti_testo(titolo, "Riavviare \"");
+        d = metti_testo(d, id_da_riavviare);
+        metti_testo(d, "\"?");
+        copia_testo(avviso_riavvia.titolo, titolo, MAX_TESTO_WIDGET);
+        avviso_apri(&avviso_riavvia);
+        return;
+    }
+}
+
 /* Le schede: si vede la pagina di quella scelta (la pillola la accende da sola). La X
  * per terminare c'e' solo con i processi; i conti del disco si fanno solo mentre lo si
  * guarda. */
@@ -615,6 +660,7 @@ static void mostra_pagina(struct pulsante_barra *b, void *dati) {
     widget_nascondi(&memoria.colonna.base, b != &scheda_memoria);
     widget_nascondi(&disco.colonna.base, !su_disco);
     widget_nascondi(&pulsante_termina.base, !processi);
+    widget_nascondi(&pulsante_riavvia.base, !processi);
     if (su_disco) aggiorna_disco(&finestra, 0);
     finestra_tk_ogni(&finestra, su_disco ? OGNI_DISCO : 0, aggiorna_disco, 0);
     uikit_ridisponi(&finestra);
@@ -635,8 +681,11 @@ int main(void) {
     spazio_prepara(&dopo_schede);
     pulsante_barra_prepara(&pulsante_termina, ICONA_X, premi_termina, 0);
     pulsante_termina.base.disabilitato = 1;
+    pulsante_barra_prepara(&pulsante_riavvia, ICONA_ROTATE_CCW, premi_riavvia, 0);
+    pulsante_riavvia.base.disabilitato = 1;
     barra_strumenti_aggiungi(&strumenti, &schede.base);
     barra_strumenti_aggiungi(&strumenti, &dopo_schede.base);
+    barra_strumenti_aggiungi(&strumenti, &pulsante_riavvia.base);
     barra_strumenti_aggiungi(&strumenti, &pulsante_termina.base);
 
     colonna_prepara(&colonna, SPAZIO_0);
@@ -670,6 +719,10 @@ int main(void) {
     finestra_tk_prepara(&finestra, "Attivit\x85", &colonna.base);
     finestra_tk_barra(&finestra, &strumenti.base);
     finestra_tk_dimensione(&finestra, 640, 460);
+    avviso_prepara(&avviso_riavvia, "Riavviare?",
+                   "Il processo viene chiuso e aperto di nuovo. I dati non salvati andranno persi.",
+                   "Riavvia", PERICOLO, 1, risposta_riavvia, 0);
+    finestra_tk_avviso(&finestra, &avviso_riavvia);
     aggiorna(&finestra, 0);
     finestra_tk_ogni(&finestra, 1000, aggiorna, 0);
     return uikit_esegui(&finestra);
