@@ -64,6 +64,29 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
   `-accel whpx` a QEMU. Da decidere.
 - La spiegazione completa delle prove è in `test/LEGGIMI.md`.
 
+**La sandbox: prove in pochi secondi, senza QEMU** (solo PC, `strumenti/sandbox/`). I programmi
+veri di mshell girano in un container Docker, compilati come in `build.sh`; cambiano solo lo
+schermo (un file in memoria al posto del DRM) e il servizio eventi (mouse e tastiera arrivano
+da una presa TCP, tradotti dallo stesso codice di `eventi.c`). Serve solo Docker.
+
+```sh
+uv run strumenti/sandbox/sandbox.py foto files                  # apre Files e salva un PNG (~2 s)
+uv run strumenti/sandbox/sandbox.py foto attivita --tema scuro  # un'app, con il tema scuro
+uv run strumenti/sandbox/sandbox.py prova applicazioni tastiera # prove di test/prove, così come sono
+uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo ciò che è cambiato
+```
+
+- Se un sorgente è cambiato, `foto` e `prova` ricompilano da sole (pochi secondi; la prima
+  volta prepara gli attrezzi con i pacchetti di `build/scarico`).
+- Per i programmi in Python c'è la classe `Sandbox`, con gli stessi comandi di `test/qemu.py`
+  (clic, tasti, rotella, foto, aspetta che lo schermo sia fermo) più `apri("files")`.
+- Le foto sono uguali a quelle di QEMU pixel per pixel (provato: scrivania, Files, Attività),
+  tranne l'ora e i dati che cambiano da soli (numeri dei processi, memoria, disco).
+- Limiti: l'orologio è quello vero (le date dei file della casa si spostano a "ieri, 18:02");
+  la memoria e il disco sono quelli del computer (la prova `attivita` sul totale della
+  memoria non vale); nella radice ci sono in più `etc`, `.dockerenv` e `.sandbox`; la prova
+  `avvio` (kernel, moduli, USB) non ha senso qui.
+
 ## 4. Com'è fatto
 
 **L'accensione, passo per passo**
@@ -121,6 +144,7 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
 | `file/` | quello che finisce nella casa della persona (`/data/users/1000/home`) |
 | `strumenti/grafica/` | genera font e icone (anche dagli SVG esportati da Figma) |
 | `strumenti/anteprima/` | disegna widget e finestre in PNG sul Mac, senza Docker né QEMU (vedi la sezione 6b) |
+| `strumenti/sandbox/` | mshell vero in Docker, senza QEMU, per foto e prove veloci (vedi la sezione 3) |
 | `test/` | le prove automatiche e le foto di riferimento |
 | `build.sh`, `run.sh`, `run.ps1` | compilare e avviare |
 
