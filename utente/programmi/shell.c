@@ -9,7 +9,7 @@
  * Sa fare solo muoversi tra le cartelle e guardarle:
  *     pwd           la cartella in cui siamo
  *     cd [cartella] ci si sposta ("cd" da solo: la radice, "cd .." sale)
- *     ls [-l] [percorso]   cosa c'e' dentro; -l: tipo, permessi, proprietario, misura, data
+ *     ls [-l] [percorso]   cosa c'e' dentro; -l: tipo, permessi, proprietario, misura
  *     help          l'elenco dei comandi
  *     exit          finisce (init la rifa' partire)
  *
@@ -25,6 +25,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "libreria.h"
@@ -77,30 +78,6 @@ static void dici_numero(unsigned long long n, int larghezza) {
     dici(fuori);
 }
 
-static void dici_due_cifre(unsigned int n) {
-    char c[3] = { (char)('0' + n / 10 % 10), (char)('0' + n % 10), 0 };
-    dici(c);
-}
-
-/* secondi dal 1/1/1970 -> "AAAA-MM-GG HH:MM" (l'ora e' quella dell'orologio del PC) */
-static void dici_data(long long t) {
-    long long giorni = t / 86400, resto = t % 86400;
-    if (resto < 0) { resto += 86400; giorni--; }
-    long long z = giorni + 719468;                    /* giorni dal 0000-03-01 */
-    long long era = (z >= 0 ? z : z - 146096) / 146097;
-    long long doe = z - era * 146097;
-    long long yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    long long doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    long long mp = (5 * doy + 2) / 153;
-    unsigned int g = (unsigned int)(doy - (153 * mp + 2) / 5 + 1);
-    unsigned int m = (unsigned int)(mp < 10 ? mp + 3 : mp - 9);
-    long long anno = yoe + era * 400 + (m <= 2);
-    dici_numero((unsigned long long)anno, 0);
-    dici("-"); dici_due_cifre(m); dici("-"); dici_due_cifre(g); dici(" ");
-    dici_due_cifre((unsigned int)(resto / 3600)); dici(":");
-    dici_due_cifre((unsigned int)(resto % 3600 / 60));
-}
-
 static const char *errore_in_parole(int e, const char *non_trovato) {
     switch (e) {
     case ERRORE_NON_TROVATO:  return non_trovato;
@@ -124,7 +101,7 @@ static void errore(const char *comando, const char *percorso, int e) {
     sgr(ROSSO);
     dici(comando); dici(": ");
     if (percorso) { dici(percorso); dici(": "); }
-    dici(errore_in_parole(e, "cartella non trovata"));
+    dici(errore_in_parole(e, "cartella inesistente"));
     sgr(NORMALE);
     dici("\n");
 }
@@ -201,25 +178,50 @@ static void dici_permessi(unsigned int tipo, unsigned int p) {
     dici(s);
 }
 
+/* Il proprietario (e il gruppo, che per ora e' lo stesso): "root" per l'uid 0, per gli altri
+ * il numero. Largo almeno 4 caselle, a sinistra. */
+static void dici_utente(unsigned int uid) {
+    char c[16];
+    int n = 0;
+    if (uid == 0) { c[n++] = 'r'; c[n++] = 'o'; c[n++] = 'o'; c[n++] = 't'; }
+    else {
+        char r[12];
+        int k = 0;
+        do { r[k++] = (char)('0' + uid % 10); uid /= 10; } while (uid);
+        while (k) c[n++] = r[--k];
+    }
+    while (n < 4) c[n++] = ' ';
+    c[n] = 0;
+    dici(c);
+}
+
+/* La parte di "ls -l" prima del nome: permessi, proprietario, gruppo, misura. */
 static void riga_lunga(const struct voce_cartella *v, const char *percorso) {
+    struct stat st;
+    unsigned int uid = lstat(percorso, &st) == 0 ? st.st_uid : 0;
     sgr(GRIGIO);
     dici_permessi(v->tipo, v->permessi & 0777);
     sgr(NORMALE);
     dici("  ");
-    struct info_file i;
     sgr(ARANCIO);
-    if (info(percorso, &i) == 0) dici_numero(i.proprietario, 5);
-    else dici("    ?");
+    dici_utente(uid); dici("  "); dici_utente(uid);
     sgr(NORMALE);
-    dici(" ");
+    dici("  ");
     sgr(VIOLA);
-    dici_numero(v->dimensione, 10);
+    dici_numero(v->dimensione, 5);
     sgr(NORMALE);
     dici("  ");
-    sgr(GRIGIO);
-    dici_data(v->modificato);
-    sgr(NORMALE);
-    dici("  ");
+}
+
+/* Per un collegamento, in "ls -l": " -> destinazione", con la freccia grigia. */
+static void dici_destinazione(const char *percorso) {
+    char dove[MAX_PERCORSO];
+    ssize_t n = readlink(percorso, dove, sizeof dove - 1);
+    if (n <= 0) return;
+    dove[n] = 0;
+    dici(" ");
+    sgr(GRIGIO); dici("->"); sgr(NORMALE);
+    dici(" "); dici(dove);
 }
 
 /* Il nome in un elenco: cartelle blu e grassetto (e '/' sulla seriale, dove i colori non ci
@@ -232,6 +234,51 @@ static void dici_nome(const char *nome, unsigned int tipo, unsigned int permessi
     dici(nome);
     sgr(NORMALE);
     if (tipo == TIPO_CARTELLA && !a_colori) dici("/");
+}
+
+#define MAX_VOCI 512
+static struct voce_cartella voci[MAX_VOCI];
+
+static int caselle_di(const char *nome) {      /* le lettere, non i byte (UTF-8) */
+    int n = 0;
+    for (; *nome; nome++) if (((unsigned char)*nome & 0xC0) != 0x80) n++;
+    return n;
+}
+
+/* Le larghezze delle colonne se l'elenco sta in 'righe' righe (una colonna alla volta);
+ * restituisce la larghezza totale, con 2 caselle tra una colonna e l'altra. */
+static int larghezze_colonne(int quante, int righe, int *largo) {
+    int colonne = (quante + righe - 1) / righe, totale = 2 * (colonne - 1);
+    for (int c = 0; c < colonne; c++) {
+        largo[c] = 0;
+        for (int r = 0; r < righe && c * righe + r < quante; r++) {
+            int l = caselle_di(voci[c * righe + r].nome);
+            if (l > largo[c]) largo[c] = l;
+        }
+        totale += largo[c];
+    }
+    return totale;
+}
+
+/* L'elenco nel terminale della finestra, in colonne come "ls": meno righe possibile, nella
+ * larghezza del terminale. */
+static void elenco_in_colonne(int quante) {
+    struct winsize w = { 0, 0, 0, 0 };
+    int larghezza = ioctl(tty, TIOCGWINSZ, &w) == 0 && w.ws_col > 0 ? w.ws_col : 80;
+    static int largo[MAX_VOCI];
+    int righe = 1;
+    while (righe < quante && larghezze_colonne(quante, righe, largo) > larghezza) righe++;
+    int colonne = (quante + righe - 1) / righe;
+    larghezze_colonne(quante, righe, largo);
+    for (int r = 0; r < righe; r++) {
+        for (int c = 0; c < colonne && c * righe + r < quante; c++) {
+            const struct voce_cartella *v = &voci[c * righe + r];
+            dici_nome(v->nome, v->tipo, v->permessi);
+            if ((c + 1) * righe + r < quante)
+                for (int n = caselle_di(v->nome); n < largo[c] + 2; n++) dici(" ");
+        }
+        dici("\n");
+    }
 }
 
 static void comando_ls(const char *dove, int lungo) {
@@ -249,22 +296,29 @@ static void comando_ls(const char *dove, int lungo) {
     }
     int d = apri(percorso, APRI_LEGGERE);
     if (d < 0) { errore("ls", dove, d); return; }
-    static struct voce_cartella v;
-    while (leggi(d, &v, sizeof v) == (int)sizeof v) {
-        v.nome[MAX_NOME_FILE - 1] = 0;
-        if (lungo) {
-            char figlio[MAX_PERCORSO];
-            int n = 0;
-            for (const char *s = percorso; *s; s++) figlio[n++] = *s;
-            if (n > 1) figlio[n++] = '/';
-            for (const char *s = v.nome; *s && n < MAX_PERCORSO - 1; s++) figlio[n++] = *s;
-            figlio[n] = 0;
-            riga_lunga(&v, figlio);
-        }
-        dici_nome(v.nome, v.tipo, v.permessi);
-        dici("\n");
+    int quante = 0;
+    while (quante < MAX_VOCI && leggi(d, &voci[quante], sizeof voci[0]) == (int)sizeof voci[0]) {
+        voci[quante].nome[MAX_NOME_FILE - 1] = 0;
+        quante++;
     }
     chiudi(d);
+    if (a_colori && !lungo) {            /* nel terminale: in colonne */
+        if (quante) elenco_in_colonne(quante);
+        return;
+    }
+    for (int k = 0; k < quante; k++) {   /* sulla seriale, e con -l: uno per riga */
+        const struct voce_cartella *v = &voci[k];
+        char figlio[MAX_PERCORSO];
+        int n = 0;
+        for (const char *s = percorso; *s; s++) figlio[n++] = *s;
+        if (n > 1) figlio[n++] = '/';
+        for (const char *s = v->nome; *s && n < MAX_PERCORSO - 1; s++) figlio[n++] = *s;
+        figlio[n] = 0;
+        if (lungo) riga_lunga(v, figlio);
+        dici_nome(v->nome, v->tipo, v->permessi);
+        if (lungo && v->tipo == TIPO_COLLEGAMENTO) dici_destinazione(figlio);
+        dici("\n");
+    }
 }
 
 /* Una riga dell'elenco dei comandi nel terminale: il comando verde e in grassetto, largo 8
@@ -293,7 +347,7 @@ static void comando_help(void) {
     dici("comandi:\n"
          "  pwd                  la cartella in cui siamo\n"
          "  cd [cartella]        si sposta (da solo: la radice; cd .. sale)\n"
-         "  ls [-l] [percorso]   cosa c'e' dentro (-l: tipo, permessi, proprietario, misura, data)\n"
+         "  ls [-l] [percorso]   cosa c'e' dentro (-l: tipo, permessi, proprietario, misura)\n"
          "  help                 questo elenco\n"
          "  exit                 finisce (sulla seriale init la rifa' partire)\n");
 }
