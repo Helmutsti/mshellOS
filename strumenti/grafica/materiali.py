@@ -28,8 +28,9 @@ for _misura in (12, 13, 14, 15, 16, 24):
     FONT_USATI.append(('plex_medio_%d' % _misura, 'IBMPlexSans-Medium.ttf', _misura))
 for _misura in (12, 13, 14, 15, 24):
     FONT_USATI.append(('plex_semigrassetto_%d' % _misura, 'IBMPlexSans-SemiBold.ttf', _misura))
-# IBM Plex Mono, a larghezza fissa: il testo del terminale (una misura sola)
-FONT_USATI.append(('plexmono_14', 'IBMPlexMono-Regular.ttf', 14))
+# IBM Plex Mono, a larghezza fissa: il testo del terminale (13, normale e grassetto: dal Figma)
+FONT_USATI.append(('plexmono_13', 'IBMPlexMono-Regular.ttf', 13))
+FONT_USATI.append(('plexmono_grassetto_13', 'IBMPlexMono-Bold.ttf', 13))
 
 ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity',
          'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right',
@@ -59,7 +60,7 @@ OGGETTI_PICCOLI = ['file', 'cartella', 'txt', 'pdf', 'png', 'zip', 'bin', 'home'
 # --- i nomi dei file (in inglese, come le cartelle del sistema) ---
 
 _FAMIGLIE = {'inter': 'inter', 'plex': 'ibm-plex-sans', 'plexmono': 'ibm-plex-mono'}
-_PESI = {'': 'regular', 'medio': 'medium', 'semigrassetto': 'semibold'}
+_PESI = {'': 'regular', 'medio': 'medium', 'semigrassetto': 'semibold', 'grassetto': 'bold'}
 _TIPI = {'cartella': 'folder', 'home': 'home', 'file': 'file', 'immagine': 'image', 'testo': 'text',
          'programma': 'program', 'etichetta': 'label', 'scrivania': 'desktop',
          'documenti': 'documents', 'immagini': 'pictures', 'download': 'downloads',
@@ -91,6 +92,9 @@ def immagini():
         for tipo in tipi:
             elenco.append(('oggetto_%s_%s' % (tipo, misura),
                            'icons/objects/%s-%s.image' % (_TIPI[tipo], _MISURE[misura])))
+    # le icone delle app di sistema, tonde come il disegno (oggi solo il Terminale), una per tema
+    elenco.append(('icona_terminale_chiaro', 'icons/apps/terminal-light.image'))
+    elenco.append(('icona_terminale_scuro', 'icons/apps/terminal-dark.image'))
     elenco.append(('sfondo_piccolo', 'wallpapers/default.image'))
     return elenco
 

@@ -2,7 +2,8 @@
  * "Margine riquadro" -> "Pannello contenuto"). E' l'eccezione decisa per Files alla struttura
  * della finestra: il contenuto non sta sul vetro ma in un pannello chiaro, SUPERFICIE_ELEVATA,
  * raggio RAGGIO_PANNELLO, staccato dal resto da un margine di SPAZIO_8 a sinistra, a destra e
- * sotto (sopra no: la barra degli strumenti ha gia' il suo padding). Il pannello non ha padding
+ * sotto (sopra no: la barra degli strumenti ha gia' il suo padding; chi non ha la barra, come
+ * il Terminale, lo chiede con 'sopra'). Il pannello non ha padding
  * suo: lo spazio dentro lo danno i suoi figli (la tabella, la griglia, lo stato vuoto).
  *
  * I figli stanno uno sopra l'altro, tutti grandi quanto il pannello: se ne mostra uno alla
@@ -12,16 +13,20 @@
 
 #define PANNELLO_MARGINE SPAZIO_8
 
-struct pannello_tk { struct widget base; };
+struct pannello_tk {
+    struct widget base;
+    int sopra;                         /* il margine in alto (0: nessuno, come in Files) */
+};
 
 static inline void pannello_misura(struct widget *w, int *l, int *a) { (void)w; *l = 0; *a = 0; }
 
 /* Il pannello vero, dentro il margine. */
 static inline void pannello_dentro(const struct widget *w, int *x, int *y, int *l, int *a) {
+    int sopra = ((const struct pannello_tk *)w)->sopra;
     *x = w->x + PANNELLO_MARGINE;
-    *y = w->y;
+    *y = w->y + sopra;
     *l = w->l - 2 * PANNELLO_MARGINE;
-    *a = w->a - PANNELLO_MARGINE;
+    *a = w->a - PANNELLO_MARGINE - sopra;
 }
 
 static inline void pannello_disponi(struct widget *w) {

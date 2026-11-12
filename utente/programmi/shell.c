@@ -39,11 +39,31 @@
 #define MAX_PAROLE 8
 
 static int tty = -1;                    /* il terminale: si legge e si scrive qui */
+static int a_colori;                    /* nel terminale della finestra: colori e grassetto */
 static char cartella[MAX_PERCORSO] = "/";
 
 /* --- scrivere --- */
 
 static void dici(const char *s) { scrivi_in(tty, s, (unsigned int)lunghezza(s)); }
+
+/* I colori e il grassetto, come li dicono tutti i terminali (sequenze ANSI SGR): si mandano
+ * solo al terminale della finestra, mai alla seriale. Quali colori siano davvero lo decide il
+ * terminale secondo il tema: noi diciamo solo rosso, verde... ("0" ripristina). */
+static void sgr(const char *codici) {
+    if (!a_colori) return;
+    dici("\033["); dici(codici); dici("m");
+}
+#define ROSSO "31"
+#define VERDE "32"
+#define GIALLO "33"
+#define BLU "34"
+#define VIOLA "35"
+#define MENTA "36"
+#define GRIGIO "90"
+#define ARANCIO "91"
+#define GRASSETTO(c) "1;" c
+#define NORMALE "0"
+#define SOLO(c) "0;" c                  /* il colore, senza il grassetto di prima */
 
 static void dici_numero(unsigned long long n, int larghezza) {
     char c[24];
@@ -92,10 +112,21 @@ static const char *errore_in_parole(int e, const char *non_trovato) {
     }
 }
 
+/* Un messaggio d'errore, in rosso, fino a capo. */
+static void dici_errore(const char *a, const char *b, const char *c) {
+    sgr(ROSSO);
+    dici(a); dici(b); dici(c);
+    sgr(NORMALE);
+    dici("\n");
+}
+
 static void errore(const char *comando, const char *percorso, int e) {
+    sgr(ROSSO);
     dici(comando); dici(": ");
     if (percorso) { dici(percorso); dici(": "); }
-    dici(errore_in_parole(e, "cartella non trovata")); dici("\n");
+    dici(errore_in_parole(e, "cartella non trovata"));
+    sgr(NORMALE);
+    dici("\n");
 }
 
 /* --- i percorsi --- */
@@ -171,16 +202,36 @@ static void dici_permessi(unsigned int tipo, unsigned int p) {
 }
 
 static void riga_lunga(const struct voce_cartella *v, const char *percorso) {
+    sgr(GRIGIO);
     dici_permessi(v->tipo, v->permessi & 0777);
+    sgr(NORMALE);
     dici("  ");
     struct info_file i;
+    sgr(ARANCIO);
     if (info(percorso, &i) == 0) dici_numero(i.proprietario, 5);
     else dici("    ?");
+    sgr(NORMALE);
     dici(" ");
+    sgr(VIOLA);
     dici_numero(v->dimensione, 10);
+    sgr(NORMALE);
     dici("  ");
+    sgr(GRIGIO);
     dici_data(v->modificato);
+    sgr(NORMALE);
     dici("  ");
+}
+
+/* Il nome in un elenco: cartelle blu e grassetto (e '/' sulla seriale, dove i colori non ci
+ * sono), programmi (file che si possono eseguire) verdi e grassetto, collegamenti menta e
+ * grassetto, gli altri file nel colore del testo. */
+static void dici_nome(const char *nome, unsigned int tipo, unsigned int permessi) {
+    if (tipo == TIPO_CARTELLA) sgr(GRASSETTO(BLU));
+    else if (tipo == TIPO_COLLEGAMENTO) sgr(GRASSETTO(MENTA));
+    else if (tipo == TIPO_FILE && (permessi & 0111)) sgr(GRASSETTO(VERDE));
+    dici(nome);
+    sgr(NORMALE);
+    if (tipo == TIPO_CARTELLA && !a_colori) dici("/");
 }
 
 static void comando_ls(const char *dove, int lungo) {
@@ -193,7 +244,7 @@ static void comando_ls(const char *dove, int lungo) {
         struct voce_cartella v = { .tipo = i.tipo, .permessi = i.permessi,
                                    .dimensione = i.dimensione, .modificato = i.modificato };
         if (lungo) riga_lunga(&v, percorso);
-        dici(dove); dici("\n");
+        dici_nome(dove, i.tipo, i.permessi); dici("\n");
         return;
     }
     int d = apri(percorso, APRI_LEGGERE);
@@ -210,14 +261,35 @@ static void comando_ls(const char *dove, int lungo) {
             figlio[n] = 0;
             riga_lunga(&v, figlio);
         }
-        dici(v.nome);
-        if (v.tipo == TIPO_CARTELLA) dici("/");
+        dici_nome(v.nome, v.tipo, v.permessi);
         dici("\n");
     }
     chiudi(d);
 }
 
+/* Una riga dell'elenco dei comandi nel terminale: il comando verde e in grassetto, largo 8
+ * caselle, poi la descrizione in grigio. */
+static void riga_help(const char *comando, const char *descrizione) {
+    sgr(GRASSETTO(VERDE));
+    dici(comando);
+    sgr(NORMALE);
+    for (int n = lunghezza(comando); n < 8; n++) dici(" ");
+    sgr(GRIGIO);
+    dici(descrizione);
+    sgr(NORMALE);
+    dici("\n");
+}
+
 static void comando_help(void) {
+    if (a_colori) {
+        riga_help("pwd", "mostra la cartella corrente");
+        riga_help("cd", "entra in una cartella");
+        riga_help("ls", "elenca i file della cartella");
+        riga_help("ls -l", "elenca con permessi e dimensioni");
+        riga_help("help", "mostra questo elenco");
+        riga_help("exit", "chiude il terminale");
+        return;
+    }
     dici("comandi:\n"
          "  pwd                  la cartella in cui siamo\n"
          "  cd [cartella]        si sposta (da solo: la radice; cd .. sale)\n"
@@ -246,19 +318,19 @@ static int esegui(char *riga) {
     for (char *s = riga; *s;) {
         while (*s == ' ' || *s == '\t') *s++ = 0;
         if (!*s) break;
-        if (quante == MAX_PAROLE) { dici("troppe parole\n"); return 0; }
+        if (quante == MAX_PAROLE) { dici_errore("troppe parole", "", ""); return 0; }
         parola[quante++] = s;
         while (*s && *s != ' ' && *s != '\t') s++;
     }
     if (quante == 0) return 0;
     const char *c = parola[0];
     if (uguali(c, "pwd") || uguali(c, "help") || uguali(c, "exit")) {
-        if (quante > 1) { dici(c); dici(": non vuole argomenti\n"); return 0; }
+        if (quante > 1) { dici_errore(c, ": non vuole argomenti", ""); return 0; }
         if (c[0] == 'p') comando_pwd();
         else if (c[0] == 'h') comando_help();
         else return 1;
     } else if (uguali(c, "cd")) {
-        if (quante > 2) { dici("cd: troppi argomenti\n"); return 0; }
+        if (quante > 2) { dici_errore("cd: troppi argomenti", "", ""); return 0; }
         comando_cd(quante == 2 ? parola[1] : "/");
     } else if (uguali(c, "ls")) {
         int lungo = 0;
@@ -266,14 +338,14 @@ static int esegui(char *riga) {
         for (int i = 1; i < quante; i++) {
             if (uguali(parola[i], "-l")) lungo = 1;
             else if (parola[i][0] == '-' && parola[i][1]) {
-                dici("ls: opzione sconosciuta: "); dici(parola[i]); dici("\n");
+                dici_errore("ls: opzione sconosciuta: ", parola[i], "");
                 return 0;
-            } else if (dove) { dici("ls: un percorso solo\n"); return 0; }
+            } else if (dove) { dici_errore("ls: un percorso solo", "", ""); return 0; }
             else dove = parola[i];
         }
         comando_ls(dove ? dove : ".", lungo);
     } else {
-        dici(c); dici(": comando sconosciuto (scrivi help)\n");
+        dici_errore(c, ": comando sconosciuto (scrivi help)", "");
     }
     return 0;
 }
@@ -292,6 +364,7 @@ int main(void) {
         /* il terminale della finestra: diventa il NOSTRO terminale (una sessione nuova, di
          * cui lui e' il terminale di controllo), cosi' Ctrl-C arriva a noi come SIGINT */
         tty = 0;
+        a_colori = 1;
         setsid();
         ioctl(0, TIOCSCTTY, 0);
         struct sigaction sa = { .sa_handler = al_ctrl_c };   /* senza SA_RESTART: read si ferma */
@@ -306,18 +379,35 @@ int main(void) {
         silenzia_kernel();
         dici("\n");                            /* dopo i messaggi dell'avvio */
     }
-    dici("mshell: shell di sviluppo (scrivi help)\n");
+    if (a_colori && getuid() == 0) {            /* il terminale, come sistema: l'avviso del disegno */
+        sgr(GRASSETTO(GIALLO)); dici("Attenzione:");
+        sgr(SOLO(GIALLO)); dici(" questa shell ha i permessi di super amministratore.\n");
+        sgr(SOLO(GRIGIO)); dici("Scrivi help per l'elenco dei comandi.\n");
+        sgr(NORMALE);
+    } else {
+        dici("mshell: shell di sviluppo (scrivi help)\n");
+    }
     /* il prompt: '#' per il sistema, '$' per una persona, come nelle shell Unix */
-    const char *prompt = getuid() == 0 ? " # " : " $ ";
+    const char *prompt = getuid() == 0 ? "#" : "$";
     static char riga[MAX_RIGA];
     for (;;) {
-        dici(cartella); dici(prompt);
+        if (a_colori) {                         /* "root@mshell <cartella> # ", a colori */
+            sgr(GRASSETTO(ROSSO)); dici(getuid() == 0 ? "root" : "utente");
+            sgr(SOLO(GRIGIO)); dici("@mshell");
+            sgr(NORMALE); dici(" ");
+            sgr(GRASSETTO(BLU)); dici(cartella);
+            sgr(NORMALE); dici(" ");
+            sgr(getuid() == 0 ? GRASSETTO(ROSSO) : GRASSETTO(VERDE)); dici(prompt);
+            sgr(NORMALE); dici(" ");
+        } else {
+            dici(cartella); dici(" "); dici(prompt); dici(" ");
+        }
         int n = (int)read(tty, riga, MAX_RIGA - 1);
         if (n < 0 && errno == EINTR) { dici("\n"); continue; }   /* Ctrl-C */
         if (n <= 0) { dici("\n"); break; }      /* Ctrl-D */
         if (riga[n - 1] == '\n') n--;
         riga[n] = 0;
-        if (n == MAX_RIGA - 1) { dici("riga troppo lunga\n"); continue; }
+        if (n == MAX_RIGA - 1) { dici_errore("riga troppo lunga", "", ""); continue; }
         if (esegui(riga)) break;
     }
     return 0;

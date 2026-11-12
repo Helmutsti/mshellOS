@@ -49,7 +49,7 @@ FONT_PLEX_MONO = os.path.join(QUI, 'font', 'IBMPlexMono')   # IBM Plex Mono (il 
 
 # code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
 CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á',
-         0xFA: '·'}   # il punto a mezza altezza, per separare ("8 processi · 34,6 MB")
+         0xFA: '·', 0x96: '–'}   # il punto a mezza altezza, per separare ("8 processi · 34,6 MB")
 CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
 FILE_IMMAGINI = dict(materiali.immagini())
 
@@ -146,6 +146,25 @@ for dimensione, elenco, lato in (('grande', OGGETTI_GRANDI, 48), ('piccola', OGG
         img = Image.open(io.BytesIO(subprocess.check_output(
             ['rsvg-convert', '-w', str(lato), '-h', str(lato)], input=svg.encode()))).convert('RGBA')
         scrivi_immagine('oggetto_%s_%s' % (tipo, dimensione), img)
+
+# L'ICONA DEL TERMINALE (pagina "App - Terminale" del file Figma, sezione "Icona dell'app"): una
+# piastrella grigio scuro (Chiaro #1c1c1e, Scuro #37373b) con un riflesso bianco in alto (24% ->
+# 0%) e il simbolo Lucide "terminal" bianco. Il disegno e' a 96 (angoli 22, simbolo 52 a 22,22):
+# qui lo si riduce a 48, la misura degli oggetti sulla scrivania.
+for tema, grigio in (('chiaro', '#1c1c1e'), ('scuro', '#37373b')):
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">'
+           '<defs><linearGradient id="l" x1="0" y1="0" x2="0" y2="1">'
+           '<stop offset="0" stop-color="#fff" stop-opacity="0.24"/>'
+           '<stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>'
+           '<rect width="96" height="96" rx="22" fill="%s"/>'
+           '<rect width="96" height="96" rx="22" fill="url(#l)"/>'
+           '<g transform="translate(22 22)" fill="none" stroke="#fff" stroke-width="4.5" '
+           'stroke-linecap="round" stroke-linejoin="round">'
+           '<path d="M8.66667 36.8333L21.6667 23.8333L8.66667 10.8333"/>'
+           '<path d="M26 41.1667H43.3333"/></g></svg>') % grigio
+    img = Image.open(io.BytesIO(subprocess.check_output(
+        ['rsvg-convert', '-w', '48', '-h', '48'], input=svg.encode()))).convert('RGBA')
+    scrivi_immagine('icona_terminale_' + tema, img)
 
 # LO SFONDO, rimpicciolito e opaco: la scrivania lo ingrandisce a tutto lo schermo.
 sfondo = svg_in_png(os.path.join(FIGMA, 'sfondo.svg'), 320, 200).convert('RGB')

@@ -36,7 +36,8 @@
     X(plex_semigrassetto_14, "fonts/ibm-plex-sans-semibold-14.font") \
     X(plex_semigrassetto_15, "fonts/ibm-plex-sans-semibold-15.font") \
     X(plex_semigrassetto_24, "fonts/ibm-plex-sans-semibold-24.font") \
-    X(plexmono_14, "fonts/ibm-plex-mono-regular-14.font") \
+    X(plexmono_13, "fonts/ibm-plex-mono-regular-13.font") \
+    X(plexmono_grassetto_13, "fonts/ibm-plex-mono-bold-13.font") \
 
 /* Le icone Lucide, ognuna in tutte le sue misure: X(nome, file). Per numero: ICONA_... */
 #define MATERIALI_ICONE(X) \
@@ -181,6 +182,8 @@
     X(oggetto_immagini_piccola, "icons/objects/pictures-small.image") \
     X(oggetto_download_piccola, "icons/objects/downloads-small.image") \
     X(oggetto_applicazioni_piccola, "icons/objects/applications-small.image") \
+    X(icona_terminale_chiaro, "icons/apps/terminal-light.image") \
+    X(icona_terminale_scuro, "icons/apps/terminal-dark.image") \
     X(sfondo_piccolo, "wallpapers/default.image") \
 
 /* Ogni materiale si chiama con il suo nome, come una variabile (&plex_14, oggetto_file_grande.l):
@@ -212,7 +215,8 @@
 #define plex_semigrassetto_14 (*font_del_sistema(MATERIALE_plex_semigrassetto_14))
 #define plex_semigrassetto_15 (*font_del_sistema(MATERIALE_plex_semigrassetto_15))
 #define plex_semigrassetto_24 (*font_del_sistema(MATERIALE_plex_semigrassetto_24))
-#define plexmono_14 (*font_del_sistema(MATERIALE_plexmono_14))
+#define plexmono_13 (*font_del_sistema(MATERIALE_plexmono_13))
+#define plexmono_grassetto_13 (*font_del_sistema(MATERIALE_plexmono_grassetto_13))
 #define scelta_accesa (*immagine_del_sistema(MATERIALE_scelta_accesa))
 #define scelta_accesa_sopra (*immagine_del_sistema(MATERIALE_scelta_accesa_sopra))
 #define file_cartella_grande (*immagine_del_sistema(MATERIALE_file_cartella_grande))
@@ -249,6 +253,8 @@
 #define oggetto_immagini_piccola (*immagine_del_sistema(MATERIALE_oggetto_immagini_piccola))
 #define oggetto_download_piccola (*immagine_del_sistema(MATERIALE_oggetto_download_piccola))
 #define oggetto_applicazioni_piccola (*immagine_del_sistema(MATERIALE_oggetto_applicazioni_piccola))
+#define icona_terminale_chiaro (*immagine_del_sistema(MATERIALE_icona_terminale_chiaro))
+#define icona_terminale_scuro (*immagine_del_sistema(MATERIALE_icona_terminale_scuro))
 #define sfondo_piccolo (*immagine_del_sistema(MATERIALE_sfondo_piccolo))
 
 #endif

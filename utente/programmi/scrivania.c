@@ -4,7 +4,7 @@
  * compositore e' un'applicazione come le altre, ma siccome e' del sistema puo' chiedere
  * delle SUPERFICI SPECIALI (vedi gkit.h):
  *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre, con le ICONE della
- *     scrivania in alto a sinistra (oggi solo "Shell", provvisoria: vedi piu' sotto);
+ *     scrivania in alto a sinistra (oggi solo "Terminale", provvisoria: vedi piu' sotto);
  *   - la USERBAR, un PANNELLO (una barra) sul bordo sinistro, centrato in altezza, sopra
  *     tutte le finestre: il pulsante App e le applicazioni del sistema, con un segno a
  *     sinistra di quelle aperte;
@@ -375,17 +375,23 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
  * di un file di Files (elemento_file.h, con l'oggetto del suo tipo: oggetti.h). Sotto il
  * puntatore si vela appena, premere la sceglie (vetro chiaro), premere altrove sullo sfondo
  * la lascia; il DOPPIO CLIC la apre.
- * Oggi c'e' solo "Shell", PROVVISORIA (STATO.md): apre il terminale con la shell di prova,
+ * Oggi c'e' solo "Terminale", PROVVISORIA (STATO.md): apre il terminale con la shell di prova,
  * un programma normale che il launcher fa partire come la persona (APRI_PROGRAMMA). Le icone
  * sono un elenco perche' un giorno saranno quelle della cartella Scrivania della persona. */
 struct icona_scrivania {
     const char *nome;
-    int oggetto;                    /* OGGETTO_... */
+    const struct immagine *(*immagine)(void);   /* l'icona, nel tema in uso (risorse su disco) */
     const char *programma;          /* cosa si apre con il doppio clic (in /system/bin) */
 };
 
+/* L'icona del Terminale (disegno Figma, "Icona dell'app"): una per tema, in /system/resources/icons/apps. */
+static const struct immagine *icona_terminale(void) {
+    return tema_corrente->testo_primario == tema_scuro.testo_primario ? &icona_terminale_scuro
+                                                                       : &icona_terminale_chiaro;
+}
+
 static const struct icona_scrivania icone[] = {
-    { "Shell", OGGETTO_BIN, "/system/bin/terminale" },
+    { "Terminale", icona_terminale, "/system/bin/terminale" },
 };
 #define QUANTE_ICONE ((int)(sizeof icone / sizeof icone[0]))
 
@@ -425,7 +431,11 @@ static int disegna_sfondo(int tutto) {
     for (int i = 0; i < QUANTE_ICONE; i++) {
         int stato = i == icona_scelta ? ELEMENTO_STATO_SCELTO : i == icona_sopra ? ELEMENTO_STATO_SOPRA
                                                                                    : ELEMENTO_NORMALE;
-        elemento_disegna_oggetto(&p, ICONE_X, icona_y[i], icona_alta[i], icone[i].oggetto, icone[i].nome, stato);
+        const struct immagine *icona = icone[i].immagine();
+        elemento_fondo(&p, ICONE_X, icona_y[i], icona_alta[i], stato);
+        disegna_immagine(&p, icona, ICONE_X + (ELEMENTO_LARGHEZZA - icona->l) / 2,
+                         icona_y[i] + ELEMENTO_MARGINE + (ELEMENTO_ICONA - icona->a) / 2);   /* come gli oggetti: al centro del posto */
+        elemento_nome(&p, ICONE_X, icona_y[i], icone[i].nome);
     }
     struct zona_finestra colonna = { ICONE_X, ICONE_Y, ELEMENTO_LARGHEZZA,
                                      icona_y[QUANTE_ICONE - 1] + icona_alta[QUANTE_ICONE - 1] - ICONE_Y };

@@ -70,7 +70,7 @@
  * Ogni messaggio comincia con il suo tipo. */
 
 #define NOME_COMPOSITORE "compositore"   /* il nome su cui ascolta */
-#define MAX_TITOLO 32
+#define MAX_TITOLO 40                     /* "Terminale - super amministratore" ne ha 32 piu' la fine */
 
 /* I pixel nelle immagini: 4 byte ciascuno, 0xAARRGGBB PREMOLTIPLICATI (AA e' l'opacita',
  * e i colori sono gia' moltiplicati per lei: vedi gkit_disegno.h), come ARGB8888 di Wayland.
