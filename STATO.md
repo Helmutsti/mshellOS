@@ -368,6 +368,11 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 - Terminale (più avanti): i comandi sono programmi, non app. L'app Terminale riceve un
   permesso esplicito "accedere ai tuoi file", come su macOS. Da dove prendere la shell e i
   comandi (toybox, busybox o fatti da noi) è ancora da decidere.
+- Terminale in finestra (icona "Shell" sulla scrivania, provvisorio): la shell dentro gira come
+  **sistema** (uid 0), non come la persona, e **chiunque può chiederla** al launcher
+  (`APRI_SHELL`, che le passa il terminale finto). Decisione della persona, provvisoria:
+  **terminale come sistema aperto a chiunque: da proteggere** ("poi lo proteggiamo"). I comandi
+  restano quelli della shell (nessuno per modificare); `/system` resta in sola lettura.
 
 **Interfaccia** (file Figma "mshell – interfaccia", chiave `X9g7EOJgKBlE4QjmjrTLFt`)
 - Font Inter, icone Lucide, aspetto a vetro smerigliato.
@@ -408,6 +413,10 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 
 Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
 persona sono nella sezione 8.
+
+**Da proteggere**: il terminale in finestra apre una shell come sistema (uid 0) a chiunque la
+chieda al launcher (`APRI_SHELL`, `utente/programmi/launcher.c`): decisione provvisoria della
+persona, "poi lo proteggiamo" (chi può chiederla, e con quale permesso).
 
 **Fatti per ultimi** (12/11/2026): i tasti speciali (l'errore era nella tabella dei tasti di
 Doom; Esc ora chiude gli avvisi) e le risorse su disco (`/system/resources`, sezione 4). Restano

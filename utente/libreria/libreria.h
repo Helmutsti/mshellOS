@@ -50,6 +50,9 @@ int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento
  * 0, 1, 2... Il suo numero, o -1. */
 int avvia_con(const char *percorso, const int *descrittori, int quanti);
 
+/* Come avvia_con, e il programma nuovo ha anche quell'uid. Solo per il sistema. */
+int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti);
+
 /* Un descrittore del programma 'numero': aspetta lo vede pronto quando e' finito. */
 int processo(int numero);
 

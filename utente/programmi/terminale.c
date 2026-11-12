@@ -2,7 +2,9 @@
  * provare la shell dalla scrivania (l'icona "Shell"); l'aspetto e' da disegnare in Figma.
  *
  * Non e' un'app ma un programma normale (APPLICAZIONI.md, sezione 2), in /system/bin: lo fa
- * partire il launcher come la persona (uid 1000), quando lo chiede la scrivania.
+ * partire il launcher come la persona (uid 1000), quando lo chiede la scrivania. La shell
+ * dentro, invece, la fa partire il launcher come SISTEMA (uid 0), dandole il nostro
+ * terminale finto: PROVVISORIO, aperto a chiunque (launcher.h, APRI_SHELL).
  *
  * COME FUNZIONA. Si apre un TERMINALE FINTO (pty, come xterm o il Terminale del Mac): una
  * coppia di capi, il "padrone" (master) che teniamo noi e lo "schiavo" (/dev/pts/N) che diamo
@@ -27,6 +29,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+#include "launcher.h"
 #include "uikit/uikit.h"
 
 #define SHELL "/system/bin/shell"
@@ -192,8 +195,7 @@ static int avvia_shell(void) {
     if (schiavo < 0) return -1;
     struct winsize misura = { .ws_row = RIGHE, .ws_col = COLONNE };
     ioctl(padrone, TIOCSWINSZ, &misura);
-    int passati[3] = { schiavo, schiavo, schiavo };
-    int numero = avvia_con(SHELL, passati, 3);
+    int numero = apri_shell(schiavo);         /* la shell parte come sistema (launcher.h) */
     close(schiavo);                           /* lo tiene solo la shell: quando finisce, "fine" */
     if (numero < 0) return -1;
     fcntl(padrone, F_SETFL, fcntl(padrone, F_GETFL) | O_NONBLOCK);

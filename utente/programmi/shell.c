@@ -1,8 +1,9 @@
 /* shell: una shell stupida, SOLO PER LE PROVE (provvisoria, STATO.md). Gira in due posti:
  *   - sulla SERIALE (la console del kernel): init la fa partire come sistema (uid 0) e la fa
  *     ripartire quando finisce;
- *   - nel TERMINALE (utente/programmi/terminale.c, l'icona "Shell" della scrivania), come la
- *     persona (uid 1000): il terminale le presta il suo terminale finto (pty) come 0, 1 e 2.
+ *   - nel TERMINALE (utente/programmi/terminale.c, l'icona "Shell" della scrivania), come
+ *     SISTEMA (uid 0): la fa partire il launcher (APRI_SHELL), con il terminale finto (pty)
+ *     del terminale come 0, 1 e 2.
  * Quale dei due lo dice il descrittore 0: se e' un terminale si usa lui, se no la seriale.
  *
  * Sa fare solo muoversi tra le cartelle e guardarle:
@@ -19,7 +20,7 @@
  * La cartella in cui siamo la tiene la shell (non il kernel): i percorsi si rendono
  * assoluti qui, e poi si danno alle funzioni della libreria, che vogliono solo percorsi
  * assoluti. "/home" e' la casa di chi chiede: sulla seriale (uid 0) /data/users/0/home,
- * nel terminale (uid 1000) /data/users/1000/home. */
+ * anche nel terminale (la shell e' sistema in tutti e due i posti). */
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>

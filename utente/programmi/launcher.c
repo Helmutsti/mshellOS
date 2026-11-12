@@ -11,6 +11,8 @@
  *     programma con un altro uid;
  *   - APRI_PROGRAMMA: un programma normale di /system/bin (non un'app: oggi il terminale),
  *     come la persona (uid 1000);
+ *   - APRI_SHELL: la shell di prova come SISTEMA (uid 0), sul terminale finto che chi chiede
+ *     gli passa (oggi il terminale della scrivania);
  *   - APRI_FILE: un pacchetto .app non si apre mai da solo: si fa partire lo Store su di
  *     lui, se e' installato; se no si risponde che le app vanno installate prima;
  *   - RIMUOVI_PACCHETTO, SVUOTA_DATI: togliere un'app della persona, svuotare i dati di
@@ -95,6 +97,19 @@ static void apri_un_programma(struct richiesta_launcher *r, struct risposta_laun
     risposta->esito = risposta->numero >= 0 ? LAUNCHER_FATTO : LAUNCHER_ERRORE;
 }
 
+/* La shell come SISTEMA sul terminale (lo schiavo del pty) che chi chiede ha allegato.
+ * PROVVISORIO, decisione della persona: terminale come sistema aperto a chiunque (non si
+ * guarda chi chiede): da proteggere (STATO.md). */
+static void apri_la_shell(int schiavo, struct risposta_launcher *risposta) {
+    if (schiavo < 0) {
+        messaggio(risposta, "Manca il terminale per la shell.");
+        return;
+    }
+    int passati[3] = { schiavo, schiavo, schiavo };
+    risposta->numero = avvia_come_con_descrittori(PROGRAMMA_SHELL, UID_SISTEMA, passati, 3);
+    risposta->esito = risposta->numero >= 0 ? LAUNCHER_FATTO : LAUNCHER_ERRORE;
+}
+
 /* Chi c'e' all'altro capo puo' installare? Il sistema, o un'app del sistema con il
  * permesso "app.gestire". */
 static int puo_installare(int d) {
@@ -174,6 +189,7 @@ static void rispondi(int d) {
         case APRI_APPLICAZIONE: apri_app(&r, &risposta); break;
         case APRI_FILE: apri_un_file(&r, &risposta); break;
         case APRI_PROGRAMMA: apri_un_programma(&r, &risposta); break;
+        case APRI_SHELL: apri_la_shell(file, &risposta); break;
         case RIMUOVI_PACCHETTO: case SVUOTA_DATI: togli_o_svuota(d, &r, &risposta); break;
         case DESCRIVI_PACCHETTO: case INSTALLA_PACCHETTO: case AGGIORNA_PACCHETTO: case ELENCO_APP:
             pacchetti(d, &r, file, &risposta);

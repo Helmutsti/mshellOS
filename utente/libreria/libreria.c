@@ -168,6 +168,10 @@ int avvia_con(const char *percorso, const int *descrittori, int quanti) {
     return lancia(percorso, descrittori, quanti, -1, 0);
 }
 
+int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti) {
+    return lancia(percorso, descrittori, quanti, (int)uid, 0);
+}
+
 #ifndef SYS_pidfd_open
 #define SYS_pidfd_open 434
 #endif
