@@ -319,10 +319,15 @@ static inline void etichetta_testo(struct etichetta *e, const char *testo) {
  * "sollevato-pieno"), Secondario (fondo di controllo, ombra "sollevato"), Ghost (senza
  * fondo: compare solo sotto il puntatore, premuto e disabilitato sono piatti come gli
  * altri). Il colore NON dice piu' il significato (blu/verde/rosso/arancio non esistono
- * nella scala di grigi): chi vuole un'azione di rilievo usa il Primario. */
-enum { PRIMARIO, SECONDARIO, GHOST };
-/* Le MISURE: S 32, M 40, L 48 (ALTEZZA_S/M/L in stile.h). */
-enum { MISURA_S, MISURA_M, MISURA_L };
+ * nella scala di grigi): chi vuole un'azione di rilievo usa il Primario.
+ * I tipi COLORATI dicono il significato dell'azione, con i colori di ruolo (tema.h):
+ * Pericolo (rosso: terminare, cancellare, cose che non si annullano), Successo (verde),
+ * Avviso (giallo, testo scuro), Informazione (blu). Si comportano come il Primario
+ * (ombra "sollevato-pieno", testo e icona nel colore *_TESTO del ruolo). */
+enum { PRIMARIO, SECONDARIO, GHOST, PERICOLO, SUCCESSO, AVVISO, INFORMAZIONE };
+/* Le MISURE: S 32, M 40, L 48 (ALTEZZA_S/M/L in stile.h); XS 24 solo per i pulsanti icona
+ * (la chiusura della mini finestra). MISURA_XS e' in fondo per non cambiare gli indici. */
+enum { MISURA_S, MISURA_M, MISURA_L, MISURA_XS };
 /* VECCHIO: da eliminare quando le app saranno migrate. I nomi di prima restano come
  * sinonimi, cosi' Files, Impostazioni, Attivita e Contatore compilano senza toccarli:
  * NEUTRO e' il Secondario, tutti i colori (blu, verde, rosso, arancio) il Primario;
@@ -337,6 +342,7 @@ static const struct misure_pulsante misure_pulsante[] = {
     { ALTEZZA_S, PADDING_S, GAP_S, ICONA_S, FONT_PULSANTE_S },
     { ALTEZZA_M, PADDING_M, GAP_M, ICONA_M, FONT_PULSANTE_M },
     { ALTEZZA_L, PADDING_L, GAP_L, ICONA_L, FONT_PULSANTE_L },
+    { ALTEZZA_XS, PADDING_S, GAP_S, ICONA_XS, FONT_PULSANTE_S },   /* XS: pensato solo icona */
 };
 
 struct pulsante;
@@ -376,7 +382,8 @@ static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
     struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
     const struct strato_ombra *ombre = 0;
     int quante = 0;
-    if (!premuto && !spento && b->colore == PRIMARIO) {
+    int pieno = b->colore == PRIMARIO || b->colore >= PERICOLO;   /* Primario e i colorati */
+    if (!premuto && !spento && pieno) {
         ombre = OMBRA_TAB(sollevato_pieno); quante = OMBRA_N(sollevato_pieno);
     } else if (!premuto && !spento && b->colore == SECONDARIO) {
         ombre = OMBRA_TAB(sollevato); quante = OMBRA_N(sollevato);
@@ -390,6 +397,18 @@ static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
     } else if (b->colore == PRIMARIO) {
         fondo = premuto ? AZIONE_SFONDO_PREMUTO : sopra ? AZIONE_SFONDO_SOPRA : AZIONE_SFONDO;
         testo = AZIONE_TESTO;
+    } else if (b->colore == PERICOLO) {
+        fondo = premuto ? PERICOLO_SFONDO_PREMUTO : sopra ? PERICOLO_SFONDO_SOPRA : PERICOLO_SFONDO;
+        testo = PERICOLO_TESTO;
+    } else if (b->colore == SUCCESSO) {
+        fondo = premuto ? SUCCESSO_SFONDO_PREMUTO : sopra ? SUCCESSO_SFONDO_SOPRA : SUCCESSO_SFONDO;
+        testo = SUCCESSO_TESTO;
+    } else if (b->colore == AVVISO) {
+        fondo = premuto ? AVVISO_SFONDO_PREMUTO : sopra ? AVVISO_SFONDO_SOPRA : AVVISO_SFONDO;
+        testo = AVVISO_TESTO;
+    } else if (b->colore == INFORMAZIONE) {
+        fondo = premuto ? INFORMAZIONE_SFONDO_PREMUTO : sopra ? INFORMAZIONE_SFONDO_SOPRA : INFORMAZIONE_SFONDO;
+        testo = INFORMAZIONE_TESTO;
     } else if (b->colore == SECONDARIO) {
         fondo = premuto ? CONTROLLO_SFONDO_PREMUTO : sopra ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO;
     } else {                           /* Ghost: nessun fondo a riposo */
@@ -452,7 +471,8 @@ static inline void pulsante_prepara(struct pulsante *b, const char *testo, int i
     copia_testo(b->testo, testo, MAX_TESTO_WIDGET);
 }
 
-/* Il tipo (PRIMARIO, SECONDARIO, GHOST) e la misura (MISURA_S, _M, _L). Accetta anche i
+/* Il tipo (PRIMARIO, SECONDARIO, GHOST, PERICOLO, SUCCESSO, AVVISO, INFORMAZIONE) e la
+ * misura (MISURA_S, _M, _L, e _XS per i pulsanti solo icona). Accetta anche i
  * vecchi nomi (NEUTRO, BLU..., PICCOLO...): sono sinonimi. */
 static inline void pulsante_stile(struct pulsante *b, int colore, int dimensione) {
     b->colore = colore;

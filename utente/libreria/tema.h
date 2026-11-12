@@ -2,10 +2,19 @@
  *
  * Un colore semantico dice A COSA SERVE, non com'e' fatto (superficie_elevata, testo_primario,
  * azione_sfondo...): i due temi gli danno valori diversi, e il codice che disegna non
- * cambia. Qui sotto c'e' un campo per ogni token di strumenti/grafica/token-figma.json (i
- * nomi sono quelli del file, con "/" e "-" trasformati in "_"), e le due istanze con i valori
- * della colonna 0 (Chiaro) e della colonna 1 (Scuro). Non scrivere i valori a mano: se il
- * disegno cambia, si rigenera da quel JSON.
+ * cambia. Qui sotto c'e' un campo per ogni colore semantico del file Figma "mshell -
+ * interfaccia" (raccolta "Semantici"; i nomi sono quelli di Figma, con "/" e "-" trasformati
+ * in "_"), e le due istanze con i valori dei modi Chiaro e Scuro. I valori sono copiati a
+ * mano dal disegno: se il disegno cambia, si ricopiano qui.
+ *
+ * Tre famiglie di colori:
+ *   - le superfici, i testi, i bordi e i controlli (la scala di grigi);
+ *   - i colori di RUOLO (successo, avviso, informazione, pericolo): dicono cosa significa
+ *     una cosa. Ognuno ha il pieno per i pulsanti (sfondo, sopra, premuto, testo) e il
+ *     tenue per i fondi leggeri (tenue, testo_tenue);
+ *   - i colori di SISTEMA (rosso, arancio, giallo, verde, menta, azzurro, blu, viola, rosa,
+ *     marrone, grigio): servono a distinguere le cose (etichette, grafici, icone). Ognuno ha
+ *     saturo, pastello e il testo da mettere sul pastello.
  *
  * I colori sono 0xAARRGGBB come nel resto della libreria (disegno.h): OPACO(rgb) e
  * VELATO(rgb, alfa). Attenzione: il pennello li vuole NON premoltiplicati (e' lui, quando
@@ -25,6 +34,20 @@
 #define TEMA_H
 
 #include "disegno.h"
+
+/* I colori di sistema, nell'ordine del disegno. Si usano come indice di tema->sistema[]
+ * (per esempio il colore di un'etichetta salvato come numero). */
+enum colore_sistema {
+    COLORE_ROSSO, COLORE_ARANCIO, COLORE_GIALLO, COLORE_VERDE, COLORE_MENTA, COLORE_AZZURRO,
+    COLORE_BLU, COLORE_VIOLA, COLORE_ROSA, COLORE_MARRONE, COLORE_GRIGIO,
+    COLORI_SISTEMA   /* quanti sono */
+};
+
+struct colore_di_sistema {
+    unsigned int saturo;           /* etichette, grafici, icone, accenti */
+    unsigned int pastello;         /* fondi leggeri, evidenziazioni */
+    unsigned int testo_pastello;   /* testo e icone sul pastello (almeno 5:1) */
+};
 
 struct tema {
     unsigned int superficie_scena;
@@ -57,6 +80,18 @@ struct tema {
     unsigned int suggerimento_sfondo;
     unsigned int suggerimento_testo;
     unsigned int suggerimento_testo_secondario;
+    unsigned int superficie_velo;   /* sopra una finestra bloccata da un avviso bloccante */
+    /* i colori di ruolo */
+    unsigned int successo_sfondo, successo_sfondo_sopra, successo_sfondo_premuto, successo_testo;
+    unsigned int successo_tenue, successo_testo_tenue;
+    unsigned int avviso_sfondo, avviso_sfondo_sopra, avviso_sfondo_premuto, avviso_testo;
+    unsigned int avviso_tenue, avviso_testo_tenue;
+    unsigned int informazione_sfondo, informazione_sfondo_sopra, informazione_sfondo_premuto;
+    unsigned int informazione_testo, informazione_tenue, informazione_testo_tenue;
+    unsigned int pericolo_sfondo, pericolo_sfondo_sopra, pericolo_sfondo_premuto, pericolo_testo;
+    unsigned int pericolo_tenue, pericolo_testo_tenue;
+    /* i colori di sistema, indicizzati da enum colore_sistema */
+    struct colore_di_sistema sistema[COLORI_SISTEMA];
 };
 
 static const struct tema tema_chiaro = {
@@ -90,27 +125,65 @@ static const struct tema tema_chiaro = {
     .suggerimento_sfondo            = OPACO(0x4C4C52),
     .suggerimento_testo             = OPACO(0xFAFAFA),
     .suggerimento_testo_secondario  = OPACO(0xC4C4C7),
+    .superficie_velo                = VELATO(0x000000, 51),    /* 20% */
+    .successo_sfondo                = OPACO(0x166534),
+    .successo_sfondo_sopra          = OPACO(0x15803D),
+    .successo_sfondo_premuto        = OPACO(0x14532D),
+    .successo_testo                 = OPACO(0xFFFFFF),
+    .successo_tenue                 = OPACO(0xDCFCE7),
+    .successo_testo_tenue           = OPACO(0x166534),
+    .avviso_sfondo                  = OPACO(0xF59E0B),
+    .avviso_sfondo_sopra            = OPACO(0xFBBF24),
+    .avviso_sfondo_premuto          = OPACO(0xD97706),
+    .avviso_testo                   = OPACO(0x1C1C1E),         /* scuro: sul giallo il bianco non si legge */
+    .avviso_tenue                   = OPACO(0xFEF3C7),
+    .avviso_testo_tenue             = OPACO(0x92400E),
+    .informazione_sfondo            = OPACO(0x1D4ED8),
+    .informazione_sfondo_sopra      = OPACO(0x2563EB),
+    .informazione_sfondo_premuto    = OPACO(0x1E40AF),
+    .informazione_testo             = OPACO(0xFFFFFF),
+    .informazione_tenue             = OPACO(0xDBEAFE),
+    .informazione_testo_tenue       = OPACO(0x1E40AF),
+    .pericolo_sfondo                = OPACO(0xB91C1C),
+    .pericolo_sfondo_sopra          = OPACO(0xDC2626),
+    .pericolo_sfondo_premuto        = OPACO(0x991B1B),
+    .pericolo_testo                 = OPACO(0xFFFFFF),
+    .pericolo_tenue                 = OPACO(0xFEE2E2),
+    .pericolo_testo_tenue           = OPACO(0x991B1B),
+    .sistema = {
+        [COLORE_ROSSO]   = { OPACO(0xFF3B30), OPACO(0xFFD4D1), OPACO(0x99231D) },
+        [COLORE_ARANCIO] = { OPACO(0xFF9500), OPACO(0xFFE8C7), OPACO(0x8C5200) },
+        [COLORE_GIALLO]  = { OPACO(0xFFCC00), OPACO(0xFFF4C7), OPACO(0x735C00) },
+        [COLORE_VERDE]   = { OPACO(0x34C759), OPACO(0xD2F3DA), OPACO(0x1D6D31) },
+        [COLORE_MENTA]   = { OPACO(0x00C7BE), OPACO(0xC7F3F1), OPACO(0x006D69) },
+        [COLORE_AZZURRO] = { OPACO(0x32ADE6), OPACO(0xD2EDF9), OPACO(0x1E688A) },
+        [COLORE_BLU]     = { OPACO(0x007AFF), OPACO(0xC7E2FF), OPACO(0x004999) },
+        [COLORE_VIOLA]   = { OPACO(0xAF52DE), OPACO(0xEDD9F8), OPACO(0x693185) },
+        [COLORE_ROSA]    = { OPACO(0xFF2D55), OPACO(0xFFD1DA), OPACO(0x991B33) },
+        [COLORE_MARRONE] = { OPACO(0xA2845E), OPACO(0xEBE4DC), OPACO(0x614F38) },
+        [COLORE_GRIGIO]  = { OPACO(0x8E8E93), OPACO(0xE6E6E7), OPACO(0x555558) },
+    },
 };
 
 static const struct tema tema_scuro = {
     .superficie_scena               = OPACO(0x1C1C1E),
     .superficie_elevata             = OPACO(0x2B2B2E),
-    .superficie_vetro               = VELATO(0x2B2B2E, 184),
+    .superficie_vetro               = VELATO(0x414146, 184),   /* piu' chiaro della scena, se no la finestra non si stacca */
     .superficie_incassata           = OPACO(0x242427),
     .controllo_sfondo               = OPACO(0x37373B),
     .controllo_sfondo_sopra         = OPACO(0x414146),
     .controllo_sfondo_premuto       = OPACO(0x2F2F33),
     .controllo_sfondo_disabilitato  = OPACO(0x242427),
-    .azione_sfondo                  = OPACO(0xE3E3E5),
-    .azione_sfondo_sopra            = OPACO(0xF2F2F3),
-    .azione_sfondo_premuto          = OPACO(0xD8D8DA),
+    .azione_sfondo                  = OPACO(0xC4C4C7),   /* grigio chiaro, non bianco */
+    .azione_sfondo_sopra            = OPACO(0xD8D8DA),
+    .azione_sfondo_premuto          = OPACO(0xB8B8BB),
     .azione_testo                   = OPACO(0x242427),
     .testo_primario                 = OPACO(0xEBEBEC),
-    .testo_secondario               = OPACO(0x9A9A9F),
-    .testo_disabilitato             = OPACO(0x5F5F64),
+    .testo_secondario               = OPACO(0xB8B8BB),   /* 6:1 sul vetro */
+    .testo_disabilitato             = OPACO(0x89898D),   /* 3,4:1 sul vetro */
     .testo_inverso                  = OPACO(0x242427),
     .bordo_controllo                = OPACO(0x4C4C52),
-    .bordo_separatore               = OPACO(0x37373B),
+    .bordo_separatore               = OPACO(0x55555B),
     .bordo_focus                    = OPACO(0xE3E3E5),
     .cursore_riempimento            = OPACO(0xFAFAFA),
     .cursore_contorno               = OPACO(0x1C1C1E),
@@ -123,6 +196,44 @@ static const struct tema tema_scuro = {
     .suggerimento_sfondo            = OPACO(0xE3E3E5),
     .suggerimento_testo             = OPACO(0x242427),
     .suggerimento_testo_secondario  = OPACO(0x77777B),
+    .superficie_velo                = VELATO(0x000000, 71),    /* 28% */
+    .successo_sfondo                = OPACO(0x166534),
+    .successo_sfondo_sopra          = OPACO(0x15803D),
+    .successo_sfondo_premuto        = OPACO(0x14532D),
+    .successo_testo                 = OPACO(0xFFFFFF),
+    .successo_tenue                 = OPACO(0x052E16),
+    .successo_testo_tenue           = OPACO(0x86EFAC),
+    .avviso_sfondo                  = OPACO(0xF59E0B),
+    .avviso_sfondo_sopra            = OPACO(0xFBBF24),
+    .avviso_sfondo_premuto          = OPACO(0xD97706),
+    .avviso_testo                   = OPACO(0x1C1C1E),
+    .avviso_tenue                   = OPACO(0x451A03),
+    .avviso_testo_tenue             = OPACO(0xFCD34D),
+    .informazione_sfondo            = OPACO(0x1D4ED8),
+    .informazione_sfondo_sopra      = OPACO(0x2563EB),
+    .informazione_sfondo_premuto    = OPACO(0x1E40AF),
+    .informazione_testo             = OPACO(0xFFFFFF),
+    .informazione_tenue             = OPACO(0x172554),
+    .informazione_testo_tenue       = OPACO(0x93C5FD),
+    .pericolo_sfondo                = OPACO(0xB91C1C),
+    .pericolo_sfondo_sopra          = OPACO(0xDC2626),
+    .pericolo_sfondo_premuto        = OPACO(0x991B1B),
+    .pericolo_testo                 = OPACO(0xFFFFFF),
+    .pericolo_tenue                 = OPACO(0x450A0A),
+    .pericolo_testo_tenue           = OPACO(0xFCA5A5),
+    .sistema = {
+        [COLORE_ROSSO]   = { OPACO(0xFF453A), OPACO(0x602826), OPACO(0xFF8F89) },
+        [COLORE_ARANCIO] = { OPACO(0xFF9F0A), OPACO(0x604318), OPACO(0xFFC56C) },
+        [COLORE_GIALLO]  = { OPACO(0xFFD60A), OPACO(0x605418), OPACO(0xFFE66C) },
+        [COLORE_VERDE]   = { OPACO(0x30D158), OPACO(0x22522F), OPACO(0x83E39B) },
+        [COLORE_MENTA]   = { OPACO(0x63E6E2), OPACO(0x315959), OPACO(0xA1F0EE) },
+        [COLORE_AZZURRO] = { OPACO(0x64D2FF), OPACO(0x325362), OPACO(0xA2E4FF) },
+        [COLORE_BLU]     = { OPACO(0x0A84FF), OPACO(0x173B62), OPACO(0x6CB5FF) },
+        [COLORE_VIOLA]   = { OPACO(0xBF5AF2), OPACO(0x4D2F5E), OPACO(0xD99CF7) },
+        [COLORE_ROSA]    = { OPACO(0xFF375F), OPACO(0x602432), OPACO(0xFF879F) },
+        [COLORE_MARRONE] = { OPACO(0xAC8E68), OPACO(0x473E34), OPACO(0xCDBBA4) },
+        [COLORE_GRIGIO]  = { OPACO(0x98989D), OPACO(0x414144), OPACO(0xC1C1C4) },
+    },
 };
 /* Il tema in uso. Debole (vedi sopra); si cambia con tema_leggi() o, nelle prove, a mano. */
 __attribute__((weak)) const struct tema *tema_corrente = &tema_chiaro;

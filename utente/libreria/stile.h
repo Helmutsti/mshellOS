@@ -18,7 +18,7 @@
 /* =====================================================================================
  * IL NUOVO STILE (fase 0C): scala di grigi, colori semantici, due temi
  * =====================================================================================
- * Viene da strumenti/grafica/token-figma.json. Il vecchio stile "a vetro scuro" (sotto, in
+ * Valori copiati a mano dal file Figma (raccolte "Semantici" e "Misure"). Il vecchio stile "a vetro scuro" (sotto, in
  * "VECCHIO STILE") resta finche' toolkit, Files, Attivita, scrivania e compositore non sono
  * migrati; poi si cancella. Dove un nome nuovo sarebbe uguale a uno vecchio, il nuovo ha il
  * suffisso _NUOVO (si toglie, insieme al vecchio, a fine migrazione). */
@@ -59,12 +59,45 @@
 #define SUGGERIMENTO_SFONDO                      (tema_corrente->suggerimento_sfondo)
 #define SUGGERIMENTO_TESTO                       (tema_corrente->suggerimento_testo)
 #define SUGGERIMENTO_TESTO_SECONDARIO            (tema_corrente->suggerimento_testo_secondario)
+#define SUPERFICIE_VELO                          (tema_corrente->superficie_velo)
+/* i colori di ruolo: pieno per i pulsanti (sfondo, sopra, premuto, testo), tenue per i fondi leggeri */
+#define SUCCESSO_SFONDO                          (tema_corrente->successo_sfondo)
+#define SUCCESSO_SFONDO_SOPRA                    (tema_corrente->successo_sfondo_sopra)
+#define SUCCESSO_SFONDO_PREMUTO                  (tema_corrente->successo_sfondo_premuto)
+#define SUCCESSO_TESTO                           (tema_corrente->successo_testo)
+#define SUCCESSO_TENUE                           (tema_corrente->successo_tenue)
+#define SUCCESSO_TESTO_TENUE                     (tema_corrente->successo_testo_tenue)
+#define AVVISO_SFONDO                            (tema_corrente->avviso_sfondo)
+#define AVVISO_SFONDO_SOPRA                      (tema_corrente->avviso_sfondo_sopra)
+#define AVVISO_SFONDO_PREMUTO                    (tema_corrente->avviso_sfondo_premuto)
+#define AVVISO_TESTO                             (tema_corrente->avviso_testo)
+#define AVVISO_TENUE                             (tema_corrente->avviso_tenue)
+#define AVVISO_TESTO_TENUE                       (tema_corrente->avviso_testo_tenue)
+#define INFORMAZIONE_SFONDO                      (tema_corrente->informazione_sfondo)
+#define INFORMAZIONE_SFONDO_SOPRA                (tema_corrente->informazione_sfondo_sopra)
+#define INFORMAZIONE_SFONDO_PREMUTO              (tema_corrente->informazione_sfondo_premuto)
+#define INFORMAZIONE_TESTO                       (tema_corrente->informazione_testo)
+#define INFORMAZIONE_TENUE                       (tema_corrente->informazione_tenue)
+#define INFORMAZIONE_TESTO_TENUE                 (tema_corrente->informazione_testo_tenue)
+#define PERICOLO_SFONDO                          (tema_corrente->pericolo_sfondo)
+#define PERICOLO_SFONDO_SOPRA                    (tema_corrente->pericolo_sfondo_sopra)
+#define PERICOLO_SFONDO_PREMUTO                  (tema_corrente->pericolo_sfondo_premuto)
+#define PERICOLO_TESTO                           (tema_corrente->pericolo_testo)
+#define PERICOLO_TENUE                           (tema_corrente->pericolo_tenue)
+#define PERICOLO_TESTO_TENUE                     (tema_corrente->pericolo_testo_tenue)
+/* i colori di sistema: SISTEMA_SATURO(COLORE_BLU), SISTEMA_PASTELLO(...), SISTEMA_TESTO_PASTELLO(...) */
+#define SISTEMA_SATURO(c)                        (tema_corrente->sistema[(c)].saturo)
+#define SISTEMA_PASTELLO(c)                      (tema_corrente->sistema[(c)].pastello)
+#define SISTEMA_TESTO_PASTELLO(c)                (tema_corrente->sistema[(c)].testo_pastello)
 /* --- le misure del nuovo design (non dipendono dal tema), in pixel ---
  * Controlli S/M/L: altezza, icona, padding ai lati, gap tra icona e testo. */
+#define ALTEZZA_XS              24   /* il pulsante icona piu' piccolo (chiusura della mini finestra) */
 #define ALTEZZA_S               32
 #define ALTEZZA_M               40
 #define ALTEZZA_L               48
 #define ALTEZZA_BARRA           40
+#define ALTEZZA_BARRA_MINI      28   /* la barra del titolo della mini finestra */
+#define ICONA_XS                14
 #define ICONA_S                 16
 #define ICONA_M                 18
 #define ICONA_L                 20
@@ -89,15 +122,15 @@
  * RAGGIO_PILLOLA e' un raggio "grande a piacere" che il disegno limita a meta' altezza. I
  * campi di testo sono rettangoli arrotondati (RAGGIO_CAMPO_S/M/L, uno per altezza).
  * Nomi uguali a quelli vecchi: RAGGIO_CONTROLLO (vecchio 5) e RAGGIO_FINESTRA (vecchio 12,
- * lo usa il codice) hanno qui il suffisso _NUOVO (12 e 28). */
+ * lo usa il codice) hanno qui il suffisso _NUOVO. Valori "C sobrio" (scelti il 12/11/2026). */
 #define RAGGIO_PILLOLA         999
-#define RAGGIO_CASELLA           6
-#define RAGGIO_CONTROLLO_NUOVO  12
-#define RAGGIO_PANNELLO         20
-#define RAGGIO_FINESTRA_NUOVO   28
-#define RAGGIO_CAMPO_S          10
-#define RAGGIO_CAMPO_M          12
-#define RAGGIO_CAMPO_L          14
+#define RAGGIO_CASELLA           3
+#define RAGGIO_CONTROLLO_NUOVO   6
+#define RAGGIO_PANNELLO         10
+#define RAGGIO_FINESTRA_NUOVO   12
+#define RAGGIO_CAMPO_S           6
+#define RAGGIO_CAMPO_M           6
+#define RAGGIO_CAMPO_L           8
 #define TILE_LARGHEZZA          96   /* un elemento a icone (file, cartella) */
 /* la barra di scorrimento: la striscia (zona sensibile) e' larga 14, il binario 12, il
  * cursore 8 per almeno 64 di lunghezza. SCORRIMENTO_CURSORE_NUOVO e' lo spessore del cursore
