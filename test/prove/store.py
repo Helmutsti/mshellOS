@@ -39,7 +39,8 @@ CHIUDI_CONTATORE = (393, 190)   # la X di Contatore, aperta nel secondo posto
 # L'elenco: lo Store (760 x 500) nel secondo posto
 RIGA_CONTATORE = (266, 291)     # la prima riga di "Le tue app"
 SVUOTA, TOGLI = (738, 626), (857, 626)
-CONFERMA = (880, 626)           # il pulsante piu' a destra: "Svuota dati" o "Togli app e dati"
+CONFERMA_SVUOTA = (684, 456)    # nell'avviso di UIKit: il pulsante "Svuota dati" (Annulla a sinistra)
+CONFERMA_TOGLI = (711, 466)     # nell'avviso a tre scelte: "Togli app e dati", il piu' a destra
 
 
 def doppio_clic(m, x, y):
@@ -82,8 +83,8 @@ def esegui(p):
     passo(lambda: m.clic(s.APP_X["Store"], s.ISOLA_Y), "store: elenco: 7 app, 1 tue", "elenco")
     passo(lambda: m.clic(*RIGA_CONTATORE), None, "dettaglio")
     passo(lambda: m.clic(*SVUOTA), None, "conferma_svuota")
-    passo(lambda: m.clic(*CONFERMA), "store: dati svuotati di contatore", "dati_svuotati")
+    passo(lambda: m.clic(*CONFERMA_SVUOTA), "store: dati svuotati di contatore", "dati_svuotati")
     p.controlla("launcher: dati svuotati di contatore" in m.testo_seriale(), "il launcher non ha svuotato i dati")
     passo(lambda: m.clic(*TOGLI), None, "conferma_togli")
-    passo(lambda: m.clic(*CONFERMA), "store: elenco: 6 app, 0 tue", "tolta")
+    passo(lambda: m.clic(*CONFERMA_TOGLI), "store: elenco: 6 app, 0 tue", "tolta")
     p.controlla("launcher: tolta contatore" in m.testo_seriale(), "il launcher non dice 'tolta contatore'")

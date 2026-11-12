@@ -682,11 +682,12 @@ static struct contenitore riga_principale, colonna_dettaglio, azioni;
 static struct elenco elenco;
 static struct documento doc_dettaglio;
 static struct spazio spinta_azioni;
-/* le azioni sull'app scelta, e i pulsanti delle domande di conferma */
-static struct pulsante p_svuota, p_togli, p_conferma_annulla, p_conferma_svuota, p_togli_solo_app, p_togli_tutto;
+/* le azioni sull'app scelta, e gli avvisi di UIKit che chiedono conferma */
+static struct pulsante p_svuota, p_togli;
+static struct avviso avviso;   /* uno solo: la finestra ne ha uno alla volta, lo si prepara a ogni domanda */
 
 /* Cosa si vede a destra. */
-enum { NIENTE, DETTAGLIO, CONFERMA_SVUOTA, CONFERMA_TOGLI };
+enum { NIENTE, DETTAGLIO };
 
 static int stato_destra = NIENTE;
 
@@ -695,10 +696,6 @@ static void mostra_azioni(int stato) {
     const struct app_installata *a = elenco.scelta >= 0 ? &installate.app[elenco.scelta] : 0;
     widget_nascondi(&p_svuota.base, stato != DETTAGLIO);
     widget_nascondi(&p_togli.base, stato != DETTAGLIO || !a || a->di_sistema);   /* solo le app della persona */
-    widget_nascondi(&p_conferma_annulla.base, stato != CONFERMA_SVUOTA && stato != CONFERMA_TOGLI);
-    widget_nascondi(&p_conferma_svuota.base, stato != CONFERMA_SVUOTA);
-    widget_nascondi(&p_togli_solo_app.base, stato != CONFERMA_TOGLI);
-    widget_nascondi(&p_togli_tutto.base, stato != CONFERMA_TOGLI);
     ridisponi();
 }
 
@@ -745,53 +742,39 @@ static void leggi_elenco(void) {
     elenco_riempi(&elenco);
 }
 
-/* Le domande di conferma, al posto del dettaglio. */
+static void scelta_svuota(struct avviso *a, int scelta, void *dati);
+static void scelta_togli(struct avviso *a, int scelta, void *dati);
+
+/* Le domande di conferma: l'avviso di UIKit, aperto sopra la finestra. Il titolo porta il
+ * nome dell'app scelta, quindi lo si prepara ogni volta prima di aprirlo. */
 static void chiedi_svuota(struct pulsante *b, void *dati) {
     (void)b; (void)dati;
-    char riga[MAX_TESTO_DOC] = "Cancellare i dati di ";
+    char riga[MAX_TESTO_WIDGET] = "Cancellare i dati di ";
     aggiungi(riga, nome_scelta(), sizeof riga);
     aggiungi(riga, "?", sizeof riga);
-    documento_svuota(&doc_dettaglio);
-    voce(&doc_dettaglio, D_TITOLO, riga);
-    voce(&doc_dettaglio, D_TESTO, "L'app rester\xc3\xa0 installata ma ripartir\xc3\xa0 da zero.");
-    mostra_azioni(CONFERMA_SVUOTA);
+    avviso_prepara(&avviso, riga, "L'app rester\xc3\xa0 installata ma ripartir\xc3\xa0 da zero.",
+                   "Svuota dati", PERICOLO, 1, scelta_svuota, 0);
+    finestra_tk_avviso(&finestra, &avviso);
+    avviso_apri(&avviso);
 }
 
 static void chiedi_togli(struct pulsante *b, void *dati) {
     (void)b; (void)dati;
-    char riga[MAX_TESTO_DOC] = "Togliere ";
+    char riga[MAX_TESTO_WIDGET] = "Togliere ";
     aggiungi(riga, nome_scelta(), sizeof riga);
     aggiungi(riga, "?", sizeof riga);
-    documento_svuota(&doc_dettaglio);
-    voce(&doc_dettaglio, D_TITOLO, riga);
-    voce(&doc_dettaglio, D_TESTO, "L'app sparisce dal computer. Puoi togliere anche i suoi dati, oppure tenerli: "
-                                  "se un giorno la installi di nuovo, li ritrova.");
-    voce(&doc_dettaglio, D_PUNTO, "\xc2\xab" "Togli app e dati\xc2\xbb: non resta niente.");
-    voce(&doc_dettaglio, D_PUNTO, "\xc2\xab" "Togli solo l'app\xc2\xbb: i dati restano, per quando la reinstalli.");
-    mostra_azioni(CONFERMA_TOGLI);
+    avviso_prepara(&avviso, riga,
+                   "L'app sparisce dal computer. Puoi togliere anche i suoi dati, oppure tenerli: "
+                   "se un giorno la installi di nuovo, li ritrova.",
+                   "Togli app e dati", PERICOLO, 1, scelta_togli, 0);
+    avviso_alternativa(&avviso, "Togli solo l'app", SECONDARIO);
+    finestra_tk_avviso(&finestra, &avviso);
+    avviso_apri(&avviso);
 }
 
-/* LE RISPOSTE ALLE DOMANDE DI CONFERMA, come numeri: 0 annulla, 1 conferma (l'azione
- * principale), 2 l'alternativa ("Togli solo l'app"). Sono i numeri che dara' la finestra di
- * conferma di UIKit quando ci sara': allora i pulsanti qui sotto spariscono, e le due
- * funzioni scelta_svuota e scelta_togli diventano le sue chiamate. */
-enum { SCELTA_ANNULLA = 0, SCELTA_CONFERMA = 1, SCELTA_ALTERNATIVA = 2 };
-
-static void scelta_svuota(int scelta);
-static void scelta_togli(int scelta);
-
-/* I pulsanti delle conferme: il numero della scelta sta nei loro 'dati'; quale domanda e'
- * aperta lo dice quale pulsante "Annulla" o "conferma" e' stato premuto. */
-static void premi_conferma_svuota(struct pulsante *b, void *dati) { (void)b; scelta_svuota((int)(long)dati); }
-static void premi_conferma_togli(struct pulsante *b, void *dati) { (void)b; scelta_togli((int)(long)dati); }
-static void premi_annulla(struct pulsante *b, void *dati) {
-    (void)b; (void)dati;
-    if (stato_destra == CONFERMA_TOGLI) scelta_togli(SCELTA_ANNULLA);
-    else scelta_svuota(SCELTA_ANNULLA);
-}
-
-static void scelta_svuota(int scelta) {
-    if (scelta != SCELTA_CONFERMA) { mostra_dettaglio(0, 0); return; }
+static void scelta_svuota(struct avviso *a, int scelta, void *dati) {
+    (void)a; (void)dati;
+    if (scelta != AVVISO_CONFERMA) return;
     struct risposta_launcher risposta;
     const char *id = installate.app[elenco.scelta].m.id;
     int esito = svuota_dati_app(id, &risposta);
@@ -802,9 +785,10 @@ static void scelta_svuota(int scelta) {
 }
 
 /* Togli: conferma = "Togli app e dati", alternativa = "Togli solo l'app" (i dati restano). */
-static void scelta_togli(int scelta) {
-    if (scelta != SCELTA_CONFERMA && scelta != SCELTA_ALTERNATIVA) { mostra_dettaglio(0, 0); return; }
-    int tieni_dati = scelta == SCELTA_ALTERNATIVA;
+static void scelta_togli(struct avviso *a, int scelta, void *dati) {
+    (void)a; (void)dati;
+    if (scelta != AVVISO_CONFERMA && scelta != AVVISO_ALTERNATIVA) return;
+    int tieni_dati = scelta == AVVISO_ALTERNATIVA;
     struct risposta_launcher risposta;
     char id[MAX_ID];
     descrizione_copia(id, installate.app[elenco.scelta].m.id, MAX_ID);
@@ -837,20 +821,9 @@ static int mostra_elenco(void) {
     spazio_prepara(&spinta_azioni);
     pulsante_prepara(&p_svuota, "Svuota dati", NESSUNA_ICONA, chiedi_svuota, 0);
     pulsante_prepara(&p_togli, "Togli app", ICONA_TRASH_2, chiedi_togli, 0);
-    pulsante_prepara(&p_conferma_annulla, "Annulla", NESSUNA_ICONA, premi_annulla, 0);
-    pulsante_prepara(&p_conferma_svuota, "Svuota dati", NESSUNA_ICONA, premi_conferma_svuota, (void *)(long)SCELTA_CONFERMA);
-    pulsante_prepara(&p_togli_solo_app, "Togli solo l'app", NESSUNA_ICONA, premi_conferma_togli,
-                     (void *)(long)SCELTA_ALTERNATIVA);
-    pulsante_prepara(&p_togli_tutto, "Togli app e dati", NESSUNA_ICONA, premi_conferma_togli, (void *)(long)SCELTA_CONFERMA);
-    pulsante_stile(&p_conferma_svuota, PRIMARIO, MISURA_M);
-    pulsante_stile(&p_togli_tutto, PRIMARIO, MISURA_M);
     widget_aggiungi(&azioni.base, &spinta_azioni.base);
     widget_aggiungi(&azioni.base, &p_svuota.base);
     widget_aggiungi(&azioni.base, &p_togli.base);
-    widget_aggiungi(&azioni.base, &p_conferma_annulla.base);
-    widget_aggiungi(&azioni.base, &p_conferma_svuota.base);
-    widget_aggiungi(&azioni.base, &p_togli_solo_app.base);
-    widget_aggiungi(&azioni.base, &p_togli_tutto.base);
     widget_aggiungi(&colonna_dettaglio.base, &doc_dettaglio.base);
     widget_aggiungi(&colonna_dettaglio.base, &azioni.base);
 
