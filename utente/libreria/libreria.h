@@ -137,6 +137,19 @@ int info(const char *percorso, struct info_file *i);
 int crea_cartella(const char *percorso);
 int cancella(const char *percorso);
 
+/* Le cartelle piene. Si scende al massimo di MAX_PROFONDITA livelli e i collegamenti simbolici
+ * non si seguono mai (si contano, si copiano e si tolgono come collegamenti).
+ *  - conta_dentro: quanti file e cartelle ci sono dentro 'percorso', a tutti i livelli;
+ *  - cancella_tutto: toglie la cartella con tutto quello che ha dentro. Se qualcosa non si
+ *    riesce a togliere (un permesso, un disco in sola lettura) va avanti con il resto e
+ *    restituisce il primo errore: quello che non si e' tolto resta dov'e';
+ *  - copia_cartella: copia la cartella e tutto quello che ha dentro in 'a' (che non deve
+ *    esistere). Se non riesce, la copia fatta a meta' si toglie. */
+#define MAX_PROFONDITA 64
+int conta_dentro(const char *percorso, unsigned long long *quanti);
+int cancella_tutto(const char *percorso);
+int copia_cartella(const char *da, const char *a);
+
 /* Rinomina o sposta. Un file gia' presente in 'a' si sostituisce. */
 int rinomina(const char *da, const char *a);
 

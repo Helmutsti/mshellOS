@@ -27,7 +27,9 @@ Si prova, una cosa dopo l'altra:
   - Nuova cartella: compare "Nuova cartella" con il nome da scrivere; si scrive "Prova",
     Invio, e un altro Invio la apre: lo stato "vuota"; indietro, la si rinomina "Esempi" (dal
     menu) e la si elimina: la casa torna com'era;
-  - eliminare Documenti (non e' vuota) non si puo': compare l'avviso in basso;
+  - duplicare Documenti (che ha dentro cartelle e file) e aprire la copia; eliminare la copia:
+    l'avviso dice quante cose ci sono dentro, Annulla non toglie niente, Invio (Elimina)
+    toglie la copia con tutto il contenuto: la casa torna com'era;
   - le informazioni di un file (dal menu) si aprono in una mini finestra; Esc la chiude;
   - un filtro (Testi) e la tastiera: Invio apre la cartella scelta; le scorciatoie scritte
     nei menu (Ctrl+Maiusc+N, F2, Ctrl+D, Ctrl+I, Canc, Esc).
@@ -263,15 +265,39 @@ def esegui(p):
     m.muovi(*PUNTO_VUOTO)
     torna(casa, "la casa com'era, dopo Elimina")
 
-    # --- eliminare una cartella piena: l'avviso ---
+    # --- duplicare una cartella piena, poi eliminare la copia: l'avviso con quante cose ci sono ---
     x, y = elemento(0)                                                  # Documenti
     clic_destro(m, wx + x, wy + y)
     cambia(casa, "il menu su Documenti", finestra)
+    m.clic(wx + x + 80, wy + y + voce(2))                               # "Duplica"
+    m.muovi(*PUNTO_VUOTO)
+    con_copia = cambia(casa, "la copia 'Documenti copia'")
+    m.foto("cartella_duplicata")
+    x, y = elemento(1)                                                  # Documenti copia
+    doppio_clic(m, wx + x, wy + y)
+    aperta = cambia(con_copia, "la copia aperta (c'e' dentro quello di Documenti)")
+    m.foto("copia_aperta")
+    clic(INDIETRO)
+    con_copia = cambia(aperta, "la casa dopo 'indietro'")
+    clic_destro(m, wx + x, wy + y)
+    cambia(con_copia, "il menu su Documenti copia", finestra)
+    m.clic(wx + x + 80, wy + y + voce(4, 1))                            # "Elimina"
+    m.muovi(*PUNTO_VUOTO)
+    avviso = cambia(con_copia, "l'avviso con quante cose ci sono dentro", schermo)
+    m.foto("avviso")
+    m.clic(587, 416)                                                    # Annulla: non si toglie niente
+    m.muovi(*PUNTO_VUOTO)
+    annullato = cambia(avviso, "l'avviso chiuso (Annulla)", schermo)
+    m.foto("annullato")
+    p.controlla(not s.zona_uguale(annullato, avviso, schermo), "Annulla non chiude l'avviso")
+    clic_destro(m, wx + x, wy + y)
+    cambia(annullato, "il menu su Documenti copia, di nuovo", finestra)
     m.clic(wx + x + 80, wy + y + voce(4, 1))
     m.muovi(*PUNTO_VUOTO)
-    avviso = cambia(casa, "l'avviso 'solo le cartelle vuote'")
-    m.foto("avviso")
-    p.riferimento("files_avviso", avviso)
+    cambia(annullato, "l'avviso, di nuovo", schermo)
+    m.premi("ret")                                                      # Elimina: la copia e tutto quello che ha dentro
+    m.muovi(*PUNTO_VUOTO)
+    torna(casa, "la casa com'era, senza la copia")
 
     # --- le informazioni di un file (dal menu): una mini finestra; Esc la chiude ---
     clic(VUOTO)                                                         # via l'avviso, niente scelto

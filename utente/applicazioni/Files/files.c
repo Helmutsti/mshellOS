@@ -41,7 +41,7 @@
  *     si dicono al centro del pannello.
  *
  * I file li legge e li cambia la libreria (apri, leggi, info, crea_cartella, rinomina,
- * cancella), cioe' Linux: Files gira come la persona (uid 1000) e puo' quello che puo'
+ * cancella, cancella_tutto, copia_cartella), cioe' Linux: Files gira come la persona (uid 1000) e puo' quello che puo'
  * lei. Nella partizione data (la sua casa) scrive; /system e' in sola lettura, e le
  * cartelle del sistema non le puo' aprire. Quando qualcosa non riesce lo dice in basso,
  * in un avviso che sparisce alla prossima azione.
@@ -346,7 +346,7 @@ static void aggiorna_frecce(void) {
     widget_disabilita(&avanti.base, posto_storia >= quante_storia - 1);
 }
 
-/* L'AVVISO: quando qualcosa non riesce (una cartella non vuota da eliminare, un disco in
+/* L'AVVISO: quando qualcosa non riesce (un permesso che manca, un disco in
  * sola lettura), una pillola in basso nel pannello, fino alla prossima azione. Il disegno non
  * lo ha (e' una domanda aperta in STATO.md): resta quello di prima, con i colori del
  * suggerimento. */
@@ -582,21 +582,28 @@ static void nuova_cartella(void) {
     comincia_rinomina(scelto);                   /* come il Finder: si scrive subito il nome */
 }
 
-/* Duplica un file: una copia accanto, "nome copia.est". Le cartelle per ora no (bisognerebbe
- * copiare tutto quello che hanno dentro). */
+/* Duplica un file o una cartella: una copia accanto, "nome copia.est". Una cartella si copia con
+ * tutto quello che ha dentro; il suo nome non ha estensione (come il Finder), anche se ha un punto. */
 static void duplica(int e) {
-    if (e < 0 || elementi[e].tipo != TIPO_FILE) return;
+    if (e < 0 || (elementi[e].tipo != TIPO_FILE && elementi[e].tipo != TIPO_CARTELLA)) return;
+    int cartella = elementi[e].tipo == TIPO_CARTELLA;
     const char *nome = elementi[e].nome;
     char base[MAX_NOME_FILE], est[MAX_NOME_FILE] = "", copia[MAX_NOME_FILE];
     copia_testo(base, nome, MAX_NOME_FILE);
     int punto = -1;
-    for (int i = 1; base[i]; i++) if (base[i] == '.') punto = i;
+    for (int i = 1; base[i] && !cartella; i++) if (base[i] == '.') punto = i;
     if (punto > 0) { copia_testo(est, base + punto, MAX_NOME_FILE); base[punto] = 0; }
     metti_testo(base + lunghezza(base), " copia");
     nome_libero(copia, base, est);
     char da[MAX_LUNGO], a[MAX_LUNGO];
     percorso_di(da, qui, nome);
     percorso_di(a, qui, copia);
+    if (cartella) {
+        int errore = a[0] ? copia_cartella(da, a) : ERRORE_NOME;
+        if (errore < 0) { avvisa_errore("Duplica", errore); return; }
+        rileggi(copia);
+        return;
+    }
     int errore = 0;
     int f = a[0] ? apri(da, APRI_LEGGERE) : ERRORE_NOME;
     int g = f < 0 ? f : apri(a, APRI_SCRIVERE | APRI_CREARE | APRI_SVUOTARE);
@@ -612,19 +619,50 @@ static void duplica(int e) {
     rileggi(copia);
 }
 
-/* Elimina un file, o una cartella vuota (quelle piene per ora no: niente cestino, e
- * cancellare tutto quello che hanno dentro e' troppo facile da sbagliare). */
+/* Un file o una cartella vuota si eliminano subito. Una cartella con qualcosa dentro prima
+ * chiede conferma (l'avviso di UIKit, come Store e Attivita'), dicendo quante cose ci sono
+ * dentro, perche' non c'e' un cestino. Il disegno di Figma non ha questo avviso: il testo e' lo
+ * stesso stile di quelli di Store. */
+static struct avviso avviso_elimina;
+static char da_eliminare[MAX_NOME_FILE];      /* la cartella su cui si e' chiesto */
+
+static void elimina_adesso(const char *nome) {
+    char p[MAX_LUNGO];
+    percorso_di(p, qui, nome);
+    int errore = p[0] ? cancella_tutto(p) : ERRORE_NOME;
+    rileggi(0);                                  /* quello che non si e' tolto resta e si vede */
+    if (errore < 0) avvisa_errore("Elimina", errore);
+}
+
+static void risposta_elimina(struct avviso *a, int scelta, void *dati) {
+    (void)a; (void)dati;
+    if (scelta == AVVISO_CONFERMA && da_eliminare[0]) elimina_adesso(da_eliminare);
+    da_eliminare[0] = 0;
+}
+
 static void elimina(int e) {
     if (e < 0) return;
     char p[MAX_LUNGO];
     percorso_di(p, qui, elementi[e].nome);
-    int errore = p[0] ? cancella(p) : ERRORE_NOME;
-    if (errore == ERRORE_NON_VUOTA) {
-        avvisa("Per ora si possono eliminare solo le cartelle vuote");
+    if (!p[0]) { avvisa_errore("Elimina", ERRORE_NOME); return; }
+    unsigned long long dentro = 0;
+    if (elementi[e].tipo == TIPO_CARTELLA && conta_dentro(p, &dentro) == 0 && dentro > 0) {
+        char titolo[MAX_TESTO_WIDGET], testo[160], *d = metti_testo(titolo, "Eliminare \"");
+        d = metti_testo(d, elementi[e].nome);
+        metti_testo(d, "\"?");
+        if (dentro == 1) d = metti_testo(testo, "Dentro c'\x8A 1 elemento. ");
+        else {
+            d = metti_testo(testo, "Dentro ci sono ");
+            d = metti_testo(metti_numero(d, dentro), " elementi. ");
+        }
+        metti_testo(d, "Verranno eliminati per sempre: non si possono recuperare.");
+        copia_testo(da_eliminare, elementi[e].nome, MAX_NOME_FILE);
+        avviso_prepara(&avviso_elimina, titolo, testo, "Elimina", PERICOLO, 1, risposta_elimina, 0);
+        finestra_tk_avviso(&finestra, &avviso_elimina);
+        avviso_apri(&avviso_elimina);
         return;
     }
-    if (errore < 0) { avvisa_errore("Elimina", errore); return; }
-    rileggi(0);
+    elimina_adesso(elementi[e].nome);
 }
 
 /* Un pacchetto .app (un'app da installare, vedi pacchetto.h)? */
@@ -733,11 +771,12 @@ static const struct voce_menu_tk menu_cartella[] = {
 
 static int bersaglio = -1;           /* l'elemento su cui si e' aperto il menu (o -1) */
 
-/* Apri solo le cartelle e i pacchetti; Duplica solo i file; Nuova cartella solo dove si legge. */
+/* Apri solo le cartelle e i pacchetti; Duplica file e cartelle; Nuova cartella solo dove si legge. */
 static int voce_attiva(int azione, void *dati) {
     (void)dati;
     if (azione == APRI) return si_apre(bersaglio);
-    if (azione == DUPLICA) return bersaglio >= 0 && elementi[bersaglio].tipo == TIPO_FILE;
+    if (azione == DUPLICA)
+        return bersaglio >= 0 && (elementi[bersaglio].tipo == TIPO_FILE || elementi[bersaglio].tipo == TIPO_CARTELLA);
     if (azione == NUOVA_CARTELLA) return !errore_qui;
     return 1;
 }
