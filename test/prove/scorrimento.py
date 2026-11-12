@@ -10,14 +10,16 @@ ciascuna: senza i riempitivi le righe sarebbero 9, e nella tabella ne stanno 9 g
 Si aprono Files, Esempio e Impostazioni, e per ultima Attivita (quarto posto, angolo
 in 260,250). Le righe sono 15: 0..4 il sistema (init, eventi, compositore, launcher,
 scrivania), 5..10 i riempitivi, 11 Files, 12 Esempio, 13 Impostazioni, 14 Attivita.
-Sono alte 30 pixel; nella vista ne entrano 272 (9 righe), il contenuto ne e' alto
-2 + 15 * 30 = 452: si puo' scorrere di 180 pixel. La rotella accelera come sul Mac
-(stile.h): uno scatto da solo fa 10 pixel; due scatti di fila, veloci, 10 + 20 = 30.
+Sono alte 44 pixel (la prima ha il centro a 162 dall'angolo della finestra); la vista e'
+alta 266 (6 righe), il contenuto 2 + 15 * 44 = 662: si puo' scorrere di 391 pixel. La
+rotella accelera come sul Mac (stile.h): uno scatto da solo fa 10 pixel; due scatti di
+fila, veloci, 10 + 20 = 30.
 
-Dove sono le cose, dall'angolo della finestra di Attivita:
-  - la tabella: x 20..620, y 98..408; la testata e' alta 34, le righe cominciano a y 134;
-  - la striscia della barra di scorrimento: x 606..620, y 132..408, sopra le righe. Il
-    cursore e' lungo 272 * 272 / 452 = 163 pixel: in cima va da y 134 a 297.
+Dove sono le cose, dall'angolo della finestra di Attivita (il tema e' chiaro: il testo e'
+scuro, si guardano i pixel scuri):
+  - la tabella: la testata a y 120 (il puntatore sta li': la rotella vale lo stesso e
+    nessuna riga si illumina), le righe cominciano a y 140;
+  - la striscia della barra di scorrimento: x 600..618, y 138..404, sopra le righe.
 
 Le righe si confrontano solo nella colonna dei numeri dei processi: lo stato e la
 memoria li aggiorna Attivita ogni secondo, e possono cambiare da una foto all'altra.
@@ -36,8 +38,8 @@ Cosa si controlla:
   5. TRASCINARE: uno scatto fa ricomparire la barra; il puntatore sopra il cursore lo
      allarga, e finche' resta sopra la barra non svanisce (anche dopo il secondo);
      premuto e trascinato fino in fondo, le righe sono come scorse in fondo con la rotella;
-  6. CLIC DOPO LO SCORRIMENTO: scorse le righe in fondo, un clic a y 359 cade sulla riga
-     13, Impostazioni (senza scorrere sarebbe la 7, un riempitivo). "Termina processo" (la
+  6. CLIC DOPO LO SCORRIMENTO: scorse le righe in fondo, un clic a y 343 cade sulla riga
+     13, Impostazioni (senza scorrere sarebbe la 4, scrivania). "Termina processo" (la
      X nella barra degli strumenti) deve chiudere proprio Impostazioni.
 Le foto 'visibile', 'sopra' e 'trascinata' mostrano la barra nei suoi stati.
 """
@@ -52,16 +54,18 @@ ORDINE = 65
 DESCRIZIONE = "Attivita: la rotella scorre i processi; la barra compare, si trascina, sparisce"
 DISCO = "disco_prove.img"             # con i riempitivi: vedi sopra
 
-STRISCIA = (606, 133, 620, 406)       # la barra di scorrimento (dentro la finestra)
-RIGHE = (21, 134, 100, 402)           # le righe, ma solo la colonna dei numeri: le altre
+STRISCIA = (600, 138, 618, 404)       # la barra di scorrimento (dentro la finestra)
+RIGHE = (44, 140, 100, 404)           # le righe, ma solo la colonna dei numeri: le altre
                                       # (stato, memoria) Attivita le aggiorna da sola
-DENTRO = (300, 250)                   # un punto sopra le righe, lontano dalla barra
-CURSORE = (613, 215)                  # il centro del cursore, quando si e' in cima
-RIGA_IMPOSTAZIONI = 359               # la y della riga 13 quando si e' scorso in fondo
+DENTRO = (300, 120)                   # un punto sulla testata della tabella: la rotella vale
+                                      # lo stesso, e nessuna riga si illumina sotto il puntatore
+CURSORE = (607, 194)                  # il centro del cursore, quando si e' in cima
+RIGA_IMPOSTAZIONI = 343               # la y della riga 13 quando si e' scorso in fondo
 SCATTO = 10                           # i pixel di uno scatto da solo (SCORRIMENTO_RIGA)
 RAFFICA = 30                          # due scatti veloci: 10 + 20
-IN_FONDO = 180                        # fin dove si puo' scorrere: 452 - 272
-TERMINA = (616, 58)                   # "Termina processo", la X nella barra degli strumenti
+IN_FONDO = 391                        # fin dove si puo' scorrere: il contenuto meno la vista
+ULTIMA_RIGA = 391                     # dove finisce il testo dell'ultima riga (y dall'angolo della finestra) quando si e' in fondo
+TERMINA = (611, 61)                   # "Termina processo", la X nella barra degli strumenti
 
 
 def zona(x, y, r):
@@ -73,10 +77,17 @@ def uguali(a, b, r):
 
 
 def scritte(foto, r):
-    """Dove c'e' scritto qualcosa nella zona: i pixel chiari (il testo e' bianco). Lo
-    sfondo della tabella e' di vetro e lascia vedere lo sfondo della scrivania, che non
-    scorre: per questo si confrontano solo le scritte."""
-    return foto.crop(r).convert("L").point(lambda v: 255 if v > 160 else 0)
+    """Dove c'e' scritto qualcosa nella zona: i pixel scuri (il tema e' chiaro, il testo
+    e' grigio scuro). Lo sfondo della tabella e' di vetro e lascia vedere lo sfondo della
+    scrivania, che non scorre: per questo si confrontano solo le scritte."""
+    return foto.crop(r).convert("L").point(lambda v: 255 if v < 150 else 0)
+
+
+def fine_testo(foto, r):
+    """La y (dentro la zona r) dove finisce l'ultima scritta della colonna dei numeri."""
+    bn = scritte(foto, r)
+    ys = [y for y in range(bn.size[1]) if any(bn.getpixel((x, y)) for x in range(bn.size[0]))]
+    return ys[-1] if ys else None
 
 
 def spostamento(dopo, prima, r):
@@ -153,11 +164,15 @@ def esegui(p):
     # in fondo: 20 scatti fanno almeno 200 pixel (anche se Attivita, su una macchina
     # emulata lenta, li vedesse tutti da soli, 10 pixel ciascuno), piu' dei 180 che si
     # possono scorrere: le righe devono essere salite di 180 esatti, non di piu'
-    m.rotella(20, pausa=0.02)
-    m.aspetta_che(lambda f: salite_di(f, prima, righe, IN_FONDO), 8.0,
+    # (ora la vista e' piu' bassa del contenuto: fra la foto in cima e quella in fondo non
+    # c'e' piu' niente in comune, quindi si controlla dove arriva l'ultima riga)
+    m.rotella(45, pausa=0.02)
+    m.aspetta_che(lambda f: fine_testo(f, righe) is not None
+                  and abs(fine_testo(f, righe) - (ULTIMA_RIGA - RIGHE[1])) <= 1, 8.0,
                   cosa=f"tanti scatti portare le righe in fondo ({IN_FONDO} pixel)")
-    in_fondo = m.foto("in_fondo")
-    m.rotella(-20, pausa=0.02)
+    in_fondo = m.aspetta_schermo_fermo()
+    m.foto("in_fondo")
+    m.rotella(-45, pausa=0.02)
     m.aspetta_che(lambda f: uguali(f, prima, striscia) and uguali(f, prima, righe), 8.0,
                   pausa=0.1, cosa="tanti scatti in su riportare le righe in cima")
 
@@ -180,7 +195,7 @@ def esegui(p):
                 "con il puntatore sopra, dopo un secondo la barra e' cambiata (svanisce?)")
     m.pulsante(True)
     time.sleep(0.2)
-    for i in range(1, 11):            # 150 pixel: piu' dei 109 che il cursore puo' fare
+    for i in range(1, 13):            # 180 pixel: piu' dei 160 che il cursore puo' fare
         m.muovi(x + CURSORE[0], y + CURSORE[1] + 15 * i)
         time.sleep(0.05)
     # Attivita ridisegna dopo ogni spostamento del puntatore: su una macchina emulata
