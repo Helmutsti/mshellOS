@@ -395,10 +395,11 @@ static void avvisa_errore(const char *cosa, int errore) {
  * il testo "etichetta" alto 16, 4 sotto) e le voci S da 32, a 4 l'una dall'altra (due
  * fondi arrotondati non si toccano mai). Dentro la voce: 12, il simbolo da 16, 8, il nome. */
 #define LATERALE_LARGHEZZA 200
-#define LATERALE_MARGINE   SPAZIO_8    /* ai lati delle voci */
-#define LATERALE_CIMA      SPAZIO_12   /* sopra la prima */
+#define LATERALE_MARGINE   SPAZIO_4    /* ai lati delle voci: 4 + 12 dentro la voce = 16 dal bordo */
+#define LATERALE_CIMA      SPAZIO_16   /* sopra il primo titolo (che non ha fondo): 16 dal bordo */
 #define LATERALE_TRA       SPAZIO_4    /* tra una voce e l'altra */
-#define LATERALE_TITOLO    (SPAZIO_8 + INTERLINEA_ETICHETTA + SPAZIO_4)   /* 28 */
+#define LATERALE_TITOLO    (INTERLINEA_ETICHETTA + SPAZIO_4)   /* il testo e 4 sotto */
+#define LATERALE_TITOLO_SOPRA SPAZIO_8 /* tra la voce di prima e un titolo (non il primo) */
 #define LATERALE_RIGA      ALTEZZA_S
 #define LATERALE_DENTRO    PADDING_S   /* nella voce, prima del simbolo */
 #define LATERALE_GAP       GAP_M       /* tra simbolo e nome */
@@ -435,8 +436,11 @@ static struct laterale laterale;
 /* Dove comincia la riga i, e quanto e' alta. */
 static int riga_laterale_y(const struct widget *w, int i, int *alta) {
     int y = w->y + LATERALE_CIMA;
-    for (int k = 0; k < i; k++)
+    for (int k = 0; k <= i; k++) {
+        if (k > 0 && righe_laterali[k].tipo == TITOLO) y += LATERALE_TITOLO_SOPRA;
+        if (k == i) break;
         y += (righe_laterali[k].tipo == TITOLO ? LATERALE_TITOLO : LATERALE_RIGA) + LATERALE_TRA;
+    }
     *alta = righe_laterali[i].tipo == TITOLO ? LATERALE_TITOLO : LATERALE_RIGA;
     return y;
 }
@@ -477,7 +481,7 @@ static void laterale_disegna(struct widget *w, struct pennello *p) {
         if (r->tipo == TITOLO) {
             pennello_colore(p, TESTO_SECONDARIO);
             testo(p, FONT_ETICHETTA, x + LATERALE_DENTRO,
-                  y + SPAZIO_8 + (INTERLINEA_ETICHETTA - FONT_ETICHETTA->altezza) / 2, r->testo);
+                  y + (INTERLINEA_ETICHETTA - FONT_ETICHETTA->altezza) / 2, r->testo);
             continue;
         }
         /* accesa (la cartella in cui si e', il filtro acceso) come una riga scelta, sotto il
@@ -572,12 +576,6 @@ static const struct tipo_widget tipo_laterale = {
 #define COLONNA_DIMENSIONE 100
 #define COLONNA_MODIFICATO 140
 
-/* Lo stato della cartella (vuota, errore...) al centro: icona 48, 12, il titolo (corpo
- * medio), 12, la spiegazione (piccolo), su una colonna larga 280. */
-#define STATO_LARGHEZZA   280
-#define STATO_ICONA       ICONA_OGGETTO
-#define STATO_TRA         SPAZIO_12
-
 /* Il campo del nome nuovo (rinomina): come un campo di testo di UIKit, incassato e con il
  * fuoco. Nell'elenco e' un campo S (alto 32, raggio 10); nel tile prende il posto del nome
  * (alto 24, raggio 6 come il fondo del nome scelto). */
@@ -589,6 +587,7 @@ static const struct tipo_widget tipo_laterale = {
 struct contenuto {
     struct widget base;
     struct barra_scorrimento barra;  /* sua figlia: sa anche dove si e' scorso */
+    struct stato_vuoto stato;        /* sua figlia: vuota, errore, permesso negato (UIKit) */
     int scelto;                      /* l'elemento scelto (indice in elementi), o -1 */
     int sopra;                       /* quello sotto il puntatore (indice in elementi), o -1 */
     int rinomina;                    /* quello di cui si sta cambiando il nome, o -1 */
@@ -610,9 +609,12 @@ static int righe_y(const struct widget *w) {
 /* La riga k dell'elenco: dove comincia, nelle righe (prima di scorrere). */
 static int riga_elenco_y(int k) { return k * (RIGA_ALTA + RIGA_TRA); }
 
+static void aggiorna_stato_cartella(struct contenuto *c);
+
 /* Rifa' il posto dei tile (vista a icone) e l'altezza di tutto, per lo scorrimento. */
 static void contenuto_impagina(struct contenuto *c) {
     struct widget *w = &c->base;
+    aggiorna_stato_cartella(c);
     if (vista == A_ICONE) {
         int largo = w->l - 2 * GRIGLIA_MARGINE;
         int per_riga = (largo + GRIGLIA_TRA) / (TILE_LARGHEZZA + GRIGLIA_TRA);
@@ -663,6 +665,7 @@ static void contenuto_misura(struct widget *w, int *l, int *a) {
 static void contenuto_disponi(struct widget *w) {
     struct contenuto *c = (struct contenuto *)w;
     barra_scorrimento_posto(&c->barra, w->x, w->y, w->l, w->a);
+    c->stato.base.x = w->x; c->stato.base.y = w->y; c->stato.base.l = w->l; c->stato.base.a = w->a;
     contenuto_impagina(c);
 }
 
@@ -707,48 +710,41 @@ static void testo_tagliato(struct pennello *p, const struct font *f, int x, int 
     testo_centrato(p, f, x, y, a, riga[0]);
 }
 
-/* Lo stato della cartella al centro: l'icona, il titolo, la spiegazione (su piu' righe). */
-static void disegna_stato(struct pennello *p, const struct widget *w, int icona_stato,
-                          const char *titolo, const char *spiegazione) {
-    char righe_t[3][MAX_RIGA_NOME], righe_s[3][MAX_RIGA_NOME];
-    int nt = testo_a_capo(FONT_CORPO_MEDIO, titolo, STATO_LARGHEZZA, righe_t, 3);
-    int ns = testo_a_capo(FONT_PICCOLO_NUOVO, spiegazione, STATO_LARGHEZZA, righe_s, 3);
-    int alto = STATO_ICONA + STATO_TRA + nt * INTERLINEA_CORPO + (ns ? STATO_TRA + ns * INTERLINEA_PICCOLO : 0);
-    int y = w->y + (w->a - alto) / 2, centro = w->x + w->l / 2;
-    pennello_colore(p, TESTO_SECONDARIO);
-    icona(p, icona_stato, STATO_ICONA, centro - STATO_ICONA / 2, y);
-    y += STATO_ICONA + STATO_TRA;
-    pennello_colore(p, TESTO_PRIMARIO);
-    for (int i = 0; i < nt; i++, y += INTERLINEA_CORPO)
-        testo_centrato(p, FONT_CORPO_MEDIO, centro - larghezza_testo(FONT_CORPO_MEDIO, righe_t[i]) / 2, y,
-                       INTERLINEA_CORPO, righe_t[i]);
-    y += STATO_TRA;
-    pennello_colore(p, TESTO_SECONDARIO);
-    for (int i = 0; i < ns; i++, y += INTERLINEA_PICCOLO)
-        testo_centrato(p, FONT_PICCOLO_NUOVO, centro - larghezza_testo(FONT_PICCOLO_NUOVO, righe_s[i]) / 2, y,
-                       INTERLINEA_PICCOLO, righe_s[i]);
-}
-
-/* Perche' la cartella non si vede: vuota, permesso negato, errore. */
-static void disegna_stato_cartella(struct pennello *p, const struct widget *w) {
-    if (errore_qui == ERRORE_PERMESSO) {
-        disegna_stato(p, w, ICONA_LOCK, "Non hai il permesso di aprire questa cartella",
-                      proprietario_qui == UID_SISTEMA
-                          ? "Appartiene al sistema: solo il sistema pu\x95 leggerla."
-                          : "Appartiene a un altro utente: solo lui pu\x95 leggerla.");
-    } else if (errore_qui) {
-        const char *perche = errore_qui == ERRORE_NOME ? "Il suo percorso \x8A troppo lungo per aprirla."
-                           : errore_qui == ERRORE_NON_TROVATO ? "Non c'\x8A pi\x97: forse \x8A stata spostata."
-                           : errore_qui == ERRORE_NON_CARTELLA ? "Non \x8A una cartella."
-                           : "Il disco non ha risposto. Riprova tra poco.";
-        disegna_stato(p, w, ICONA_TRIANGLE_ALERT, "Impossibile leggere la cartella", perche);
-    } else if (!quanti_elementi) {
-        disegna_stato(p, w, ICONA_FOLDER, "Questa cartella \x8A vuota",
-                      "Usa il tasto destro per creare una nuova cartella.");
-    } else {                                 /* ci sono file, ma il filtro o la ricerca li nascondono */
-        disegna_stato(p, w, ICONA_SEARCH, "Nessun file da mostrare",
-                      "Nessun file di questa cartella corrisponde al filtro o alla ricerca.");
+/* Perche' la cartella non si vede: vuota, permesso negato, errore, o tutto nascosto da un
+ * filtro. Si dice al widget stato_vuoto di UIKit, che sta sopra il contenuto. */
+static void aggiorna_stato_cartella(struct contenuto *c) {
+    int icona_stato;
+    const char *titolo, *perche;
+    if (!errore_qui && quanti_visibili) {
+        if (!c->stato.base.nascosto) widget_nascondi(&c->stato.base, 1);
+        return;
     }
+    if (errore_qui == ERRORE_PERMESSO) {
+        icona_stato = ICONA_LOCK;
+        titolo = "Non hai il permesso di aprire questa cartella";
+        perche = proprietario_qui == UID_SISTEMA
+                     ? "Appartiene al sistema: solo il sistema pu\x95 leggerla."
+                     : "Appartiene a un altro utente: solo lui pu\x95 leggerla.";
+    } else if (errore_qui) {
+        icona_stato = ICONA_TRIANGLE_ALERT;
+        titolo = "Impossibile leggere la cartella";
+        perche = errore_qui == ERRORE_NOME ? "Il suo percorso \x8A troppo lungo per aprirla."
+               : errore_qui == ERRORE_NON_TROVATO ? "Non c'\x8A pi\x97: forse \x8A stata spostata."
+               : errore_qui == ERRORE_NON_CARTELLA ? "Non \x8A una cartella."
+               : "Il disco non ha risposto. Riprova tra poco.";
+    } else if (!quanti_elementi) {
+        icona_stato = ICONA_FOLDER;
+        titolo = "Questa cartella \x8A vuota";
+        perche = "Usa il tasto destro per creare una nuova cartella.";
+    } else {                                 /* ci sono file, ma il filtro o la ricerca li nascondono */
+        icona_stato = ICONA_SEARCH;
+        titolo = "Nessun file da mostrare";
+        perche = "Nessun file di questa cartella corrisponde al filtro o alla ricerca.";
+    }
+    if (c->stato.icona != icona_stato || !uguali(c->stato.titolo, titolo) ||
+        !uguali(c->stato.spiegazione, perche))
+        stato_vuoto_cambia(&c->stato, icona_stato, titolo, perche);
+    if (c->stato.base.nascosto) widget_nascondi(&c->stato.base, 0);
 }
 
 enum { NORMALE, SOPRA, SCELTO };
@@ -886,9 +882,10 @@ static void contenuto_disegna(struct widget *w, struct pennello *p) {
     struct contenuto *c = (struct contenuto *)w;
     pennello_salva(p);
     pennello_ritaglia(p, w->x, w->y, w->l, w->a);
-    if (errore_qui || !quanti_visibili) disegna_stato_cartella(p, w);
-    else if (vista == A_ICONE) disegna_icone(p, c);
-    else disegna_elenco(p, c);
+    if (!errore_qui && quanti_visibili) {      /* se no, lo stato vuoto (figlio) disegna da se' */
+        if (vista == A_ICONE) disegna_icone(p, c);
+        else disegna_elenco(p, c);
+    }
     if (avviso[0]) disegna_avviso(p, w);
     pennello_ripristina(p);
 }
@@ -1102,14 +1099,15 @@ struct menu {
 static struct menu menu;
 
 /* IL MENU: il "Menu" del file Figma (Componenti complessi), livello sovrapposto. Un pannello
- * largo 240, raggio 20, fondo SUPERFICIE_ELEVATA con l'ombra "sovrapposto"; 8 sopra e sotto;
- * le voci M (alte 40, larghe 224: rientrate di 8 ai lati, raggio 12, concentrico) una sotto
+ * largo 240, raggio 20, fondo SUPERFICIE_ELEVATA con l'ombra "sovrapposto"; 5 sopra e sotto;
+ * le voci M (alte 40, larghe 232: rientrate di 4 ai lati, raggio 12, concentrico) una sotto
  * l'altra; i separatori sono una linea BORDO_SEPARATORE da bordo a bordo, con 4 sopra e sotto.
  * Nella voce: 12, il simbolo (18), 8, il testo ("corpo"), la scorciatoia ("piccolo",
  * TESTO_SECONDARIO) o la freccia del sottomenu o la spunta (16) a destra, 12. Sotto il
  * puntatore la voce ha il fondo CONTROLLO_SFONDO; spenta e' tutta TESTO_DISABILITATO. */
 #define MENU_LARGO         240
-#define MENU_PADDING       SPAZIO_8     /* sopra, sotto, e a sinistra e a destra delle voci */
+#define MENU_PADDING_X     SPAZIO_4     /* a sinistra e a destra delle voci: 4 + 12 dentro la voce = 16 */
+#define MENU_PADDING_Y     (SPAZIO_16 - (VOCE_ALTA - VOCE_SIMBOLO) / 2)   /* sopra e sotto: 5 + 11 sopra il simbolo = 16 */
 #define VOCE_ALTA          ALTEZZA_M
 #define VOCE_DENTRO        PADDING_S    /* 12 */
 #define VOCE_GAP           GAP_M        /* 8 */
@@ -1122,14 +1120,14 @@ static struct menu menu;
 static int alta_voce(const struct voce_menu *v) { return v->azione == SEPARATORE ? SEPARA_ALTO : VOCE_ALTA; }
 
 static int altezza_pannello(const struct pannello *pn) {
-    int a = 2 * MENU_PADDING;
+    int a = 2 * MENU_PADDING_Y;
     for (int i = 0; i < pn->quante; i++) a += alta_voce(&pn->voci[i]);
     return a;
 }
 
 /* Dove comincia la voce i del pannello (y), e quanto e' alta. */
 static int voce_y(const struct pannello *pn, int i, int *alta) {
-    int y = pn->y + MENU_PADDING;
+    int y = pn->y + MENU_PADDING_Y;
     for (int k = 0; k < i; k++) y += alta_voce(&pn->voci[k]);
     *alta = alta_voce(&pn->voci[i]);
     return y;
@@ -1165,7 +1163,7 @@ static void fondo_pannello(struct pennello *p, int x, int y, int l, int a) {
 
 static void disegna_pannello(struct pennello *p, const struct pannello *pn, int numero) {
     fondo_pannello(p, pn->x, pn->y, MENU_LARGO, altezza_pannello(pn));
-    int x = pn->x + MENU_PADDING, largo = MENU_LARGO - 2 * MENU_PADDING;
+    int x = pn->x + MENU_PADDING_X, largo = MENU_LARGO - 2 * MENU_PADDING_X;
     for (int i = 0; i < pn->quante; i++) {
         const struct voce_menu *v = &pn->voci[i];
         int alta, y = voce_y(pn, i, &alta);
@@ -1201,11 +1199,11 @@ static void disegna_pannello(struct pennello *p, const struct pannello *pn, int 
 }
 
 /* LA SCHEDA DELLE INFORMAZIONI: un pannello al centro della finestra, come il menu
- * (sovrapposto, raggio 20), con 24 di margine: l'icona, il nome (sezione) e sotto, a due
+ * (sovrapposto, raggio 20), con 16 di margine: l'icona, il nome (sezione) e sotto, a due
  * colonne, quello che si sa del file (titoli in TESTO_SECONDARIO, valori a destra). Un clic
  * ovunque la chiude. */
 #define SCHEDA_LARGHEZZA 320
-#define SCHEDA_DENTRO    SPAZIO_24
+#define SCHEDA_DENTRO    SPAZIO_16
 #define SCHEDA_RIGA      (ALTEZZA_S - SPAZIO_8)   /* 24: una riga di "corpo" con un po' d'aria */
 #define SCHEDA_TITOLI    90                     /* la colonna dei titoli */
 
@@ -1266,7 +1264,7 @@ static int voce_in(const struct menu *m, int x, int y) {
         if (x < pn->x || x >= pn->x + MENU_LARGO || y < pn->y || y >= pn->y + altezza_pannello(pn)) continue;
         for (int i = 0; i < pn->quante; i++) {
             int alta, vy = voce_y(pn, i, &alta);
-            if (y >= vy && y < vy + alta && x >= pn->x + MENU_PADDING && x < pn->x + MENU_LARGO - MENU_PADDING)
+            if (y >= vy && y < vy + alta && x >= pn->x + MENU_PADDING_X && x < pn->x + MENU_LARGO - MENU_PADDING_X)
                 return pn->voci[i].azione == SEPARATORE ? -2 : n * 100 + i;
         }
         return -2;
@@ -1284,7 +1282,7 @@ static void apri_sottomenu(struct menu *m, int i) {
     const struct pannello *pn = &m->pannelli[0];
     int alta, vy = voce_y(pn, i, &alta);
     struct pannello *sotto = &m->pannelli[1];
-    *sotto = (struct pannello){ menu_ordina, QUANTE(menu_ordina), pn->x + MENU_LARGO + SOTTOMENU_STACCO, vy - MENU_PADDING };
+    *sotto = (struct pannello){ menu_ordina, QUANTE(menu_ordina), pn->x + MENU_LARGO + SOTTOMENU_STACCO, vy - MENU_PADDING_Y };
     if (sotto->x + MENU_LARGO > m->base.l - MENU_BORDO) sotto->x = pn->x - MENU_LARGO - SOTTOMENU_STACCO;
     if (sotto->x < MENU_BORDO) sotto->x = MENU_BORDO;
     int a = altezza_pannello(sotto);
@@ -1632,6 +1630,9 @@ int main(int quanti, char **argomenti) {
                                     .scelto = -1, .sopra = -1, .rinomina = -1, .clic_su = -1 };
     barra_scorrimento_prepara(&contenuto.barra);
     widget_aggiungi(&contenuto.base, &contenuto.barra.base);
+    stato_vuoto_prepara(&contenuto.stato, ICONA_FOLDER, "", "");
+    contenuto.stato.base.nascosto = 1;
+    widget_aggiungi(&contenuto.base, &contenuto.stato.base);
     widget_aggiungi(&corpo.base, &laterale.base);
     widget_aggiungi(&corpo.base, &contenuto.base);
 
