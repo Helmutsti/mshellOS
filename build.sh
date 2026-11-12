@@ -23,6 +23,8 @@
 #                      solo in disco_prove.img, mai nel disco normale
 #   file/              quello che si mette qui finisce nel disco, nella casa della persona
 #                      (/data/users/1000/home, che i programmi vedono come /home)
+#   risorse/           le risorse del sistema (caratteri, icone, sfondi), gia' pronte (le
+#                      prepara strumenti/grafica/genera.py): vanno in /system/resources
 #   strumenti/         programmi che girano qui, sul computer che compila (la grafica)
 #   build/<cpu>/       il compilato (si puo' cancellare, viene rifatto):
 #       linux          il kernel (per il PC: bzImage; per ARM: Image)
@@ -53,8 +55,9 @@
 #                                pacchetto .app, scompattato)
 #       bin/                     i comandi (per ora nessuno)
 #       lib/                     per le librerie condivise (per ora nessuna: vedi sotto)
-#       resources/fonts, icons, wallpapers   le risorse del sistema (per ora i caratteri e
-#                                le icone sono dentro i programmi: le cartelle sono pronte)
+#       resources/               le risorse del sistema: fonts/ (i caratteri), icons/ (le
+#                                icone), wallpapers/ (gli sfondi). Sono i file di risorse/
+#                                del repository; li leggono GKit e UIKit
 #       firmware/                il firmware dei dispositivi (firmware_class.path)
 #       modules/                 i moduli del kernel da caricare dal disco (per ora tutti
 #                                quelli che servono stanno nell'archivio di avvio)
@@ -276,15 +279,23 @@ chmod 755 "$ALBERO_SISTEMA/data"
 #   /system/lib        le librerie condivise. Oggi non ce ne sono: i programmi sono
 #                      statici (passo 1) e si portano dentro tutto. Quando ci saranno
 #                      librerie condivise, qui andranno loro e il "caricatore" (ld.so)
-#   /system/resources  le risorse del sistema: caratteri, icone, sfondi. Oggi i caratteri
-#                      e le icone sono dentro i programmi (uikit/materiali_dati.h, fatto
-#                      da strumenti/), e lo sfondo lo disegna la scrivania
+#   /system/resources  le risorse del sistema: caratteri, icone, sfondi (le riempie il
+#                      passo qui sotto, da risorse/)
 #   /system/firmware   il firmware dei dispositivi (firmware_class.path, RIGA_KERNEL)
 #   /system/modules    i moduli del kernel da caricare dal disco (oggi tutti quelli che
 #                      servono stanno nell'archivio di avvio, passo 3)
 for c in /system/bin /system/lib /system/resources/fonts /system/resources/icons \
          /system/resources/wallpapers /system/firmware /system/modules; do
     metti_cartella "$c" 0 755
+done
+
+# Le risorse del sistema: i file di risorse/ (preparati da strumenti/grafica/genera.py: i
+# caratteri e le icone gia' disegnati, misura per misura, e lo sfondo) vanno tali e quali in
+# /system/resources (fonts/, icons/, wallpapers/). Non sono dentro i programmi: GKit li
+# legge dal disco (gkit/materiali_file.c) e UIKit carica i suoi la prima volta che servono
+# (uikit/materiali.h). Sono di tutti da leggere: 644.
+(cd risorse && find . -type f | sort) | while read -r f; do
+    metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
 done
 
 SERVIZI=""

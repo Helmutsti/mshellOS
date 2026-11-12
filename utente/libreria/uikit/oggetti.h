@@ -10,7 +10,7 @@
  *     gli altri sono il file semplice.
  *
  * I COLORI vengono dal tema (oggetto/riempimento-forte, oggetto/riempimento, oggetto/tratto):
- * i dati (materiali_dati.h, da strumenti/grafica/genera.py) dicono per ogni pixel quanto c'e'
+ * i dati (i file in /system/resources/icons/objects, da strumenti/grafica/genera.py) dicono per ogni pixel quanto c'e'
  * di ognuno dei tre, e li si mescola qui con i colori del tema in uso. Livello piatto: niente
  * ombre. Lo stato (sopra, scelto) non e' dell'oggetto ma di chi lo contiene (il tile, la riga).
  *
@@ -34,21 +34,22 @@ enum { OGGETTO_GRANDE, OGGETTO_PICCOLO };
 #define OGGETTO_ETICHETTA_Y  23    /* la scritta (TXT...) sul foglio grande: la cima, dal disegno */
 
 /* I dati, per tipo: [tipo][0 grande, 1 piccola]. I file con l'etichetta, nella misura
- * grande, sono tutti lo stesso foglio; la scritta e' in oggetto_etichetta. */
-static const struct immagine *const oggetti_dati[OGGETTI][2] = {
-    [OGGETTO_FILE]         = { &oggetto_file_grande,         &oggetto_file_piccola },
-    [OGGETTO_CARTELLA]     = { &oggetto_cartella_grande,     &oggetto_cartella_piccola },
-    [OGGETTO_TXT]          = { &oggetto_etichetta_grande,    &oggetto_txt_piccola },
-    [OGGETTO_PDF]          = { &oggetto_etichetta_grande,    &oggetto_pdf_piccola },
-    [OGGETTO_PNG]          = { &oggetto_etichetta_grande,    &oggetto_png_piccola },
-    [OGGETTO_ZIP]          = { &oggetto_etichetta_grande,    &oggetto_zip_piccola },
-    [OGGETTO_BIN]          = { &oggetto_etichetta_grande,    &oggetto_bin_piccola },
-    [OGGETTO_HOME]         = { &oggetto_home_grande,         &oggetto_home_piccola },
-    [OGGETTO_SCRIVANIA]    = { &oggetto_scrivania_grande,    &oggetto_scrivania_piccola },
-    [OGGETTO_DOCUMENTI]    = { &oggetto_documenti_grande,    &oggetto_documenti_piccola },
-    [OGGETTO_IMMAGINI]     = { &oggetto_immagini_grande,     &oggetto_immagini_piccola },
-    [OGGETTO_DOWNLOAD]     = { &oggetto_download_grande,     &oggetto_download_piccola },
-    [OGGETTO_APPLICAZIONI] = { &oggetto_applicazioni_grande, &oggetto_applicazioni_piccola },
+ * grande, sono tutti lo stesso foglio; la scritta e' in oggetto_etichetta. I numeri sono
+ * quelli dei materiali (immagine_del_sistema, materiali.h). */
+static const unsigned char oggetti_dati[OGGETTI][2] = {
+    [OGGETTO_FILE]         = { MATERIALE_oggetto_file_grande,         MATERIALE_oggetto_file_piccola },
+    [OGGETTO_CARTELLA]     = { MATERIALE_oggetto_cartella_grande,     MATERIALE_oggetto_cartella_piccola },
+    [OGGETTO_TXT]          = { MATERIALE_oggetto_etichetta_grande,    MATERIALE_oggetto_txt_piccola },
+    [OGGETTO_PDF]          = { MATERIALE_oggetto_etichetta_grande,    MATERIALE_oggetto_pdf_piccola },
+    [OGGETTO_PNG]          = { MATERIALE_oggetto_etichetta_grande,    MATERIALE_oggetto_png_piccola },
+    [OGGETTO_ZIP]          = { MATERIALE_oggetto_etichetta_grande,    MATERIALE_oggetto_zip_piccola },
+    [OGGETTO_BIN]          = { MATERIALE_oggetto_etichetta_grande,    MATERIALE_oggetto_bin_piccola },
+    [OGGETTO_HOME]         = { MATERIALE_oggetto_home_grande,         MATERIALE_oggetto_home_piccola },
+    [OGGETTO_SCRIVANIA]    = { MATERIALE_oggetto_scrivania_grande,    MATERIALE_oggetto_scrivania_piccola },
+    [OGGETTO_DOCUMENTI]    = { MATERIALE_oggetto_documenti_grande,    MATERIALE_oggetto_documenti_piccola },
+    [OGGETTO_IMMAGINI]     = { MATERIALE_oggetto_immagini_grande,     MATERIALE_oggetto_immagini_piccola },
+    [OGGETTO_DOWNLOAD]     = { MATERIALE_oggetto_download_grande,     MATERIALE_oggetto_download_piccola },
+    [OGGETTO_APPLICAZIONI] = { MATERIALE_oggetto_applicazioni_grande, MATERIALE_oggetto_applicazioni_piccola },
 };
 
 /* La scritta del foglio grande, o 0. */
@@ -83,9 +84,10 @@ static inline unsigned int oggetto_mescola(unsigned int pesi, unsigned int forte
  * l'angolo in (x, y), nei colori del tema. */
 static inline void oggetto(struct pennello *p, int quale, int misura, int x, int y) {
     if (quale < 0 || quale >= OGGETTI) quale = OGGETTO_FILE;
-    const struct immagine *dati = oggetti_dati[quale][misura == OGGETTO_PICCOLO];
+    const struct immagine *dati = immagine_del_sistema(oggetti_dati[quale][misura == OGGETTO_PICCOLO]);
     static unsigned int pixel[OGGETTO_LATO_GRANDE * OGGETTO_LATO_GRANDE];
     int n = dati->l * dati->a;
+    if (n > OGGETTO_LATO_GRANDE * OGGETTO_LATO_GRANDE) return;   /* un file sbagliato, troppo grande */
     unsigned int forte = OGGETTO_RIEMPIMENTO_FORTE, pieno = OGGETTO_RIEMPIMENTO, tratto = OGGETTO_TRATTO;
     for (int i = 0; i < n; i++) pixel[i] = oggetto_mescola(dati->pixel[i], forte, pieno, tratto);
     struct immagine colorata = { dati->l, dati->a, pixel };

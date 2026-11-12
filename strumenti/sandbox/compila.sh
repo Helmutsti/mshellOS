@@ -58,6 +58,10 @@ for c in /system/bin /system/lib /system/resources/fonts /system/resources/icons
          /system/resources/wallpapers /system/firmware /system/modules; do
     metti_cartella "$c" 0 755
 done
+# le risorse del sistema (font, icone, sfondi), come build.sh
+(cd risorse && find . -type f | sort) | while read -r f; do
+    metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
+done
 metti_file $O/bin/init /system/init 755
 SERVIZI="compositore eventi launcher scrivania"
 for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755; done

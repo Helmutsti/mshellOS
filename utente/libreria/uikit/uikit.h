@@ -7,8 +7,9 @@
  * I PEZZI DI UIKIT, tutti in questa cartella:
  *   - lo stile e i temi (stile.h, tema.h, dal file Figma "mshell - interfaccia"): colori
  *     semantici Chiaro/Scuro, misure, raggi, ombre;
- *   - i materiali del sistema (materiali.h, i dati in materiali_dati.h): il font, le icone
- *     Lucide, le icone di file e cartelle;
+ *   - i materiali del sistema (materiali.h; i dati in file su disco, /system/resources,
+ *     caricati la prima volta che servono): il font, le icone Lucide, le icone di file e
+ *     cartelle;
  *   - la finestra dell'applicazione come la decide il design, i componenti e il ciclo degli
  *     eventi: qui sotto (e l'elemento di un file in elemento_file.h; la userbar e il vassoio,
  *     della scrivania, in userbar.h);
@@ -413,13 +414,14 @@ enum { NEUTRO = SECONDARIO, BLU = PRIMARIO, VERDE = PRIMARIO, ROSSO = PRIMARIO, 
 enum { PICCOLO = MISURA_S, MEDIO = MISURA_M, GRANDE = MISURA_L };
 
 /* Le misure del disegno: altezza, margine ai lati, spazio icona-testo, lato dell'icona,
- * font. Il raggio non c'e': i pulsanti sono pillole (raggio = meta' altezza). */
-struct misure_pulsante { int altezza, margine, spazio, icona; const struct font *font; };
+ * font (il suo numero: font_del_sistema, materiali.h). Il raggio non c'e': i pulsanti sono
+ * pillole (raggio = meta' altezza). */
+struct misure_pulsante { int altezza, margine, spazio, icona, font; };
 static const struct misure_pulsante misure_pulsante[] = {
-    { ALTEZZA_S, PADDING_S, GAP_S, ICONA_S, FONT_PULSANTE_S },
-    { ALTEZZA_M, PADDING_M, GAP_M, ICONA_M, FONT_PULSANTE_M },
-    { ALTEZZA_L, PADDING_L, GAP_L, ICONA_L, FONT_PULSANTE_L },
-    { ALTEZZA_XS, PADDING_S, GAP_S, ICONA_XS, FONT_PULSANTE_S },   /* XS: pensato solo icona */
+    { ALTEZZA_S, PADDING_S, GAP_S, ICONA_S, FONT_PULSANTE_S_NUMERO },
+    { ALTEZZA_M, PADDING_M, GAP_M, ICONA_M, FONT_PULSANTE_M_NUMERO },
+    { ALTEZZA_L, PADDING_L, GAP_L, ICONA_L, FONT_PULSANTE_L_NUMERO },
+    { ALTEZZA_XS, PADDING_S, GAP_S, ICONA_XS, FONT_PULSANTE_S_NUMERO },   /* XS: pensato solo icona */
 };
 
 struct pulsante;
@@ -441,7 +443,7 @@ static inline void pulsante_misura(struct widget *w, int *l, int *a) {
     const struct misure_pulsante *m = &misure_pulsante[b->dimensione];
     *a = m->altezza;
     if (!b->testo[0]) { *l = m->altezza; return; }             /* solo icona: tondo, lato = altezza */
-    *l = 2 * m->margine + larghezza_testo(m->font, b->testo);
+    *l = 2 * m->margine + larghezza_testo(font_del_sistema(m->font), b->testo);
     if (b->icona != NESSUNA_ICONA) *l += m->icona + m->spazio;
 }
 
@@ -507,7 +509,8 @@ static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
     if (ombre) ombre_strati_dentro(p, &t, ombre, quante);
 
     /* icona e testo, centrati insieme */
-    int largo = b->testo[0] ? larghezza_testo(m->font, b->testo) : 0;
+    const struct font *font = font_del_sistema(m->font);
+    int largo = b->testo[0] ? larghezza_testo(font, b->testo) : 0;
     if (b->icona != NESSUNA_ICONA) largo += m->icona + (b->testo[0] ? m->spazio : 0);
     int x = w->x + (w->l - largo) / 2;
     if (b->icona != NESSUNA_ICONA) {
@@ -516,7 +519,7 @@ static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
         x += m->icona + m->spazio;
     }
     pennello_colore(p, testo);
-    if (b->testo[0]) testo_centrato(p, m->font, x, w->y, w->a, b->testo);
+    if (b->testo[0]) testo_centrato(p, font, x, w->y, w->a, b->testo);
 }
 
 /* Come i pulsanti veri: scatta quando si LASCIA, e solo se il puntatore e' ancora
@@ -705,12 +708,12 @@ struct campo {
  * rettangolo arrotondato, NON una pillola; la ricerca ha il raggio = meta' altezza) e font.
  * Il font e' Plex Regular (non Medium come i pulsanti: si scrive, non si preme) della stessa
  * dimensione del testo dei pulsanti: 13, 14, 16. Larghezza: 280 il campo (di solito si
- * allarga), 180 la ricerca. */
-struct misure_campo { int altezza, margine, icona, spazio, raggio; const struct font *font; };
+ * allarga), 180 la ricerca. Il font per numero, come in misure_pulsante. */
+struct misure_campo { int altezza, margine, icona, spazio, raggio, font; };
 static const struct misure_campo misure_campo[] = {
-    { ALTEZZA_S, PADDING_S, ICONA_S, GAP_S, RAGGIO_CAMPO_S, &plex_13 },
-    { ALTEZZA_M, PADDING_M, ICONA_M, GAP_M, RAGGIO_CAMPO_M, &plex_14 },
-    { ALTEZZA_L, PADDING_L, ICONA_L, GAP_L, RAGGIO_CAMPO_L, &plex_16 },
+    { ALTEZZA_S, PADDING_S, ICONA_S, GAP_S, RAGGIO_CAMPO_S, MATERIALE_plex_13 },
+    { ALTEZZA_M, PADDING_M, ICONA_M, GAP_M, RAGGIO_CAMPO_M, MATERIALE_plex_14 },
+    { ALTEZZA_L, PADDING_L, ICONA_L, GAP_L, RAGGIO_CAMPO_L, MATERIALE_plex_16 },
 };
 #define CAMPO_LARGHEZZA_NORMALE 280
 
@@ -729,6 +732,7 @@ static inline void campo_misura(struct widget *w, int *l, int *a) {
 static inline void campo_disegna(struct widget *w, struct pennello *p) {
     struct campo *c = (struct campo *)w;
     const struct misure_campo *m = &misure_campo[c->misura];
+    const struct font *font = font_del_sistema(m->font);
     int spento = w->disabilitato;
     struct tondo t = tondo(w->x, w->y, w->l, w->a, c->piccolo ? w->a / 2 : m->raggio);
     if (!spento) {
@@ -771,18 +775,18 @@ static inline void campo_disegna(struct widget *w, struct pennello *p) {
          * testo. Il cursore e' sempre in fondo (la tastiera non manda ancora le frecce),
          * quindi basta guardare la fine del testo: scrivendo il testo va a sinistra,
          * cancellando torna a destra. Senza fuoco si vede l'inizio, come sul Mac. */
-        int fine = larghezza_testo(m->font, c->testo) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
+        int fine = larghezza_testo(font, c->testo) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
         int scorrimento = w->fuoco && x + fine > destra ? x + fine - destra : 0;
         pennello_ritaglia(p, x - 2, w->y, destra - (x - 2), w->a);  /* 2: le lettere che sbordano */
-        x = testo_centrato(p, m->font, x - scorrimento, w->y, w->a, c->testo);
+        x = testo_centrato(p, font, x - scorrimento, w->y, w->a, c->testo);
         if (w->fuoco) {                    /* il cursore: una barretta alta quanto la riga */
-            int alto = m->font->altezza;
+            int alto = font->altezza;
             struct tondo cursore = tondo(x + CAMPO_CURSORE_SPAZIO, w->y + (w->a - alto) / 2, 2, alto, 0);
             riempi_forma(p, &cursore);
         }
     } else {
         pennello_colore(p, spento ? TESTO_DISABILITATO : TESTO_SECONDARIO);
-        testo_centrato(p, m->font, x, w->y, w->a, c->suggerimento);
+        testo_centrato(p, font, x, w->y, w->a, c->suggerimento);
     }
     pennello_ripristina(p);
 }

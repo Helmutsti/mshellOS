@@ -36,9 +36,14 @@ pixel per pixel usa solo la base.
 
 Oggi `disegno.h`. **Come** si disegna, senza nessun gusto: rettangoli anche arrotondati, linee,
 sfumature, ritagli, testo **con il font che riceve**, immagini e icone **che riceve**. Non sa cosa
-sia una cartella né quale sia il font del sistema. Sa già caricare un'immagine PNG da un file su
+sia una cartella né quale sia il font del sistema. Sa caricare un'immagine PNG da un file su
 disco (`immagine_carica`, in `gkit/immagine_file.c`, con stb_image): la usa la scrivania per le
-icone delle app. Più avanti imparerà anche a caricare un font (punto 16 delle cose da fare).
+icone delle app. E sa leggere da un file un font, un'icona o un'immagine gia' disegnati, nei
+formati di `strumenti/grafica/formato.py` (`font_da_file`, `icona_da_file`, `immagine_da_file`,
+in `gkit/materiali_file.c`): il file si mette in memoria in sola lettura (mmap), e se manca o
+è rovinato lo si scrive nel registro e si dà un sostituto che si disegna senza pericolo. Dove
+stanno le risorse del sistema lo dice `percorso_risorsa` (`/system/resources`, o la variabile
+`MSHELL_RISORSE` per gli attrezzi fuori da mshell).
 
 ## UIKit
 
@@ -46,10 +51,13 @@ Costruita sopra GKit:
 
 - **lo stile e i temi** (oggi `stile.h` e `tema.h`): colori semantici Chiaro/Scuro, misure,
   raggi, con i nomi delle variabili di Figma;
-- **i materiali del sistema**: il font del sistema, le icone Lucide, le icone di file e cartelle
-  (oggi tutti insieme in `grafica_dati.h`, generato da `strumenti/grafica/genera.py`). È **cosa**
-  si disegna: il design di mshell. La scrivania e tutte le app li usano da qui, così una cartella
-  è uguale ovunque;
+- **i materiali del sistema**: il font del sistema, le icone Lucide, le icone di file e cartelle,
+  lo sfondo (`materiali.h`). I dati sono file in `/system/resources`, preparati da
+  `strumenti/grafica/genera.py`; l'elenco (nome in C e file) è `materiali_elenco.h`. Ognuno si
+  carica la prima volta che serve e si chiama con il suo nome come una variabile (`&plex_14`,
+  `oggetto_cartella_grande`), un'icona per numero con `icona()`. È **cosa** si disegna: il
+  design di mshell. La scrivania e tutte le app li usano da qui, così una cartella è uguale
+  ovunque;
 - **la finestra dell'applicazione** come la decide il design: barra del titolo (normale e mini),
   barra degli strumenti, area dei contenuti con la barra laterale, il pannello incassato
   facoltativo; la finestra blank con o senza barra del titolo agganciata (con la barra del
@@ -77,6 +85,7 @@ finestre mini segnalato dalla libreria.
 - Due cartelle: `utente/libreria/gkit/` (`gkit.h` la base, `gkit_disegno.h` gli strumenti) e
   `utente/libreria/uikit/` (`uikit.h`, che include tutto quello che serve a un'app).
 - `grafica_dati.h` si divide: i dati di font e icone vanno a UIKit, il codice che li disegna resta in GKit.
+  (Poi i dati sono usciti dai programmi: sono file in `/system/resources`, punto 16.)
 - Le funzioni tengono i loro nomi italiani; cambiano solo quelle che contengono "toolkit" (per
   esempio `toolkit_esegui` diventa `uikit_esegui`).
 - Un agente sposta i file, aggiorna build.sh, le app, il compositore e le prove, compila PC e

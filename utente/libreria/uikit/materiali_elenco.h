@@ -1,0 +1,252 @@
+/* GENERATO da strumenti/grafica/genera.py (l'elenco e' in strumenti/grafica/materiali.py):
+ * non modificare a mano.
+ *
+ * L'elenco dei materiali del sistema, di UIKit: per ognuno il nome in C e il file, dentro la
+ * cartella delle risorse (/system/resources). I dati non sono qui ma nei file: li carica
+ * uikit/materiali.c la prima volta che servono (vedi uikit/materiali.h). */
+#ifndef MATERIALI_ELENCO_H
+#define MATERIALI_ELENCO_H
+
+/* I font: X(nome, file). */
+#define MATERIALI_FONT(X) \
+    X(inter_13, "fonts/inter-regular-13.font") \
+    X(inter_14, "fonts/inter-regular-14.font") \
+    X(inter_medio_13, "fonts/inter-medium-13.font") \
+    X(inter_medio_14, "fonts/inter-medium-14.font") \
+    X(inter_medio_16, "fonts/inter-medium-16.font") \
+    X(inter_semigrassetto_13, "fonts/inter-semibold-13.font") \
+    X(inter_semigrassetto_15, "fonts/inter-semibold-15.font") \
+    X(inter_12, "fonts/inter-regular-12.font") \
+    X(inter_medio_12, "fonts/inter-medium-12.font") \
+    X(inter_semigrassetto_12, "fonts/inter-semibold-12.font") \
+    X(inter_semigrassetto_14, "fonts/inter-semibold-14.font") \
+    X(plex_12, "fonts/ibm-plex-sans-regular-12.font") \
+    X(plex_13, "fonts/ibm-plex-sans-regular-13.font") \
+    X(plex_14, "fonts/ibm-plex-sans-regular-14.font") \
+    X(plex_15, "fonts/ibm-plex-sans-regular-15.font") \
+    X(plex_16, "fonts/ibm-plex-sans-regular-16.font") \
+    X(plex_medio_12, "fonts/ibm-plex-sans-medium-12.font") \
+    X(plex_medio_13, "fonts/ibm-plex-sans-medium-13.font") \
+    X(plex_medio_14, "fonts/ibm-plex-sans-medium-14.font") \
+    X(plex_medio_15, "fonts/ibm-plex-sans-medium-15.font") \
+    X(plex_medio_16, "fonts/ibm-plex-sans-medium-16.font") \
+    X(plex_medio_24, "fonts/ibm-plex-sans-medium-24.font") \
+    X(plex_semigrassetto_12, "fonts/ibm-plex-sans-semibold-12.font") \
+    X(plex_semigrassetto_13, "fonts/ibm-plex-sans-semibold-13.font") \
+    X(plex_semigrassetto_14, "fonts/ibm-plex-sans-semibold-14.font") \
+    X(plex_semigrassetto_15, "fonts/ibm-plex-sans-semibold-15.font") \
+    X(plex_semigrassetto_24, "fonts/ibm-plex-sans-semibold-24.font") \
+
+/* Le icone Lucide, ognuna in tutte le sue misure: X(nome, file). Per numero: ICONA_... */
+#define MATERIALI_ICONE(X) \
+    X(save, "icons/lucide/save.icon") \
+    X(check, "icons/lucide/check.icon") \
+    X(minus, "icons/lucide/minus.icon") \
+    X(plus, "icons/lucide/plus.icon") \
+    X(x, "icons/lucide/x.icon") \
+    X(user, "icons/lucide/user.icon") \
+    X(triangle_alert, "icons/lucide/triangle-alert.icon") \
+    X(layout_grid, "icons/lucide/layout-grid.icon") \
+    X(settings, "icons/lucide/settings.icon") \
+    X(square, "icons/lucide/square.icon") \
+    X(activity, "icons/lucide/activity.icon") \
+    X(arrow_left, "icons/lucide/arrow-left.icon") \
+    X(arrow_right, "icons/lucide/arrow-right.icon") \
+    X(list, "icons/lucide/list.icon") \
+    X(search, "icons/lucide/search.icon") \
+    X(house, "icons/lucide/house.icon") \
+    X(chevron_right, "icons/lucide/chevron-right.icon") \
+    X(folder, "icons/lucide/folder.icon") \
+    X(folder_open, "icons/lucide/folder-open.icon") \
+    X(folder_plus, "icons/lucide/folder-plus.icon") \
+    X(pencil, "icons/lucide/pencil.icon") \
+    X(copy, "icons/lucide/copy.icon") \
+    X(info, "icons/lucide/info.icon") \
+    X(trash_2, "icons/lucide/trash-2.icon") \
+    X(arrow_up_down, "icons/lucide/arrow-up-down.icon") \
+    X(image, "icons/lucide/image.icon") \
+    X(file, "icons/lucide/file.icon") \
+    X(terminal, "icons/lucide/terminal.icon") \
+    X(lock, "icons/lucide/lock.icon") \
+    X(globe, "icons/lucide/globe.icon") \
+    X(mail, "icons/lucide/mail.icon") \
+    X(rotate_ccw, "icons/lucide/rotate-ccw.icon") \
+    X(package, "icons/lucide/package.icon") \
+    X(bell, "icons/lucide/bell.icon") \
+    X(download, "icons/lucide/download.icon") \
+    X(external_link, "icons/lucide/external-link.icon") \
+    X(eye_off, "icons/lucide/eye-off.icon") \
+    X(layers, "icons/lucide/layers.icon") \
+    X(power, "icons/lucide/power.icon") \
+    X(scan, "icons/lucide/scan.icon") \
+    X(badge_check, "icons/lucide/badge-check.icon") \
+    X(circle_x, "icons/lucide/circle-x.icon") \
+    X(circle_check, "icons/lucide/circle-check.icon") \
+    X(chevron_left, "icons/lucide/chevron-left.icon") \
+    X(volume_2, "icons/lucide/volume-2.icon") \
+    X(chevron_up, "icons/lucide/chevron-up.icon") \
+    X(chevron_down, "icons/lucide/chevron-down.icon") \
+    X(monitor, "icons/lucide/monitor.icon") \
+    X(file_text, "icons/lucide/file-text.icon") \
+    X(app_window, "icons/lucide/app-window.icon") \
+
+#define ICONA_MISURE 8   /* quante misure al massimo: 12, 14, 16, 18, 20, 24, 32, 48 */
+#define ICONA_SAVE 0
+#define ICONA_CHECK 1
+#define ICONA_MINUS 2
+#define ICONA_PLUS 3
+#define ICONA_X 4
+#define ICONA_USER 5
+#define ICONA_TRIANGLE_ALERT 6
+#define ICONA_LAYOUT_GRID 7
+#define ICONA_SETTINGS 8
+#define ICONA_SQUARE 9
+#define ICONA_ACTIVITY 10
+#define ICONA_ARROW_LEFT 11
+#define ICONA_ARROW_RIGHT 12
+#define ICONA_LIST 13
+#define ICONA_SEARCH 14
+#define ICONA_HOUSE 15
+#define ICONA_CHEVRON_RIGHT 16
+#define ICONA_FOLDER 17
+#define ICONA_FOLDER_OPEN 18
+#define ICONA_FOLDER_PLUS 19
+#define ICONA_PENCIL 20
+#define ICONA_COPY 21
+#define ICONA_INFO 22
+#define ICONA_TRASH_2 23
+#define ICONA_ARROW_UP_DOWN 24
+#define ICONA_IMAGE 25
+#define ICONA_FILE 26
+#define ICONA_TERMINAL 27
+#define ICONA_LOCK 28
+#define ICONA_GLOBE 29
+#define ICONA_MAIL 30
+#define ICONA_ROTATE_CCW 31
+#define ICONA_PACKAGE 32
+#define ICONA_BELL 33
+#define ICONA_DOWNLOAD 34
+#define ICONA_EXTERNAL_LINK 35
+#define ICONA_EYE_OFF 36
+#define ICONA_LAYERS 37
+#define ICONA_POWER 38
+#define ICONA_SCAN 39
+#define ICONA_BADGE_CHECK 40
+#define ICONA_CIRCLE_X 41
+#define ICONA_CIRCLE_CHECK 42
+#define ICONA_CHEVRON_LEFT 43
+#define ICONA_VOLUME_2 44
+#define ICONA_CHEVRON_UP 45
+#define ICONA_CHEVRON_DOWN 46
+#define ICONA_MONITOR 47
+#define ICONA_FILE_TEXT 48
+#define ICONA_APP_WINDOW 49
+
+/* Le immagini a colori: X(nome, file). */
+#define MATERIALI_IMMAGINI(X) \
+    X(scelta_accesa, "icons/controls/choice-on.image") \
+    X(scelta_accesa_sopra, "icons/controls/choice-on-hover.image") \
+    X(file_cartella_grande, "icons/files/folder-large.image") \
+    X(file_cartella_piccola, "icons/files/folder-small.image") \
+    X(file_home_grande, "icons/files/home-large.image") \
+    X(file_home_piccola, "icons/files/home-small.image") \
+    X(file_file_grande, "icons/files/file-large.image") \
+    X(file_file_piccola, "icons/files/file-small.image") \
+    X(file_immagine_grande, "icons/files/image-large.image") \
+    X(file_immagine_piccola, "icons/files/image-small.image") \
+    X(file_testo_grande, "icons/files/text-large.image") \
+    X(file_testo_piccola, "icons/files/text-small.image") \
+    X(file_programma_grande, "icons/files/program-large.image") \
+    X(file_programma_piccola, "icons/files/program-small.image") \
+    X(oggetto_file_grande, "icons/objects/file-large.image") \
+    X(oggetto_cartella_grande, "icons/objects/folder-large.image") \
+    X(oggetto_etichetta_grande, "icons/objects/label-large.image") \
+    X(oggetto_home_grande, "icons/objects/home-large.image") \
+    X(oggetto_scrivania_grande, "icons/objects/desktop-large.image") \
+    X(oggetto_documenti_grande, "icons/objects/documents-large.image") \
+    X(oggetto_immagini_grande, "icons/objects/pictures-large.image") \
+    X(oggetto_download_grande, "icons/objects/downloads-large.image") \
+    X(oggetto_applicazioni_grande, "icons/objects/applications-large.image") \
+    X(oggetto_file_piccola, "icons/objects/file-small.image") \
+    X(oggetto_cartella_piccola, "icons/objects/folder-small.image") \
+    X(oggetto_txt_piccola, "icons/objects/txt-small.image") \
+    X(oggetto_pdf_piccola, "icons/objects/pdf-small.image") \
+    X(oggetto_png_piccola, "icons/objects/png-small.image") \
+    X(oggetto_zip_piccola, "icons/objects/zip-small.image") \
+    X(oggetto_bin_piccola, "icons/objects/bin-small.image") \
+    X(oggetto_home_piccola, "icons/objects/home-small.image") \
+    X(oggetto_scrivania_piccola, "icons/objects/desktop-small.image") \
+    X(oggetto_documenti_piccola, "icons/objects/documents-small.image") \
+    X(oggetto_immagini_piccola, "icons/objects/pictures-small.image") \
+    X(oggetto_download_piccola, "icons/objects/downloads-small.image") \
+    X(oggetto_applicazioni_piccola, "icons/objects/applications-small.image") \
+    X(sfondo_piccolo, "wallpapers/default.image") \
+
+/* Ogni materiale si chiama con il suo nome, come una variabile (&plex_14, oggetto_file_grande.l):
+ * dietro c'e' la funzione che lo carica la prima volta. */
+#define inter_13 (*font_del_sistema(MATERIALE_inter_13))
+#define inter_14 (*font_del_sistema(MATERIALE_inter_14))
+#define inter_medio_13 (*font_del_sistema(MATERIALE_inter_medio_13))
+#define inter_medio_14 (*font_del_sistema(MATERIALE_inter_medio_14))
+#define inter_medio_16 (*font_del_sistema(MATERIALE_inter_medio_16))
+#define inter_semigrassetto_13 (*font_del_sistema(MATERIALE_inter_semigrassetto_13))
+#define inter_semigrassetto_15 (*font_del_sistema(MATERIALE_inter_semigrassetto_15))
+#define inter_12 (*font_del_sistema(MATERIALE_inter_12))
+#define inter_medio_12 (*font_del_sistema(MATERIALE_inter_medio_12))
+#define inter_semigrassetto_12 (*font_del_sistema(MATERIALE_inter_semigrassetto_12))
+#define inter_semigrassetto_14 (*font_del_sistema(MATERIALE_inter_semigrassetto_14))
+#define plex_12 (*font_del_sistema(MATERIALE_plex_12))
+#define plex_13 (*font_del_sistema(MATERIALE_plex_13))
+#define plex_14 (*font_del_sistema(MATERIALE_plex_14))
+#define plex_15 (*font_del_sistema(MATERIALE_plex_15))
+#define plex_16 (*font_del_sistema(MATERIALE_plex_16))
+#define plex_medio_12 (*font_del_sistema(MATERIALE_plex_medio_12))
+#define plex_medio_13 (*font_del_sistema(MATERIALE_plex_medio_13))
+#define plex_medio_14 (*font_del_sistema(MATERIALE_plex_medio_14))
+#define plex_medio_15 (*font_del_sistema(MATERIALE_plex_medio_15))
+#define plex_medio_16 (*font_del_sistema(MATERIALE_plex_medio_16))
+#define plex_medio_24 (*font_del_sistema(MATERIALE_plex_medio_24))
+#define plex_semigrassetto_12 (*font_del_sistema(MATERIALE_plex_semigrassetto_12))
+#define plex_semigrassetto_13 (*font_del_sistema(MATERIALE_plex_semigrassetto_13))
+#define plex_semigrassetto_14 (*font_del_sistema(MATERIALE_plex_semigrassetto_14))
+#define plex_semigrassetto_15 (*font_del_sistema(MATERIALE_plex_semigrassetto_15))
+#define plex_semigrassetto_24 (*font_del_sistema(MATERIALE_plex_semigrassetto_24))
+#define scelta_accesa (*immagine_del_sistema(MATERIALE_scelta_accesa))
+#define scelta_accesa_sopra (*immagine_del_sistema(MATERIALE_scelta_accesa_sopra))
+#define file_cartella_grande (*immagine_del_sistema(MATERIALE_file_cartella_grande))
+#define file_cartella_piccola (*immagine_del_sistema(MATERIALE_file_cartella_piccola))
+#define file_home_grande (*immagine_del_sistema(MATERIALE_file_home_grande))
+#define file_home_piccola (*immagine_del_sistema(MATERIALE_file_home_piccola))
+#define file_file_grande (*immagine_del_sistema(MATERIALE_file_file_grande))
+#define file_file_piccola (*immagine_del_sistema(MATERIALE_file_file_piccola))
+#define file_immagine_grande (*immagine_del_sistema(MATERIALE_file_immagine_grande))
+#define file_immagine_piccola (*immagine_del_sistema(MATERIALE_file_immagine_piccola))
+#define file_testo_grande (*immagine_del_sistema(MATERIALE_file_testo_grande))
+#define file_testo_piccola (*immagine_del_sistema(MATERIALE_file_testo_piccola))
+#define file_programma_grande (*immagine_del_sistema(MATERIALE_file_programma_grande))
+#define file_programma_piccola (*immagine_del_sistema(MATERIALE_file_programma_piccola))
+#define oggetto_file_grande (*immagine_del_sistema(MATERIALE_oggetto_file_grande))
+#define oggetto_cartella_grande (*immagine_del_sistema(MATERIALE_oggetto_cartella_grande))
+#define oggetto_etichetta_grande (*immagine_del_sistema(MATERIALE_oggetto_etichetta_grande))
+#define oggetto_home_grande (*immagine_del_sistema(MATERIALE_oggetto_home_grande))
+#define oggetto_scrivania_grande (*immagine_del_sistema(MATERIALE_oggetto_scrivania_grande))
+#define oggetto_documenti_grande (*immagine_del_sistema(MATERIALE_oggetto_documenti_grande))
+#define oggetto_immagini_grande (*immagine_del_sistema(MATERIALE_oggetto_immagini_grande))
+#define oggetto_download_grande (*immagine_del_sistema(MATERIALE_oggetto_download_grande))
+#define oggetto_applicazioni_grande (*immagine_del_sistema(MATERIALE_oggetto_applicazioni_grande))
+#define oggetto_file_piccola (*immagine_del_sistema(MATERIALE_oggetto_file_piccola))
+#define oggetto_cartella_piccola (*immagine_del_sistema(MATERIALE_oggetto_cartella_piccola))
+#define oggetto_txt_piccola (*immagine_del_sistema(MATERIALE_oggetto_txt_piccola))
+#define oggetto_pdf_piccola (*immagine_del_sistema(MATERIALE_oggetto_pdf_piccola))
+#define oggetto_png_piccola (*immagine_del_sistema(MATERIALE_oggetto_png_piccola))
+#define oggetto_zip_piccola (*immagine_del_sistema(MATERIALE_oggetto_zip_piccola))
+#define oggetto_bin_piccola (*immagine_del_sistema(MATERIALE_oggetto_bin_piccola))
+#define oggetto_home_piccola (*immagine_del_sistema(MATERIALE_oggetto_home_piccola))
+#define oggetto_scrivania_piccola (*immagine_del_sistema(MATERIALE_oggetto_scrivania_piccola))
+#define oggetto_documenti_piccola (*immagine_del_sistema(MATERIALE_oggetto_documenti_piccola))
+#define oggetto_immagini_piccola (*immagine_del_sistema(MATERIALE_oggetto_immagini_piccola))
+#define oggetto_download_piccola (*immagine_del_sistema(MATERIALE_oggetto_download_piccola))
+#define oggetto_applicazioni_piccola (*immagine_del_sistema(MATERIALE_oggetto_applicazioni_piccola))
+#define sfondo_piccolo (*immagine_del_sistema(MATERIALE_sfondo_piccolo))
+
+#endif

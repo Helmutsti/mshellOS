@@ -15,6 +15,11 @@ fi
 [ -f "$QUI/scene/$1.c" ] || { echo "scena '$1' non trovata in $QUI/scene" >&2; exit 1; }
 mkdir -p "$QUI/out"
 USCITA=${3:-$QUI/out/$1.png}
+# I materiali del sistema (font, icone, oggetti) sono file su disco: si compilano anche chi li
+# legge (GKit, materiali_file.c) e chi sa quali sono (UIKit, materiali.c), e li si fa cercare
+# in risorse/ del repository invece che in /system/resources (MSHELL_RISORSE, gkit_disegno.h).
 clang -std=gnu11 -O1 -w -I"$RADICE/utente/libreria" -I"$QUI" \
-    -DSCENA="\"$QUI/scene/$1.c\"" "$QUI/anteprima.c" -o "$QUI/out/.anteprima_$1"
-"$QUI/out/.anteprima_$1" "$USCITA" "${2:-1}"
+    -DSCENA="\"$QUI/scene/$1.c\"" "$QUI/anteprima.c" \
+    "$RADICE/utente/libreria/gkit/materiali_file.c" "$RADICE/utente/libreria/uikit/materiali.c" \
+    -o "$QUI/out/.anteprima_$1"
+MSHELL_RISORSE="$RADICE/risorse" "$QUI/out/.anteprima_$1" "$USCITA" "${2:-1}"

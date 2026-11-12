@@ -336,18 +336,27 @@ static int notizia_vassoio(const struct notizia *n) {
 
 static struct finestra sfondo;
 
-/* Lo sfondo del disegno, ingrandito da quello piccolo (320x200) di materiali_dati.h: ogni
- * pixel nuovo e' una media pesata dei quattro vicini di quello piccolo. E' una sfumatura
- * morbida: ingrandendola non si perde niente. */
+/* Lo sfondo del disegno, ingrandito da quello piccolo (320x200, il materiale sfondo_piccolo:
+ * /system/resources/wallpapers/default.image): ogni pixel nuovo e' una media pesata dei
+ * quattro vicini di quello piccolo. E' una sfumatura morbida: ingrandendola non si perde
+ * niente. Se il file manca (GKit lo scrive nel registro), lo sfondo e' grigio. */
+#define SFONDO_DI_RISERVA 0xFF505058u
 static void prepara_sfondo(unsigned int *pixel, int l, int a) {
+    const struct immagine *piccolo = &sfondo_piccolo;
+    int pl = piccolo->l, pa = piccolo->a;
+    if (pl < 1 || pa < 1) {
+        for (int i = 0; i < l * a; i++) pixel[i] = SFONDO_DI_RISERVA;
+        return;
+    }
+    const unsigned int *sp = piccolo->pixel;
     for (int y = 0; y < a; y++) {
-        int fy = y * ((SFONDO_A - 1) << 8) / (a - 1);   /* in 256esimi di pixel piccolo */
-        int iy = fy >> 8, ty = fy & 255, iy2 = iy + 1 < SFONDO_A ? iy + 1 : iy;
+        int fy = y * ((pa - 1) << 8) / (a - 1);   /* in 256esimi di pixel piccolo */
+        int iy = fy >> 8, ty = fy & 255, iy2 = iy + 1 < pa ? iy + 1 : iy;
         for (int x = 0; x < l; x++) {
-            int fx = x * ((SFONDO_L - 1) << 8) / (l - 1);
-            int ix = fx >> 8, tx = fx & 255, ix2 = ix + 1 < SFONDO_L ? ix + 1 : ix;
-            unsigned int c1 = sfondo_piccolo[iy * SFONDO_L + ix], c2 = sfondo_piccolo[iy * SFONDO_L + ix2];
-            unsigned int c3 = sfondo_piccolo[iy2 * SFONDO_L + ix], c4 = sfondo_piccolo[iy2 * SFONDO_L + ix2];
+            int fx = x * ((pl - 1) << 8) / (l - 1);
+            int ix = fx >> 8, tx = fx & 255, ix2 = ix + 1 < pl ? ix + 1 : ix;
+            unsigned int c1 = sp[iy * pl + ix], c2 = sp[iy * pl + ix2];
+            unsigned int c3 = sp[iy2 * pl + ix], c4 = sp[iy2 * pl + ix2];
             unsigned int px = 0xFF000000u;   /* opaco */
             for (int k = 0; k < 24; k += 8) {
                 int su = ((c1 >> k) & 0xFF) * (256 - tx) + ((c2 >> k) & 0xFF) * tx;

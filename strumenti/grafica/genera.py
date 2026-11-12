@@ -1,10 +1,16 @@
-"""Prepara i materiali del sistema: font, icone, immagini e sfondo, come tabelle C.
+"""Prepara i materiali del sistema: font, icone, immagini e sfondo, come file su disco.
 
-Gira sul computer che compila, dentro il container alpine (vedi genera.sh), e scrive
-utente/libreria/uikit/materiali_dati.h: i materiali sono di UIKit (vedi LIBRERIE.md), i
-tipi (struct font, struct icona, struct immagine) e il codice che li disegna sono di GKit
-(gkit/gkit_disegno.h). I programmi di mshell non sanno leggere un file TrueType o un SVG:
-qui li si trasforma una volta per tutte in pixel.
+Gira sul computer che compila, dentro il container alpine (vedi genera.sh), e scrive:
+  - risorse/ (nel repository): i file, che build.sh mette in /system/resources --
+    fonts/<famiglia>-<peso>-<misura>.font, icons/lucide/<nome>.icon, icons/objects/,
+    icons/files/ e icons/controls/ (.image), wallpapers/default.image. Com'e' fatto ogni
+    tipo di file: formato.py;
+  - utente/libreria/uikit/materiali_elenco.h: l'elenco per UIKit (nomi e file, niente dati).
+Quali materiali ci sono e come si chiamano i file: materiali.py. I materiali sono di UIKit
+(vedi LIBRERIE.md), che li carica la prima volta che servono; i tipi (struct font, struct
+icona, struct immagine) e il codice che li legge e li disegna sono di GKit
+(gkit/gkit_disegno.h, gkit/materiali_file.c). I programmi di mshell non sanno leggere un
+file TrueType o un SVG: qui li si trasforma una volta per tutte in pixel.
 
   - I FONT: Inter e IBM Plex Sans (licenza SIL OFL) in ogni misura e peso che usa
     l'interfaccia (Inter e' in via di sostituzione con Plex). Ogni
@@ -13,69 +19,43 @@ qui li si trasforma una volta per tutte in pixel.
   - LE ICONE: Lucide (licenza ISC), dagli SVG del file Figma "mshell - interfaccia". Anche
     loro solo alfa: il colore lo sceglie chi disegna.
   - LE IMMAGINI A COLORI (la scelta singola accesa): pixel 0xAARRGGBB premoltiplicati.
-  - LO SFONDO: e' una sfumatura molto morbida, quindi lo si tiene piccolo (320x200) e il
-    compositore lo ingrandisce all'avvio.
+  - LO SFONDO: e' una sfumatura molto morbida, quindi lo si tiene piccolo (320x200) e la
+    scrivania lo ingrandisce all'avvio.
 
 I caratteri sono quelli della code page 437 (come i tasti e la console): l'ASCII piu'
-le lettere accentate italiane."""
+le lettere accentate italiane.
+
+Licenze: font Inter, di Rasmus Andersson (https://rsms.me/inter), e IBM Plex Sans, di IBM
+(https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide
+(https://lucide.dev), licenza ISC: Copyright (c) for portions of Lucide are held by Cole
+Bemis 2013-2022 as part of Feather (MIT); all other copyright (c) for Lucide are held by
+Lucide Contributors 2022. Icone, immagini e sfondo vengono dal file Figma "mshell -
+interfaccia"."""
 import io, os, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont
+
+import formato
+import materiali
+from materiali import FONT_USATI, ICONE, LATI, SCELTE, TIPI_FILE, OGGETTI_GRANDI, OGGETTI_PICCOLI
 
 QUI = os.path.dirname(os.path.abspath(__file__))
 FIGMA = os.path.join(QUI, 'figma')
 FONT = sys.argv[1]                  # la cartella con Inter-Regular.ttf, -Medium, -SemiBold
-USCITA = sys.argv[2]
+REPO = sys.argv[2]                  # il repository: si scrivono risorse/ e l'elenco di UIKit
+RISORSE = os.path.join(REPO, 'risorse')
 FONT_PLEX = os.path.join(QUI, 'font', 'IBMPlexSans')   # IBM Plex Sans: TTF e OFL.txt nel repo
-
-# I font dell'interfaccia (dal file Figma): nome C, file, misura in pixel
-FONT_USATI = [
-    ('inter_13',            'Inter-Regular.ttf',  13),
-    ('inter_14',            'Inter-Regular.ttf',  14),
-    ('inter_medio_13',      'Inter-Medium.ttf',   13),
-    ('inter_medio_14',      'Inter-Medium.ttf',   14),
-    ('inter_medio_16',      'Inter-Medium.ttf',   16),
-    ('inter_semigrassetto_13', 'Inter-SemiBold.ttf', 13),
-    ('inter_semigrassetto_15', 'Inter-SemiBold.ttf', 15),
-    # per Files: i nomi sotto le icone (medio 12), le colonne e le scorciatoie (12), i
-    # titoli delle sezioni e delle colonne (semigrassetto 12), lo stato della cartella
-    # (semigrassetto 14)
-    ('inter_12',            'Inter-Regular.ttf',  12),
-    ('inter_medio_12',      'Inter-Medium.ttf',   12),
-    ('inter_semigrassetto_12', 'Inter-SemiBold.ttf', 12),
-    ('inter_semigrassetto_14', 'Inter-SemiBold.ttf', 14),
-]
-
-# IBM Plex Sans (stesse regole di nome: plex_<misura>, plex_medio_<misura>, plex_semigrassetto_<misura>)
-for _misura in (12, 13, 14, 15, 16):
-    FONT_USATI.append(('plex_%d' % _misura, 'IBMPlexSans-Regular.ttf', _misura))
-for _misura in (12, 13, 14, 15, 16, 24):
-    FONT_USATI.append(('plex_medio_%d' % _misura, 'IBMPlexSans-Medium.ttf', _misura))
-for _misura in (12, 13, 14, 15, 24):
-    FONT_USATI.append(('plex_semigrassetto_%d' % _misura, 'IBMPlexSans-SemiBold.ttf', _misura))
 
 # code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
 CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á',
          0xFA: '·'}   # il punto a mezza altezza, per separare ("8 processi · 34,6 MB")
 CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
+FILE_IMMAGINI = dict(materiali.immagini())
 
-ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity',
-         'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right',
-         # Files: la barra laterale, i menu, gli stati della cartella
-         'folder', 'folder-open', 'folder-plus', 'pencil', 'copy', 'info', 'trash-2',
-         'arrow-up-down', 'image', 'file', 'terminal', 'lock',
-         # la userbar (le app fissate) e il riavvio di Attivita
-         'globe', 'mail', 'rotate-ccw',
-         # lo Store: i permessi, le deviazioni, i ruoli, i messaggi, i pulsanti (pagina "App - Store")
-         'package', 'bell', 'download', 'external-link', 'eye-off', 'layers', 'power', 'scan',
-         'badge-check', 'circle-x', 'circle-check', 'chevron-left', 'volume-2',
-         # Files nel disegno nuovo: indietro, le frecce dell'ordinamento, i simboli della
-         # barra laterale (Scrivania, Testi, Programmi)
-         'chevron-up', 'chevron-down', 'monitor', 'file-text', 'app-window']
-LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: disegna_icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 def svg_in_png(file, l, a):
     return Image.open(io.BytesIO(subprocess.check_output(
         ['rsvg-convert', '-w', str(l), '-h', str(a), file]))).convert('RGBA')
+
 
 def icona_in_png(file, lato):
     """Come le disegna Figma: il tratto resta di 2 pixel a qualunque misura (non si
@@ -86,17 +66,6 @@ def icona_in_png(file, lato):
     return Image.open(io.BytesIO(subprocess.check_output(
         ['rsvg-convert', '-w', str(lato), '-h', str(lato)], input=svg.encode()))).convert('RGBA')
 
-def tabella_byte(valori, per_riga=24):
-    righe = []
-    for i in range(0, len(valori), per_riga):
-        righe.append('    ' + ', '.join(str(v) for v in valori[i:i + per_riga]) + ',')
-    return '\n'.join(righe)
-
-def tabella_parole(valori, per_riga=8):
-    righe = []
-    for i in range(0, len(valori), per_riga):
-        righe.append('    ' + ', '.join('0x%08X' % v for v in valori[i:i + per_riga]) + ',')
-    return '\n'.join(righe)
 
 def premoltiplicato(img):
     out = []
@@ -104,22 +73,11 @@ def premoltiplicato(img):
         out.append(a << 24 | (r * a // 255) << 16 | (g * a // 255) << 8 | (b * a // 255))
     return out
 
-c = []
-c.append('''/* GENERATO da strumenti/grafica/genera.py: non modificare a mano.
- *
- * Font Inter, di Rasmus Andersson (https://rsms.me/inter), e IBM Plex Sans, di IBM
- * (https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide (https://lucide.dev), licenza ISC: Copyright (c) for portions
- * of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other
- * copyright (c) for Lucide are held by Lucide Contributors 2022.
- * Icone, immagini e sfondo vengono dal file Figma "mshell - interfaccia".
- *
- * I materiali del sistema, di UIKit: solo i dati. I tipi e il codice che li disegna sono di
- * GKit (gkit_disegno.h); le icone per numero si disegnano con icona() (uikit/materiali.h). */
-#ifndef MATERIALI_DATI_H
-#define MATERIALI_DATI_H
 
-#include "gkit/gkit_disegno.h"   /* struct glifo, font, icona, immagine */
-''')
+def scrivi_immagine(nome, img):
+    formato.immagine(os.path.join(RISORSE, FILE_IMMAGINI[nome]), img.size[0], img.size[1],
+                     premoltiplicato(img))
+
 
 for nome, file, misura in FONT_USATI:
     cartella = FONT_PLEX if file.startswith('IBMPlex') else FONT
@@ -142,61 +100,31 @@ for nome, file, misura in FONT_USATI:
         indice[codice] = len(glifi)
         glifi.append((len(alfa), gx, gy, gl, ga, avanzo))
         alfa += dati
-    c.append('static const unsigned char %s_alfa[] = {\n%s\n};' % (nome, tabella_byte(alfa)))
-    c.append('static const struct glifo %s_glifi[] = {' % nome)
-    for g in glifi:
-        c.append('    { %d, %d, %d, %d, %d, %d },' % g)
-    c.append('};')
-    c.append('static const struct font %s = { %s_glifi, %s_alfa, {%s}, %d, %d };\n' % (
-        nome, nome, nome, ', '.join(str(i) for i in indice), ascesa + discesa, ascesa))
+    formato.font(os.path.join(RISORSE, materiali.file_font(nome)), ascesa + discesa, ascesa,
+                 indice, glifi, alfa)
 
-nomi_icone = []
 for icona in ICONE:
-    file = os.path.join(FIGMA, 'icona-%s.svg' % icona)
-    nome = icona.replace('-', '_')
-    nomi_icone.append(nome)
-    for lato in LATI:
-        img = icona_in_png(file, lato)
-        c.append('static const unsigned char icona_%s_%d[] = {\n%s\n};' % (
-            nome, lato, tabella_byte(list(img.getchannel("A").get_flattened_data()))))
-c.append('#define ICONA_MISURE %d' % len(LATI))
-c.append('static const struct icona icone[][ICONA_MISURE] = {')
-for nome in nomi_icone:
-    c.append('    { ' + ', '.join('{ %d, icona_%s_%d }' % (l, nome, l) for l in LATI) + ' },')
-c.append('};')
-for i, nome in enumerate(nomi_icone):
-    c.append('#define ICONA_%s %d' % (nome.upper(), i))
-c.append('')
+    svg = os.path.join(FIGMA, 'icona-%s.svg' % icona)
+    formato.icona(os.path.join(RISORSE, materiali.file_icona(icona)),
+                  [(lato, list(icona_in_png(svg, lato).getchannel('A').get_flattened_data()))
+                   for lato in LATI])
 
-for nome, file in [('scelta_accesa', 'scelta-accesa.svg'), ('scelta_accesa_sopra', 'scelta-accesa-sopra.svg')]:
-    img = Image.open(io.BytesIO(subprocess.check_output(
-        ['rsvg-convert', os.path.join(FIGMA, file)]))).convert('RGBA')
-    c.append('static const unsigned int %s_pixel[] = {\n%s\n};' % (nome, tabella_parole(premoltiplicato(img))))
-    c.append('static const struct immagine %s = { %d, %d, %s_pixel };\n' % (nome, img.size[0], img.size[1], nome))
+for nome, file in SCELTE:
+    scrivi_immagine(nome, Image.open(io.BytesIO(subprocess.check_output(
+        ['rsvg-convert', os.path.join(FIGMA, file)]))).convert('RGBA'))
 
-# LE ICONE DEI FILE (Files e la scrivania): non sono icone dell'interfaccia ma
-# "contenuto", a colori, ognuna in due misure (grande 56, piccola 18), dagli SVG
-# esportati dal file Figma (il set "Icona file"). Le ombre e le luci interne sono
-# filtri SVG: le calcola rsvg-convert, qui, una volta per tutte.
-TIPI_FILE = ['cartella', 'home', 'file', 'immagine', 'testo', 'programma']
-c.append('/* Le icone dei file: [tipo][0 grande, 1 piccola]. */')
+# LE ICONE DEI FILE (il set "Icona file" del file Figma): non sono icone dell'interfaccia ma
+# "contenuto", a colori, ognuna in due misure (grande 56, piccola 18), dagli SVG esportati
+# dal file Figma. Le ombre e le luci interne sono filtri SVG: le calcola rsvg-convert, qui,
+# una volta per tutte. (Oggi nessun programma le usa: Files e la scrivania usano gli oggetti,
+# qui sotto.)
 for tipo in TIPI_FILE:
     for dimensione in ('grande', 'piccola'):
-        nome = 'file_%s_%s' % (tipo, dimensione)
         img = Image.open(io.BytesIO(subprocess.check_output(
             ['rsvg-convert', os.path.join(FIGMA, 'file-%s-%s.svg' % (tipo, dimensione))]))).convert('RGBA')
         lato = 56 if dimensione == 'grande' else 18
         img = img.crop((0, 0, lato, lato))   # alcune sono alte mezzo pixel in piu' (l'ombra)
-        c.append('static const unsigned int %s_pixel[] = {\n%s\n};' % (nome, tabella_parole(premoltiplicato(img))))
-        c.append('static const struct immagine %s = { %d, %d, %s_pixel };' % (nome, lato, lato, nome))
-c.append('#define TIPI_FILE %d' % len(TIPI_FILE))
-c.append('static const struct immagine *const icone_file[TIPI_FILE][2] = {')
-for tipo in TIPI_FILE:
-    c.append('    { &file_%s_grande, &file_%s_piccola },' % (tipo, tipo))
-c.append('};')
-for i, tipo in enumerate(TIPI_FILE):
-    c.append('#define FILE_%s %d' % (tipo.upper(), i))
-c.append('')
+        scrivi_immagine('file_%s_%s' % (tipo, dimensione), img)
 
 # GLI OGGETTI (il componente "Oggetto" del file Figma): le icone di file e cartelle del disegno
 # nuovo, in due misure ottiche (grande 48, piccola 24). Sono a tre colori del tema
@@ -207,12 +135,7 @@ c.append('')
 # sono proprio i pesi dei tre colori, e a la copertura. UIKit (uikit/oggetti.h) li ricolora
 # con il tema in uso. I file con l'etichetta (TXT, PNG...) nella misura grande sono il foglio
 # "etichetta" e la scritta, che la disegna UIKit.
-OGGETTI_GRANDI = ['file', 'cartella', 'etichetta', 'home', 'scrivania', 'documenti', 'immagini',
-                  'download', 'applicazioni']
-OGGETTI_PICCOLI = ['file', 'cartella', 'txt', 'pdf', 'png', 'zip', 'bin', 'home', 'scrivania',
-                   'documenti', 'immagini', 'download', 'applicazioni']
 RUOLI = {'#E3E3E5': '#FF0000', '#F2F2F3': '#00FF00', '#77777B': '#0000FF'}
-c.append('/* Gli oggetti (file e cartelle), a pesi: r riempimento forte, g riempimento, b tratto. */')
 for dimensione, elenco, lato in (('grande', OGGETTI_GRANDI, 48), ('piccola', OGGETTI_PICCOLI, 24)):
     for tipo in elenco:
         svg = open(os.path.join(FIGMA, 'oggetto-%s-%s.svg' % (tipo, dimensione)), encoding='utf-8').read()
@@ -220,17 +143,12 @@ for dimensione, elenco, lato in (('grande', OGGETTI_GRANDI, 48), ('piccola', OGG
             svg = svg.replace(colore, puro)
         img = Image.open(io.BytesIO(subprocess.check_output(
             ['rsvg-convert', '-w', str(lato), '-h', str(lato)], input=svg.encode()))).convert('RGBA')
-        nome = 'oggetto_%s_%s' % (tipo, dimensione)
-        c.append('static const unsigned int %s_pixel[] = {\n%s\n};' % (nome, tabella_parole(premoltiplicato(img))))
-        c.append('static const struct immagine %s = { %d, %d, %s_pixel };' % (nome, lato, lato, nome))
-c.append('')
+        scrivi_immagine('oggetto_%s_%s' % (tipo, dimensione), img)
 
+# LO SFONDO, rimpicciolito e opaco: la scrivania lo ingrandisce a tutto lo schermo.
 sfondo = svg_in_png(os.path.join(FIGMA, 'sfondo.svg'), 320, 200).convert('RGB')
-c.append('/* Lo sfondo, rimpicciolito: 0xRRGGBB. Il compositore lo ingrandisce a 1280x800. */')
-c.append('#define SFONDO_L 320\n#define SFONDO_A 200')
-c.append('static const unsigned int sfondo_piccolo[] = {\n%s\n};' % tabella_parole(
-    [r << 16 | g << 8 | b for r, g, b in sfondo.get_flattened_data()]))
-c.append('\n#endif')
+formato.immagine(os.path.join(RISORSE, FILE_IMMAGINI['sfondo_piccolo']), 320, 200,
+                 [0xFF000000 | r << 16 | g << 8 | b for r, g, b in sfondo.get_flattened_data()])
 
-open(USCITA, 'w', encoding='utf-8', newline='\n').write('\n'.join(c) + '\n')
-print('scritto', USCITA)
+materiali.scrivi_elenco(os.path.join(REPO, 'utente', 'libreria', 'uikit', 'materiali_elenco.h'))
+print('scritti', RISORSE, 'e materiali_elenco.h')

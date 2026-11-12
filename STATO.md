@@ -134,7 +134,8 @@ non c'è kernel né seriale: per una shell si entra nel container con `docker ex
 - `/system/init`, `/system/services/<nome>` (un file per servizio),
   `/system/apps/<app>/{code, manifest.toml, resources}`, `/system/bin`,
   `/system/lib` (vuota, tenuta per una futura libreria condivisa),
-  `/system/resources/{fonts, icons, wallpapers}`, `/system/firmware`, `/system/modules`.
+  `/system/resources/{fonts, icons, wallpapers}` (le risorse del sistema: font, icone e sfondo
+  gia' disegnati, da `risorse/` del repository), `/system/firmware`, `/system/modules`.
 - `/data/apps` (app installate), `/data/system` (identità, utenti, permessi, elenco delle
   app installate: solo per root), `/data/services/<nome>`,
   `/data/users/<uid>/{home, bin, appsdata/<app>, preferences}`.
@@ -215,7 +216,7 @@ vassoio) il puntatore lo sentono sempre.
 |----------|----------|
 | `utente/libreria/` | la libreria dei programmi (`libreria.h`: file, processi, socket...) |
 | `utente/libreria/gkit/` | GKit, la grafica (vedi `LIBRERIE.md`): protocollo delle finestre, finestra dell'app e schermo (`gkit.h`), strumenti di disegno (`gkit_disegno.h`) |
-| `utente/libreria/uikit/` | UIKit, l'interfaccia: `uikit.h` (finestra, componenti, ciclo degli eventi: include tutto quello che serve a un'app), stile e temi (`stile.h` riprende le variabili del file Figma), materiali del sistema (`materiali.h`, font e icone), userbar, quello che serve al compositore (`uikit_compositore.h`) |
+| `utente/libreria/uikit/` | UIKit, l'interfaccia: `uikit.h` (finestra, componenti, ciclo degli eventi: include tutto quello che serve a un'app), stile e temi (`stile.h` riprende le variabili del file Figma), materiali del sistema (`materiali.h`: font, icone e oggetti, caricati dai file in `/system/resources` la prima volta che servono; l'elenco in `materiali_elenco.h`), userbar, quello che serve al compositore (`uikit_compositore.h`) |
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
 | `utente/applicazioni/` | Attivita, Doom, Files, Impostazioni, Store (una cartella ciascuna, con `manifest.toml` e `resources/`) |
@@ -223,7 +224,8 @@ vassoio) il puntatore lo sentono sempre.
 | `utente/libreria/esterni/` | librerie di altri: miniz (zip), tomlc99 (TOML) e stb_image (PNG), con le loro licenze |
 | `utente/prove/` | programmi solo per le prove (vanno solo nel disco delle prove) |
 | `file/` | quello che finisce nella casa della persona (`/data/users/1000/home`) |
-| `strumenti/grafica/` | genera font e icone (anche dagli SVG esportati da Figma) |
+| `risorse/` | le risorse del sistema, gia' pronte, che vanno in `/system/resources`: `fonts/*.font`, `icons/{lucide,objects,files,controls}/`, `wallpapers/default.image` (le fa `strumenti/grafica/genera.py`; i formati in `strumenti/grafica/formato.py`) |
+| `strumenti/grafica/` | genera font, icone e sfondo (anche dagli SVG esportati da Figma) come file in `risorse/` |
 | `strumenti/anteprima/` | disegna widget e finestre in PNG sul Mac, senza Docker né QEMU (vedi la sezione 6b) |
 | `strumenti/sandbox/` | mshell vero in Docker, senza QEMU, per foto e prove veloci (vedi la sezione 3) |
 | `test/` | le prove automatiche e le foto di riferimento |
@@ -413,11 +415,9 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
 persona sono nella sezione 8.
 
-**In corso**
-- I tasti speciali (Ctrl, Maiusc, Alt, Cmd) non arrivano alle app: Doom non funziona. Anche Esc
-  non chiude le domande di conferma (avviso di UIKit).
-- Spostare le risorse su disco (caratteri, icone, immagini) in `/system/resources`, invece di
-  compilarle dentro ogni programma.
+**Fatti per ultimi** (12/11/2026): i tasti speciali (l'errore era nella tabella dei tasti di
+Doom; Esc ora chiude gli avvisi) e le risorse su disco (`/system/resources`, sezione 4). Restano
+da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 
 **App e interfaccia**
 1. **Impostazioni** da rifare da zero sul disegno Figma: scelta del tema Chiaro/Scuro (scrive il
@@ -518,7 +518,7 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   a destra quanto manca per arrivare a 14 (`barra_scorrimento_riserva`, `uikit.h`).
 
 **Fatto**
-- Fase 0: font Plex in `uikit/materiali_dati.h` (`plex_*`, TTF e licenza OFL in `strumenti/grafica/font/`,
+- Fase 0: font Plex in `uikit/materiali_dati.h` (oggi file in `risorse/fonts/`) (`plex_*`, TTF e licenza OFL in `strumenti/grafica/font/`,
   Inter ancora presente); nuove primitive in `gkit/gkit_disegno.h` (ombra con diffusione, ombra interna, ombre a
   strati, pillola, cerchio, archi: tutto intero, niente float); token e temi in `tema.h` e nella
   sezione nuova di `stile.h` (29 colori semantici per tema, misure, font, ombre); il tema si sceglie
