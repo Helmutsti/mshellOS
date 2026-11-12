@@ -15,8 +15,7 @@ Si prova, una cosa dopo l'altra:
     con le foto di riferimento;
   - il doppio clic su Documenti ci entra, "indietro" (+24, +58) torna alla casa;
   - nella Scrivania (barra laterale) c'e' contatore.app: il doppio clic NON lo avvia (non
-    e' installato e lo Store non c'e'): il launcher scrive nella seriale "le app vanno
-    installate prima di aprirle" e Files mostra l'avviso in basso;
+    e' installato): si apre lo Store con la richiesta di installazione, e lo si chiude;
   - in Documenti, la cartella col nome lungo non si apre (il suo percorso supera i 63
     caratteri della libreria): lo stato "errore";
   - /data/system (del sistema, 700) non si puo' aprire: lo stato "permesso negato". Ci si
@@ -146,9 +145,14 @@ def esegui(p):
     scrivania_files = cambia(casa, "la Scrivania (con contatore.app)")
     m.foto("scrivania")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])           # contatore.app
-    m.aspetta_seriale("le app vanno installate prima di aprirle", attesa=10.0)
-    cambia(scrivania_files, "l'avviso 'Le app vanno installate prima di aprirle'")
-    m.foto("pacchetto_non_installato")
+    # si apre lo Store con la richiesta di installazione (nel secondo posto, 560 x 480): lo
+    # si chiude con la sua X (la prova store lo prova tutto)
+    m.aspetta_seriale("store: richiesta di installazione: contatore", attesa=20.0)
+    m.foto("pacchetto_nello_store")
+    sx, sy = s.angolo(1)
+    m.clic(*s.comandi(sx, sy, 560)[1])
+    m.muovi(*PUNTO_VUOTO)
+    s.aspetta_zona(m, scrivania_files, corpo, attesa=10.0, cosa="lo Store chiuso")
     p.controlla(s.segno_sotto(m.aspetta_schermo_fermo(), "Files") > 0, "Files non e' piu' aperta")
 
     # --- errore: la cartella dal nome troppo lungo, in Documenti ---

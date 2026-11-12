@@ -391,18 +391,51 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
   lo Store non c'è compare l'avviso "Le app vanno installate prima di aprirle".
 
 **Prove**
-- `test/pacchetti/prova.sh` (in Docker, senza QEMU): 50 controlli sulla libreria dei pacchetti.
+- `test/pacchetti/prova.sh` (in Docker, senza QEMU): i controlli sulla libreria dei pacchetti.
 - `test/prove/pacchetti.py`: in QEMU, con un disco suo (`disco_pacchetti.img`), installa
-  contatore.app chiedendolo al launcher e la apre.
+  contatore.app chiedendolo al launcher, ne svuota i dati e la apre.
 - Le prove che usavano Contatore ora usano Esempio, Impostazioni o Files. Le foto di
   riferimento di `immagini` (e alcune di `files`) vanno rifatte dopo averle guardate.
 
+**Lo Store (le funzioni di base, fatte)** — `utente/applicazioni/Store/`, un'app del sistema
+con il permesso `app.gestire`. L'aspetto è provvisorio (i widget del toolkit di oggi): quello
+vero arriverà dal disegno in Figma.
+- Aperto dall'isola: l'elenco delle app installate, in due gruppi ("Le tue app", "App del
+  sistema"), con nome, autore e versione. Scegliendone una, a destra il dettaglio: descrizione,
+  i permessi che chiede (se la persona li ha concessi non è ancora scritto da nessuna parte),
+  "Cosa fa di diverso" (le deviazioni) e i ruoli.
+- Nel dettaglio "Svuota dati" (per ogni app) e "Togli app" (solo per quelle installate dalla
+  persona), ognuno con la sua domanda di conferma: "Togli app e dati", "Togli solo l'app" (i
+  dati restano per quando la si reinstalla), "Annulla". Le domande stanno al posto del
+  dettaglio, perché il toolkit non ha ancora le finestre di conferma.
+- Aprendo un `.app` (doppio clic in Files): la richiesta di installazione con nome, autore,
+  versione, descrizione, i permessi che chiederà al primo avvio, le deviazioni, i ruoli, gli
+  avvisi e gli errori. "Installa" / "Annulla" per un'app nuova, "Aggiorna" / "Annulla" per una
+  versione più nuova, solo "Chiudi" se ci sono errori o se il file è rovinato. Dopo: "<nome> è
+  installata" con "Apri" e "Chiudi". Se è già installata con la stessa versione lo dice, con
+  "Apri" e "Chiudi".
+- I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
+  Store li traduce (`Store/testo437.h`; nella libreria una funzione così non c'era).
+- Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
+  e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
+  persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati
+  di una persona si cancellano con un processo che ha la sua identità, non come sistema.
+- Nell'isola lo Store ha per ora l'icona Lucide "save" (fra le icone di oggi non c'è "package").
+
+**Prove**
+- `test/pacchetti/prova.sh`: 78 controlli (con togliere, svuotare, gli id con "/" e "..", i
+  collegamenti che puntano fuori, un'app accesa).
+- `test/prove/store.py`: in QEMU, tutto il giro dello Store con contatore.app.
+
 **Non c'è ancora**
-- Lo Store (lo fa un altro lavoro, dopo questo).
-- La scrivania legge le app solo all'avvio: un'app appena installata compare quando riparte.
+- La scrivania legge le app solo all'avvio: un'app appena installata (o tolta) compare (o
+  sparisce) quando riparte.
 - La scrivania mostra ancora le sue icone di prima (una tabella provvisoria in `scrivania.c`):
-  disegnare gli SVG è un passo successivo.
-- Togliere un'app, i permessi chiesti al primo avvio, l'isolamento, le firme.
+  disegnare gli SVG è un passo successivo. Anche lo Store mostra un quadrato al posto
+  dell'icona dell'app.
+- Nello Store: "Installa da file…", la ricerca automatica degli aggiornamenti (aspettano la
+  decisione della persona).
+- I permessi chiesti al primo avvio, l'isolamento, le firme.
 
 ## Per chi continua il lavoro
 

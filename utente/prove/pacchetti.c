@@ -47,14 +47,13 @@ static int ha_contatore(void) {
 int main(void) {
     dormi(1000);    /* che i servizi siano partiti */
     passo("elenco", elenco_app_installate(&e), LAUNCHER_FATTO);
-    passo("app nell'elenco (5 del sistema)", e.quante, 5);
+    passo("app nell'elenco (6 del sistema, con lo Store)", e.quante, 6);
     passo("contatore nell'elenco prima", ha_contatore(), 0);
 
+    /* aprire contatore.app farebbe partire lo Store (lo prova test/prove/store.py): qui si
+     * prova solo un file che non e' un pacchetto */
     struct risposta_launcher risposta;
-    passo("apri il file contatore.app", apri_file(PACCHETTO, &risposta), LAUNCHER_SERVE_STORE);
-    scrivi_testo("pacchetti: messaggio: ");
-    scrivi_testo(risposta.messaggio);
-    scrivi_testo("\n");
+    passo("apri il file leggimi.txt", apri_file(NON_PACCHETTO, &risposta), LAUNCHER_NON_SUPPORTATO);
     passo("apri l'app contatore (non installata)", apri_applicazione("contatore") >= 0, 0);
 
     passo("descrivi un file che non e' un pacchetto", launcher_pacchetto(DESCRIVI_PACCHETTO, NON_PACCHETTO, &r),
@@ -71,7 +70,16 @@ int main(void) {
           LAUNCHER_PACCHETTO_NON_VALIDO);
     passo("elenco dopo", elenco_app_installate(&e), LAUNCHER_FATTO);
     passo("contatore nell'elenco dopo (installata dalla persona)", ha_contatore(), 1);
+    passo("togli un'app del sistema (files)", togli_app("files", 0, &risposta), LAUNCHER_DEL_SISTEMA);
+    passo("togli '../apps/contatore'", togli_app("../apps/contatore", 0, &risposta), LAUNCHER_ERRORE);
+    passo("svuota i dati di '..'", svuota_dati_app("..", &risposta), LAUNCHER_ERRORE);
+    passo("svuota i dati di contatore (spenta)", svuota_dati_app("contatore", &risposta), LAUNCHER_FATTO);
     passo("apri l'app contatore (installata)", apri_applicazione("contatore") >= 0, 1);
+    dormi(1500);    /* che sia partita */
+    passo("togli contatore mentre e' accesa", togli_app("contatore", 0, &risposta), LAUNCHER_IN_USO);
+    scrivi_testo("pacchetti: messaggio: ");
+    scrivi_testo(risposta.messaggio);
+    scrivi_testo("\n");
 
     scrivi_testo(fallite ? "pacchetti: fallita\n" : "pacchetti: tutto bene\n");
     return 0;

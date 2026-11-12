@@ -11,6 +11,8 @@
  *     programma con un altro uid;
  *   - APRI_FILE: un pacchetto .app non si apre mai da solo: si fa partire lo Store su di
  *     lui, se e' installato; se no si risponde che le app vanno installate prima;
+ *   - RIMUOVI_PACCHETTO, SVUOTA_DATI: togliere un'app della persona, svuotare i dati di
+ *     un'app (pacchetto_togli, pacchetto_svuota_dati), con lo stesso permesso di installare;
  *   - DESCRIVI_PACCHETTO, INSTALLA_PACCHETTO, AGGIORNA_PACCHETTO, ELENCO_APP: il lavoro lo
  *     fa pacchetto.c; il launcher controlla chi puo' installare, legge il file che chi
  *     chiede gli passa gia' aperto, e risponde con il resoconto in un foglio. E' lui a
@@ -115,6 +117,31 @@ static void pacchetti(int d, struct richiesta_launcher *r, int file, struct risp
     chiudi(f);
 }
 
+/* Togliere un'app o svuotarne i dati: lo stesso permesso di installare. */
+static void togli_o_svuota(int d, struct richiesta_launcher *r, struct risposta_launcher *risposta) {
+    if (!puo_installare(d)) {
+        risposta->esito = LAUNCHER_NON_PERMESSO;
+        messaggio(risposta, "Solo lo Store pu\xc3\xb2 togliere le app o svuotarne i dati.");
+        return;
+    }
+    char id[MAX_ID];
+    descrizione_copia(id, r->applicazione, MAX_ID);
+    if (lunghezza(r->applicazione) >= MAX_ID) id[0] = 0;   /* troppo lungo: non valido */
+    int esito = r->tipo == RIMUOVI_PACCHETTO
+                    ? pacchetto_togli(id, (r->opzioni & LAUNCHER_TIENI_DATI) != 0, risposta->messaggio, MAX_MESSAGGIO_LAUNCHER)
+                    : pacchetto_svuota_dati(id, risposta->messaggio, MAX_MESSAGGIO_LAUNCHER);
+    switch (esito) {
+    case TOGLI_FATTO:          risposta->esito = LAUNCHER_FATTO; break;
+    case TOGLI_DEL_SISTEMA:    risposta->esito = LAUNCHER_DEL_SISTEMA; break;
+    case TOGLI_NON_INSTALLATA: risposta->esito = LAUNCHER_NON_INSTALLATA; break;
+    case TOGLI_IN_USO:         risposta->esito = LAUNCHER_IN_USO; break;
+    default:                   risposta->esito = LAUNCHER_ERRORE; break;
+    }
+    if (esito == TOGLI_FATTO)
+        registro(r->tipo == RIMUOVI_PACCHETTO ? (r->opzioni & LAUNCHER_TIENI_DATI ? "tolta (dati tenuti) " : "tolta ")
+                                              : "dati svuotati di ", id);
+}
+
 static void rispondi(int d) {
     struct richiesta_launcher r;
     int file = -1;
@@ -126,6 +153,7 @@ static void rispondi(int d) {
         switch (r.tipo) {
         case APRI_APPLICAZIONE: apri_app(&r, &risposta); break;
         case APRI_FILE: apri_un_file(&r, &risposta); break;
+        case RIMUOVI_PACCHETTO: case SVUOTA_DATI: togli_o_svuota(d, &r, &risposta); break;
         case DESCRIVI_PACCHETTO: case INSTALLA_PACCHETTO: case AGGIORNA_PACCHETTO: case ELENCO_APP:
             pacchetti(d, &r, file, &risposta);
             if (file >= 0) chiudi(file);

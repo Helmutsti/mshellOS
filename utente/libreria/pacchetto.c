@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <ftw.h>
+#include <grp.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/syscall.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <dirent.h>
 
@@ -647,6 +649,196 @@ int pacchetto_elenco(struct elenco_app *e) {
     }
     qsort(e->app, (size_t)e->quante, sizeof e->app[0], per_id);
     return e->quante;
+}
+
+/* --- togliere un'app e svuotarne i dati --- */
+
+static void di(char *messaggio, int massimo, const char *formato, ...) {
+    if (!messaggio || massimo <= 0) return;
+    va_list a;
+    va_start(a, formato);
+    vsnprintf(messaggio, (size_t)massimo, formato, a);
+    va_end(a);
+}
+
+int pacchetto_in_uso(const char *programma) {
+    DIR *d = opendir("/proc");
+    if (!d) return 0;
+    size_t l = strlen(programma);
+    int trovato = 0;
+    struct dirent *v;
+    while (!trovato && (v = readdir(d))) {
+        char *fine;
+        long n = strtol(v->d_name, &fine, 10);
+        if (*fine || n <= 0) continue;
+        char percorso[64], programma_qui[1024];
+        snprintf(percorso, sizeof percorso, "/proc/%ld/exe", n);
+        ssize_t k = readlink(percorso, programma_qui, sizeof programma_qui - 1);
+        if (k <= 0) continue;
+        programma_qui[k] = 0;
+        /* Linux aggiunge " (deleted)" se il file non c'e' piu' */
+        if (!strncmp(programma_qui, programma, l) && (!programma_qui[l] || !strcmp(programma_qui + l, " (deleted)")))
+            trovato = 1;
+    }
+    closedir(d);
+    return trovato;
+}
+
+/* L'app installata 'id': in quale cartella delle app sta (CARTELLA_APP_...), con la sua
+ * cartella in 'cartella' e il manifesto in *m (vuoto, con il nome uguale all'id, se non si
+ * legge: un'app rovinata si deve poter togliere lo stesso). -1 se non c'e'. */
+static int trova_app(const char *id, struct manifesto *m, char *cartella, size_t massimo) {
+    for (int c = 0; c < QUANTE_CARTELLE_APPLICAZIONI; c++) {
+        struct stat s;
+        if (percorso_in(cartella, massimo, cartelle_applicazioni[c], id) < 0 || lstat(cartella, &s) < 0) continue;
+        if (!S_ISDIR(s.st_mode)) return -1;
+        if (manifesto_dell_app(cartella, m) < 0) {
+            memset(m, 0, sizeof *m);
+            snprintf(m->programma, sizeof m->programma, "code");
+        }
+        if (!m->nome[0]) snprintf(m->nome, sizeof m->nome, "%s", id);
+        return c;
+    }
+    return -1;
+}
+
+static int app_in_uso(const struct manifesto *m, const char *cartella) {
+    char programma[600];
+    snprintf(programma, sizeof programma, "%s/%s", cartella, programma_valido(m->programma) ? m->programma : "code");
+    return pacchetto_in_uso(programma);
+}
+
+/* Svuotare: tutto tranne la cartella stessa (il primo livello di nftw). */
+static int svuota_voce(const char *percorso, const struct stat *s, int tipo, struct FTW *f) {
+    if (f->level == 0) return 0;
+    return togli_voce(percorso, s, tipo, f);
+}
+
+/* Il lavoro sui dati di una persona, in un processo con la sua identita': cancella la
+ * cartella 'percorso' (svuota 0) o tutto quello che c'e' dentro (svuota 1; e se al posto della
+ * cartella c'e' altro, lo si toglie e la si rifa': sua, 700). 0 se riuscito. */
+static int lavoro_figlio(unsigned int uid, const char *percorso, int svuota) {
+    if (setgroups(0, 0) < 0 || setgid(uid) < 0 || setuid(uid) < 0) return -1;
+    if (!svuota) return nftw(percorso, togli_voce, 16, FTW_DEPTH | FTW_PHYS) == 0 ? 0 : -1;
+    struct stat s;
+    if (lstat(percorso, &s) == 0 && !S_ISDIR(s.st_mode) && unlink(percorso) < 0) return -1;
+    if (lstat(percorso, &s) < 0 && mkdir(percorso, 0700) < 0) return -1;
+    if (nftw(percorso, svuota_voce, 16, FTW_DEPTH | FTW_PHYS) != 0) return -1;
+    return chmod(percorso, 0700) == 0 ? 0 : -1;
+}
+
+/* Com'e' andata, il figlio lo dice con un byte in un tubo e non con il suo codice d'uscita:
+ * chi usa la libreria (il launcher) ignora SIGCHLD perche' i figli finiti spariscano da
+ * soli, e allora waitpid non lo puo' sapere. */
+static int lavoro_come(unsigned int uid, const char *percorso, int svuota) {
+    int tubo[2];
+    if (pipe2(tubo, O_CLOEXEC) < 0) return -1;
+    pid_t figlio = fork();
+    if (figlio < 0) { close(tubo[0]); close(tubo[1]); return -1; }
+    if (figlio == 0) {
+        close(tubo[0]);
+        char esito = lavoro_figlio(uid, percorso, svuota) == 0 ? 's' : 'n';
+        if (write(tubo[1], &esito, 1) < 0) _exit(1);
+        _exit(0);
+    }
+    close(tubo[1]);
+    char esito = 'n';
+    while (read(tubo[0], &esito, 1) < 0 && errno == EINTR) {}
+    close(tubo[0]);
+    while (waitpid(figlio, 0, 0) < 0 && errno == EINTR) {}   /* con SIGCHLD ignorato: ECHILD, va bene */
+    return esito == 's' ? 0 : -1;
+}
+
+/* Per ogni persona (/data/users/<uid>) che ha la cartella dei dati dell'app: la cancella o
+ * la svuota. 0 se tutto bene. */
+static int dati_persone(const char *id, int svuota) {
+    DIR *d = opendir(cartella_persone);
+    if (!d) return 0;
+    int esito = 0;
+    struct dirent *v;
+    while ((v = readdir(d))) {
+        char *fine;
+        unsigned long uid = strtoul(v->d_name, &fine, 10);
+        if (*fine || !v->d_name[0] || uid == 0 || uid > 0x7fffffff) continue;   /* solo i numeri, non il sistema */
+        char percorso[600];
+        struct stat s;
+        if (snprintf(percorso, sizeof percorso, "%s/%s/appsdata/%s", cartella_persone, v->d_name, id) >= (int)sizeof percorso)
+            { esito = -1; continue; }
+        if (lstat(percorso, &s) < 0) continue;                 /* questa persona non ha dati dell'app */
+        if (lavoro_come((unsigned int)uid, percorso, svuota) < 0) esito = -1;
+    }
+    closedir(d);
+    return esito;
+}
+
+int pacchetto_togli(const char *id, int tieni_dati, char *messaggio, int massimo) {
+    if (!id || !id_valido(id)) {
+        di(messaggio, massimo, "L'identificativo dell'app non \xc3\xa8 valido.");
+        return TOGLI_ID_SBAGLIATO;
+    }
+    struct manifesto *m = malloc(sizeof *m);
+    if (!m) { di(messaggio, massimo, "Non c'\xc3\xa8 abbastanza memoria."); return TOGLI_DISCO; }
+    char cartella[512], nascosta[512];
+    int dove = trova_app(id, m, cartella, sizeof cartella), esito;
+    if (dove < 0) {
+        di(messaggio, massimo, "Quest'app non \xc3\xa8 installata.");
+        esito = TOGLI_NON_INSTALLATA;
+    } else if (dove == CARTELLA_APP_SISTEMA) {
+        di(messaggio, massimo, "%s \xc3\xa8 un'app del sistema: non si pu\xc3\xb2 togliere.", m->nome);
+        esito = TOGLI_DEL_SISTEMA;
+    } else if (app_in_uso(m, cartella)) {
+        di(messaggio, massimo, "Chiudi %s prima di toglierla.", m->nome);
+        esito = TOGLI_IN_USO;
+    } else if (snprintf(nascosta, sizeof nascosta, "%s/.togliere-%s-%d", cartelle_applicazioni[CARTELLA_APP_DATI], id,
+                        (int)getpid()) >= (int)sizeof nascosta) {
+        di(messaggio, massimo, "Non si \xc3\xa8 riusciti a togliere %s.", m->nome);
+        esito = TOGLI_DISCO;
+    } else {
+        togli_cartella(nascosta);                        /* rimasta da un tentativo interrotto */
+        if (rename(cartella, nascosta) < 0) {            /* l'app sparisce tutta insieme */
+            di(messaggio, massimo, "Non si \xc3\xa8 riusciti a togliere %s (%s).", m->nome, strerror(errno));
+            esito = TOGLI_DISCO;
+        } else {
+            togli_cartella(nascosta);
+            esito = TOGLI_FATTO;
+            if (!tieni_dati && dati_persone(id, 0) < 0) {
+                di(messaggio, massimo, "%s \xc3\xa8 stata tolta, ma non tutti i suoi dati si sono potuti cancellare.", m->nome);
+                esito = TOGLI_DISCO;
+            } else {
+                di(messaggio, massimo, "%s \xc3\xa8 stata tolta.", m->nome);
+            }
+            sync();
+        }
+    }
+    free(m);
+    return esito;
+}
+
+int pacchetto_svuota_dati(const char *id, char *messaggio, int massimo) {
+    if (!id || !id_valido(id)) {
+        di(messaggio, massimo, "L'identificativo dell'app non \xc3\xa8 valido.");
+        return TOGLI_ID_SBAGLIATO;
+    }
+    struct manifesto *m = malloc(sizeof *m);
+    if (!m) { di(messaggio, massimo, "Non c'\xc3\xa8 abbastanza memoria."); return TOGLI_DISCO; }
+    char cartella[512];
+    int esito;
+    if (trova_app(id, m, cartella, sizeof cartella) < 0) {
+        di(messaggio, massimo, "Quest'app non \xc3\xa8 installata.");
+        esito = TOGLI_NON_INSTALLATA;
+    } else if (app_in_uso(m, cartella)) {
+        di(messaggio, massimo, "Chiudi %s prima di svuotarne i dati.", m->nome);
+        esito = TOGLI_IN_USO;
+    } else if (dati_persone(id, 1) < 0) {
+        di(messaggio, massimo, "Non si \xc3\xa8 riusciti a svuotare tutti i dati di %s.", m->nome);
+        esito = TOGLI_DISCO;
+    } else {
+        di(messaggio, massimo, "Dati svuotati.");
+        esito = TOGLI_FATTO;
+        sync();
+    }
+    free(m);
+    return esito;
 }
 
 int pacchetto_puo_gestire(const char *programma) {

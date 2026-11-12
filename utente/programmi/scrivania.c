@@ -65,6 +65,7 @@ static const struct { const char *id; int icona; unsigned int colore; } icone_te
     { "esempio", ICONA_SQUARE, ARANCIO_NORMALE },
     { "files", ICONA_FOLDER, BLU_NORMALE },
     { "impostazioni", ICONA_SETTINGS, 0 },
+    { "store", ICONA_SAVE, 0 },        /* fra le icone Lucide di oggi non c'e' "package" */
 };
 
 static int uguali(const char *a, const char *b) { return descrizione_uguali(a, b); }

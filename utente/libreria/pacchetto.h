@@ -31,6 +31,8 @@
  * (/data/users/<uid>/appsdata/<id>) non si toccano mai; se la cartella non c'e', la si
  * crea vuota.
  *
+ * TOGLIERE un'app e SVUOTARNE I DATI: vedi pacchetto_togli e pacchetto_svuota_dati, sotto.
+ *
  * Chi puo' scrivere in /data/apps: solo il sistema. Per questo lo fa il launcher (uid 0),
  * quando un'app glielo chiede (launcher.h); questo modulo e' la parte che fa il lavoro.
  *
@@ -110,6 +112,41 @@ int pacchetto_elenco(struct elenco_app *e);
  * di un'app del sistema che nel manifesto chiede il permesso "app.gestire" (installare e
  * aggiornare app): per ora, solo cosi' un'app puo' chiedere di installare. */
 int pacchetto_puo_gestire(const char *programma);
+
+/* --- togliere un'app e svuotarne i dati --- */
+
+/* TOGLIERE un'app (pacchetto_togli): solo un'app installata dalla persona (/data/apps/<id>);
+ * quelle del sistema no. La cartella dell'app sparisce tutta insieme (prima la si sposta in
+ * una cartella nascosta, poi la si cancella). I dati delle persone
+ * (/data/users/<uid>/appsdata/<id>, per ogni persona che li ha) si cancellano anche loro,
+ * a meno di 'tieni_dati': allora restano, e se la stessa app si installa di nuovo li ritrova
+ * (installare non tocca mai una cartella dei dati che c'e' gia').
+ *
+ * SVUOTARE I DATI (pacchetto_svuota_dati): per qualunque app installata, anche del sistema.
+ * Si cancella tutto quello che c'e' dentro la cartella dei dati di ogni persona, ma la
+ * cartella resta, sua e con i permessi di quando l'app e' stata installata (700). L'app
+ * resta installata.
+ *
+ * Tutte e due si rifiutano se l'app e' accesa (un programma in esecuzione e' il suo): non la
+ * si ferma, si chiede alla persona di chiuderla. I dati di una persona si cancellano con un
+ * processo che ha la sua identita' (non come sistema): cosi' un collegamento messo li' dentro
+ * non puo' far cancellare niente fuori dalla sua cartella.
+ *
+ * L'esito (TOGLI_...) e, in 'messaggio', la frase per la persona (UTF-8). */
+#define TOGLI_FATTO          0
+#define TOGLI_ID_SBAGLIATO  -1   /* l'identificativo non e' valido (per esempio con "/" o "..") */
+#define TOGLI_DEL_SISTEMA   -2   /* un'app del sistema non si toglie */
+#define TOGLI_NON_INSTALLATA -3
+#define TOGLI_IN_USO        -4   /* l'app e' accesa */
+#define TOGLI_DISCO         -5   /* non si e' riusciti a cancellare (il perche' nel messaggio) */
+
+#define MAX_MESSAGGIO_TOGLI 160
+
+int pacchetto_togli(const char *id, int tieni_dati, char *messaggio, int massimo);
+int pacchetto_svuota_dati(const char *id, char *messaggio, int massimo);
+
+/* 1 se un programma in esecuzione e' il file 'programma' (il percorso completo). */
+int pacchetto_in_uso(const char *programma);
 
 /* Dove stanno le cartelle dei dati delle persone (/data/users): una variabile solo per le
  * prove sul computer che compila (test/pacchetti/). */

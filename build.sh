@@ -307,8 +307,8 @@ done
 #   3. le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
 #      contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
 #      Le app di DA_INSTALLARE invece no: il loro pacchetto va sulla Scrivania della persona,
-#      per provare l'installazione (si apre con Files: senza lo Store, il launcher risponde
-#      che le app vanno installate prima di aprirle).
+#      per provare l'installazione (si apre con Files: il launcher fa partire lo Store, che
+#      chiede se installarla).
 # L'id dell'app (nel manifesto) deve essere il nome della cartella dei sorgenti in minuscolo.
 DA_INSTALLARE="contatore"
 PACCHETTI="$B/pacchetti"

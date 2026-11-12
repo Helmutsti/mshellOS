@@ -47,10 +47,24 @@
  *                       elenco_app: le app installate (prima del sistema, poi di /data/apps)
  *                       con il loro manifesto. Chiunque puo' chiederlo.
  *
- * CHI PUO' INSTALLARE E AGGIORNARE: il sistema (uid 0), oppure un'app DEL SISTEMA che nel
- * manifesto chiede il permesso "app.gestire" (sara' lo Store). Il launcher lo controlla
- * chiedendo al kernel quale programma c'e' all'altro capo (programma_di). Gli altri
- * ricevono LAUNCHER_NON_PERMESSO.
+ *   RIMUOVI_PACCHETTO   applicazione = l'id; opzioni = LAUNCHER_TIENI_DATI o 0. Toglie
+ *                       un'app installata dalla persona (/data/apps/<id>): quelle del sistema
+ *                       no (LAUNCHER_DEL_SISTEMA). Senza LAUNCHER_TIENI_DATI cancella anche i
+ *                       dati delle persone (/data/users/<uid>/appsdata/<id>); con, li lascia,
+ *                       e reinstallando la stessa app si ritrovano. pacchetto_togli in
+ *                       pacchetto.h. Risposta: l'esito e la frase per la persona in messaggio.
+ *
+ *   SVUOTA_DATI         applicazione = l'id. Per ogni app installata, anche del sistema:
+ *                       svuota la cartella dei dati di ogni persona (la cartella resta).
+ *                       L'app resta installata. pacchetto_svuota_dati in pacchetto.h.
+ *
+ *   Se l'app e' accesa, RIMUOVI_PACCHETTO e SVUOTA_DATI rispondono LAUNCHER_IN_USO ("Chiudi
+ *   <nome> prima di ..."): il launcher non la ferma.
+ *
+ * CHI PUO' INSTALLARE, AGGIORNARE, TOGLIERE E SVUOTARE I DATI: il sistema (uid 0), oppure
+ * un'app DEL SISTEMA che nel manifesto chiede il permesso "app.gestire" (lo Store). Il
+ * launcher lo controlla chiedendo al kernel quale programma c'e' all'altro capo
+ * (programma_di). Gli altri ricevono LAUNCHER_NON_PERMESSO.
  *
  * Una nuova app installata la scrivania non la vede finche' non riparte (per ora legge le
  * app una volta, all'avvio). */
@@ -69,6 +83,11 @@
 #define AGGIORNA_PACCHETTO 4
 #define ELENCO_APP         5
 #define APRI_FILE          6
+#define RIMUOVI_PACCHETTO  7
+#define SVUOTA_DATI        8
+
+/* le opzioni di RIMUOVI_PACCHETTO */
+#define LAUNCHER_TIENI_DATI 1
 
 /* gli esiti della risposta */
 #define LAUNCHER_FATTO                 0
@@ -78,6 +97,8 @@
 #define LAUNCHER_NON_SUPPORTATO       -4   /* un file che il sistema non sa ancora aprire */
 #define LAUNCHER_PACCHETTO_NON_VALIDO -5   /* il resoconto (nel foglio) dice perche' */
 #define LAUNCHER_NON_PERMESSO         -6   /* chi chiede non puo' installare */
+#define LAUNCHER_IN_USO               -7   /* l'app e' accesa: va chiusa prima */
+#define LAUNCHER_DEL_SISTEMA          -8   /* un'app del sistema non si toglie */
 
 #define ID_STORE "store"
 
@@ -85,6 +106,7 @@ struct richiesta_launcher {
     unsigned int tipo;
     char applicazione[MAX_NOME_FILE];   /* APRI_APPLICAZIONE: l'id, per esempio "files" */
     char argomento[MAX_PERCORSO];       /* per l'applicazione, o il file da aprire; "" niente */
+    unsigned int opzioni;               /* RIMUOVI_PACCHETTO: LAUNCHER_TIENI_DATI o 0 */
 };
 
 #define MAX_MESSAGGIO_LAUNCHER 160
@@ -159,6 +181,21 @@ static inline int launcher_pacchetto(unsigned int tipo, const char *percorso, st
     int esito = launcher_chiedi(&q, f, &risposta, r, sizeof *r);
     chiudi(f);
     return esito;
+}
+
+/* Toglie l'app 'id' (RIMUOVI_PACCHETTO), tenendo i dati delle persone se 'tieni_dati'.
+ * L'esito; la frase per la persona in risposta->messaggio. */
+static inline int togli_app(const char *id, int tieni_dati, struct risposta_launcher *risposta) {
+    struct richiesta_launcher q = { .tipo = RIMUOVI_PACCHETTO, .opzioni = tieni_dati ? LAUNCHER_TIENI_DATI : 0 };
+    launcher_copia(q.applicazione, id, MAX_NOME_FILE);
+    return launcher_chiedi(&q, -1, risposta, 0, 0);
+}
+
+/* Svuota i dati dell'app 'id' (SVUOTA_DATI). L'esito; la frase in risposta->messaggio. */
+static inline int svuota_dati_app(const char *id, struct risposta_launcher *risposta) {
+    struct richiesta_launcher q = { .tipo = SVUOTA_DATI };
+    launcher_copia(q.applicazione, id, MAX_NOME_FILE);
+    return launcher_chiedi(&q, -1, risposta, 0, 0);
 }
 
 /* Le app installate, in *e. L'esito. */

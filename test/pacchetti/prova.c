@@ -5,11 +5,14 @@
  * cartella_persone sono variabili apposta); i pacchetti li prepara fai_pacchetti.py. Per
  * ogni caso si controlla il resoconto (installabile? quali voci hanno errori o avvisi?) e,
  * per le installazioni, cosa c'e' sul disco. Alla fine: quante prove riuscite e fallite. */
+#include <dirent.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "pacchetto.h"
@@ -71,7 +74,114 @@ static int permessi(const char *percorso, unsigned int attesi, int cartella) {
 
 static int esiste(const char *p) { struct stat s; return lstat(p, &s) == 0; }
 
+/* Quante voci nella cartella cominciano con 'inizio' ("" per tutte, tranne "." e "..")?
+ * (Senza system: in prova_togli SIGCHLD e' ignorato, e system non saprebbe l'esito.) */
+static int voci(const char *p, const char *inizio) {
+    DIR *d = opendir(p);
+    if (!d) return -1;
+    int n = 0;
+    struct dirent *v;
+    while ((v = readdir(d)))
+        if (strcmp(v->d_name, ".") && strcmp(v->d_name, "..") && !strncmp(v->d_name, inizio, strlen(inizio))) n++;
+    closedir(d);
+    return n;
+}
+
+static int vuota(const char *p) { return voci(p, "") == 0; }
+
+/* La cartella dei dati: della persona (1000), 700. */
+static int cartella_dati_giusta(const char *p) {
+    struct stat s;
+    return lstat(p, &s) == 0 && S_ISDIR(s.st_mode) && (s.st_mode & 07777) == 0700 && s.st_uid == 1000;
+}
+
+#define DATI RADICE "/data/users/1000/appsdata"
+
+/* Togliere un'app e svuotarne i dati (pacchetto_togli, pacchetto_svuota_dati). Prima c'e'
+ * "prova" 1.1.0 installata, con il file "punteggio" nei suoi dati. */
+static void prova_togli(void) {
+    char msg[MAX_MESSAGGIO_TOGLI];
+    /* i dati si cancellano con l'identita' della persona: le sue cartelle devono essere sue */
+    system("chown 1000:1000 " RADICE "/data/users/1000 " DATI);
+    /* come nel launcher (libreria.c): i figli finiti spariscono da soli */
+    signal(SIGCHLD, SIG_IGN);
+
+    /* percorsi pericolosi: rifiutati, niente cancellato */
+    controlla(pacchetto_togli("../apps/prova", 0, msg, sizeof msg) == TOGLI_ID_SBAGLIATO, "togliere '../apps/prova': no");
+    controlla(pacchetto_togli("..", 0, msg, sizeof msg) == TOGLI_ID_SBAGLIATO, "togliere '..': no");
+    controlla(pacchetto_togli("prova/code", 0, msg, sizeof msg) == TOGLI_ID_SBAGLIATO, "togliere 'prova/code': no");
+    controlla(pacchetto_togli("", 0, msg, sizeof msg) == TOGLI_ID_SBAGLIATO, "togliere '': no");
+    controlla(pacchetto_svuota_dati("../1000", msg, sizeof msg) == TOGLI_ID_SBAGLIATO, "svuotare '../1000': no");
+    controlla(pacchetto_svuota_dati("/data", msg, sizeof msg) == TOGLI_ID_SBAGLIATO, "svuotare '/data': no");
+    controlla(esiste(RADICE "/data/apps/prova/code") && esiste(DATI "/prova/punteggio"), "dopo i rifiuti non manca niente");
+
+    /* un'app del sistema non si toglie; una che non c'e' neanche */
+    controlla(pacchetto_togli("files", 0, msg, sizeof msg) == TOGLI_DEL_SISTEMA && esiste(RADICE "/system/apps/files"),
+              "togliere un'app del sistema: no");
+    printf("    %s\n", msg);
+    controlla(pacchetto_togli("nessuna", 0, msg, sizeof msg) == TOGLI_NON_INSTALLATA, "togliere un'app che non c'e': no");
+    controlla(pacchetto_svuota_dati("nessuna", msg, sizeof msg) == TOGLI_NON_INSTALLATA, "svuotare un'app che non c'e': no");
+
+    /* accesa: no. Il suo programma e' una copia di questa prova, che dorme */
+    char questa[512], comando[1200];
+    ssize_t k = readlink("/proc/self/exe", questa, sizeof questa - 1);   /* questa prova (non la shell di system) */
+    questa[k > 0 ? k : 0] = 0;
+    snprintf(comando, sizeof comando, "cp '%s' " RADICE "/data/apps/prova/code && chmod 755 " RADICE "/data/apps/prova/code",
+             questa);
+    system(comando);
+    pid_t accesa = fork();
+    if (accesa == 0) {
+        execl(RADICE "/data/apps/prova/code", "code", "dormi", (char *)0);
+        _exit(1);
+    }
+    usleep(300000);
+    controlla(pacchetto_in_uso(RADICE "/data/apps/prova/code"), "l'app accesa si vede");
+    controlla(pacchetto_togli("prova", 0, msg, sizeof msg) == TOGLI_IN_USO && esiste(RADICE "/data/apps/prova/code"),
+              "togliere un'app accesa: no");
+    printf("    %s\n", msg);
+    controlla(pacchetto_svuota_dati("prova", msg, sizeof msg) == TOGLI_IN_USO && esiste(DATI "/prova/punteggio"),
+              "svuotare i dati di un'app accesa: no");
+    kill(accesa, SIGKILL);
+    waitpid(accesa, 0, 0);
+    controlla(!pacchetto_in_uso(RADICE "/data/apps/prova/code"), "spenta, non si vede piu'");
+
+    /* svuotare: dentro non resta niente, la cartella si'; un collegamento che punta fuori si
+     * toglie, ma quello a cui punta resta */
+    system("mkdir -p " RADICE "/fuori && echo tieni > " RADICE "/fuori/importante && "
+           "mkdir -p " DATI "/prova/sotto && echo x > " DATI "/prova/sotto/file && "
+           "ln -s " RADICE "/fuori " DATI "/prova/collegamento && chmod 755 " DATI "/prova && "
+           "chown -R -h 1000:1000 " DATI "/prova");
+    controlla(pacchetto_svuota_dati("prova", msg, sizeof msg) == TOGLI_FATTO, "svuotare i dati di prova: si'");
+    controlla(cartella_dati_giusta(DATI "/prova") && vuota(DATI "/prova"), "la cartella dei dati resta, vuota, sua, 700");
+    controlla(esiste(RADICE "/fuori/importante"), "svuotare non segue i collegamenti");
+    controlla(esiste(RADICE "/data/apps/prova/code"), "svuotare non toglie l'app");
+
+    /* svuotare i dati di un'app del sistema: si' */
+    system("mkdir -p " DATI "/files && echo x > " DATI "/files/preferiti && chmod 700 " DATI "/files && "
+           "chown -R 1000:1000 " DATI "/files");
+    controlla(pacchetto_svuota_dati("files", msg, sizeof msg) == TOGLI_FATTO && cartella_dati_giusta(DATI "/files") &&
+              vuota(DATI "/files"), "svuotare i dati di un'app del sistema: si'");
+
+    /* togliere tenendo i dati: l'app sparisce, i dati restano, e reinstallandola si ritrovano */
+    system("echo record > " DATI "/prova/punteggio && chown 1000:1000 " DATI "/prova/punteggio");
+    controlla(pacchetto_togli("prova", 1, msg, sizeof msg) == TOGLI_FATTO, "togliere prova tenendo i dati: si'");
+    printf("    %s\n", msg);
+    controlla(!esiste(RADICE "/data/apps/prova") && esiste(DATI "/prova/punteggio"), "l'app non c'e' piu', i dati si'");
+    controlla(fai("buono.app", PACCHETTO_INSTALLA) == 0 && esiste(DATI "/prova/punteggio"),
+              "reinstallata, ritrova i suoi dati");
+
+    /* togliere con i dati: non resta niente, neanche le cartelle nascoste */
+    system("ln -s " RADICE "/fuori " DATI "/prova/collegamento && chown -h 1000:1000 " DATI "/prova/collegamento");
+    controlla(pacchetto_togli("prova", 0, msg, sizeof msg) == TOGLI_FATTO, "togliere prova con i dati: si'");
+    controlla(!esiste(RADICE "/data/apps/prova") && !esiste(DATI "/prova"), "non c'e' piu' ne' l'app ne' i dati");
+    controlla(esiste(RADICE "/fuori/importante"), "togliere non segue i collegamenti");
+    controlla(voci(RADICE "/data/apps", ".togliere") == 0, "niente cartelle nascoste rimaste");
+    signal(SIGCHLD, SIG_DFL);
+    controlla(pacchetto_togli("prova", 0, msg, sizeof msg) == TOGLI_NON_INSTALLATA, "togliere di nuovo: non c'e' piu'");
+}
+
 int main(int quanti, char **argomenti) {
+    if (quanti == 2 && !strcmp(argomenti[1], "dormi")) { sleep(30); return 0; }   /* l'app "accesa" */
     if (quanti < 2) { printf("uso: prova <cartella dei pacchetti>\n"); return 2; }
     pacchetti = argomenti[1];
     system("rm -rf " RADICE " && mkdir -p " RADICE "/system/apps/files " RADICE "/system/apps/store "
@@ -167,6 +277,8 @@ int main(int quanti, char **argomenti) {
     controlla(!pacchetto_puo_gestire(RADICE "/system/apps/files/code"), "files non puo' installare");
     controlla(!pacchetto_puo_gestire(RADICE "/data/apps/prova/code"), "un'app installata non puo' installare");
 
+    prova_togli();
+
     /* i pacchetti veri fatti da build.sh (se c'e' la cartella): devono essere tutti
      * installabili, su un sistema senza app (cosi' gli id non sono gia' presi) */
     if (quanti > 2) {
@@ -174,7 +286,7 @@ int main(int quanti, char **argomenti) {
         cartelle_applicazioni[0] = RADICE "/vuoto/system";
         cartelle_applicazioni[1] = RADICE "/vuoto/data";
         pacchetti = argomenti[2];
-        static const char *const veri[] = { "attivita", "contatore", "doom", "esempio", "files", "impostazioni" };
+        static const char *const veri[] = { "attivita", "contatore", "doom", "esempio", "files", "impostazioni", "store" };
         for (unsigned int i = 0; i < sizeof veri / sizeof veri[0]; i++) {
             char nome[64], cosa[128];
             snprintf(nome, sizeof nome, "%s.app", veri[i]);
