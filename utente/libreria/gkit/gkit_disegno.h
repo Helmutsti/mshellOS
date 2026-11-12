@@ -1,6 +1,8 @@
-/* La libreria di disegno: il secondo strato della grafica, come Cairo su Linux o Core
- * Graphics sul Mac. Disegna su una TELA (un pezzo di memoria con dei pixel, per
- * esempio l'immagine di una finestra) e non sa niente di finestre o di compositore.
+/* GKit, gli strumenti di disegno (vedi LIBRERIE.md): come Cairo su Linux o Core Graphics
+ * sul Mac. Disegna su una TELA (un pezzo di memoria con dei pixel, per esempio l'immagine
+ * di una finestra) e non sa niente di finestre o di compositore. Sa COME si disegna, senza
+ * nessun gusto: non conosce i colori del tema, le misure del design, il font e le icone del
+ * sistema (quelli sono di UIKit, in uikit/).
  *
  * L'IDEA DEL PENNELLO. Invece di passare colore, opacita' e ritaglio a ogni disegno, si
  * prepara un pennello e si dice "da adesso questo colore": i disegni dopo lo usano. Il
@@ -13,7 +15,7 @@
  *     pennello_colore(&p, 0x24FFFFFF);               bianco al 14%
  *     riempi_tondo(&p, 10, 10, 120, 36, 8);          angoli di raggio 8
  *     pennello_colore(&p, OPACO(0xFFFFFF));
- *     testo(&p, &inter_14, 22, 19, "Ciao");
+ *     testo(&p, font, 22, 19, "Ciao");               con il font che riceve
  *
  * I COLORI sono 0xAARRGGBB: AA e' quanto e' opaco (0 invisibile, FF pieno). I pixel della
  * tela invece sono PREMOLTIPLICATI: ogni colore e' gia' moltiplicato per la sua opacita'
@@ -27,14 +29,47 @@
  * 256esimi di pixel: i programmi non possono usare i numeri con la virgola (il kernel
  * non salva quella parte del processore quando passa da un programma all'altro).
  *
- * IL TESTO E LE ICONE vengono da grafica_dati.h: tabelle di copertura gia' calcolate
- * (font Inter, icone Lucide). Qui si colorano e si mettono sulla tela.
+ * IL TESTO, LE ICONE E LE IMMAGINI si ricevono da chi disegna: un font, un'icona o
+ * un'immagine sono tabelle gia' calcolate (struct font, struct icona, struct immagine, qui
+ * sotto), e qui si colorano e si mettono sulla tela. Quelli del sistema (i font IBM Plex e
+ * Inter, le icone Lucide, le icone dei file) sono di UIKit: uikit/materiali.h.
  *
  * Coordinate in pixel, (0, 0) in alto a sinistra, y verso il basso. */
-#ifndef DISEGNO_H
-#define DISEGNO_H
+#ifndef GKIT_DISEGNO_H
+#define GKIT_DISEGNO_H
 
-#include "grafica_dati.h"
+/* --- i materiali che si ricevono: font, icone, immagini ---
+ * I tipi soltanto: i dati veri li prepara strumenti/grafica/genera.py (quelli del sistema
+ * stanno in uikit/materiali_dati.h). */
+
+/* Una lettera: dove sta la sua tabella di alfa, dove va rispetto al punto di scrittura
+ * (x a destra, y in su dalla linea di base) e di quanto si avanza dopo. */
+struct glifo {
+    unsigned int inizio;
+    signed char x, y;
+    unsigned char l, a, avanzo;
+};
+
+struct font {
+    const struct glifo *glifi;
+    const unsigned char *alfa;
+    unsigned char indice[256];    /* carattere (code page 437) -> glifo; 0 = non c'e' */
+    unsigned char altezza;        /* l'altezza di una riga */
+    unsigned char ascesa;         /* dalla cima della riga alla linea di base */
+};
+
+/* Un'icona a una misura: lato x lato pixel di alfa. Un'icona intera e' un elenco delle sue
+ * misure, dalla piu' piccola alla piu' grande. */
+struct icona {
+    unsigned char lato;
+    const unsigned char *alfa;
+};
+
+/* Un'immagine a colori: l x a pixel 0xAARRGGBB premoltiplicati. */
+struct immagine {
+    unsigned short l, a;
+    const unsigned int *pixel;
+};
 
 #define OPACO(rgb) (0xFF000000u | (unsigned int)(rgb))
 /* Un colore con opacita' da 0 a 255: VELATO(0xFFFFFF, 36) e' il bianco al 14%. */
@@ -371,6 +406,9 @@ struct strato_ombra {
     int dx, dy, sfocatura, diffusione;
 };
 
+/* Quante righe ha una lista di strati scritta come array. */
+#define OMBRA_STRATI(tabella)          ((int)(sizeof(tabella) / sizeof((tabella)[0])))
+
 /* L'ORDINE. La lista si scrive come nei token (e come il pannello di Figma): la PRIMA
  * riga e' quella che sta SOPRA a tutte. Per disegnare si fa al contrario, dall'ultima
  * alla prima, cosi' la piu' grande e lontana (di solito l'ultima) va sotto e la piu'
@@ -591,12 +629,14 @@ static inline int testo(struct pennello *p, const struct font *f, int x, int y, 
 
 /* --- le icone e le immagini --- */
 
-/* L'icona 'quale' (ICONA_...) di lato 'lato' pixel, nel colore del pennello. Se quella
- * misura non c'e', si usa la piu' vicina. */
-static inline void icona(struct pennello *p, int quale, int lato, int x, int y) {
-    const struct icona *scelta = &icone[quale][0];
-    for (int i = 1; i < ICONA_MISURE; i++)
-        if (icone[quale][i].lato <= lato) scelta = &icone[quale][i];
+/* L'icona 'misure' (le sue 'quante' misure, dalla piu' piccola) di lato 'lato' pixel, nel
+ * colore del pennello. Se quella misura non c'e', si usa la piu' grande che ci sta (o la
+ * piu' piccola), centrata. Le icone del sistema per numero: icona(), in uikit/materiali.h. */
+static inline void disegna_icona(struct pennello *p, const struct icona *misure, int quante,
+                                 int lato, int x, int y) {
+    const struct icona *scelta = &misure[0];
+    for (int i = 1; i < quante; i++)
+        if (misure[i].lato <= lato) scelta = &misure[i];
     int l = scelta->lato;
     x += (lato - l) / 2;
     y += (lato - l) / 2;

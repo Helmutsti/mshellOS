@@ -1,4 +1,4 @@
-/* Le cose che i pezzi della libreria (libreria.c, file.c, comunicazione.c, schermo.c)
+/* Le cose che i pezzi della libreria (libreria.c, file.c, comunicazione.c, gkit/schermo.c)
  * si dicono tra loro. I programmi non lo includono: per loro c'e' libreria.h. */
 #ifndef INTERNO_H
 #define INTERNO_H

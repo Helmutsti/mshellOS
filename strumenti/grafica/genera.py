@@ -1,8 +1,10 @@
-"""Prepara la grafica dei programmi: font, icone, immagini e sfondo, come tabelle C.
+"""Prepara i materiali del sistema: font, icone, immagini e sfondo, come tabelle C.
 
 Gira sul computer che compila, dentro il container alpine (vedi genera.sh), e scrive
-utente/libreria/grafica_dati.h. I programmi di mshell non sanno leggere un file TrueType
-o un SVG: qui li si trasforma una volta per tutte in pixel.
+utente/libreria/uikit/materiali_dati.h: i materiali sono di UIKit (vedi LIBRERIE.md), i
+tipi (struct font, struct icona, struct immagine) e il codice che li disegna sono di GKit
+(gkit/gkit_disegno.h). I programmi di mshell non sanno leggere un file TrueType o un SVG:
+qui li si trasforma una volta per tutte in pixel.
 
   - I FONT: Inter e IBM Plex Sans (licenza SIL OFL) in ogni misura e peso che usa
     l'interfaccia (Inter e' in via di sostituzione con Plex). Ogni
@@ -63,7 +65,7 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          'arrow-up-down', 'image', 'file', 'terminal', 'lock',
          # la userbar (le app fissate) e il riavvio di Attivita
          'globe', 'mail', 'rotate-ccw']
-LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: icona() prende la piu' grande che ci sta (48: lo stato vuoto)
+LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: disegna_icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 def svg_in_png(file, l, a):
     return Image.open(io.BytesIO(subprocess.check_output(
@@ -103,25 +105,14 @@ c.append('''/* GENERATO da strumenti/grafica/genera.py: non modificare a mano.
  * (https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide (https://lucide.dev), licenza ISC: Copyright (c) for portions
  * of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other
  * copyright (c) for Lucide are held by Lucide Contributors 2022.
- * Icone, immagini e sfondo vengono dal file Figma "mshell - interfaccia". */
-#ifndef GRAFICA_DATI_H
-#define GRAFICA_DATI_H
+ * Icone, immagini e sfondo vengono dal file Figma "mshell - interfaccia".
+ *
+ * I materiali del sistema, di UIKit: solo i dati. I tipi e il codice che li disegna sono di
+ * GKit (gkit_disegno.h); le icone per numero si disegnano con icona() (uikit/materiali.h). */
+#ifndef MATERIALI_DATI_H
+#define MATERIALI_DATI_H
 
-/* Una lettera: dove sta la sua tabella di alfa, dove va rispetto al punto di scrittura
- * (x a destra, y in su dalla linea di base) e di quanto si avanza dopo. */
-struct glifo {
-    unsigned int inizio;
-    signed char x, y;
-    unsigned char l, a, avanzo;
-};
-
-struct font {
-    const struct glifo *glifi;
-    const unsigned char *alfa;
-    unsigned char indice[256];    /* carattere (code page 437) -> glifo; 0 = non c'e' */
-    unsigned char altezza;        /* l'altezza di una riga */
-    unsigned char ascesa;         /* dalla cima della riga alla linea di base */
-};
+#include "gkit/gkit_disegno.h"   /* struct glifo, font, icona, immagine */
 ''')
 
 for nome, file, misura in FONT_USATI:
@@ -153,12 +144,6 @@ for nome, file, misura in FONT_USATI:
     c.append('static const struct font %s = { %s_glifi, %s_alfa, {%s}, %d, %d };\n' % (
         nome, nome, nome, ', '.join(str(i) for i in indice), ascesa + discesa, ascesa))
 
-c.append('''/* Un'icona a una misura: lato x lato pixel di alfa. */
-struct icona {
-    unsigned char lato;
-    const unsigned char *alfa;
-};
-''')
 nomi_icone = []
 for icona in ICONE:
     file = os.path.join(FIGMA, 'icona-%s.svg' % icona)
@@ -177,12 +162,6 @@ for i, nome in enumerate(nomi_icone):
     c.append('#define ICONA_%s %d' % (nome.upper(), i))
 c.append('')
 
-c.append('''/* Un'immagine a colori: l x a pixel 0xAARRGGBB premoltiplicati. */
-struct immagine {
-    unsigned short l, a;
-    const unsigned int *pixel;
-};
-''')
 for nome, file in [('scelta_accesa', 'scelta-accesa.svg'), ('scelta_accesa_sopra', 'scelta-accesa-sopra.svg')]:
     img = Image.open(io.BytesIO(subprocess.check_output(
         ['rsvg-convert', os.path.join(FIGMA, file)]))).convert('RGBA')

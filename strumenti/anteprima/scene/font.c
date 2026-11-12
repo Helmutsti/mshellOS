@@ -1,6 +1,6 @@
 /* I font IBM Plex Sans a tutte le misure, con una frase di prova. Rilancia:
  * anteprima.sh font 2 (il 2 ingrandisce, per vedere i pixel) */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 #define FRASE "Impostazioni di sistema - bilancio-novembre.txt 0123456789 \x85\x8a\x82\x8d\x95\x97"
 
@@ -36,5 +36,5 @@ int main(void) {
     riga(&plex_semigrassetto_14, "Accenti S14: \x85\x8a\x82\x8d\x95\x97 \xfa 0123");
     riga(&inter_14, "Inter 14 per confronto: " FRASE);
     finestra_tk_prepara(&finestra, "Font", &colonna.base);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

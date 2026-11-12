@@ -7,7 +7,7 @@
  *     che dichiara (se la persona li ha concessi non e' ancora scritto da nessuna parte: si
  *     mostra solo l'elenco), le deviazioni ("Cosa fa di diverso"), i ruoli. Sotto, "Svuota
  *     dati" per ogni app e "Togli app" solo per quelle installate dalla persona, ognuno con
- *     la sua domanda di conferma (nello stesso posto del dettaglio: il toolkit non ha
+ *     la sua domanda di conferma (nello stesso posto del dettaglio: UIKit non ha
  *     ancora le finestre di dialogo);
  *   - CON UN PERCORSO (lo fa partire il launcher quando si apre un file .app, APRI_FILE):
  *     la RICHIESTA DI INSTALLAZIONE. Si chiede al launcher di descrivere il pacchetto
@@ -21,12 +21,12 @@
  * installare, togliere e svuotare perche' e' un'app del sistema con il permesso
  * "app.gestire" (manifest.toml).
  *
- * L'aspetto e' provvisorio, fatto con i widget del toolkit: quello vero arrivera' dal
+ * L'aspetto e' provvisorio, fatto con i widget di UIKit: quello vero arrivera' dal
  * disegno in Figma.
  *
  * Ogni passo importante lo scrive anche nella seriale ("store: ..."): lo guardano le prove
  * (test/prove/store.py). */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 #include "launcher.h"
 #include "testo437.h"
 
@@ -94,7 +94,7 @@ static int dichiara_funzione(const struct manifesto *m, const char *f) {
  * Fatto qui, per lo Store: titoli, sezioni, paragrafi, punti di un elenco, avvisi ed
  * errori (con la loro icona), e in cima la "testata" di un'app (il posto dell'icona, il
  * nome, autore e versione). Se non ci sta tutto, scorre con la rotella (la barra di
- * scorrimento del toolkit, come la tabella di Attivita'). I testi si danno in UTF-8: li
+ * scorrimento di UIKit, come la tabella di Attivita'). I testi si danno in UTF-8: li
  * traduce lui per il font. */
 
 enum { D_TESTATA, D_TITOLO, D_SEZIONE, D_TESTO, D_NOTA, D_PUNTO, D_AVVISO, D_ERRORE, D_FATTO };
@@ -305,7 +305,7 @@ static void elenchi_del_manifesto(struct documento *d, const struct manifesto *m
 static struct finestra_tk finestra;
 
 static void ridisponi(void) {
-    if (finestra.base.l > 0) toolkit_ridisponi(&finestra);
+    if (finestra.base.l > 0) uikit_ridisponi(&finestra);
 }
 
 static void chiudi_store(struct pulsante *b, void *dati) {
@@ -505,7 +505,7 @@ static int richiesta(const char *percorso) {
     descrivi();
     finestra_tk_prepara(&finestra, "Store", &colonna_richiesta.base);
     finestra_tk_dimensione(&finestra, 560, 480);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }
 
 /* ================= L'ELENCO DELLE APP INSTALLATE (senza argomento) ================= */
@@ -773,7 +773,7 @@ static void chiedi_togli(struct pulsante *b, void *dati) {
 
 /* LE RISPOSTE ALLE DOMANDE DI CONFERMA, come numeri: 0 annulla, 1 conferma (l'azione
  * principale), 2 l'alternativa ("Togli solo l'app"). Sono i numeri che dara' la finestra di
- * conferma del toolkit quando ci sara': allora i pulsanti qui sotto spariscono, e le due
+ * conferma di UIKit quando ci sara': allora i pulsanti qui sotto spariscono, e le due
  * funzioni scelta_svuota e scelta_togli diventano le sue chiamate. */
 enum { SCELTA_ANNULLA = 0, SCELTA_CONFERMA = 1, SCELTA_ALTERNATIVA = 2 };
 
@@ -861,7 +861,7 @@ static int mostra_elenco(void) {
     mostra_dettaglio(0, 0);
     finestra_tk_prepara(&finestra, "Store", &riga_principale.base);
     finestra_tk_dimensione(&finestra, 760, 500);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }
 
 int main(int quanti, char **argomenti) {

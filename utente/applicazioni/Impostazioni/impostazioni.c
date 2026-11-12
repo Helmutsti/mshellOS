@@ -1,12 +1,12 @@
 /* impostazioni: la finestra "Impostazioni" del file Figma "mshell - interfaccia",
- * fatta con i widget del toolkit. Serve a vedere i componenti insieme: titoli, campo
+ * fatta con i widget di UIKit. Serve a vedere i componenti insieme: titoli, campo
  * di testo, caselle di spunta, scelte singole, pulsanti, e la barra degli strumenti
  * (indietro e avanti, il percorso, griglia o lista, la ricerca).
  *
  * Le impostazioni non si salvano ancora da nessuna parte: "Annulla" e "Salva" chiudono
  * la finestra. La barra degli strumenti e' solo da vedere: "avanti" e' spento, e un clic
  * su un nome del percorso torna a quella cartella. */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 static struct finestra_tk finestra;
 static struct contenitore colonna, temi, azioni;
@@ -91,5 +91,5 @@ int main(void) {
     finestra_tk_prepara(&finestra, "Impostazioni", &colonna.base);
     finestra_tk_barra(&finestra, &strumenti.base);
     finestra_tk_dimensione(&finestra, 460, 380 + STRUMENTI_ALTEZZA);   /* il disegno, piu' la barra */
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

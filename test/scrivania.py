@@ -40,7 +40,7 @@ SEGNO_Y = 57          # il puntino / trattino sotto le applicazioni aperte
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),
           "Impostazioni": (460, 420), "Files": (800, 480)}
 
-BARRA = 36            # l'altezza della barra del titolo delle finestre del toolkit
+BARRA = 36            # l'altezza della barra del titolo delle finestre di UIKit
 
 # I colori di Esempio (esempio.c): disegna tutto da sola, a colori pieni, quindi i suoi
 # pixel si possono cercare esattamente.
@@ -55,7 +55,7 @@ def angolo(posto):
 
 
 def comandi(x, y, larghezza):
-    """Dove sono "riduci" e "chiudi" nella barra di una finestra del toolkit."""
+    """Dove sono "riduci" e "chiudi" nella barra di una finestra di UIKit."""
     return (x + larghezza - 49, y + 18), (x + larghezza - 21, y + 18)
 
 

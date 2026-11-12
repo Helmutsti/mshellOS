@@ -16,7 +16,7 @@
  * uso (Chiaro o Scuro, stile.h), i font Plex. La tabella segue i componenti "Tabella",
  * "Riga di tabella" e "Intestazione di colonna" del file Figma; la barra e la legenda la
  * pagina "Disegno - Attivita'" (una barra sottile in scala di grigi, pallini di 8). */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 #define MAX_PROCESSI 64
 
@@ -76,7 +76,7 @@ static const char *nome_stato(unsigned int stato) {
  *     la memoria e' allineata a destra.
  *
  * Le righe che non ci stanno si vedono SCORRENDO: con la rotella sopra la tabella, o
- * trascinando la barra di scorrimento del toolkit, che sta sopra le righe, sul bordo
+ * trascinando la barra di scorrimento di UIKit, che sta sopra le righe, sul bordo
  * destro. L'intestazione resta ferma; le righe scorrono sotto di lei, pixel per pixel. */
 
 #define TABELLA_TESTATA   ALTEZZA_S
@@ -500,7 +500,7 @@ static void aggiorna_riassunto_processi(void) {
     metti_testo(d, " in uso");
     int prima = larghezza_testo(riassunto_processi.font, riassunto_processi.testo);
     etichetta_testo(&riassunto_processi, testo);
-    if (larghezza_testo(riassunto_processi.font, testo) != prima) toolkit_ridisponi(&finestra);
+    if (larghezza_testo(riassunto_processi.font, testo) != prima) uikit_ridisponi(&finestra);
 }
 
 /* Rilegge processi e memoria dal kernel (ogni secondo). */
@@ -617,7 +617,7 @@ static void mostra_pagina(struct pulsante_barra *b, void *dati) {
     widget_nascondi(&pulsante_termina.base, !processi);
     if (su_disco) aggiorna_disco(&finestra, 0);
     finestra_tk_ogni(&finestra, su_disco ? OGNI_DISCO : 0, aggiorna_disco, 0);
-    toolkit_ridisponi(&finestra);
+    uikit_ridisponi(&finestra);
 }
 
 int main(void) {
@@ -672,5 +672,5 @@ int main(void) {
     finestra_tk_dimensione(&finestra, 640, 460);
     aggiorna(&finestra, 0);
     finestra_tk_ogni(&finestra, 1000, aggiorna, 0);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

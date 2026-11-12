@@ -1,7 +1,7 @@
 /* La userbar e il vassoio delle app (userbar.h), su un pezzo di scrivania dentro una finestra
  * di prova: barra a sinistra centrata in altezza, pulsante App premuto, vassoio aperto con il
  * puntatore su Files. Uso: TEMA=scuro anteprima.sh userbar 2 */
-#include "userbar.h"
+#include "uikit/userbar.h"
 
 static struct finestra_tk finestra;
 static struct widget scrivania;
@@ -32,5 +32,5 @@ int main(void) {
     scrivania = (struct widget){ .tipo = &tipo_scrivania };
     finestra_tk_prepara(&finestra, "Userbar", &scrivania);
     finestra_tk_bordo(&finestra);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

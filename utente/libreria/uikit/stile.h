@@ -1,25 +1,27 @@
 /* Lo stile del sistema: colori, misure e font dell'interfaccia, dal file Figma
  * "mshell - interfaccia" (le sue variabili hanno gli stessi nomi, qui in maiuscolo).
  *
- * Lo usano il toolkit, per dare a tutte le applicazioni lo stesso aspetto, e il
- * compositore, che disegna la barra di un'applicazione che non risponde (lei non puo'
- * piu' ridisegnarsi). Cambiare un valore qui cambia l'aspetto di tutto il sistema.
+ * E' di UIKit (vedi LIBRERIE.md): lo usano i componenti, per dare a tutte le applicazioni lo
+ * stesso aspetto, e la scrivania. Il compositore non lo vede: quello che gli serve del design
+ * (la barra di un'applicazione che non risponde, l'ombra e il vetro delle finestre) glielo da'
+ * uikit_compositore.h. Cambiare un valore qui cambia l'aspetto di tutto il sistema.
  *
  * Ci sono DUE stili. Il nuovo (in alto): scala di grigi, colori semantici letti dal tema in
  * uso (Chiaro o Scuro, scelto a tempo di esecuzione: tema.h). Il vecchio (in fondo): "a
  * vetro", pannelli bianchi semitrasparenti sopra lo sfondo, che si toglie quando tutto sara'
- * migrato. I colori sono 0xAARRGGBB (vedi disegno.h): VELATO(0xFFFFFF, 36) e' il bianco al 14%. */
+ * migrato. I colori sono 0xAARRGGBB (vedi gkit_disegno.h): VELATO(0xFFFFFF, 36) e' il bianco al 14%. */
 #ifndef STILE_H
 #define STILE_H
 
-#include "disegno.h"
+#include "gkit/gkit_disegno.h"
+#include "materiali.h"
 #include "tema.h"
 
 /* =====================================================================================
  * IL NUOVO STILE (fase 0C): scala di grigi, colori semantici, due temi
  * =====================================================================================
  * Valori copiati a mano dal file Figma (raccolte "Semantici" e "Misure"). Il vecchio stile "a vetro scuro" (sotto, in
- * "VECCHIO STILE") resta finche' toolkit, Files, Attivita, scrivania e compositore non sono
+ * "VECCHIO STILE") resta finche' UIKit, Files, Attivita, scrivania e compositore non sono
  * migrati; poi si cancella. Dove un nome nuovo sarebbe uguale a uno vecchio, il nuovo ha il
  * suffisso _NUOVO (si toglie, insieme al vecchio, a fine migrazione). */
 
@@ -190,17 +192,17 @@
 #define SPAZIATURA_ETICHETTA     2
 
 /* --- le ombre: strati sovrapposti ---
- * Una tabella di 'struct strato_ombra' (disegno.h) per ogni livello di profondita' e per ogni
- * tema, nell'ordine dei token: la PRIMA riga sta sopra a tutte (vedi il commento delle ombre
- * a strati in disegno.h per l'ordine in cui si disegnano). Livelli: incassato (campi,
+ * Una tabella di 'struct strato_ombra' (gkit_disegno.h) per ogni livello di profondita' e
+ * per ogni tema, nell'ordine dei token: la PRIMA riga sta sopra a tutte (vedi il commento
+ * delle ombre a strati in gkit_disegno.h per l'ordine in cui si disegnano). Livelli: incassato (campi,
  * binari), sollevato (pulsanti), sollevato_pieno (pulsante d'azione), sovrapposto (menu,
  * suggerimento), barra, finestra, focus (l'anello), puntatore. Si sceglie la tabella del
  * tema in uso (tema_corrente == &tema_scuro ? ..._scuro : ..._chiaro) e si passa a
- * ombre_strati_fuori / ombre_strati_dentro; il numero di righe e' OMBRA_STRATI(tabella).
+ * ombre_strati_fuori / ombre_strati_dentro; il numero di righe e' OMBRA_STRATI(tabella)
+ * (gkit_disegno.h).
  * Il JSON ha anche degli strati "BB" (sfocatura dello sfondo, solo un raggio) per barra e
  * finestra: struct strato_ombra non li puo' dire, e non sono ombre; sono le due misure
  * qui sotto, per chi sfoca quello che sta sotto. */
-#define OMBRA_STRATI(tabella)          ((int)(sizeof(tabella) / sizeof((tabella)[0])))
 #define OMBRA_BARRA_SFOCATURA_SFONDO   20
 #define OMBRA_FINESTRA_SFOCATURA_SFONDO 28
 static const struct strato_ombra ombra_incassato_chiaro[] = {
@@ -288,7 +290,7 @@ static const struct strato_ombra ombra_puntatore_scuro[] = {
 /* ATTENZIONE: il tema in uso si riconosce dal VALORE (la superficie di scena, diversa nei due
  * temi), non dall'indirizzo. tema_scuro e' 'static const' in tema.h: ogni file .c ne ha una
  * copia sua, e 'tema_corrente' (debole, unico per programma) punta a quella del file che ha
- * chiamato tema_scegli (libreria.c), che non e' la copia di toolkit.h: confrontare gli
+ * chiamato tema_scegli (tema.c), che non e' la copia di uikit.h: confrontare gli
  * indirizzi darebbe sempre "chiaro" nelle applicazioni. */
 #define TEMA_SCURO_IN_USO (tema_corrente->superficie_scena == tema_scuro.superficie_scena)
 #define OMBRA_TAB(nome)  (TEMA_SCURO_IN_USO ? ombra_##nome##_scuro : ombra_##nome##_chiaro)
@@ -296,7 +298,7 @@ static const struct strato_ombra ombra_puntatore_scuro[] = {
                                                        : OMBRA_STRATI(ombra_##nome##_chiaro))
 
 /* altre misure del nuovo design nate nei controlli (non hanno un token) */
-/* Quanto un widget puo' disegnare fuori dal suo rettangolo (il toolkit ritaglia li'): l'anello
+/* Quanto un widget puo' disegnare fuori dal suo rettangolo (UIKit ritaglia li'): l'anello
  * del fuoco (3) e le ombre a strati, la piu' lunga e' quella del pulsante primario (giu' di
  * 10 + sfocatura 20 - diffusione 6 = 24). */
 #define WIDGET_SBORDO           24

@@ -110,7 +110,9 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
 
 | cartella | cosa c'è |
 |----------|----------|
-| `utente/libreria/` | la libreria comune: disegno, finestre, toolkit, stile (`stile.h` riprende le variabili del file Figma) |
+| `utente/libreria/` | la libreria dei programmi (`libreria.h`: file, processi, socket...) |
+| `utente/libreria/gkit/` | GKit, la grafica (vedi `LIBRERIE.md`): protocollo delle finestre, finestra dell'app e schermo (`gkit.h`), strumenti di disegno (`gkit_disegno.h`) |
+| `utente/libreria/uikit/` | UIKit, l'interfaccia: `uikit.h` (finestra, componenti, ciclo degli eventi: include tutto quello che serve a un'app), stile e temi (`stile.h` riprende le variabili del file Figma), materiali del sistema (`materiali.h`, font e icone), userbar, quello che serve al compositore (`uikit_compositore.h`) |
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
 | `utente/applicazioni/` | Attivita, Contatore, Doom, Esempio, Files, Impostazioni (una cartella ciascuna, con `manifest.toml` e `resources/`) |
@@ -202,7 +204,7 @@ una barra (trascinamento e X). Si apre dalla scrivania (icona rossa con il trian
 **Tasti fisici** (premuto/rilasciato): `eventi` manda `EVENTO_TASTO_FISICO` (codice Linux
 KEY_*, senza ripetizione automatica) al compositore, che lo recapita solo alla finestra
 attiva che l'ha chiesto con `finestra_tasti_fisici()` (messaggio `VOGLIO_TASTI_FISICI`,
-notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. Il toolkit non usa
+notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. UIKit non usa
 ancora i tasti fisici: le scorciatoie di Files (Ctrl, F2, Canc, Esc) si possono costruire su
 questo, ma la domanda 5 della sezione 8 resta aperta.
 
@@ -273,7 +275,8 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 10. **Internet** (più avanti).
 11. **Sistema in sola lettura come immagine erofs + dm-verity, con aggiornamenti A/B** (futuro).
 12. **Prove più veloci sul PC Windows** con l'accelerazione hardware (WHPX, vedi la sezione 3).
-13. **Definire meglio il confine tra libreria grafica che parla con il composer e il toolkit.**
+13. ~~**Definire meglio il confine tra libreria grafica che parla con il composer e il toolkit.**~~
+    Fatto: GKit e UIKit, vedi `LIBRERIE.md`.
 14. **Integrazione a pannelli.**
 15. **Ragionare sulla title bar.**
 16. **Spostare tutte le risorse su disco** (font, icone, immagini), invece di compilarle dentro i
@@ -325,8 +328,8 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   (titolo 40 px, divisore da bordo a bordo, finestra raggio 28).
 
 **Fatto**
-- Fase 0: font Plex in `grafica_dati.h` (`plex_*`, TTF e licenza OFL in `strumenti/grafica/font/`,
-  Inter ancora presente); nuove primitive in `disegno.h` (ombra con diffusione, ombra interna, ombre a
+- Fase 0: font Plex in `uikit/materiali_dati.h` (`plex_*`, TTF e licenza OFL in `strumenti/grafica/font/`,
+  Inter ancora presente); nuove primitive in `gkit/gkit_disegno.h` (ombra con diffusione, ombra interna, ombre a
   strati, pillola, cerchio, archi: tutto intero, niente float); token e temi in `tema.h` e nella
   sezione nuova di `stile.h` (29 colori semantici per tema, misure, font, ombre); il tema si sceglie
   all'avvio dal file `/data/users/1000/preferences/tema` ("chiaro" o "scuro", predefinito chiaro).
@@ -346,8 +349,7 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   incassato, colonna Numero 76 px, Nome in testo primario, messaggio d'errore senza rosso, spazi 12.
 - Mancano nella libreria: menu, tabella, griglia, barra a pezzi e legenda come widget (oggi Files e
   Attività li disegnano a mano), frecce su/giù, testo con spaziatura delle lettere.
-  `elemento_file.h` (icona Home della scrivania) usa ancora i nomi vecchi. Il campo
-  `disegna_disabilitato` di `toolkit.h` dà avvisi "missing field initializer" in ogni app.
+  `elemento_file.h` (icona Home della scrivania) usa ancora i nomi vecchi.
 - Prove da aggiornare: in `test/scrivania.py` le posizioni delle icone dell'isola sono di prima di
   Doom (circa 20 px più a destra del vero), quindi falliscono tutte le prove che aprono un'app;
   `test/prove/files.py`, `attivita.py` e `scorrimento.py` hanno le misure vecchie (righe ora ogni
@@ -404,7 +406,7 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
   riferimento di `immagini` (e alcune di `files`) vanno rifatte dopo averle guardate.
 
 **Lo Store (le funzioni di base, fatte)** — `utente/applicazioni/Store/`, un'app del sistema
-con il permesso `app.gestire`. L'aspetto è provvisorio (i widget del toolkit di oggi): quello
+con il permesso `app.gestire`. L'aspetto è provvisorio (i widget di UIKit di oggi): quello
 vero arriverà dal disegno in Figma.
 - Aperto dall'isola: l'elenco delle app installate, in due gruppi ("Le tue app", "App del
   sistema"), con nome, autore e versione. Scegliendone una, a destra il dettaglio: descrizione,
@@ -413,7 +415,7 @@ vero arriverà dal disegno in Figma.
 - Nel dettaglio "Svuota dati" (per ogni app) e "Togli app" (solo per quelle installate dalla
   persona), ognuno con la sua domanda di conferma: "Togli app e dati", "Togli solo l'app" (i
   dati restano per quando la si reinstalla), "Annulla". Le domande stanno al posto del
-  dettaglio, perché il toolkit non ha ancora le finestre di conferma.
+  dettaglio, perché UIKit non ha ancora le finestre di conferma.
 - Aprendo un `.app` (doppio clic in Files): la richiesta di installazione con nome, autore,
   versione, descrizione, i permessi che chiederà al primo avvio, le deviazioni, i ruoli, gli
   avvisi e gli errori. "Installa" / "Annulla" per un'app nuova, "Aggiorna" / "Annulla" per una

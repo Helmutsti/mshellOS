@@ -1,7 +1,7 @@
 """applicazioni: ogni applicazione si apre dall'isola.
 
 Si cliccano una dopo l'altra le applicazioni dell'isola, tranne Doom (pesante, e la sua
-finestra non e' del toolkit), con Files per ultima (la sua finestra, 800 x 480, al quarto
+finestra non e' di UIKit), con Files per ultima (la sua finestra, 800 x 480, al quarto
 posto sta ancora tutta nello schermo). Per ognuna:
   - sotto la sua icona deve comparire il segno "aperta" (il puntino o il trattino);
   - la sua finestra deve comparire dove la mette il compositore (a scala: la prima in

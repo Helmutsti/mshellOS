@@ -1,6 +1,6 @@
 /* La mini finestra: "Informazioni" su un file, con tre righe etichetta / valore.
  * Uso: TEMA=scuro anteprima.sh mini_finestra 2 */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 static struct finestra_tk finestra;
 static struct contenitore colonna, righe[3];
@@ -26,5 +26,5 @@ int main(void) {
     finestra_tk_prepara(&finestra, "Informazioni - foto-mare.png", &colonna.base);
     finestra_tk_mini(&finestra);
     finestra_tk_dimensione(&finestra, 320, 133);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

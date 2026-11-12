@@ -2,7 +2,7 @@
  * 4 stati (normale, sopra, premuto, spento), e sotto i pulsanti solo icona XS (24) di ogni
  * tipo. Gli stati si forzano a mano come in pulsanti.c.
  * Uso: TEMA=scuro anteprima.sh pulsanti_colori 2 */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 #include "piano.h"
 
 #define COLORATI 4
@@ -47,5 +47,5 @@ int main(void) {
     widget_aggiungi(&colonna.base, &righe[COLORATI].base);
     piano_prepara(&piano, &colonna.base);
     finestra_tk_prepara(&finestra, "Pulsanti colorati", &piano.base);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

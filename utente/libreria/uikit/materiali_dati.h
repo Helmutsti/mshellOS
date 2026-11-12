@@ -4,25 +4,14 @@
  * (https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide (https://lucide.dev), licenza ISC: Copyright (c) for portions
  * of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other
  * copyright (c) for Lucide are held by Lucide Contributors 2022.
- * Icone, immagini e sfondo vengono dal file Figma "mshell - interfaccia". */
-#ifndef GRAFICA_DATI_H
-#define GRAFICA_DATI_H
+ * Icone, immagini e sfondo vengono dal file Figma "mshell - interfaccia".
+ *
+ * I materiali del sistema, di UIKit: solo i dati. I tipi e il codice che li disegna sono di
+ * GKit (gkit_disegno.h); le icone per numero si disegnano con icona() (uikit/materiali.h). */
+#ifndef MATERIALI_DATI_H
+#define MATERIALI_DATI_H
 
-/* Una lettera: dove sta la sua tabella di alfa, dove va rispetto al punto di scrittura
- * (x a destra, y in su dalla linea di base) e di quanto si avanza dopo. */
-struct glifo {
-    unsigned int inizio;
-    signed char x, y;
-    unsigned char l, a, avanzo;
-};
-
-struct font {
-    const struct glifo *glifi;
-    const unsigned char *alfa;
-    unsigned char indice[256];    /* carattere (code page 437) -> glifo; 0 = non c'e' */
-    unsigned char altezza;        /* l'altezza di una riga */
-    unsigned char ascesa;         /* dalla cima della riga alla linea di base */
-};
+#include "gkit/gkit_disegno.h"   /* struct glifo, font, icona, immagine */
 
 static const unsigned char inter_13_alfa[] = {
     199, 130, 196, 127, 193, 124, 190, 121, 187, 118, 184, 115, 181, 113, 0, 0, 0, 0, 162, 104, 198, 132, 168, 138,
@@ -11792,12 +11781,6 @@ static const struct glifo plex_semigrassetto_24_glifi[] = {
 };
 static const struct font plex_semigrassetto_24 = { plex_semigrassetto_24_glifi, plex_semigrassetto_24_alfa, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 0, 0, 0, 95, 0, 0, 96, 0, 0, 0, 0, 97, 0, 0, 98, 0, 0, 0, 0, 0, 0, 0, 99, 0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 101, 0, 102, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 103, 0, 0, 0, 0, 0}, 32, 25 };
 
-/* Un'icona a una misura: lato x lato pixel di alfa. */
-struct icona {
-    unsigned char lato;
-    const unsigned char *alfa;
-};
-
 static const unsigned char icona_save_12[] = {
     0, 49, 116, 119, 119, 119, 119, 114, 33, 0, 0, 0, 49, 250, 255, 255, 255, 255, 255, 255, 253, 106, 0, 0,
     121, 255, 255, 255, 196, 136, 136, 155, 254, 254, 106, 0, 128, 255, 242, 255, 255, 255, 255, 249, 181, 254, 252, 33,
@@ -19417,12 +19400,6 @@ static const struct icona icone[][ICONA_MISURE] = {
 #define ICONA_GLOBE 29
 #define ICONA_MAIL 30
 #define ICONA_ROTATE_CCW 31
-
-/* Un'immagine a colori: l x a pixel 0xAARRGGBB premoltiplicati. */
-struct immagine {
-    unsigned short l, a;
-    const unsigned int *pixel;
-};
 
 static const unsigned int scelta_accesa_pixel[] = {
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x51203150, 0xAA456AA6, 0xE05D8DD9,

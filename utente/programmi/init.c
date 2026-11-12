@@ -19,7 +19,7 @@
  * torna alla console, il nome resta occupato, e le applicazioni che si collegano proprio
  * in quel momento aspettano in fila, invece di trovare la porta chiusa. */
 #include "libreria.h"
-#include "protocollo.h"
+#include "gkit/gkit.h"
 #include "launcher.h"
 
 /* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Eventi riceve

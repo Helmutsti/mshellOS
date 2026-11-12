@@ -1,8 +1,8 @@
-/* ANTEPRIMA: disegna una scena del toolkit su un PNG, sul Mac, senza QEMU.
+/* ANTEPRIMA: disegna una scena di UIKit su un PNG, sul Mac, senza QEMU.
  *
- * Il toolkit e' fatto di funzioni 'static inline' negli header: non ha bisogno del kernel
- * per disegnare, solo di una tela (un array di pixel). Qui si include toolkit.h cosi' com'e',
- * si FINGE toolkit_esegui (invece del ciclo degli eventi: impagina, disegna una volta e
+ * UIKit e' fatto di funzioni 'static inline' negli header: non ha bisogno del kernel
+ * per disegnare, solo di una tela (un array di pixel). Qui si include uikit.h cosi' com'e',
+ * si FINGE uikit_esegui (invece del ciclo degli eventi: impagina, disegna una volta e
  * torna) e si scrive il PNG. Una scena e' un file C con un main() come quello di
  * un'applicazione (anche l'applicazione stessa: vedi scene/impostazioni.c).
  *
@@ -16,7 +16,7 @@
 #include <stdint.h>
 #include <time.h>
 
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 /* --- gli scudi: quello che la libreria prenderebbe dal kernel --- */
 unsigned int tempo(void) {
@@ -38,7 +38,7 @@ int data_ora(struct data_ora *d) { (void)d; return -1; }
 /* --- il finto ciclo degli eventi --- */
 static struct finestra_tk *catturata;
 static int anteprima_esegui(struct finestra_tk *f) { catturata = f; return 0; }
-#define toolkit_esegui anteprima_esegui
+#define uikit_esegui anteprima_esegui
 
 #define main scena_main
 #include SCENA
@@ -113,7 +113,7 @@ int main(int argc, char **argv) {
     /* TEMA=chiaro|scuro sceglie il tema dei colori semantici (tema.h); senza, il chiaro. */
     tema_scegli(getenv("TEMA"));
     ((int (*)())scena_main)(0, 0);   /* main() o main(argc, argv): qui e' lo stesso */
-    if (!catturata) { fprintf(stderr, "la scena non ha chiamato toolkit_esegui\n"); return 1; }
+    if (!catturata) { fprintf(stderr, "la scena non ha chiamato uikit_esegui\n"); return 1; }
     struct finestra_tk *f = catturata;
 
     int l, a;
@@ -132,7 +132,7 @@ int main(int argc, char **argv) {
     struct pennello p;
     pennello_prepara(&p, &t);
     if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);
-    toolkit_disegna_tutto(f, &p);
+    uikit_disegna_tutto(f, &p);
 
     int M = 16, L = l + 2 * M, A = a + 2 * M;       /* un po' di sfondo intorno */
     unsigned char *fondo = malloc((size_t)L * A * 3);

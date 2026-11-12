@@ -2,7 +2,7 @@
  *
  * E' un programma del sistema (uid 0), sorvegliato da init come il compositore. Per il
  * compositore e' un'applicazione come le altre, ma siccome e' del sistema puo' chiedere
- * delle SUPERFICI SPECIALI (vedi protocollo.h):
+ * delle SUPERFICI SPECIALI (vedi gkit.h):
  *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre;
  *   - l'ISOLA, un PANNELLO in alto al centro, sopra tutte le finestre: il pulsante del
  *     menu, le applicazioni installate (con un puntino sotto quelle aperte) e l'ora.
@@ -33,11 +33,11 @@
  *
  * Disegna con la libreria di disegno e lo stile del sistema, come il disegno Figma
  * "mshell - interfaccia" (Isola, Voce dell'isola, Pulsante applicazioni, Orologio). */
-#include "finestra.h"
-#include "stile.h"
+#include "gkit/gkit.h"
+#include "uikit/stile.h"
 #include "descrizione.h"
 #include "launcher.h"
-#include "elemento_file.h"
+#include "uikit/elemento_file.h"
 
 /* --- le applicazioni installate --- */
 
@@ -377,7 +377,7 @@ static struct finestra sfondo;
 static int sfondo_l, sfondo_a;
 static unsigned int *sfondo_pulito;   /* lo sfondo senza niente sopra, per ridisegnare la Home */
 
-/* Lo sfondo del disegno, ingrandito da quello piccolo (320x200) di grafica_dati.h: ogni
+/* Lo sfondo del disegno, ingrandito da quello piccolo (320x200) di materiali_dati.h: ogni
  * pixel nuovo e' una media pesata dei quattro vicini di quello piccolo. E' una sfumatura
  * morbida: ingrandendola non si perde niente. */
 static void prepara_sfondo(unsigned int *pixel, int l, int a) {

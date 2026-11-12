@@ -1,8 +1,20 @@
-/* Il toolkit: il terzo strato della grafica, come AppKit sul Mac o GTK su Linux.
- * Da' alle applicazioni dei pezzi pronti, i WIDGET, tutti con lo stile del sistema
- * (stile.h, dal file Figma "mshell - interfaccia"), e fa da solo le cose noiose: la
- * barra del titolo, il "trascinami", il fuoco, la tastiera, il ciclo degli eventi, il
- * ridisegno.
+/* UIKit, l'interfaccia (vedi LIBRERIE.md): come AppKit sul Mac o GTK su Linux, costruita
+ * sopra GKit. Da' alle applicazioni dei pezzi pronti, i WIDGET, tutti con l'aspetto del
+ * sistema, e fa da solo le cose noiose: la barra del titolo, il "trascinami", il fuoco, la
+ * tastiera, il ciclo degli eventi, il ridisegno. Un'applicazione include solo questo file:
+ * dentro c'e' tutto quello che le serve.
+ *
+ * I PEZZI DI UIKIT, tutti in questa cartella:
+ *   - lo stile e i temi (stile.h, tema.h, dal file Figma "mshell - interfaccia"): colori
+ *     semantici Chiaro/Scuro, misure, raggi, ombre;
+ *   - i materiali del sistema (materiali.h, i dati in materiali_dati.h): il font, le icone
+ *     Lucide, le icone di file e cartelle;
+ *   - la finestra dell'applicazione come la decide il design, i componenti e il ciclo degli
+ *     eventi: qui sotto (e l'elemento di un file in elemento_file.h; la userbar e il vassoio,
+ *     della scrivania, in userbar.h);
+ *   - quello che serve al compositore del design (uikit_compositore.h).
+ * Sotto, GKit (utente/libreria/gkit/): la finestra (gkit.h) e gli strumenti di disegno
+ * (gkit_disegno.h).
  *
  *     static struct finestra_tk finestra;
  *     static struct contenitore colonna;
@@ -18,12 +30,12 @@
  *         widget_aggiungi(&colonna.base, &saluto.base);
  *         widget_aggiungi(&colonna.base, &ok.base);
  *         finestra_tk_prepara(&finestra, "Saluto", &colonna.base);
- *         return toolkit_esegui(&finestra);
+ *         return uikit_esegui(&finestra);
  *     }
  *
  * GLI OGGETTI, IN C. Ogni widget comincia con una 'struct widget' (la "base"): li' ci
  * sono il posto, i figli e il TIPO, cioe' le funzioni che sanno misurarlo, sistemarne i
- * figli, disegnarlo, fargli sentire il puntatore e la tastiera. Il toolkit chiama quelle,
+ * figli, disegnarlo, fargli sentire il puntatore e la tastiera. UIKit chiama quelle,
  * senza sapere se e' un pulsante o una colonna. E' lo stesso schema di GTK, in C.
  *
  * L'ALBERO. I widget stanno uno dentro l'altro. Per disegnare si scende dall'alto,
@@ -34,24 +46,24 @@
  * poi i contenitori distribuiscono lo spazio vero (disponi). Righe e colonne mettono i
  * figli uno dopo l'altro; lo spazio in piu' va agli SPAZI ELASTICI (come "flex: 1").
  *
- * GLI STATI. Il toolkit segna da solo quale widget ha il puntatore SOPRA (per
+ * GLI STATI. UIKit segna da solo quale widget ha il puntatore SOPRA (per
  * illuminarlo), quale e' PREMUTO, quale ha il FUOCO della tastiera (il campo di testo
  * su cui si e' cliccato). Un widget DISABILITATO si disegna al 40% e non sente niente.
  *
- * IL CICLO DEGLI EVENTI E' DEL TOOLKIT. toolkit_esegui non torna finche' la finestra
+ * IL CICLO DEGLI EVENTI E' DI UIKIT. uikit_esegui non torna finche' la finestra
  * c'e': aspetta le notizie del compositore, le consegna ai widget, ridisegna quando
  * qualcosa e' cambiato. Torna quando si preme "chiudi". L'applicazione interviene solo
  * quando succede qualcosa che le interessa ("quando premono questo pulsante, chiama
  * questa funzione": in GTK i segnali, in AppKit target-action).
  *
  * IL TEMPO. Un'applicazione che deve aggiornarsi da sola (un orologio, il task manager)
- * chiede al toolkit di chiamarla ogni tanto: finestra_tk_ogni(&finestra, 1000, f, dati).
+ * chiede a UIKit di chiamarla ogni tanto: finestra_tk_ogni(&finestra, 1000, f, dati).
  * Il ciclo allora non dorme senza limite: aspetta le notizie fino alla prima scadenza.
  * Le chiamate possono essere piu' d'una (fino a MAX_CHIAMATE): le usano anche i widget
  * che si animano, come la barra di scorrimento, solo finche' l'animazione dura.
  *
  * LO SCORRIMENTO. Di un contenuto piu' alto del suo spazio (una lista, una tabella) se ne
- * mostra un pezzo, la VISTA, e la rotella del mouse lo fa scorrere. Il toolkit da' due
+ * mostra un pezzo, la VISTA, e la rotella del mouse lo fa scorrere. UIKit da' due
  * pezzi: 'struct scorrimento', i tre numeri (dove si e', quanto e' alto tutto, quanto se
  * ne vede), e la BARRA DI SCORRIMENTO, un widget che sta sopra il contenuto, sul bordo
  * destro, e si vede solo mentre si scorre (come sul Mac). La rotella va al widget sotto
@@ -59,16 +71,17 @@
  *
  * I WIDGET NASCOSTI non si misurano, non si disegnano e non sentono niente: e' cosi' che
  * si fanno le pagine (piu' contenuti nello stesso posto, se ne vede uno). Dopo averne
- * mostrato o nascosto uno, toolkit_ridisponi rifa' l'impaginazione.
+ * mostrato o nascosto uno, uikit_ridisponi rifa' l'impaginazione.
  *
  * I WIDGET LI DICHIARA L'APPLICAZIONE, come variabili sue. Una finestra per
  * applicazione, che non cambia misura. Il pulsante "riduci" la nasconde: torna con un
  * clic sulla sua icona nell'isola della scrivania. */
-#ifndef TOOLKIT_H
-#define TOOLKIT_H
+#ifndef UIKIT_H
+#define UIKIT_H
 
-#include "finestra.h"
-#include "stile.h"
+#include "gkit/gkit.h"
+#include "gkit/gkit_disegno.h"
+#include "stile.h"           /* con i temi (tema.h) e i materiali (materiali.h) */
 #include "elemento_file.h"   /* testo_a_capo, per il messaggio dell'avviso */
 
 /* --- il widget in generale --- */
@@ -91,14 +104,14 @@ struct tipo_widget {
      * puntatore sopra di lui o sopra uno dei suoi figli (0: non gli interessa) */
     void (*rotella)(struct widget *w, int sx, int sy);
     /* il puntatore e' appena arrivato sopra di lui, o se n'e' andato: 'sopra' e' gia'
-     * cambiato (0: basta il ridisegno che fa il toolkit) */
+     * cambiato (0: basta il ridisegno che fa UIKit) */
     void (*sopra_cambiato)(struct widget *w);
     /* il puntatore si muove sopra di lui senza pulsanti premuti, in (x, y) (0: non gli
      * interessa). Serve a chi deve sapere SOPRA QUALE SUA PARTE e' il puntatore (i file
      * di una cartella, per illuminare quello li' sotto), non solo se e' sopra di lui */
     void (*movimento)(struct widget *w, int x, int y);
     /* 1: il widget sa disegnarsi disabilitato (piatto, con i colori _DISABILITATO del
-     * tema) e il toolkit NON lo sbiadisce al 40%. 0 (gli altri): il vecchio modo, 40%. */
+     * tema) e UIKit NON lo sbiadisce al 40%. 0 (gli altri): il vecchio modo, 40%. */
     int disegna_disabilitato;
 };
 
@@ -110,8 +123,8 @@ struct widget {
     int x, y, l, a;                    /* il suo spazio, in coordinate della finestra */
     struct widget *figli[MAX_FIGLI];
     int quanti_figli;
-    int sopra;                         /* il puntatore e' sopra di lui (lo segna il toolkit) */
-    int fuoco;                         /* ha il fuoco della tastiera (lo segna il toolkit) */
+    int sopra;                         /* il puntatore e' sopra di lui (lo segna UIKit) */
+    int fuoco;                         /* ha il fuoco della tastiera (lo segna UIKit) */
     int disabilitato;                  /* si vede al 40% e non sente niente */
     int elastico;                      /* prende lo spazio in piu' nel suo contenitore */
     int largo;                         /* nell'altra direzione si allarga a tutto lo spazio */
@@ -179,7 +192,7 @@ static inline void widget_disabilita(struct widget *w, int disabilitato) {
     widget_cambiato(w);
 }
 
-/* Mostra o nasconde un widget. Lo spazio si ridistribuisce con toolkit_ridisponi. */
+/* Mostra o nasconde un widget. Lo spazio si ridistribuisce con uikit_ridisponi. */
 static inline void widget_nascondi(struct widget *w, int nascosto) {
     w->nascosto = nascosto;
     widget_cambiato(w);
@@ -255,7 +268,7 @@ static inline void contenitore_disponi(struct widget *w) {
 }
 
 static const struct tipo_widget tipo_contenitore = {
-    contenitore_misura, contenitore_disponi, 0, 0, 0, 0, 0, 0
+    contenitore_misura, contenitore_disponi, 0, 0, 0, 0, 0, 0, 0
 };
 
 static inline void riga_prepara(struct contenitore *c, int spazio) {
@@ -272,7 +285,7 @@ static inline void colonna_prepara(struct contenitore *c, int spazio) {
 
 struct spazio { struct widget base; };
 
-static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 
 static inline void spazio_prepara(struct spazio *s) {
     *s = (struct spazio){ .base = { .tipo = &tipo_spazio, .elastico = 1 } };
@@ -299,7 +312,7 @@ static inline void etichetta_disegna(struct widget *w, struct pennello *p) {
     testo_centrato(p, e->font, w->x, w->y, w->a, e->testo);
 }
 
-static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0, 0, 0 };
 
 static inline void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font) {
     *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font,
@@ -372,7 +385,7 @@ static inline void pulsante_misura(struct widget *w, int *l, int *a) {
 /* LA PROFONDITA' del pulsante. Si preme, quindi e' SOLLEVATO: il Primario ha l'ombra
  * "sollevato-pieno", il Secondario "sollevato", e le ombre ci sono sia a riposo sia sotto
  * il puntatore. Premuto "scende" e disabilitato "si spegne": tutti e due PIATTI, senza
- * ombra. Ghost e' sempre piatto. L'ordine e' quello di disegno.h: ombre esterne, fondo,
+ * ombra. Ghost e' sempre piatto. L'ordine e' quello di gkit_disegno.h: ombre esterne, fondo,
  * ombre interne (nel tema scuro c'e' un filo di luce sul bordo alto), poi icona e testo. */
 static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
     struct pulsante *b = (struct pulsante *)w;
@@ -698,7 +711,7 @@ static inline void campo_disegna(struct widget *w, struct pennello *p) {
     pennello_ripristina(p);
 }
 
-/* Il clic gli da' il fuoco (lo fa il toolkit): qui non serve altro. */
+/* Il clic gli da' il fuoco (lo fa UIKit): qui non serve altro. */
 static inline void campo_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
     (void)w; (void)x; (void)y; (void)pulsanti;
 }
@@ -810,7 +823,7 @@ static inline void stato_vuoto_disegna(struct widget *w, struct pennello *p) {
         testo_centrato(p, FONT_CORPO, cx - larghezza_testo(FONT_CORPO, righe[i]) / 2, y, INTERLINEA_CORPO, righe[i]);
 }
 
-static const struct tipo_widget tipo_stato_vuoto = { stato_vuoto_misura, 0, stato_vuoto_disegna, 0, 0, 0, 0, 0 };
+static const struct tipo_widget tipo_stato_vuoto = { stato_vuoto_misura, 0, stato_vuoto_disegna, 0, 0, 0, 0, 0, 0 };
 
 static inline void stato_vuoto_prepara(struct stato_vuoto *s, int icona_, const char *titolo,
                                        const char *spiegazione) {
@@ -849,7 +862,7 @@ static inline void stato_vuoto_cambia(struct stato_vuoto *s, int icona_, const c
  *     avviso_prepara(&riavvia, "Riavviare \"contatore\"?",
  *                    "Il processo viene chiuso e aperto di nuovo.", "Riavvia", PERICOLO, 1,
  *                    al_riavvia, 0);
- *     finestra_tk_avviso(&finestra, &riavvia);     // una volta, prima di toolkit_esegui
+ *     finestra_tk_avviso(&finestra, &riavvia);     // una volta, prima di uikit_esegui
  *     ...
  *     avviso_apri(&riavvia);                        // quando serve
  *
@@ -1092,7 +1105,7 @@ static inline struct finestra_tk *widget_finestra(struct widget *w) {
 static const struct tipo_widget tipo_finestra_tk;   /* piu' sotto */
 
 /* Se il widget non e' ancora in una finestra (lo si sta preparando, prima di
- * toolkit_esegui), non c'e' niente da ridisegnare: la cima del suo albero non e' una
+ * uikit_esegui), non c'e' niente da ridisegnare: la cima del suo albero non e' una
  * finestra, e non la si tocca. */
 static inline void widget_cambiato(struct widget *w) {
     struct finestra_tk *f = widget_finestra(w);
@@ -1220,7 +1233,7 @@ static inline void finestra_tk_titolo_disegna(struct finestra_tk *f, struct penn
 
     /* i comandi: pulsanti ghost tondi (S, o XS nella mini finestra, che ha solo chiudi).
      * Senza fondo a riposo; sotto il puntatore CONTROLLO_SFONDO, premuto
-     * CONTROLLO_SFONDO_SOPRA (come ogni ghost del toolkit). */
+     * CONTROLLO_SFONDO_SOPRA (come ogni ghost di UIKit). */
     int lato = comando_lato(f), segno = f->mini ? ICONA_XS : ICONA_S, cy = comando_y(f);
     pennello_salva(p);
     if (!attiva) pennello_opacita(p, OPACITA_COMANDI_INATTIVI);
@@ -1260,7 +1273,7 @@ static inline void finestra_tk_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_finestra_tk = {
-    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0, 0, 0, 0
+    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0, 0, 0, 0, 0
 };
 
 static inline void finestra_tk_prepara(struct finestra_tk *f, const char *titolo,
@@ -1272,7 +1285,7 @@ static inline void finestra_tk_prepara(struct finestra_tk *f, const char *titolo
 
 /* Mette una barra degli strumenti sotto la barra del titolo (di solito una 'struct
  * barra_strumenti', piu' sotto): la finestra si allunga della sua altezza. Da chiamare
- * prima di toolkit_esegui, dopo finestra_tk_prepara. */
+ * prima di uikit_esegui, dopo finestra_tk_prepara. */
 static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strumenti) {
     f->strumenti = strumenti;
     widget_aggiungi(&f->base, strumenti);
@@ -1281,7 +1294,7 @@ static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strum
 /* Il contenuto senza il margine intorno: arriva fino ai bordi della finestra e fin sotto
  * la barra (degli strumenti, se c'e'). Per le finestre fatte a "pannelli", come Files con
  * la sua barra laterale: i margini, dentro, li decide l'applicazione. Prima di
- * toolkit_esegui. */
+ * uikit_esegui. */
 static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine = 1; }
 
 /* Cambia il titolo della finestra (per esempio, la cartella in cui si e'). Lo disegna la
@@ -1294,17 +1307,17 @@ static inline void finestra_tk_titolo(struct finestra_tk *f, const char *titolo)
 /* LA MINI FINESTRA, per le cose secondarie (informazioni su un file, un avanzamento, uno
  * strumento): testata da ALTEZZA_BARRA_MINI (28) con il titolo piccolo (FONT_ETICHETTA) e il
  * solo pulsante di chiusura XS (24): non si riduce. Il contenuto ha SPAZIO_16 di margine.
- * Prima di toolkit_esegui, dopo finestra_tk_prepara. */
+ * Prima di uikit_esegui, dopo finestra_tk_prepara. */
 static inline void finestra_tk_mini(struct finestra_tk *f) { f->mini = 1; }
 
 /* Da' alla finestra il suo avviso (chiuso): si apre con avviso_apri. Prima di
- * toolkit_esegui, dopo finestra_tk_prepara. Una finestra ha un solo avviso alla volta. */
+ * uikit_esegui, dopo finestra_tk_prepara. Una finestra ha un solo avviso alla volta. */
 static inline void finestra_tk_avviso(struct finestra_tk *f, struct avviso *v) {
     f->avviso = v;
     v->base.genitore = &f->base;
 }
 
-/* Chiude la finestra, come il pulsante "chiudi": toolkit_esegui torna. */
+/* Chiude la finestra, come il pulsante "chiudi": uikit_esegui torna. */
 static inline void finestra_tk_chiudi(struct finestra_tk *f) { f->da_chiudere = 1; }
 
 /* Una misura fissa per la finestra, invece di quella del contenuto. */
@@ -1334,7 +1347,7 @@ static inline void finestra_tk_ogni(struct finestra_tk *f, unsigned int ms,
 }
 
 /* La chiamata che scade per prima, o 0 se non ce ne sono. */
-static inline struct chiamata_tk *toolkit_prima_chiamata(struct finestra_tk *f) {
+static inline struct chiamata_tk *uikit_prima_chiamata(struct finestra_tk *f) {
     struct chiamata_tk *prima = 0;
     for (int i = 0; i < MAX_CHIAMATE; i++) {
         struct chiamata_tk *c = &f->chiamate[i];
@@ -1345,7 +1358,7 @@ static inline struct chiamata_tk *toolkit_prima_chiamata(struct finestra_tk *f) 
 
 /* Fa le chiamate scadute. Ognuna prima si rimette in fila (la prossima volta tra 'ms'),
  * poi si chiama: cosi' puo' cambiare il suo ritmo, o smettere. */
-static inline void toolkit_chiamate_scadute(struct finestra_tk *f) {
+static inline void uikit_chiamate_scadute(struct finestra_tk *f) {
     unsigned int ora = tempo();
     for (int i = 0; i < MAX_CHIAMATE; i++) {
         struct chiamata_tk *c = &f->chiamate[i];
@@ -1356,7 +1369,7 @@ static inline void toolkit_chiamate_scadute(struct finestra_tk *f) {
 }
 
 /* Rifa' l'impaginazione dentro la finestra (dopo aver mostrato o nascosto dei widget). */
-static inline void toolkit_ridisponi(struct finestra_tk *f) {
+static inline void uikit_ridisponi(struct finestra_tk *f) {
     widget_disponi(&f->base);
     f->da_ridisegnare = 1;
 }
@@ -1372,7 +1385,7 @@ static inline void toolkit_ridisponi(struct finestra_tk *f) {
  * uno spazio) prende la larghezza che avanza.
  *
  * Un clic sullo spazio vuoto della barra trascina la finestra, come sulla testata (cosi'
- * fa il Mac): vedi toolkit_puntatore.
+ * fa il Mac): vedi uikit_puntatore.
  *
  *     barra_strumenti_prepara(&strumenti);
  *     barra_strumenti_aggiungi(&strumenti, &frecce.base);
@@ -1402,7 +1415,7 @@ static inline void barra_strumenti_disponi(struct widget *w) {
 }
 
 static const struct tipo_widget tipo_barra_strumenti = {
-    barra_strumenti_misura, barra_strumenti_disponi, 0, 0, 0, 0, 0, 0
+    barra_strumenti_misura, barra_strumenti_disponi, 0, 0, 0, 0, 0, 0, 0
 };
 
 static inline void barra_strumenti_prepara(struct barra_strumenti *b) {
@@ -1552,7 +1565,7 @@ static inline void pillola_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_pillola = {
-    pillola_misura, pillola_disponi, pillola_disegna, 0, 0, 0, 0, 0
+    pillola_misura, pillola_disponi, pillola_disegna, 0, 0, 0, 0, 0, 0
 };
 
 /* Accende o spegne un pulsante; in una pillola a scelta, accenderlo spegne gli altri. */
@@ -1576,7 +1589,7 @@ static inline void pulsante_barra_puntatore(struct widget *w, int x, int y, unsi
 }
 
 static const struct tipo_widget tipo_pulsante_barra = {
-    pulsante_barra_misura, 0, pulsante_barra_disegna, pulsante_barra_puntatore, 0, 0, 0, 0
+    pulsante_barra_misura, 0, pulsante_barra_disegna, pulsante_barra_puntatore, 0, 0, 0, 0, 0
 };
 
 static inline void pulsante_barra_prepara(struct pulsante_barra *b, int icona,
@@ -1610,7 +1623,7 @@ static inline void pillola_aggiungi(struct pillola *p, struct pulsante_barra *b)
  * si tolgono i nomi dal principio (restano gli ultimi, i piu' utili); se non ci sta
  * neanche l'ultimo, lo si taglia.
  *
- * Ogni nome e' un widget figlio: cosi' il toolkit sa sopra quale nome e' il puntatore
+ * Ogni nome e' un widget figlio: cosi' UIKit sa sopra quale nome e' il puntatore
  * (lo accende) e a quale mandare il clic. */
 #define MAX_NOMI_PERCORSO 8   /* le cartelle che il percorso sa mostrare */
 
@@ -1700,7 +1713,7 @@ static inline void percorso_disegna(struct widget *w, struct pennello *p) {
 }
 
 static const struct tipo_widget tipo_percorso = {
-    percorso_misura, percorso_disponi, percorso_disegna, 0, 0, 0, 0, 0
+    percorso_misura, percorso_disponi, percorso_disegna, 0, 0, 0, 0, 0, 0
 };
 
 static inline void nome_percorso_disegna(struct widget *w, struct pennello *p) {
@@ -1723,10 +1736,10 @@ static inline void nome_percorso_puntatore(struct widget *w, int x, int y, unsig
 
 /* Due tipi: i nomi che si cliccano, e l'ultimo (dove si e') che non sente il puntatore. */
 static const struct tipo_widget tipo_nome_percorso = {
-    0, 0, nome_percorso_disegna, nome_percorso_puntatore, 0, 0, 0, 0
+    0, 0, nome_percorso_disegna, nome_percorso_puntatore, 0, 0, 0, 0, 0
 };
 static const struct tipo_widget tipo_nome_percorso_qui = {
-    0, 0, nome_percorso_disegna, 0, 0, 0, 0, 0
+    0, 0, nome_percorso_disegna, 0, 0, 0, 0, 0, 0
 };
 
 static inline void percorso_prepara(struct percorso *p, al_clic_percorso al_clic, void *dati) {
@@ -1755,7 +1768,7 @@ static inline void percorso_metti(struct percorso *p, const char *const *nomi, i
     }
     struct finestra_tk *f = widget_finestra(&p->base);
     if (f->base.tipo == &tipo_finestra_tk) {   /* gia' in una finestra: si rifa' il suo posto */
-        /* i nomi sono stati rifatti da capo (spenti): il toolkit deve riaccendere quello
+        /* i nomi sono stati rifatti da capo (spenti): UIKit deve riaccendere quello
          * sotto il puntatore. (Il widget catturato, se era un nome, resta valido: i nomi
          * stanno sempre negli stessi posti.) */
         if (f->sotto && f->sotto->genitore == &p->base) f->sotto = 0;
@@ -1831,7 +1844,7 @@ static inline int scorrimento_rotella(struct scorrimento *s, int scatti) {
  *
  * LE ANIMAZIONI. A ogni passo si guarda quanto tempo e' passato, e opacita' e spessore si
  * avvicinano al loro obiettivo di conseguenza: anche se un passo arriva in ritardo,
- * l'animazione dura quanto deve. I passi li fa una chiamata "ogni tanto" del toolkit, che
+ * l'animazione dura quanto deve. I passi li fa una chiamata "ogni tanto" di UIKit, che
  * c'e' solo mentre qualcosa si muove: con la barra ferma, la finestra non si ridisegna.
  * Mentre la barra aspetta il secondo prima di svanire, la chiamata e' una sola, alla fine.
  *
@@ -2016,7 +2029,7 @@ static inline void barra_scorrimento_sopra(struct widget *w) {
 
 static const struct tipo_widget tipo_barra_scorrimento = {
     0, 0, barra_scorrimento_disegna, barra_scorrimento_puntatore, 0,
-    barra_scorrimento_su_rotella, barra_scorrimento_sopra, 0
+    barra_scorrimento_su_rotella, barra_scorrimento_sopra, 0, 0
 };
 
 static inline void barra_scorrimento_prepara(struct barra_scorrimento *b) {
@@ -2036,7 +2049,7 @@ static inline void barra_scorrimento_posto(struct barra_scorrimento *b, int x, i
 
 /* Disegna tutta la finestra: l'albero e, sopra a tutto, l'avviso aperto (velo, ombra,
  * riquadro). La usa anche l'anteprima (strumenti/anteprima). */
-static inline void toolkit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
+static inline void uikit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
     widget_disegna(&f->base, p);
     struct avviso *v = finestra_tk_avviso_aperto(f);
     if (v) {
@@ -2045,20 +2058,20 @@ static inline void toolkit_disegna_tutto(struct finestra_tk *f, struct pennello 
     }
 }
 
-static inline int toolkit_ridisegna(struct finestra_tk *f) {
+static inline int uikit_ridisegna(struct finestra_tk *f) {
     unsigned int *pixel = finestra_tela(&f->finestra);
     if (!pixel) return 0;
     struct tela t = { pixel, f->base.l, f->base.a };
     struct pennello p;
     pennello_prepara(&p, &t);
-    toolkit_disegna_tutto(f, &p);
+    uikit_disegna_tutto(f, &p);
     f->da_ridisegnare = 0;
     return finestra_mostra(&f->finestra) >= 0;
 }
 
 /* Il puntatore sopra un widget nuovo (o su nessuno): si spegne il vecchio, si accende
  * il nuovo. */
-static inline void toolkit_sotto(struct finestra_tk *f, struct widget *w) {
+static inline void uikit_sotto(struct finestra_tk *f, struct widget *w) {
     if (w == f->sotto) return;
     struct widget *prima = f->sotto;
     if (prima) { prima->sopra = 0; widget_cambiato(prima); }
@@ -2070,7 +2083,7 @@ static inline void toolkit_sotto(struct finestra_tk *f, struct widget *w) {
 
 /* Il widget sotto il puntatore, con l'avviso: prima i suoi pulsanti; se e' bloccante, fuori
  * dal riquadro non c'e' niente. */
-static inline struct widget *toolkit_widget_sotto(struct finestra_tk *f, int x, int y) {
+static inline struct widget *uikit_widget_sotto(struct finestra_tk *f, int x, int y) {
     struct avviso *v = finestra_tk_avviso_aperto(f);
     if (v) {
         struct widget *w = widget_sotto(&v->base, x, y);
@@ -2080,13 +2093,13 @@ static inline struct widget *toolkit_widget_sotto(struct finestra_tk *f, int x, 
 }
 
 /* La rotella: al widget sotto il puntatore, o al primo dei suoi genitori che la vuole. */
-static inline void toolkit_rotella(struct finestra_tk *f, int x, int y, int sx, int sy) {
+static inline void uikit_rotella(struct finestra_tk *f, int x, int y, int sx, int sy) {
     if (y < testata_altezza(f) || finestra_tk_bloccata(f)) return;
     for (struct widget *w = widget_in(&f->base, x, y); w; w = w->genitore)
         if (w->tipo->rotella) { w->tipo->rotella(w, sx, sy); return; }
 }
 
-static inline void toolkit_fuoco(struct finestra_tk *f, struct widget *w) {
+static inline void uikit_fuoco(struct finestra_tk *f, struct widget *w) {
     if (w == f->con_fuoco) return;
     if (f->con_fuoco) { f->con_fuoco->fuoco = 0; widget_cambiato(f->con_fuoco); }
     f->con_fuoco = w;
@@ -2105,7 +2118,7 @@ static inline void toolkit_fuoco(struct finestra_tk *f, struct widget *w) {
  *
  * Senza pulsanti premuti, il widget sotto il puntatore che lo vuole sapere riceve il
  * MOVIMENTO (il campo 'movimento' del suo tipo). */
-static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pulsanti) {
+static inline void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pulsanti) {
     const unsigned int cattura = PULSANTE_SINISTRO | PULSANTE_DESTRO;
     int giu = pulsanti & cattura;
     int appena_premuto = giu && !(f->pulsanti_prima & cattura);
@@ -2126,8 +2139,8 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
             if (sinistro) finestra_trascinami(&f->finestra);
             return;
         }
-        f->catturato = toolkit_widget_sotto(f, x, y);
-        toolkit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
+        f->catturato = uikit_widget_sotto(f, x, y);
+        uikit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
     }
     if (f->chiudi_premuto) {
         if (!sinistro) {
@@ -2147,11 +2160,11 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
     }
     if (f->catturato) {
         f->catturato->tipo->puntatore(f->catturato, x, y, pulsanti);
-        toolkit_sotto(f, widget_contiene(f->catturato, x, y) ? f->catturato : 0);
+        uikit_sotto(f, widget_contiene(f->catturato, x, y) ? f->catturato : 0);
         if (giu) return;
         f->catturato = 0;
     }
-    toolkit_sotto(f, toolkit_widget_sotto(f, x, y));
+    uikit_sotto(f, uikit_widget_sotto(f, x, y));
     if (!giu && f->sotto && f->sotto->tipo->movimento) f->sotto->tipo->movimento(f->sotto, x, y);
 }
 
@@ -2162,8 +2175,8 @@ static inline void avviso_apri(struct avviso *v) {
     v->annulla.premuto = v->conferma.premuto = 0;
     avviso_sistema(v, f->base.l, f->base.a);
     if (f->base.tipo == &tipo_finestra_tk) {
-        toolkit_sotto(f, 0);
-        toolkit_fuoco(f, &v->base);
+        uikit_sotto(f, 0);
+        uikit_fuoco(f, &v->base);
     }
     widget_cambiato(&v->base);
 }
@@ -2173,15 +2186,15 @@ static inline void avviso_chiudi(struct avviso *v) {
     v->base.nascosto = 1;
     if (f->base.tipo == &tipo_finestra_tk) {
         if (f->con_fuoco == &v->base || f->con_fuoco == &v->annulla.base ||
-            f->con_fuoco == &v->conferma.base) toolkit_fuoco(f, 0);
-        if (f->sotto == &v->annulla.base || f->sotto == &v->conferma.base) toolkit_sotto(f, 0);
+            f->con_fuoco == &v->conferma.base) uikit_fuoco(f, 0);
+        if (f->sotto == &v->annulla.base || f->sotto == &v->conferma.base) uikit_sotto(f, 0);
     }
     widget_cambiato(&v->base);
 }
 
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il
  * compositore la chiude (1). */
-static inline int toolkit_esegui(struct finestra_tk *f) {
+static inline int uikit_esegui(struct finestra_tk *f) {
     int l, a;
     widget_misura(&f->base, &l, &a);
     f->base.x = f->base.y = 0;
@@ -2190,7 +2203,7 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
     widget_disponi(&f->base);
     if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);   /* aperto prima di avere una misura */
     if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
-    if (!toolkit_ridisegna(f)) return 1;
+    if (!uikit_ridisegna(f)) return 1;
 
     struct notizia n;
     for (;;) {
@@ -2200,14 +2213,14 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
          * uno scatto della rotella, si serve prima lui e poi l'animazione (come in GTK, dove
          * l'input passa davanti ai ridisegni). Cosi' due scatti veloci restano una raffica
          * anche quando ridisegnare costa. */
-        struct chiamata_tk *prima = toolkit_prima_chiamata(f);
+        struct chiamata_tk *prima = uikit_prima_chiamata(f);
         if (prima && !f->finestra.quante) {
             int resta = (int)(prima->scadenza - tempo());
             struct da_guardare g = { .descrittore = f->finestra.collegamento };
             if (aspetta(&g, 1, resta > 0 ? resta : 0) == 0) {
-                toolkit_chiamate_scadute(f);
+                uikit_chiamate_scadute(f);
                 if (f->da_chiudere) return 0;
-                if (f->da_ridisegnare && !toolkit_ridisegna(f)) return 1;
+                if (f->da_ridisegnare && !uikit_ridisegna(f)) return 1;
                 continue;
             }
             if (!finestra_ricevi(&f->finestra, &n)) return 1;
@@ -2216,7 +2229,7 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
             return 1;
         }
         if (n.tipo == PUNTATORE) {
-            toolkit_puntatore(f, n.x, n.y, n.pulsanti);
+            uikit_puntatore(f, n.x, n.y, n.pulsanti);
         } else if (n.tipo == USCITO) {
             /* il puntatore non e' piu' nostro (per esempio, il compositore ha cominciato
              * a spostare la finestra): una pressione in corso si annulla, senza scattare */
@@ -2226,9 +2239,9 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
             f->riduci_premuto = 0;
             f->pulsanti_prima = 0;
             if (f->comando_sopra) { f->comando_sopra = 0; f->da_ridisegnare = 1; }
-            toolkit_sotto(f, 0);
+            uikit_sotto(f, 0);
         } else if (n.tipo == ROTELLA) {
-            toolkit_rotella(f, n.x, n.y, n.scatti_x, n.scatti_y);
+            uikit_rotella(f, n.x, n.y, n.scatti_x, n.scatti_y);
         } else if (n.tipo == TASTO && finestra_tk_bloccata(f)) {
             avviso_tasto(&f->avviso->base, n.tasto);   /* sotto un avviso bloccante: solo lui */
         } else if (n.tipo == TASTO && f->con_fuoco) {
@@ -2238,7 +2251,7 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
             f->da_ridisegnare = 1;
         }
         if (f->da_chiudere) return 0;
-        if (f->da_ridisegnare && !toolkit_ridisegna(f)) return 1;
+        if (f->da_ridisegnare && !uikit_ridisegna(f)) return 1;
     }
 }
 

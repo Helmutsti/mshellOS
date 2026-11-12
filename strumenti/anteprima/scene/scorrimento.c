@@ -3,7 +3,7 @@
  * e trascinata (cursore in SCORRIMENTO_CURSORE_TRASCINATO_NUOVO). L'anteprima non ha eventi
  * ne' animazioni: gli stati si forzano a mano, come nella scena campo.
  * Uso: TEMA=scuro anteprima.sh scorrimento 3 */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 #define ALTEZZA_PROVA 200
 
@@ -38,5 +38,5 @@ int main(void) {
         widget_aggiungi(&prova.base, &b->base);
     }
     finestra_tk_prepara(&finestra, "Scorrimento", &prova.base);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

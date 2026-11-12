@@ -6,10 +6,10 @@
  * programma non e' cambiato niente. Dentro, ognuna fa le chiamate di sistema di Linux che
  * servono (l'elenco completo, con il "come", e' in cima a libreria.c).
  *
- * Le funzioni stanno in libreria.c (programmi, file, tempo, processi), comunicazione.c
- * (socket, fogli, aspetta) e schermo.c (lo schermo): build.sh le compila una volta e le
- * lega dentro ogni programma, insieme alla libreria C (tutto in un file solo: "statico",
- * senza librerie da caricare all'avvio).
+ * Le funzioni stanno in libreria.c (programmi, file, tempo, processi) e comunicazione.c
+ * (socket, fogli, aspetta): build.sh le compila una volta e le lega dentro ogni programma,
+ * insieme alla libreria C (tutto in un file solo: "statico", senza librerie da caricare
+ * all'avvio). Lo schermo e' della grafica: le sue funzioni sono in gkit/gkit.h.
  *
  * Qui si dichiarano solo le nostre funzioni e i nostri tipi (chiamate.h): gli header di
  * Linux e della libreria C li vede solo la libreria, cosi' i loro nomi non si mescolano
@@ -52,19 +52,6 @@ int avvia_con(const char *percorso, const int *descrittori, int quanti);
 
 /* Un descrittore del programma 'numero': aspetta lo vede pronto quando e' finito. */
 int processo(int numero);
-
-/* --- lo schermo (vedi chiamate.h) --- */
-
-/* Lo schermo: un descrittore, o -1 se e' gia' di un altro programma. */
-int apri_schermo(void);
-
-/* Mette l'immagine dello schermo del descrittore 'd' nella memoria del programma:
- * scrivere li' un numero vuol dire accendere un pixel. L'indirizzo, o 0. 'info' dice
- * com'e' fatta. */
-void *mappa_schermo(int d, struct info_schermo *info);
-
-/* Dice che in quelle zone dello schermo si e' scritto qualcosa di nuovo. 0, o -1. */
-int schermo_cambiato(int d, const struct zona_schermo *zone, int quante);
 
 /* --- i socket: parlare con gli altri programmi (vedi chiamate.h) --- */
 

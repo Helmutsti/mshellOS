@@ -1,6 +1,6 @@
-/* Lo stato vuoto del toolkit, nei tre casi di Files: cartella vuota (senza icona), cartella
+/* Lo stato vuoto di UIKit, nei tre casi di Files: cartella vuota (senza icona), cartella
  * che non si legge, permesso negato. Uso: TEMA=scuro anteprima.sh stato_vuoto */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 static struct finestra_tk finestra;
 static struct contenitore riga;
@@ -19,5 +19,5 @@ int main(void) {
     widget_aggiungi(&riga.base, &permesso.base);
     finestra_tk_prepara(&finestra, "Stato vuoto", &riga.base);
     finestra_tk_dimensione(&finestra, 1440, 320);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

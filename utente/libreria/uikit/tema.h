@@ -16,24 +16,24 @@
  *     marrone, grigio): servono a distinguere le cose (etichette, grafici, icone). Ognuno ha
  *     saturo, pastello e il testo da mettere sul pastello.
  *
- * I colori sono 0xAARRGGBB come nel resto della libreria (disegno.h): OPACO(rgb) e
+ * I colori sono 0xAARRGGBB come in GKit (gkit_disegno.h): OPACO(rgb) e
  * VELATO(rgb, alfa). Attenzione: il pennello li vuole NON premoltiplicati (e' lui, quando
  * disegna, a premoltiplicare: vedi il commento di struct tela), quindi VELATO tiene l'rgb
  * pieno e mette solo l'alfa (0.72 -> 184). Premoltiplicarli qui li scurirebbe due volte.
  *
  * LA SCELTA DEL TEMA e' a tempo di esecuzione: 'tema_corrente' punta a uno dei due, e le
  * macro di stile.h (SUPERFICIE_ELEVATA, TESTO_PRIMARIO...) leggono sempre da lui. Parte sul
- * chiaro; tema_leggi() (libreria.c) lo cambia in base al file delle preferenze, una volta
+ * chiaro; tema_leggi() (tema.c) lo cambia in base al file delle preferenze, una volta
  * all'avvio del programma.
  *
  * 'tema_corrente' e' un simbolo DEBOLE definito qui nell'header: ogni file .c che lo include
  * ne porta una copia, e il linker le unisce in una sola. Cosi' l'header resta "header-only"
  * come gli altri, ma il puntatore e' uno per programma (e non uno per file .c, che sarebbe
- * un puntatore che il toolkit non vede cambiare quando lo cambia libreria.c). */
+ * un puntatore che UIKit non vede cambiare quando lo cambia tema.c). */
 #ifndef TEMA_H
 #define TEMA_H
 
-#include "disegno.h"
+#include "gkit/gkit_disegno.h"
 
 /* I colori di sistema, nell'ordine del disegno. Si usano come indice di tema->sistema[]
  * (per esempio il colore di un'etichetta salvato come numero). */
@@ -247,7 +247,7 @@ static inline void tema_scegli(const char *nome) {
         tema_corrente = &tema_chiaro;
 }
 
-/* Sceglie il tema leggendo /data/users/1000/preferences/tema (libreria.c). La chiama da sola,
+/* Sceglie il tema leggendo /data/users/1000/preferences/tema (tema.c). La chiama da sola,
  * prima di main, ogni programma che lega la libreria. */
 void tema_leggi(void);
 

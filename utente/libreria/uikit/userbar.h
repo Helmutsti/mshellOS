@@ -20,7 +20,7 @@
 #ifndef USERBAR_H
 #define USERBAR_H
 
-#include "toolkit.h"
+#include "uikit.h"
 
 #define USERBAR_DAL_BORDO   SPAZIO_8
 #define USERBAR_MARGINE     SPAZIO_4
@@ -51,7 +51,7 @@ static inline void userbar_posto(int schermo_a, int fissate, int *x, int *y) {
 /* Il centro in altezza del pulsante App, rispetto all'alto della userbar (per il vassoio). */
 static inline int userbar_centro_app(void) { return USERBAR_MARGINE + ALTEZZA_S / 2; }
 
-/* Un pulsante tondo del toolkit disegnato fuori da una finestra: stesso aspetto, stessi stati. */
+/* Un pulsante tondo di UIKit disegnato fuori da una finestra: stesso aspetto, stessi stati. */
 static inline void userbar_tondo(struct pennello *p, int x, int y, int tipo, int misura, int icona_,
                                  int sopra, int premuto) {
     struct pulsante b;

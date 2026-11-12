@@ -1,8 +1,8 @@
 /* esempio: la prima applicazione con una finestra vera.
  *
- * Disegna da sola TUTTA la sua finestra, con la libreria di disegno, nella tela che le
- * da' la libreria delle finestre: la barra con il titolo (blu quando ha il
- * fuoco, grigia quando no) e il contenuto. Non usa un toolkit, quindi si fa tutto da
+ * Disegna da sola TUTTA la sua finestra, con gli strumenti di disegno di GKit, nella tela
+ * che le da' la finestra di GKit: la barra con il titolo (blu quando ha il
+ * fuoco, grigia quando no) e il contenuto. Non usa UIKit, quindi si fa tutto da
  * sola: anche accorgersi che si e' premuto sulla barra e chiedere al compositore di
  * trascinarla.
  * Un clic nel contenuto mette un quadretto dove si e' cliccato; un tasto cambia il
@@ -11,8 +11,11 @@
  * OGNI VOLTA SI RIDISEGNA TUTTO. Le tele sono due e si alternano: quella che si riceve
  * contiene il disegno di DUE volte fa, non dell'ultima. Per questo l'applicazione tiene
  * il suo stato (i quadretti, il colore, il fuoco) e ridisegna tutto da capo. */
-#include "finestra.h"
-#include "disegno.h"
+/* Solo GKit (la finestra e gli strumenti di disegno), piu' i dati del font del sistema per
+ * il titolo (materiali_dati.h): niente stile, temi o componenti di UIKit. */
+#include "gkit/gkit.h"
+#include "gkit/gkit_disegno.h"
+#include "uikit/materiali_dati.h"
 
 #define LARGHEZZA 320
 #define ALTEZZA   220

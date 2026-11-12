@@ -1,4 +1,4 @@
-/* La libreria dei programmi, sopra Linux: lo schermo.
+/* GKit, il lato del compositore: lo schermo (dichiarato in gkit.h, parte 2).
  *
  * In Linux lo schermo e' del DRM ("Direct Rendering Manager"), un file per scheda video:
  * /dev/dri/card0. Il primo programma che lo apre ne diventa il PADRONE ("DRM master"):
@@ -30,7 +30,7 @@
 #include <drm/drm.h>
 #include <drm/drm_mode.h>
 
-#include "libreria.h"
+#include "gkit.h"
 #include "interno.h"
 
 #define LARGHEZZA_VOLUTA 1280

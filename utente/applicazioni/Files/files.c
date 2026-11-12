@@ -27,7 +27,7 @@
  *     altri file per ora non si aprono, tranne i pacchetti .app, che si chiedono al
  *     launcher: lui fa partire lo Store, o dice che le app vanno installate prima).
  *     Nella vista a elenco le colonne Nome, Tipo, Dimensione, Modificato. Si scorre con la
- *     rotella o con la barra di scorrimento del toolkit.
+ *     rotella o con la barra di scorrimento di UIKit.
  *   - IL TASTO DESTRO apre un menu dove si e' cliccato: su un file Apri, Rinomina,
  *     Duplica, Informazioni, Elimina; sul vuoto Nuova cartella, Ordina per, Mostra come
  *     icone o elenco. Rinominare (anche la cartella appena creata) si fa li', nel nome.
@@ -48,8 +48,8 @@
  * LA TASTIERA. Per ora arrivano alle applicazioni solo i caratteri, Invio e "cancella"
  * (eventi.c non manda Ctrl, F2, Canc ed Esc): Invio apre la cartella scelta e conferma
  * il nome nuovo. Le altre scorciatoie scritte nei menu (F2, Ctrl+D...) non arrivano. */
-#include "toolkit.h"
-#include "elemento_file.h"
+#include "uikit/uikit.h"
+#include "uikit/elemento_file.h"
 #include "launcher.h"     /* aprire un pacchetto .app: lo chiede al launcher */
 
 #define MAX_ELEMENTI 256
@@ -543,7 +543,7 @@ static const struct tipo_widget tipo_laterale = {
  *     +----------------+
  *
  * Tra un tile e l'altro 8; intorno alla griglia 16. L'icona del file resta l'immagine di
- * grafica_dati.h (icone_file), centrata nel riquadro. */
+ * materiali_dati.h (icone_file), centrata nel riquadro. */
 #define GRIGLIA_MARGINE   SPAZIO_16
 #define GRIGLIA_TRA       SPAZIO_8
 #define TILE_ALTEZZA      116
@@ -578,7 +578,7 @@ static const struct tipo_widget tipo_laterale = {
 #define STATO_ICONA       ICONA_OGGETTO
 #define STATO_TRA         SPAZIO_12
 
-/* Il campo del nome nuovo (rinomina): come un campo di testo del toolkit, incassato e con il
+/* Il campo del nome nuovo (rinomina): come un campo di testo di UIKit, incassato e con il
  * fuoco. Nell'elenco e' un campo S (alto 32, raggio 10); nel tile prende il posto del nome
  * (alto 24, raggio 6 come il fondo del nome scelto). */
 #define NOME_CAMPO_DENTRO SPAZIO_8     /* nel campo, a sinistra e a destra del testo */
@@ -667,7 +667,7 @@ static void contenuto_disponi(struct widget *w) {
 }
 
 /* Il campo del nome nuovo (rinomina), largo 'l' e alto 'a', raggio 'raggio': incassato con il
- * fuoco come campo_disegna del toolkit (ombre "focus", SUPERFICIE_INCASSATA, bordo
+ * fuoco come campo_disegna di UIKit (ombre "focus", SUPERFICIE_INCASSATA, bordo
  * BORDO_FOCUS), con dentro il testo e il cursore in fondo. Il testo centrato se 'centrato';
  * se e' piu' lungo del campo, si vede la fine (dove si scrive). */
 static void campo_nome(struct pennello *p, int x, int y, int l, int a, int raggio,
@@ -932,7 +932,7 @@ static void comincia_rinomina(int e) {
     contenuto.rinomina = e;
     contenuto.scelto = e;
     copia_testo(contenuto.nome_nuovo, elementi[e].nome, MAX_NOME_FILE);
-    toolkit_fuoco(&finestra, &contenuto.base);      /* i tasti vanno al campo */
+    uikit_fuoco(&finestra, &contenuto.base);      /* i tasti vanno al campo */
     widget_cambiato(&contenuto.base);
 }
 
@@ -1387,8 +1387,8 @@ static void chiudi_menu(void) {
     menu.stato = CHIUSO;
     menu.quanti = 0;
     widget_nascondi(&menu.base, 1);
-    /* il puntatore e' ancora li': il toolkit deve ritrovare il widget sotto di lui */
-    toolkit_sotto(&finestra, 0);
+    /* il puntatore e' ancora li': UIKit deve ritrovare il widget sotto di lui */
+    uikit_sotto(&finestra, 0);
 }
 
 /* --- il contenuto: il puntatore, la tastiera, la rotella --- */
@@ -1564,7 +1564,7 @@ static void vai(const char *dove, int nella_storia) {
     aggiorna_contenuto();
     aggiorna_percorso();
     aggiorna_frecce();
-    toolkit_ridisponi(&finestra);
+    uikit_ridisponi(&finestra);
 }
 
 static void premi_indietro(struct pulsante_barra *b, void *dati) {
@@ -1646,5 +1646,5 @@ int main(int quanti, char **argomenti) {
     widget_aggiungi(&finestra.base, &menu.base);
 
     vai(quanti > 1 && argomenti[1][0] == '/' ? argomenti[1] : CASA, 1);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

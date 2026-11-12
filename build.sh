@@ -12,7 +12,9 @@
 # su, solo i nostri programmi: niente programmi di una distribuzione, niente shell.
 #
 #   utente/libreria/   la libreria dei programmi (libreria.h): le nostre funzioni, fatte
-#                      con le chiamate di sistema di Linux e la libreria C musl
+#                      con le chiamate di sistema di Linux e la libreria C musl. Dentro,
+#                      le due librerie della grafica (LIBRERIE.md): gkit/ (le finestre, lo
+#                      schermo e il disegno) e uikit/ (lo stile, i materiali e i componenti)
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
@@ -178,7 +180,8 @@ lega() {   # lega USCITA OGGETTI...
 
 # --- 2. i programmi: la libreria, i programmi del sistema e le applicazioni ---
 UTENTE="-Iutente/libreria"
-for f in utente/libreria/*.c; do
+# (anche GKit e UIKit, nelle loro cartelle: i nomi dei file .c sono tutti diversi)
+for f in utente/libreria/*.c utente/libreria/gkit/*.c utente/libreria/uikit/*.c; do
     $CC $UTENTE -c "$f" -o "$B/oggetti/libreria/$(basename "$f" .c).o"
 done
 # Le librerie di altri (utente/libreria/esterni/, ognuna con la sua LICENSE), legate nella
@@ -265,8 +268,8 @@ chmod 755 "$ALBERO_SISTEMA/data"
 #                      statici (passo 1) e si portano dentro tutto. Quando ci saranno
 #                      librerie condivise, qui andranno loro e il "caricatore" (ld.so)
 #   /system/resources  le risorse del sistema: caratteri, icone, sfondi. Oggi i caratteri
-#                      e le icone sono dentro i programmi (grafica_dati.h, fatto da
-#                      strumenti/), e lo sfondo lo disegna la scrivania
+#                      e le icone sono dentro i programmi (uikit/materiali_dati.h, fatto
+#                      da strumenti/), e lo sfondo lo disegna la scrivania
 #   /system/firmware   il firmware dei dispositivi (firmware_class.path, RIGA_KERNEL)
 #   /system/modules    i moduli del kernel da caricare dal disco (oggi tutti quelli che
 #                      servono stanno nell'archivio di avvio, passo 3)

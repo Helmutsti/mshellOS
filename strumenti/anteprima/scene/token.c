@@ -6,7 +6,7 @@
  * Il tema di partenza non conta: la scena imposta tema_corrente da sola, una volta per
  * pannello, e disegna con le MACRO (SUPERFICIE_SCENA, TESTO_PRIMARIO...), cosi' prova anche
  * quelle. Uso: anteprima.sh token */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 /* nome e colore (letto dal tema in uso) di ogni token: stesso ordine del JSON */
 #define TOKEN(n) { #n, n }
@@ -53,7 +53,7 @@ static void pannello(struct pennello *p, int x0, int y0, const struct tema *t, c
     ombre(p, x0, y0, t);
 }
 
-/* le ombre: un rettangolo arrotondato per livello, nell'ordine di disegno.h (esterne,
+/* le ombre: un rettangolo arrotondato per livello, nell'ordine di gkit_disegno.h (esterne,
  * fondo, interne). Il fondo e' SUPERFICIE_ELEVATA tranne per l'incassato (SUPERFICIE_INCASSATA). */
 static void ombre(struct pennello *p, int x0, int y0, const struct tema *t) {
     int scuro = t == &tema_scuro;
@@ -98,5 +98,5 @@ static struct widget lavagna = { .tipo = &tipo_token };
 
 int main(void) {
     finestra_tk_prepara(&finestra, "Token", &lavagna);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

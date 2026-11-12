@@ -13,8 +13,12 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "finestra.h"
-#include "disegno.h"
+/* Solo GKit: la finestra (gkit.h) e gli strumenti di disegno (gkit_disegno.h). Della barra
+ * si prendono dai materiali del sistema soltanto i dati del font e dell'icona X
+ * (materiali_dati.h): niente stile, temi o componenti di UIKit. */
+#include "gkit/gkit.h"
+#include "gkit/gkit_disegno.h"
+#include "uikit/materiali_dati.h"
 #include "doomkeys.h"
 #include "doomgeneric.h"
 
@@ -116,7 +120,7 @@ void DG_DrawFrame(void) {
     riempi_rettangolo(&p, 0, 0, LARG, BARRA);
     pennello_colore(&p, OPACO(0xFFFFFF));
     testo(&p, &inter_semigrassetto_13, 14, (BARRA - inter_semigrassetto_13.altezza) / 2, TITOLO_FINESTRA);
-    icona(&p, ICONA_X, 14, LARG - BARRA + 7, 7);
+    disegna_icona(&p, icone[ICONA_X], ICONA_MISURE, 14, LARG - BARRA + 7, 7);
 
     /* il gioco, ingrandito: ogni riga di arrivo prende la sua riga di partenza; se e' la
      * stessa della precedente si copia la riga gia' pronta */

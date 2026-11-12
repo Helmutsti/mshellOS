@@ -3,7 +3,7 @@
  * Come in un sistema vero, il kernel non disegna finestre: presta lo schermo a un solo
  * programma, questo, e gli consegna gli eventi di tastiera e mouse. Le applicazioni si
  * collegano al socket "compositore" e parlano con il protocollo delle finestre
- * (protocollo.h): ognuna disegna da sola la sua finestra in un foglio di memoria
+ * (gkit.h): ognuna disegna da sola la sua finestra in un foglio di memoria
  * condivisa, e dice "mostra". Il compositore:
  *   - COMPONE, a strati: lo sfondo (una superficie della scrivania), le finestre dal
  *     fondo al primo piano, ognuna con la sua ombra morbida intorno, l'isola (un'altra
@@ -49,18 +49,22 @@
  * "chiudi" rosso, che chiude il programma (termina). Se invece ricomincia a rispondere,
  * torna normale. Come GNOME e il Mac.
  *
- * LO STILE (colori, misure, font) e' quello del sistema, in stile.h: lo stesso del
- * toolkit, cosi' la barra di emergenza e' uguale a quella delle applicazioni. */
+ * LA GRAFICA. Il compositore usa solo GKit (vedi LIBRERIE.md): il protocollo e lo schermo
+ * (gkit.h) e gli strumenti di disegno (gkit_disegno.h). Non vede lo stile del sistema: le
+ * poche cose del design che deve disegnare lui (la barra di emergenza, uguale a quella delle
+ * applicazioni, e l'ombra e il vetro delle finestre) gliele da' UIKit, con le sole funzioni
+ * di uikit_compositore.h. */
 #include "libreria.h"
-#include "protocollo.h"
-#include "stile.h"
+#include "gkit/gkit.h"
+#include "gkit/gkit_disegno.h"
+#include "uikit/uikit_compositore.h"
 
 /* Le risorse che init gli passa gia' aperte (vedi sopra). */
 #define D_SCHERMO 0
 #define D_EVENTI  1
 #define D_ASCOLTO 2
 
-#define MAX_LARGHEZZA 1280  /* la modalita' che chiede la libreria (schermo.c) */
+#define MAX_LARGHEZZA 1280  /* la modalita' che chiede GKit (gkit/schermo.c) */
 #define MAX_ALTEZZA   800
 
 static struct info_schermo schermo;
@@ -101,11 +105,13 @@ static void immagine(int x, int y, int l, int a, const unsigned int *pixel, int 
     }
 }
 
-/* --- le finestre, una per applicazione collegata --- */
+/* --- le finestre, una per applicazione collegata ---
+ * (struct finestra_compositore: 'struct finestra' e' la finestra vista dall'applicazione,
+ * in gkit.h) */
 
 #define MAX_FINESTRE 8
 
-struct finestra {
+struct finestra_compositore {
     int usata;
     int collegamento, foglio;
     unsigned int *immagini[2];
@@ -132,7 +138,7 @@ struct finestra {
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
 };
 
-static struct finestra finestre[MAX_FINESTRE];
+static struct finestra_compositore finestre[MAX_FINESTRE];
 
 /* L'ordine: ordine[0] e' quella piu' in fondo, ordine[quante-1] quella in primo piano.
  * Si disegnano dal fondo: ognuna copre quelle disegnate prima. */
@@ -149,8 +155,8 @@ static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto
 static unsigned int prossimo_ping = 1;
 static unsigned int prossimo_id = 1;
 
-/* L'OMBRA di una finestra: a STRATI, come nel disegno (token "ombra/finestra", in stile.h:
- * ombra_finestra_chiaro / _scuro). Sono tre ombre esterne sovrapposte, una vicina e netta e
+/* L'OMBRA di una finestra: a STRATI, come nel disegno (il token "ombra/finestra", Chiaro o
+ * Scuro, che UIKit da' con ombra_finestra). Sono tre ombre esterne sovrapposte, una vicina e netta e
  * una larga e leggera, ognuna spostata in giu' e con una diffusione negativa (piu' stretta
  * della finestra, cosi' si vede soprattutto sotto, come con una luce alta). Calcolarla costa
  * (le distanze dal bordo arrotondato per ogni strato), e dipende solo dalla misura della
@@ -193,14 +199,13 @@ static const struct strato_ombra ombra_pannello[] = {
 };
 
 /* La tabella degli strati di una finestra, secondo il suo ruolo e il tema in uso. */
-static const struct strato_ombra *strati_ombra(const struct finestra *f, int *quanti) {
+static const struct strato_ombra *strati_ombra(const struct finestra_compositore *f, int *quanti) {
     if (f->ruolo == RUOLO_PANNELLO) { *quanti = OMBRA_STRATI(ombra_pannello); return ombra_pannello; }
-    *quanti = OMBRA_N(finestra);
-    return OMBRA_TAB(finestra);
+    return ombra_finestra(quanti);
 }
 
 static void prepara_ombra(int i) {
-    const struct finestra *f = &finestre[i];
+    const struct finestra_compositore *f = &finestre[i];
     int n;
     const struct strato_ombra *strati = strati_ombra(f, &n);
     struct tondo forma = tondo(0, 0, f->l, f->a, f->raggio);
@@ -228,7 +233,7 @@ static void prepara_ombra(int i) {
 }
 
 static void disegna_ombra(int i) {
-    const struct finestra *f = &finestre[i];
+    const struct finestra_compositore *f = &finestre[i];
     int n;
     const struct strato_ombra *strati = strati_ombra(f, &n);
     unsigned int rgb = 0;
@@ -256,17 +261,18 @@ static void disegna_ombra(int i) {
  *      costo non dipende da quanto e' larga la sfocatura;
  *   3. tre medie una dopo l'altra danno una sfocatura morbida quasi uguale a quella
  *      "vera" (gaussiana) del disegno. Nel disegno la sfocatura dello sfondo della finestra
- *      e' 28 (OMBRA_FINESTRA_SFOCATURA_SFONDO, in stile.h): in Figma il raggio vale due
+ *      e' 28 (sfocatura_finestra(), da UIKit): in Figma il raggio vale due
  *      deviazioni standard, quindi sigma = 14 pixel. Tre medie larghe L pixel hanno
  *      sigma = L * 0.5 (radice di 3 * L^2 / 12): per sigma 14 serve L = 28, cioe' 7 pixel
- *      rimpiccioliti, RAGGIO_MEDIA 3 (prima erano medie di 11: sigma 22, troppo sfocato);
+ *      rimpiccioliti, raggio_media 3 (prima erano medie di 11: sigma 22, troppo sfocato);
  *   4. la si rifa' solo quando cambia qualcosa in quello che guarda (la finestra si
  *      sposta, o cambia qualcosa sotto di lei li' intorno: vedi cosa_rifare); se no si
  *      riusa quella gia' fatta.
  * Poi, a ogni composizione, la si ingrandisce di nuovo (ogni pixel e' la media pesata
  * dei quattro vicini di quella piccola) dentro la forma arrotondata della finestra. */
 #define SCALA          4    /* la copia rimpicciolita: un pixel ogni 4x4 */
-#define RAGGIO_MEDIA   (OMBRA_FINESTRA_SFOCATURA_SFONDO / SCALA / 2)   /* 3: medie di 7 pixel rimpiccioliti (28 veri), tre volte */
+static int raggio_media;    /* sfocatura_finestra() / SCALA / 2 = 3: medie di 7 pixel
+                             * rimpiccioliti (28 veri), tre volte. Lo si chiede a UIKit in main */
 #define BORDO_PICCOLO 16    /* quanto si prende intorno alla finestra, in pixel rimpiccioliti */
 #define PICCOLA_L (MAX_LARGHEZZA / SCALA + 2 * BORDO_PICCOLO + 2)
 #define PICCOLA_A (MAX_ALTEZZA / SCALA + 2 * BORDO_PICCOLO + 2)
@@ -284,14 +290,14 @@ static void media_fila(unsigned int *fila, int n, int salto) {
     for (int volta = 0; volta < 3; volta++) {
         for (int k = 0; k < 24; k += 8) {
             int somma = 0;
-            for (int i = -RAGGIO_MEDIA; i <= RAGGIO_MEDIA; i++) {
+            for (int i = -raggio_media; i <= raggio_media; i++) {
                 int j = i < 0 ? 0 : i >= n ? n - 1 : i;
                 somma += (fila[j * salto] >> k) & 0xFF;
             }
             for (int i = 0; i < n; i++) {
                 riga_media[i] = (riga_media[i] & ~(0xFFu << k)) |
-                                (unsigned int)(somma / (2 * RAGGIO_MEDIA + 1)) << k;
-                int esce = i - RAGGIO_MEDIA, entra = i + RAGGIO_MEDIA + 1;
+                                (unsigned int)(somma / (2 * raggio_media + 1)) << k;
+                int esce = i - raggio_media, entra = i + raggio_media + 1;
                 somma -= (fila[(esce < 0 ? 0 : esce) * salto] >> k) & 0xFF;
                 somma += (fila[(entra >= n ? n - 1 : entra) * salto] >> k) & 0xFF;
             }
@@ -301,7 +307,7 @@ static void media_fila(unsigned int *fila, int n, int salto) {
 }
 
 /* Dove sta la copia piccola della finestra f, in pixel rimpiccioliti. */
-static void posto_sfocata(const struct finestra *f, int *x, int *y, int *l, int *a) {
+static void posto_sfocata(const struct finestra_compositore *f, int *x, int *y, int *l, int *a) {
     *x = (f->x < 0 ? f->x - SCALA + 1 : f->x) / SCALA - BORDO_PICCOLO;
     *y = (f->y < 0 ? f->y - SCALA + 1 : f->y) / SCALA - BORDO_PICCOLO;
     *l = f->l / SCALA + 2 * BORDO_PICCOLO + 2;
@@ -312,7 +318,7 @@ static void posto_sfocata(const struct finestra *f, int *x, int *y, int *l, int 
  * prepara_sfocatura legge (fuori dallo schermo legge il bordo, quindi si taglia). */
 static int dentro(int v, int min, int max) { return v < min ? min : v > max ? max : v; }
 
-static struct zona guardata(const struct finestra *f) {
+static struct zona guardata(const struct finestra_compositore *f) {
     int x, y, l, a;
     posto_sfocata(f, &x, &y, &l, &a);
     return (struct zona){ dentro(x * SCALA, 0, larghezza - 1), dentro(y * SCALA, 0, altezza - 1),
@@ -322,7 +328,7 @@ static struct zona guardata(const struct finestra *f) {
 
 /* Sfoca quello che c'e' adesso nella scena dietro la finestra i (e un po' intorno). */
 static void prepara_sfocatura(int i, struct sfocata *s) {
-    const struct finestra *f = &finestre[i];
+    const struct finestra_compositore *f = &finestre[i];
     posto_sfocata(f, &s->x, &s->y, &s->l, &s->a);
     /* 1. rimpicciolire: ogni pixel piccolo e' la media di 4x4 pixel della scena */
     for (int v = 0; v < s->a; v++)
@@ -346,7 +352,7 @@ static void prepara_sfocatura(int i, struct sfocata *s) {
 
 /* Mette la sfocatura dentro la forma della finestra, ingrandendola di nuovo. */
 static void metti_sfocatura(int i, const struct sfocata *s) {
-    const struct finestra *f = &finestre[i];
+    const struct finestra_compositore *f = &finestre[i];
     struct tondo forma = tondo(f->x, f->y, f->l, f->a, f->raggio);
     int y0 = f->y > zy0 ? f->y : zy0, y1 = f->y + f->a < zy1 ? f->y + f->a : zy1;
     int x0 = f->x > zx0 ? f->x : zx0, x1 = f->x + f->l < zx1 ? f->x + f->l : zx1;
@@ -381,61 +387,11 @@ static void metti_sfocatura(int i, const struct sfocata *s) {
     }
 }
 
-/* I due comandi della barra, come li mette il toolkit (finestra_tk, toolkit.h): riduci e
- * chiudi, tondi da ALTEZZA_S, a destra, a TITOLO_MARGINE dal bordo e l'uno dall'altro. */
-static int comando_x(const struct finestra *f, int chiudi) {
-    return f->x + f->l - TITOLO_MARGINE - ALTEZZA_S - (chiudi ? 0 : ALTEZZA_S + TITOLO_MARGINE);
-}
-static int comando_y(const struct finestra *f) { return f->y + TITOLO_MARGINE; }
-
-static int sul_chiudi(const struct finestra *f, int x, int y) {
-    return x >= comando_x(f, 1) && x < comando_x(f, 1) + ALTEZZA_S &&
-           y >= comando_y(f) && y < comando_y(f) + ALTEZZA_S;
-}
-
-/* La testata di una finestra che non risponde, al posto di quella dell'applicazione: il
- * vetro della finestra (SUPERFICIE_VETRO) con sopra un velo rosso, l'avviso e il titolo al
- * centro, e i due comandi tondi come quelli del toolkit, col "chiudi" in rosso. Alta
- * TITOLO_ALTEZZA, con i soli angoli in alto arrotondati: il divisore e tutto il resto
- * sono ancora dell'applicazione (si disegna la sua immagine da TITOLO_ALTEZZA in giu').
- *
- * IL FONDO SCURO. Prima qui c'era VETRO_FONDO sotto il vetro, per far leggere il testo
- * bianco sopra uno sfondo chiaro. Il nuovo vetro ha il suo testo (scuro sul vetro chiaro,
- * chiaro sul vetro scuro): il fondo serve solo a contraddire il tema, e non c'e' piu'. */
-static void barra_non_risponde(const struct finestra *f) {
-    struct pennello *p = &pennello;
-    struct tondo barra = { f->x, f->y, f->l, TITOLO_ALTEZZA, { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
-    pennello_colore(p, SUPERFICIE_VETRO);
-    riempi_forma(p, &barra);
-    pennello_colore(p, STATO_ERRORE_VELO);
-    riempi_forma(p, &barra);
-
-    char avviso[MAX_TITOLO + 16];
-    int n = 0;
-    for (const char *c = f->titolo; *c; c++) avviso[n++] = *c;
-    for (const char *c = " non risponde"; *c; c++) avviso[n++] = *c;
-    avviso[n] = 0;
-    int largo = ICONA_S + GAP_S + larghezza_testo(FONT_TITOLO_FINESTRA, avviso);
-    int x = f->x + (f->l - largo) / 2;
-    pennello_salva(p);
-    pennello_ritaglia(p, f->x, f->y, f->l, TITOLO_ALTEZZA);
-    pennello_colore(p, TESTO_PRIMARIO);
-    icona(p, ICONA_TRIANGLE_ALERT, ICONA_S, x, f->y + (TITOLO_ALTEZZA - ICONA_S) / 2);
-    testo(p, FONT_TITOLO_FINESTRA, x + ICONA_S + GAP_S,
-          f->y + (TITOLO_ALTEZZA - FONT_TITOLO_FINESTRA->altezza) / 2, avviso);
-    pennello_ripristina(p);
-
-    for (int chiudi = 0; chiudi < 2; chiudi++) {
-        pennello_colore(p, CONTROLLO_SFONDO_NUOVO);
-        riempi_cerchio(p, comando_x(f, chiudi) + ALTEZZA_S / 2, comando_y(f) + ALTEZZA_S / 2, ALTEZZA_S / 2);
-        pennello_colore(p, chiudi ? STATO_ERRORE : TESTO_PRIMARIO);
-        icona(p, chiudi ? ICONA_X : ICONA_MINUS, ICONA_S, comando_x(f, chiudi) + (ALTEZZA_S - ICONA_S) / 2,
-              comando_y(f) + (ALTEZZA_S - ICONA_S) / 2);
-    }
-    struct tondo tutta = tondo(f->x, f->y, f->l, f->a, RAGGIO_FINESTRA_NUOVO);
-    pennello_colore(p, STATO_ERRORE);
-    contorna_forma(p, &tutta, 256);
-}
+/* LA BARRA DI EMERGENZA di una finestra che non risponde (vedi in cima): la disegna UIKit,
+ * con barra_congelata_disegna, al posto delle prime barra_congelata_altezza righe
+ * dell'applicazione. Il compositore non sa se una finestra e' una mini finestra (il
+ * protocollo non lo dice): per lui sono tutte normali ('mini' = 0). */
+#define MINI 0
 
 /* Quanto occupa una finestra sullo schermo, con l'ombra (lo sfondo non ne ha). */
 static struct zona con_ombra(unsigned int ruolo, int x, int y, int l, int a) {
@@ -455,7 +411,7 @@ static void nella_zona(int k) {
     pennello.s.rx2 = zx1; pennello.s.ry2 = zy1;
 }
 
-static int nella_zona_si_vede(const struct finestra *f) {
+static int nella_zona_si_vede(const struct finestra_compositore *f) {
     struct zona z = { zx0, zy0, zx1, zy1 };
     return si_toccano(con_ombra(f->ruolo, f->x, f->y, f->l, f->a), z);
 }
@@ -465,7 +421,7 @@ static int nella_zona_si_vede(const struct finestra *f) {
  * la scena fatta fin qui (ombra compresa), poi vetro, immagine e barra in tutte le zone.
  * La sfocatura 's' e' quella da usare (quella tenuta da parte, di solito). */
 static void disegna_finestra(int i, int ricalcola, struct sfocata *s) {
-    const struct finestra *f = &finestre[i];
+    const struct finestra_compositore *f = &finestre[i];
     if (f->ruolo == RUOLO_SFONDO) {           /* sotto tutto: niente ombra, niente vetro */
         for (int k = 0; k < quante_zone; k++) {
             nella_zona(k);
@@ -482,8 +438,10 @@ static void disegna_finestra(int i, int ricalcola, struct sfocata *s) {
         nella_zona(k);
         if (!nella_zona_si_vede(f)) continue;
         metti_sfocatura(i, s);
-        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? TITOLO_ALTEZZA : 0);
-        if (f->non_risponde && f->ruolo == RUOLO_FINESTRA) barra_non_risponde(f);
+        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata],
+                 f->non_risponde ? barra_congelata_altezza(MINI) : 0);
+        if (f->non_risponde && f->ruolo == RUOLO_FINESTRA)
+            barra_congelata_disegna(&pennello, f->x, f->y, f->l, f->a, f->titolo, MINI);
     }
 }
 
@@ -511,7 +469,7 @@ static void dai_fuoco(int i) {
  * fuoco sparisce (chiusa o ridotta), il fuoco passa a lei. */
 static int piu_davanti(void) {
     for (int k = quante - 1; k >= 0; k--) {
-        const struct finestra *f = &finestre[ordine[k]];
+        const struct finestra_compositore *f = &finestre[ordine[k]];
         if (f->usata && f->ruolo == RUOLO_FINESTRA && f->mostrata >= 0 && !f->ridotta) return ordine[k];
     }
     return -1;
@@ -535,7 +493,7 @@ static const unsigned int strati[] = { RUOLO_SFONDO, RUOLO_FINESTRA, RUOLO_PANNE
 static int finestra_sotto(int x, int y) {
     for (int s = QUANTI_STRATI - 1; s >= 0; s--)
         for (int k = quante - 1; k >= 0; k--) {
-            const struct finestra *f = &finestre[ordine[k]];
+            const struct finestra_compositore *f = &finestre[ordine[k]];
             if (f->mostrata < 0 || f->ridotta || f->ruolo != strati[s]) continue;
             if (x >= f->x && x < f->x + f->l && y >= f->y && y < f->y + f->a)
                 return ordine[k];
@@ -570,7 +528,7 @@ static void racconta_attiva(void) {
 }
 
 static void scollega(int i) {
-    struct finestra *f = &finestre[i];
+    struct finestra_compositore *f = &finestre[i];
     if (!f->usata) return;
     if (f->annunciata) racconta(i, FINESTRA_CHIUSA);
     if (f->immagini[0]) togli(f->immagini[0]);
@@ -597,15 +555,15 @@ static void nuovo_collegamento(int ascolto) {
     int i = 0;
     while (i < MAX_FINESTRE && finestre[i].usata) i++;
     if (i == MAX_FINESTRE) { chiudi(d); return; }   /* troppe finestre */
-    struct finestra *f = &finestre[i];
-    *f = (struct finestra){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1,
+    struct finestra_compositore *f = &finestre[i];
+    *f = (struct finestra_compositore){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1,
                             .da_rilasciare = -1, .ultimo_ping = tempo() };
     ordine[quante++] = i;
 }
 
 /* Il primo messaggio: la finestra, con il suo foglio. Tutto si controlla. */
 static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) {
-    struct finestra *f = &finestre[i];
+    struct finestra_compositore *f = &finestre[i];
     if (f->immagini[0]) {                /* ne ha gia' una: messaggio sbagliato */
         if (foglio >= 0) chiudi(foglio);
         scollega(i);
@@ -646,7 +604,7 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
 }
 
 static void mostra(int i, const struct mostra *m) {
-    struct finestra *f = &finestre[i];
+    struct finestra_compositore *f = &finestre[i];
     if (!f->immagini[0] || m->immagine > 1) { scollega(i); return; }
     int prima = f->mostrata;
     f->mostrata = m->immagine;
@@ -669,7 +627,7 @@ static void mostra(int i, const struct mostra *m) {
 /* PONG: ha risposto. Se era bloccata, torna normale, e le si dice quello che si era
  * perso: l'immagine da restituire e se ha il fuoco. */
 static void pong(int i, const struct pong *m) {
-    struct finestra *f = &finestre[i];
+    struct finestra_compositore *f = &finestre[i];
     if (!f->ping_atteso || m->numero != f->ping_numero) return;   /* una risposta vecchia */
     f->ping_atteso = 0;
     if (!f->non_risponde) return;
@@ -685,7 +643,7 @@ static void pong(int i, const struct pong *m) {
 static void controlla_risposte(void) {
     unsigned int adesso = tempo();
     for (int i = 0; i < MAX_FINESTRE; i++) {
-        struct finestra *f = &finestre[i];
+        struct finestra_compositore *f = &finestre[i];
         if (!f->usata || !f->immagini[0]) continue;
         if (f->ping_atteso && adesso - f->ultimo_ping >= 3000) f->non_risponde = 1;
         if (!f->ping_atteso && adesso - f->ultimo_ping >= 1000) {
@@ -713,7 +671,7 @@ static void trascinami(int i) {
 
 /* RIDUCIMI: la finestra si nasconde, e il fuoco passa a quella che c'era sotto. */
 static void riducimi(int i) {
-    struct finestra *f = &finestre[i];
+    struct finestra_compositore *f = &finestre[i];
     if (f->ruolo != RUOLO_FINESTRA || f->mostrata < 0 || f->ridotta) return;
     f->ridotta = 1;
     if (presa == i) presa = -1;
@@ -730,7 +688,7 @@ static void riducimi(int i) {
 static void porta_davanti(int pannello, unsigned int numero) {
     if (finestre[pannello].ruolo != RUOLO_PANNELLO) return;
     for (int i = 0; i < MAX_FINESTRE; i++) {
-        struct finestra *f = &finestre[i];
+        struct finestra_compositore *f = &finestre[i];
         if (!f->usata || f->ruolo != RUOLO_FINESTRA || f->id != numero || f->mostrata < 0) continue;
         f->ridotta = 0;
         in_primo_piano(i);
@@ -885,7 +843,7 @@ static void fai_lista(void) {
     in_lista = 0;
     for (int s = 0; s < QUANTI_STRATI; s++)
         for (int k = 0; k < quante; k++) {
-            const struct finestra *f = &finestre[ordine[k]];
+            const struct finestra_compositore *f = &finestre[ordine[k]];
             if (f->mostrata >= 0 && !f->ridotta && f->ruolo == strati[s]) lista[in_lista++] = ordine[k];
         }
 }
@@ -983,7 +941,7 @@ static void cosa_rifare(void) {
     struct impronta adesso[MAX_FINESTRE] = { 0 };
     for (int k = 0; k < in_lista; k++) {
         int i = lista[k];
-        const struct finestra *f = &finestre[i];
+        const struct finestra_compositore *f = &finestre[i];
         adesso[i] = (struct impronta){ 1, f->x, f->y, f->l, f->a, k, i == fuoco, f->non_risponde,
                                        f->ruolo, f->generazione, f->id };
     }
@@ -1116,7 +1074,8 @@ static void al_mouse(const struct evento *e) {
 
     if (appena_premuto) {   /* un clic: la finestra sotto va davanti e prende il fuoco */
         int i = finestra_sotto(px, py);
-        if (i >= 0 && finestre[i].non_risponde && sul_chiudi(&finestre[i], px, py)) {
+        if (i >= 0 && finestre[i].non_risponde &&
+            barra_congelata_sul_chiudi(finestre[i].l, MINI, px - finestre[i].x, py - finestre[i].y)) {
             /* il "chiudi" rosso di emergenza: si chiude il programma. La finestra sparira'
              * quando il suo collegamento si chiude (lo chiude il kernel). */
             termina(finestre[i].collegamento);
@@ -1144,7 +1103,7 @@ static void al_mouse(const struct evento *e) {
     if (sotto >= 0 && sotto != a_chi) avvisa(sotto, (struct notizia){ .tipo = USCITO });
     sotto = a_chi;
     if (a_chi >= 0) {
-        const struct finestra *f = &finestre[a_chi];
+        const struct finestra_compositore *f = &finestre[a_chi];
         avvisa(a_chi, (struct notizia){ .tipo = PUNTATORE, .x = px - f->x, .y = py - f->y,
                                         .pulsanti = e->pulsanti });
     }
@@ -1160,7 +1119,7 @@ static void alla_rotella(const struct evento *e) {
     if (trascinata >= 0) return;
     int i = presa >= 0 ? presa : finestra_sotto(px, py);
     if (i < 0) return;
-    const struct finestra *f = &finestre[i];
+    const struct finestra_compositore *f = &finestre[i];
     avvisa(i, (struct notizia){ .tipo = ROTELLA, .x = px - f->x, .y = py - f->y,
                                 .scatti_x = e->dx, .scatti_y = e->dy });
 }
@@ -1208,6 +1167,7 @@ static int servi(int ms) {
 }
 
 int main(void) {
+    raggio_media = sfocatura_finestra() / SCALA / 2;
     if (!(memoria = mappa_schermo(D_SCHERMO, &schermo))) {
         scrivi_testo("compositore: non ho lo schermo (mi deve far partire init)\n");
         return 0;

@@ -1,8 +1,8 @@
-/* L'avviso del toolkit, aperto sopra una finestra semplice. Variabile BLOCCANTE=0 per
+/* L'avviso di UIKit, aperto sopra una finestra semplice. Variabile BLOCCANTE=0 per
  * quello non bloccante (senza velo, la finestra resta attiva); senza, bloccante.
  * Uso: TEMA=scuro BLOCCANTE=0 anteprima.sh avviso 2 */
 #include <stdlib.h>
-#include "toolkit.h"
+#include "uikit/uikit.h"
 
 static struct finestra_tk finestra;
 static struct contenitore colonna, riga;
@@ -57,5 +57,5 @@ int main(void) {
     }
     finestra_tk_avviso(&finestra, &avviso);
     avviso_apri(&avviso);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

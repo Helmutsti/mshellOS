@@ -6,8 +6,8 @@
  * non le usano direttamente: usano le funzioni di libreria.h (apri, manda, ricevi,
  * foglio...), che le fanno per loro. Le funzioni sono le stesse di quando sotto c'era
  * mkernel, il kernel didattico (che vive nel ramo "mykernel"): e' cambiato solo il "come",
- * dentro la libreria (libreria.c, comunicazione.c, schermo.c). Qui sotto c'e' il "cosa":
- * il contratto tra la libreria e i programmi. */
+ * dentro la libreria (libreria.c, comunicazione.c e, per lo schermo, gkit/schermo.c). Qui
+ * sotto c'e' il "cosa": il contratto tra la libreria e i programmi. */
 #ifndef CHIAMATE_H
 #define CHIAMATE_H
 

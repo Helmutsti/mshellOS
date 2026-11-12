@@ -2,7 +2,7 @@
  * pillola, e caselle e scelte (a riposo, accese, miste, disabilitate).
  * Il fuoco, l'errore e il disabilitato si forzano a mano: l'anteprima non ha eventi.
  * Uso: TEMA=scuro anteprima.sh campo 2 */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 #include "piano.h"
 
 #define STATI 4   /* righe: normale, attivo, errore, disabilitato; colonne: S, M, L */
@@ -65,5 +65,5 @@ int main(void) {
     widget_aggiungi(&colonna.base, &fila_scelte.base);
     piano_prepara(&piano, &colonna.base);
     finestra_tk_prepara(&finestra, "Campo", &piano.base);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

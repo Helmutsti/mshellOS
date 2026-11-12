@@ -1,10 +1,10 @@
 /* I pulsanti del nuovo design: 3 tipi (Primario, Secondario, Ghost) x 3 misure (S, M, L) x
  * 4 stati (normale, sopra, premuto, disabilitato), e sotto i pulsanti solo icona (tondi).
  * L'anteprima disegna un fotogramma senza eventi, quindi gli stati si FORZANO a mano:
- * 'sopra' e' lo stesso campo che segna il toolkit quando il puntatore e' sopra, 'premuto'
+ * 'sopra' e' lo stesso campo che segna UIKit quando il puntatore e' sopra, 'premuto'
  * e 'dentro' quelli del clic, 'disabilitato' quello di widget_disabilita.
  * Uso: TEMA=scuro anteprima.sh pulsanti 2 */
-#include "toolkit.h"
+#include "uikit/uikit.h"
 #include "piano.h"
 
 #define TIPI 3
@@ -59,5 +59,5 @@ int main(void) {
     (void)nome_tipo;
     piano_prepara(&piano, &colonna.base);
     finestra_tk_prepara(&finestra, "Pulsanti", &piano.base);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

@@ -1,8 +1,8 @@
-/* Le primitive nuove di disegno.h: ombre a strati, ombra interna, pillola, cerchio, arco.
+/* Le primitive nuove di gkit_disegno.h: ombre a strati, ombra interna, pillola, cerchio, arco.
  * Valori presi da strumenti/grafica/token-figma.json (chiave "ombre"). Va guardata su
  * fondo chiaro:  SFONDO=bianco anteprima.sh primitive 2
- * Nessun widget del toolkit: un solo widget fatto qui, che si disegna da se'. */
-#include "toolkit.h"
+ * Nessun widget di UIKit: un solo widget fatto qui, che si disegna da se'. */
+#include "uikit/uikit.h"
 #include <stdio.h>
 #include <time.h>
 
@@ -27,7 +27,7 @@ static const struct strato_ombra sovrapposto[] = {
     { INK(0.14), OMBRA_ESTERNA, 0, 20, 40, -12 },
 };
 
-/* La scheda: ombre di fuori, fondo, ombre di dentro (l'ordine spiegato in disegno.h). */
+/* La scheda: ombre di fuori, fondo, ombre di dentro (l'ordine spiegato in gkit_disegno.h). */
 static void scheda(struct pennello *p, int x, int y, int l, int a, int r,
                    const struct strato_ombra *s, int n, unsigned int fondo) {
     struct tondo t = tondo(x, y, l, a, r);
@@ -99,5 +99,5 @@ static struct finestra_tk finestra;
 
 int main(void) {
     finestra_tk_prepara(&finestra, "Primitive", &vista);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }

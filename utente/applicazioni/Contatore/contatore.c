@@ -1,10 +1,10 @@
-/* contatore: un numero e due pulsanti, - e +, fatto con il toolkit.
+/* contatore: un numero e due pulsanti, - e +, fatto con UIKit.
  *
  * Confrontalo con esempio, che si disegna tutto a mano: qui non c'e' un pixel, non c'e'
  * la barra, non c'e' il ciclo degli eventi. Si dice COSA c'e' nella finestra e cosa fare
- * quando premono i pulsanti; il resto (stile, barra, trascinare, ridisegnare) lo fa il
- * toolkit. */
-#include "toolkit.h"
+ * quando premono i pulsanti; il resto (stile, barra, trascinare, ridisegnare) lo fa
+ * UIKit. */
+#include "uikit/uikit.h"
 
 static struct finestra_tk finestra;
 static struct contenitore colonna, riga;
@@ -43,5 +43,5 @@ int main(void) {
     widget_aggiungi(&colonna.base, &riga.base);
 
     finestra_tk_prepara(&finestra, "Contatore", &colonna.base);
-    return toolkit_esegui(&finestra);
+    return uikit_esegui(&finestra);
 }
