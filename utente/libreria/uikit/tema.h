@@ -235,6 +235,38 @@ static const struct tema tema_scuro = {
         [COLORE_GRIGIO]  = { OPACO(0x98989D), OPACO(0x414144), OPACO(0xC1C1C4) },
     },
 };
+/* IL COLORE DI UN'ICONA: la raccolta "Colore icona" del file Figma. Ha una sola variabile
+ * (icona/colore) con otto modi, e ogni modo punta a un colore semantico qui sopra: e' per
+ * questo che non ha valori suoi e vale da sola nei due temi. Nei componenti del disegno ogni
+ * icona prende il colore da qui, con il modo scelto dal componente (il pulsante Primario usa
+ * Inverso, l'intestazione di colonna Secondario...): il codice fa lo stesso, sceglie il modo
+ * e chiede il colore a colore_icona_di (o alla macro COLORE_ICONA di stile.h). L'ordine e'
+ * quello dei modi in Figma. */
+enum colore_icona {
+    COLORE_ICONA_PRIMARIO,      /* testo/primario */
+    COLORE_ICONA_INVERSO,       /* azione/testo: sopra il fondo scuro di un'azione */
+    COLORE_ICONA_ATTENUATO,     /* testo/disabilitato */
+    COLORE_ICONA_SECONDARIO,    /* testo/secondario */
+    COLORE_ICONA_PERICOLO,      /* pericolo/testo */
+    COLORE_ICONA_SUCCESSO,      /* successo/testo */
+    COLORE_ICONA_AVVISO,        /* avviso/testo */
+    COLORE_ICONA_INFORMAZIONE,  /* informazione/testo */
+    COLORI_ICONA                /* quanti sono */
+};
+
+static inline unsigned int colore_icona_di(const struct tema *t, int modo) {
+    switch (modo) {
+    case COLORE_ICONA_INVERSO:      return t->azione_testo;
+    case COLORE_ICONA_ATTENUATO:    return t->testo_disabilitato;
+    case COLORE_ICONA_SECONDARIO:   return t->testo_secondario;
+    case COLORE_ICONA_PERICOLO:     return t->pericolo_testo;
+    case COLORE_ICONA_SUCCESSO:     return t->successo_testo;
+    case COLORE_ICONA_AVVISO:       return t->avviso_testo;
+    case COLORE_ICONA_INFORMAZIONE: return t->informazione_testo;
+    default:                        return t->testo_primario;
+    }
+}
+
 /* Il tema in uso. Debole (vedi sopra); si cambia con tema_leggi() o, nelle prove, a mano. */
 __attribute__((weak)) const struct tema *tema_corrente = &tema_chiaro;
 

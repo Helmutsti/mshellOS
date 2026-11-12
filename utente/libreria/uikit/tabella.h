@@ -81,9 +81,16 @@ struct tabella_tk {
     int clic_su;
 };
 
+/* Quanto e' larga la parte con le righe e le intestazioni: senza la corsia della barra di
+ * scorrimento (barra_scorrimento_riserva; la tabella non ha padding suo: il testo sta a
+ * TABELLA_DENTRO dal fondo della riga, che arriva fin qui). */
+static inline int tabella_tk_largo(const struct tabella_tk *t) {
+    return t->base.l - barra_scorrimento_riserva(&t->barra, 0);
+}
+
 /* Dove comincia ogni colonna (x nella finestra) e quanto e' larga. */
 static inline void tabella_tk_colonne(const struct tabella_tk *t, int *x, int *l) {
-    int resta = t->base.l - 2 * TABELLA_DENTRO - (t->quante_colonne - 1) * TABELLA_TRA_COLONNE, elastiche = 0;
+    int resta = tabella_tk_largo(t) - 2 * TABELLA_DENTRO - (t->quante_colonne - 1) * TABELLA_TRA_COLONNE, elastiche = 0;
     for (int c = 0; c < t->quante_colonne; c++) {
         resta -= t->colonne[c].larghezza;
         elastiche += !t->colonne[c].larghezza;
@@ -108,7 +115,7 @@ static inline int tabella_tk_riga_y(const struct tabella_tk *t, int k) {
 /* La riga nel punto (x, y) dello schermo, o -1. */
 static inline int tabella_tk_riga_in(const struct tabella_tk *t, int x, int y) {
     const struct widget *w = &t->base;
-    if (y < tabella_tk_righe_y(t) || y >= w->y + w->a || x < w->x || x >= w->x + w->l) return -1;
+    if (y < tabella_tk_righe_y(t) || y >= w->y + w->a || x < w->x || x >= w->x + tabella_tk_largo(t)) return -1;
     int dentro = y - tabella_tk_righe_y(t) + t->barra.scorrimento.posizione;
     int k = dentro / (TABELLA_ALTEZZA_RIGA + TABELLA_TRA_RIGHE);
     if (dentro - k * (TABELLA_ALTEZZA_RIGA + TABELLA_TRA_RIGHE) >= TABELLA_ALTEZZA_RIGA) return -1;
@@ -136,6 +143,7 @@ static inline void intestazione_colonna_disegna(struct pennello *p, int x, int y
     int tx = destra ? x + l - largo : x;
     pennello_colore(p, TESTO_SECONDARIO);
     testo_centrato(p, FONT_ETICHETTA, tx, y, TABELLA_ALTEZZA_TESTATA, etichetta);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_SECONDARIO));
     if (freccia)
         icona(p, ordine == ORDINE_CRESCENTE ? ICONA_CHEVRON_UP : ICONA_CHEVRON_DOWN, TABELLA_FRECCIA,
               tx + largo - TABELLA_FRECCIA, y + (TABELLA_ALTEZZA_TESTATA - TABELLA_FRECCIA) / 2);
@@ -149,18 +157,19 @@ static inline void tabella_tk_disegna(struct widget *w, struct pennello *p) {
         intestazione_colonna_disegna(p, cx[c], w->y, cl[c], t->colonne[c].etichetta, t->colonne[c].destra,
                                      t->ordinata == c ? t->verso : ORDINE_NESSUNO);
     int linea = w->y + TABELLA_ALTEZZA_TESTATA;
-    pennello_colore(p, BORDO_SEPARATORE);
-    riempi_rettangolo(p, w->x, linea, w->l, 1);
+    pennello_colore(p, BORDO_SEPARATORE);       /* la linea: fino al padding del contenitore */
+    riempi_rettangolo(p, w->x, linea, w->l - t->barra.fuori, 1);
 
+    int largo = tabella_tk_largo(t);            /* le righe non vanno sotto la barra */
     pennello_salva(p);
-    pennello_ritaglia(p, w->x, linea + 1, w->l, w->y + w->a - linea - 1);
+    pennello_ritaglia(p, w->x, linea + 1, largo, w->y + w->a - linea - 1);
     for (int k = 0; k < t->righe; k++) {
         int y = tabella_tk_riga_y(t, k);
         if (y + TABELLA_ALTEZZA_RIGA <= linea || y >= w->y + w->a) continue;
         int scelta = k == t->scelta || k == t->rinomina, sopra = k == t->sopra;
         if (scelta || sopra) {
             pennello_colore(p, scelta ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
-            riempi_tondo(p, w->x, y, w->l, TABELLA_ALTEZZA_RIGA, RAGGIO_CONTROLLO_NUOVO);
+            riempi_tondo(p, w->x, y, largo, TABELLA_ALTEZZA_RIGA, RAGGIO_CONTROLLO_NUOVO);
         }
         struct riga_tk r = { .oggetto = -1 };
         if (t->riga) t->riga(t, k, &r, t->dati);

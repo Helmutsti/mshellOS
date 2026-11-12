@@ -64,7 +64,7 @@ from qemu import ErroreProva, OROLOGIO, PUNTO_VUOTO, isola_visibile, pixel_diver
 LARGHEZZA, ALTEZZA = 1280, 800
 IMMAGINE = "mshell-sandbox"
 ATTREZZI = "mshell-sandbox-attrezzi"
-OGGETTI = "mshell-sandbox-oggetti"
+OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", "mshell-sandbox-oggetti")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
 # i dischi delle prove di build.sh, e cosa vuol dire per la sandbox (avvio_sandbox.c)

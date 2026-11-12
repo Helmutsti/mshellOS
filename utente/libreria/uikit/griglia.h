@@ -55,10 +55,13 @@ struct griglia_tk {
     void *dati;
     unsigned int clic_prima, pulsanti_prima;
     int clic_su;
+    int riserva;                       /* i pixel a destra che i tile non usano (griglia_impagina) */
 };
 
+/* Quanti tile in una riga: nello spazio meno il padding e meno la corsia della barra di
+ * scorrimento (barra_scorrimento_riserva: il padding di 8 a destra, se scorre, diventa di 14). */
 static inline int griglia_per_riga(const struct griglia_tk *g) {
-    int n = (g->base.l - 2 * GRIGLIA_PADDING + GRIGLIA_TRA) / (TILE_LARGHEZZA + GRIGLIA_TRA);
+    int n = (g->base.l - g->riserva - 2 * GRIGLIA_PADDING + GRIGLIA_TRA) / (TILE_LARGHEZZA + GRIGLIA_TRA);
     return n < 1 ? 1 : n;
 }
 
@@ -79,12 +82,22 @@ static inline int griglia_in(const struct griglia_tk *g, int x, int y) {
     return -1;
 }
 
+static inline int griglia_totale(const struct griglia_tk *g) {
+    int righe = (g->quanti + griglia_per_riga(g) - 1) / griglia_per_riga(g);
+    return 2 * GRIGLIA_PADDING + (righe ? righe * (TILE_ALTEZZA + GRIGLIA_TRA) - GRIGLIA_TRA : 0);
+}
+
+/* Prima senza la corsia della barra; se cosi' non ci sta tutto, la barra c'e': si rifa' con la
+ * corsia (che puo' togliere un tile per riga, e allungare la griglia). */
 static inline void griglia_impagina(struct griglia_tk *g) {
     struct widget *w = &g->base;
-    int righe = (g->quanti + griglia_per_riga(g) - 1) / griglia_per_riga(g);
-    int totale = 2 * GRIGLIA_PADDING + (righe ? righe * (TILE_ALTEZZA + GRIGLIA_TRA) - GRIGLIA_TRA : 0);
+    int posizione = g->barra.scorrimento.posizione;   /* la prima misura non deve spostarla */
     barra_scorrimento_posto(&g->barra, w->x, w->y, w->l, w->a);
-    scorrimento_misure(&g->barra.scorrimento, totale, w->a);
+    g->riserva = g->barra.fuori;
+    scorrimento_misure(&g->barra.scorrimento, griglia_totale(g), w->a);
+    g->riserva = barra_scorrimento_riserva(&g->barra, GRIGLIA_PADDING);
+    g->barra.scorrimento.posizione = posizione;
+    scorrimento_misure(&g->barra.scorrimento, griglia_totale(g), w->a);
 }
 
 static inline void griglia_misura(struct widget *w, int *l, int *a) { (void)w; *l = 0; *a = 0; }

@@ -481,6 +481,8 @@ static void aggiorna_stato_cartella(void) {
     }
     if (stato.icona != icona_stato || !uguali(stato.titolo, titolo) || !uguali(stato.spiegazione, perche))
         stato_vuoto_cambia(&stato, icona_stato, titolo, perche);
+    /* come nel disegno: l'icona di un errore e' primaria, le altre secondarie */
+    stato_vuoto_colore_icona(&stato, errore_qui ? COLORE_ICONA_PRIMARIO : COLORE_ICONA_SECONDARIO);
 }
 
 /* Il filtro, la ricerca o l'ordine sono cambiati, o la cartella e' stata riletta: si rifa'

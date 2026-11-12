@@ -91,6 +91,8 @@
 #define SISTEMA_SATURO(c)                        (tema_corrente->sistema[(c)].saturo)
 #define SISTEMA_PASTELLO(c)                      (tema_corrente->sistema[(c)].pastello)
 #define SISTEMA_TESTO_PASTELLO(c)                (tema_corrente->sistema[(c)].testo_pastello)
+/* il colore di un'icona (raccolta "Colore icona", tema.h): COLORE_ICONA(COLORE_ICONA_SECONDARIO)... */
+#define COLORE_ICONA(modo)                       colore_icona_di(tema_corrente, (modo))
 /* --- le misure del nuovo design (non dipendono dal tema), in pixel ---
  * Controlli S/M/L: altezza, icona, padding ai lati, gap tra icona e testo. */
 #define ALTEZZA_XS              24   /* il pulsante icona piu' piccolo (chiusura della mini finestra) */

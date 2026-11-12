@@ -52,7 +52,7 @@ static inline void riga_app_disegna(struct widget *w, struct pennello *p) {
     pennello_colore(p, TESTO_SECONDARIO);
     testo_centrato(p, FONT_PICCOLO_NUOVO, x, y + INTERLINEA_CORPO, INTERLINEA_PICCOLO, r->dettagli);
     pennello_ripristina(p);
-    pennello_colore(p, TESTO_SECONDARIO);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_ATTENUATO));   /* come nel disegno: la freccia e' attenuata */
     icona(p, ICONA_CHEVRON_RIGHT, ICONA_S, freccia, w->y + (w->a - ICONA_S) / 2);
 }
 

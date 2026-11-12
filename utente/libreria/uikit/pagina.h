@@ -121,12 +121,38 @@ static inline void pagina_misura(struct widget *w, int *l, int *a) {
     *a = g->scorre ? 0 : pagina_totale(g);   /* se scorre, sta in quello che riceve (e' elastica) */
 }
 
+/* La barra di scorrimento di un figlio che scorre da solo (una tabella, una griglia: ha la
+ * barra tra i suoi figli), o 0. Le pagine figlie non contano: scorrono dentro i loro margini. */
+static inline struct barra_scorrimento *pagina_barra_del_figlio(struct widget *f) {
+    if (f->tipo == &tipo_pagina) return 0;
+    for (int i = 0; i < f->quanti_figli; i++)
+        if (f->figli[i]->tipo == &tipo_barra_scorrimento) return (struct barra_scorrimento *)f->figli[i];
+    return 0;
+}
+
+static inline void pagina_figli_larghi(struct pagina *g, int dentro) {
+    struct widget *w = &g->base;
+    for (int i = 0; i < w->quanti_figli; i++)
+        if (w->figli[i] != &g->barra.base && !w->figli[i]->nascosto) pagina_larghezza(w->figli[i], dentro);
+}
+
+/* LA BARRA DI SCORRIMENTO NON VA SOPRA IL CONTENUTO (barra_scorrimento_riserva, uikit.h).
+ *   - La barra della pagina sta nel suo margine destro. Se il margine e' piu' stretto della
+ *     barra (14) e la pagina scorre, i figli si stringono a destra di quello che manca.
+ *   - Un figlio che scorre da solo (tabella, griglia) riceve anche il margine destro della
+ *     pagina (si allarga fino al bordo della pagina) e sa che quei pixel sono padding: la sua
+ *     barra ci sta dentro, il suo contenuto no. Cosi' il contenuto resta dov'e' (stessa
+ *     distanza dal bordo a sinistra e a destra) e la barra sta nel padding, non sopra. */
 static inline void pagina_disponi(struct widget *w) {
     struct pagina *g = (struct pagina *)w;
     int dentro = w->l - 2 * g->margine_x;
-    for (int i = 0; i < w->quanti_figli; i++)
-        if (w->figli[i] != &g->barra.base && !w->figli[i]->nascosto) pagina_larghezza(w->figli[i], dentro);
+    pagina_figli_larghi(g, dentro);
     int totale = pagina_totale(g), elastici = 0;
+    if (g->scorre && totale > w->a && g->margine_x < SCORRIMENTO_ZONA) {
+        dentro -= SCORRIMENTO_ZONA - g->margine_x;   /* la corsia della barra della pagina */
+        pagina_figli_larghi(g, dentro);
+        totale = pagina_totale(g);
+    }
     for (int i = 0; i < w->quanti_figli; i++)
         if (w->figli[i] != &g->barra.base && !w->figli[i]->nascosto) elastici += w->figli[i]->elastico;
     int in_piu = w->a - totale;
@@ -147,6 +173,11 @@ static inline void pagina_disponi(struct widget *w) {
         f->y = y;
         f->l = f->largo ? dentro : fl;
         f->a = fa;
+        struct barra_scorrimento *b = f->largo ? pagina_barra_del_figlio(f) : 0;
+        if (b) {                            /* il margine destro della pagina, per la sua barra */
+            b->fuori = w->x + w->l - (f->x + f->l);
+            f->l += b->fuori;
+        }
         y += fa + g->spazio;
     }
 }

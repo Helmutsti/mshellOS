@@ -321,6 +321,7 @@ static void mostra_illeggibile(int si_apre) {
     char riga[200];
     con_nome(riga, sizeof riga, "Il file \"", nome_file(pacchetto), "\" \xc3\xa8 danneggiato o non \xc3\xa8 un pacchetto di app.");
     mostra_esito(ICONA_TRIANGLE_ALERT, "Impossibile leggere il pacchetto", riga);
+    stato_vuoto_colore_icona(&esito, COLORE_ICONA_PRIMARIO);   /* un errore: come nel disegno */
     mostra_pulsanti(0, 0, 0, 0, 1);
     registro(si_apre ? "pacchetto danneggiato: " : "pacchetto illeggibile: ", pacchetto);
 }

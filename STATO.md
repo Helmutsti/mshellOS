@@ -352,7 +352,16 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   contenuto (menu, barre, finestre, suggerimento); *piatto* = il resto, premuto e disabilitato inclusi.
 - Controlli S 32 / M 40 / L 48. Azioni (pulsanti, solo icona, gruppi, ricerca) a pillola; campi dati
   a rettangolo arrotondato (raggio 10/12/14). Titolo e contenuto della finestra sono separati
-  (titolo 40 px, divisore da bordo a bordo, finestra raggio 28).
+  (titolo 40 px, finestra raggio 28). Il divisore da bordo a bordo sotto il titolo si vede solo
+  se sotto c'è il contenuto; con la barra degli strumenti sotto, titolo e barra sono un vetro solo
+  (deciso dalla persona: nel disegno la linea c'è, ma sul vetro di Figma non si vede).
+- Le icone prendono il colore dalla raccolta "Colore icona" del disegno (`COLORE_ICONA(...)`,
+  `tema.h`): Primario, Inverso, Attenuato, Secondario, Pericolo, Successo, Avviso, Informazione,
+  col modo che usa il componente in Figma.
+- La barra di scorrimento non va mai sopra il contenuto: sta nel padding a destra (14 px). Se il
+  contenitore ha un margine di almeno 14 (una pagina), la barra ci sta dentro e il contenuto non
+  cambia; se no (Files: tabella e griglia nel pannello) il contenuto, quando scorre, lascia libero
+  a destra quanto manca per arrivare a 14 (`barra_scorrimento_riserva`, `uikit.h`).
 
 **Fatto**
 - Fase 0: font Plex in `uikit/materiali_dati.h` (`plex_*`, TTF e licenza OFL in `strumenti/grafica/font/`,
