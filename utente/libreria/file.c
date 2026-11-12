@@ -12,6 +12,7 @@
  * cartella, la libreria legge tutte le voci, salta "." e "..", le mette in ordine
  * alfabetico e poi le consegna una alla volta, a ogni leggi. */
 #define _GNU_SOURCE
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -226,6 +227,159 @@ int cancella(const char *percorso) {
     if (unlink(vero) == 0) return 0;
     if (errno != EISDIR) return errore_file(errno);
     return rmdir(vero) < 0 ? errore_file(errno) : 0;
+}
+
+
+/* --- le cartelle piene: contare, togliere, copiare ---
+ *
+ * Si scende con un percorso solo, in un blocco di memoria: a ogni livello si attacca il nome
+ * in fondo e poi si rimette com'era. Con lstat i collegamenti simbolici non si seguono. */
+
+/* Attacca "/nome" in fondo a p (lungo l); la nuova lunghezza, o ERRORE_NOME se non ci sta. */
+static int attacca(char *p, int l, const char *nome) {
+    int n = (int)strlen(nome);
+    if (l + 1 + n >= MAX_VERO) return ERRORE_NOME;
+    p[l] = '/';
+    memcpy(p + l + 1, nome, (size_t)n + 1);
+    return l + 1 + n;
+}
+
+static int conta_albero(char *p, int l, int profondita, unsigned long long *quanti) {
+    if (profondita > MAX_PROFONDITA) return ERRORE_NOME;
+    DIR *dir = opendir(p);
+    if (!dir) return errore_file(errno);
+    int errore = 0;
+    struct dirent *v;
+    while (!errore && (v = readdir(dir))) {
+        if (!strcmp(v->d_name, ".") || !strcmp(v->d_name, "..")) continue;
+        int m = attacca(p, l, v->d_name);
+        if (m < 0) { errore = m; break; }
+        struct stat s;
+        (*quanti)++;
+        if (lstat(p, &s) == 0 && S_ISDIR(s.st_mode)) errore = conta_albero(p, m, profondita + 1, quanti);
+        p[l] = 0;
+    }
+    closedir(dir);
+    return errore;
+}
+
+int conta_dentro(const char *percorso, unsigned long long *quanti) {
+    char vero[MAX_VERO];
+    int e = percorso_vero(percorso, vero);
+    if (e < 0) return e;
+    *quanti = 0;
+    return conta_albero(vero, (int)strlen(vero), 0, quanti);
+}
+
+/* Toglie tutto quello che c'e' in p e poi p. Il primo errore si ricorda, ma si continua. */
+static int cancella_albero(char *p, int l, int profondita) {
+    int errore = 0;
+    struct stat s;
+    if (lstat(p, &s) < 0) return errore_file(errno);
+    if (!S_ISDIR(s.st_mode)) return unlink(p) < 0 ? errore_file(errno) : 0;
+    if (profondita > MAX_PROFONDITA) return ERRORE_NOME;
+    DIR *dir = opendir(p);
+    if (!dir) return errore_file(errno);
+    /* prima si legge tutto l'elenco: togliere mentre si legge puo' saltare delle voci */
+    int quanti = 0, capienza = 0;
+    char (*nomi)[MAX_NOME_FILE] = 0;
+    struct dirent *v;
+    while ((v = readdir(dir))) {
+        if (!strcmp(v->d_name, ".") || !strcmp(v->d_name, "..") || strlen(v->d_name) >= MAX_NOME_FILE) continue;
+        if (quanti == capienza) {
+            capienza = capienza ? 2 * capienza : 16;
+            void *piu = realloc(nomi, (size_t)capienza * sizeof *nomi);
+            if (!piu) { errore = ERRORE_MEMORIA; break; }
+            nomi = piu;
+        }
+        strcpy(nomi[quanti++], v->d_name);
+    }
+    closedir(dir);
+    for (int i = 0; i < quanti; i++) {
+        int m = attacca(p, l, nomi[i]);
+        int e = m < 0 ? m : cancella_albero(p, m, profondita + 1);
+        if (e < 0 && !errore) errore = e;
+        p[l] = 0;
+    }
+    free(nomi);
+    if (errore) return errore;     /* qualcosa e' rimasto: la cartella non e' vuota */
+    return rmdir(p) < 0 ? errore_file(errno) : 0;
+}
+
+int cancella_tutto(const char *percorso) {
+    char vero[MAX_VERO];
+    int e = percorso_vero(percorso, vero);
+    if (e < 0) return e;
+    return cancella_albero(vero, (int)strlen(vero), 0);
+}
+
+static int copia_file(const char *da, const char *a, mode_t modo) {
+    int f = open(da, O_RDONLY | O_CLOEXEC);
+    if (f < 0) return errore_file(errno);
+    int g = open(a, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, modo & 0777);
+    if (g < 0) { int e = errore_file(errno); close(f); return e; }
+    static char blocco[4096];
+    int errore = 0;
+    for (;;) {
+        ssize_t n = read(f, blocco, sizeof blocco);
+        if (n < 0) { if (errno == EINTR) continue; errore = errore_file(errno); break; }
+        if (n == 0) break;
+        for (ssize_t k = 0; k < n && !errore;) {
+            ssize_t w = write(g, blocco + k, (size_t)(n - k));
+            if (w < 0) { if (errno == EINTR) continue; errore = errore_file(errno); }
+            else k += w;
+        }
+        if (errore) break;
+    }
+    close(f);
+    if (close(g) < 0 && !errore) errore = errore_file(errno);
+    return errore;
+}
+
+/* Copia la cartella da (lunga ld) in a (lunga la): prima la cartella, poi ogni voce. Per poterci
+ * scrivere dentro, la cartella nasce con i permessi del proprietario; quelli veri a fine lavoro. */
+static int copia_albero(char *da, int ld, char *a, int la, int profondita, mode_t modo) {
+    if (profondita > MAX_PROFONDITA) return ERRORE_NOME;
+    if (mkdir(a, (modo & 07777) | 0700) < 0) return errore_file(errno);
+    DIR *dir = opendir(da);
+    if (!dir) return errore_file(errno);
+    int errore = 0;
+    struct dirent *v;
+    while (!errore && (v = readdir(dir))) {
+        if (!strcmp(v->d_name, ".") || !strcmp(v->d_name, "..")) continue;
+        int md = attacca(da, ld, v->d_name), ma = md < 0 ? md : attacca(a, la, v->d_name);
+        if (md < 0 || ma < 0) { errore = md < 0 ? md : ma; da[ld] = a[la] = 0; break; }
+        struct stat s;
+        if (lstat(da, &s) < 0) errore = errore_file(errno);
+        else if (S_ISDIR(s.st_mode)) errore = copia_albero(da, md, a, ma, profondita + 1, s.st_mode);
+        else if (S_ISREG(s.st_mode)) errore = copia_file(da, a, s.st_mode);
+        else if (S_ISLNK(s.st_mode)) {        /* il collegamento si copia com'e', senza seguirlo */
+            char meta[MAX_VERO];
+            ssize_t n = readlink(da, meta, sizeof meta - 1);
+            if (n < 0) errore = errore_file(errno);
+            else { meta[n] = 0; if (symlink(meta, a) < 0) errore = errore_file(errno); }
+        }                                      /* dispositivi, code: non si copiano */
+        da[ld] = a[la] = 0;
+    }
+    closedir(dir);
+    if (!errore && chmod(a, modo & 07777) < 0) errore = errore_file(errno);
+    return errore;
+}
+
+int copia_cartella(const char *da, const char *a) {
+    char vero_da[MAX_VERO], vero_a[MAX_VERO];
+    int e = percorso_vero(da, vero_da);
+    if (e < 0 || (e = percorso_vero(a, vero_a)) < 0) return e;
+    struct stat s;
+    if (lstat(vero_da, &s) < 0) return errore_file(errno);
+    if (!S_ISDIR(s.st_mode)) return ERRORE_NON_CARTELLA;
+    e = copia_albero(vero_da, (int)strlen(vero_da), vero_a, (int)strlen(vero_a), 0, s.st_mode);
+    if (e < 0 && e != ERRORE_ESISTE) {          /* una copia a meta' non serve */
+        char c[MAX_VERO];
+        memcpy(c, vero_a, strlen(vero_a) + 1);
+        cancella_albero(c, (int)strlen(c), 0);
+    }
+    return e;
 }
 
 int rinomina(const char *da, const char *a) {

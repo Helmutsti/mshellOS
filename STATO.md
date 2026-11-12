@@ -261,8 +261,12 @@ di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
   chiudono.
 - **Scorciatoie**: Invio (apre, conferma il nome), F2, Ctrl+D, Ctrl+I, Canc, Ctrl+Maiusc+N,
   Esc (chiude il menu, annulla il nome nuovo, toglie la scelta).
-- **Azioni sui file**: rinomina nel posto, nuova cartella, duplica (solo file), elimina (file e
-  cartelle vuote). Se un'azione non riesce compare un piccolo avviso in basso.
+- **Azioni sui file**: rinomina nel posto, nuova cartella, duplica (file e cartelle, anche piene: la
+  cartella si copia con tutto il contenuto), elimina (file, cartelle vuote e cartelle piene: per le
+  piene prima compare l'avviso di UIKit "Eliminare \"nome\"?" che dice quanti elementi ci sono
+  dentro, e solo con "Elimina" si toglie tutto; i collegamenti simbolici non si seguono; se
+  qualcosa non si riesce a togliere resta dov'è e compare il piccolo avviso in basso). Se un'azione
+  non riesce compare un piccolo avviso in basso.
 - **Icona dell'app** dal disegno (SVG 96 e PNG 32 e 18, chiara e scura) nel `manifest.toml`.
 - Prova `files` aggiornata (anche le scorciatoie, la mini finestra, la cartella vuota). Le foto
   di riferimento `test/riferimenti/*/files_*.png` sono quelle di prima: vanno rifatte dopo
@@ -271,7 +275,6 @@ di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
 
 **Non c'è ancora**:
 - aprire i file che non sono cartelle (non esiste ancora un visore: "Apri" è grigio);
-- eliminare cartelle piene e duplicare cartelle;
 - (fatto) i percorsi arrivano a 4096 lettere come su Linux (`MAX_PERCORSO`; i nomi a 255,
   `MAX_NOME_FILE`): la cartella dal nome lungo di Documenti ora si apre. I messaggi del
   launcher hanno posto per un percorso intero (`MAX_MESSAGGIO` 5120); il percorso del
