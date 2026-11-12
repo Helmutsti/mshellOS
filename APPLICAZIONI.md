@@ -128,12 +128,90 @@ e la persona ne viene informata.
 - Il toolkit mostra le due cose come una sola: l'app può chiedere "che permessi ho?", ma non può
   cambiarli.
 
-## 9. Sul tavolo
+## 9. Elenco minimo di servizi, permessi, deviazioni e ruoli
+
+Prima proposta, scritta il 12 novembre 2026 su incarico della persona. È volutamente piccola: si
+allarga quando arriva un'app che ha davvero bisogno di qualcosa in più.
+
+**Principio:** quello che fa ogni app normale non chiede permessi. Si chiede il permesso solo per
+quello che tocca le cose della persona o il sistema intero.
+
+### La base: ogni app ce l'ha, senza chiedere
+
+| Cosa | Servizio | Note |
+|---|---|---|
+| Aprire finestre, disegnarci, ricevere tastiera e mouse nelle proprie finestre | compositore | lo standard di ogni app |
+| La propria cartella dei dati e il proprio database | (disco) | una per persona, nel suo mondo isolato |
+| Leggere tema (chiaro/scuro), lingua, ora | impostazioni, ora | solo lettura |
+| Usare font e icone del sistema | (disco) | `/system/resources`, sola lettura |
+| Aprire **un file scelto dalla persona** | selettore dei file | il sistema mostra la finestra "Apri"/"Salva"; l'app riceve solo quel file. Così la maggior parte delle app non ha bisogno del permesso sui file (come macOS e iPhone) |
+| Chiedere al sistema di condividere o di passare una richiesta a un ruolo | sistema | è la persona a scegliere a chi va |
+
+### Permessi normali: li concede la persona al primo avvio
+
+| Permesso | Cosa permette |
+|---|---|
+| `file.leggere` | leggere tutti i file della persona (la sua Home) |
+| `file.scrivere` | leggere e modificare tutti i file della persona (comprende `file.leggere`) |
+| `notifiche` | mandare notifiche |
+| `rete` | usare la rete e internet (oggi l'app non vede nessuna rete) |
+| `audio` | riprodurre suoni (quando il sistema avrà l'audio) |
+
+### Permessi di sistema: poteri sul sistema intero
+
+Toccano tutte le app o tutto il computer. Proposta: oggi li ricevono solo le app del sistema
+(in `/system/apps`); quando ci saranno le firme, anche le app firmate da uno sviluppatore
+autorizzato. È la proposta delle "chiavi a due livelli", ancora da confermare (vedi sotto).
+
+| Permesso | Cosa permette | Chi lo usa oggi |
+|---|---|---|
+| `processi` | vedere i programmi in esecuzione e fermarli | Attività |
+| `impostazioni.sistema` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
+| `spegnimento` | spegnere e riavviare il computer | (scrivania) |
+| `app.gestire` | installare, aggiornare e togliere app | (il futuro installatore) |
+
+### Deviazioni dallo standard: si dichiarano, la persona viene informata
+
+| Deviazione | Cosa vuol dire | Cosa vede la persona |
+|---|---|---|
+| `senza_finestra` | l'app non mostra nessuna interfaccia | un avviso all'installazione; l'app compare tra quelle attive in Attività |
+| `sottofondo` | l'app resta accesa dopo che chiudi la finestra | un avviso all'installazione e un segno sempre visibile finché è accesa |
+| `avvio_automatico` | l'app parte da sola quando la persona entra | un avviso all'installazione; si spegne dalle Impostazioni |
+| `schermo_intero` | l'app può coprire tutto lo schermo, barra compresa | un avviso all'installazione; c'è sempre un tasto per uscire |
+
+### Ruoli e funzioni obbligatorie
+
+Ogni funzione dice cosa riceve l'app e cosa deve fare. Un'app viene proposta per un ruolo solo se
+offre **tutte** le funzioni obbligatorie.
+
+| Ruolo | Funzioni obbligatorie | Esempio oggi |
+|---|---|---|
+| **file** (gestore dei file) | `file.apri_cartella` (riceve un percorso, mostra la cartella) · `file.mostra` (riceve un file, lo mostra selezionato nella sua cartella) | Files |
+| **browser** | `web.apri` (riceve un indirizzo http/https e lo apre) | — |
+| **mail** | `mail.scrivi` (riceve destinatari, oggetto, testo e allegati facoltativi, e apre una mail nuova pronta da mandare; non la manda da sola) | — |
+| **immagini** | `immagine.apri` (riceve un file immagine e lo mostra) | — |
+| **testo** | `testo.apri` (riceve un file di testo e lo apre per modificarlo) · `testo.nuovo` (apre un testo vuoto) | — |
+| **terminale** | `terminale.apri` (apre un terminale in una cartella data) | — |
+
+Il ruolo **firewall** resta fuori finché non si decide il lavoro in sottofondo: un firewall deve
+restare sempre acceso e controllare la rete di tutto il sistema.
+
+### Le app di oggi con questo elenco
+
+| App | Permessi | Deviazioni | Ruoli |
+|---|---|---|---|
+| Files | `file.scrivere` | — | file |
+| Attività | `processi` (di sistema) | — | — |
+| Impostazioni | `impostazioni.sistema` (di sistema) | — | — |
+| Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |
+| Contatore, Esempio | — | — | — |
+
+## 10. Sul tavolo
 
 Da decidere, più o meno in quest'ordine:
 
-1. **L'elenco dei servizi, dei permessi e dei ruoli** del sistema, con le funzioni obbligatorie di
-   ogni ruolo.
+1. **Confermare l'elenco minimo** qui sopra, in particolare i permessi di sistema solo per le app
+   del sistema.
 2. **Il lavoro in sottofondo**: se un'app lo può dichiarare liberamente, solo per i ruoli che lo
    prevedono, o solo se firmata da uno sviluppatore autorizzato (chiavi a due livelli). Riguarda
    ruoli come "firewall", che non possono essere app che si aprono e si chiudono con la finestra.

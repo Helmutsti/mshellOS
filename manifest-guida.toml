@@ -9,6 +9,8 @@
 #  Il manifesto si chiama "manifest.toml" e sta dentro il pacchetto .app.
 #  È scritto in TOML: righe "chiave = valore", sezioni tra parentesi quadre,
 #  elenchi tra [ ], testi tra virgolette. Le righe che cominciano con # sono commenti.
+#  Attenzione: tutto quello che sta sotto una sezione [nome] appartiene a quella
+#  sezione, quindi le voci semplici vanno prima e le sezioni (come [icone]) in fondo.
 #
 #  Le voci segnate "DA DECIDERE" esistono già come idea, ma i valori possibili
 #  non sono ancora stabiliti: quelli scritti qui sono solo esempi.
@@ -56,6 +58,81 @@ sistema_minimo = 1
 programma = "code"
 
 
+# --- Permessi: cosa l'app CHIEDE al sistema ----------------------------------
+#
+# L'elenco dei servizi del sistema che l'app vuole usare. Al primo avvio il
+# sistema li chiede tutti insieme alla persona; dopo, si possono spegnere dalle
+# Impostazioni.
+#
+# Per ogni permesso concesso, il sistema apre un canale tra l'app e quel
+# servizio. Senza canale l'app non può nemmeno chiedere. Il toolkit nasconde
+# tutto questo: chi sviluppa chiama le funzioni normali, e se un permesso manca
+# riceve un errore chiaro.
+#
+# REGOLA: l'app deve funzionare (o spiegare cosa non va) anche se la persona
+# dice no a uno o più permessi.
+#
+# Senza permessi l'app ha già la base: le sue finestre, la sua cartella dei
+# dati, tema/lingua/ora in lettura, e i file che la persona sceglie dalla
+# finestra "Apri"/"Salva" del sistema. Spesso non serve chiedere altro.
+#
+# Permessi normali (li concede la persona):
+#   "file.leggere"   leggere tutti i file della persona
+#   "file.scrivere"  leggere e modificare tutti i file della persona
+#   "notifiche"      mandare notifiche
+#   "rete"           usare la rete e internet
+#   "audio"          riprodurre suoni
+# Permessi di sistema (oggi solo per le app del sistema):
+#   "processi", "impostazioni.sistema", "spegnimento", "app.gestire"
+#
+# L'elenco completo e le regole sono in APPLICAZIONI.md (sezione 9).
+
+permessi = ["file.leggere", "notifiche"]
+
+
+# --- Deviazioni dallo standard -----------------------------------------------
+#
+# Lo standard è: l'app ha una finestra, lavora mentre la finestra è aperta e si
+# ferma quando la chiudi. Tutto quello che si allontana da questo va dichiarato
+# qui. Non c'è niente di male, ma la persona ne viene informata.
+#
+# Se un'app si comporta in modo diverso senza averlo dichiarato (per esempio
+# non apre nessuna finestra) il sistema se ne accorge e la ferma o avvisa.
+#
+# Deviazioni possibili (si scrivono solo quelle che servono):
+#   "senza_finestra"    l'app non mostra nessuna interfaccia grafica
+#   "sottofondo"        l'app resta accesa anche quando la finestra è chiusa
+#   "avvio_automatico"  l'app parte da sola quando la persona entra
+#   "schermo_intero"    l'app può coprire tutto lo schermo, barra compresa
+#
+# Un'app normale come questa non ha deviazioni: l'elenco è vuoto.
+
+deviazioni = []
+
+
+# --- Funzioni: cosa l'app OFFRE (per i ruoli) --------------------------------
+#
+# Un ruolo (per esempio "mail" o "firewall") è un insieme di funzioni, con un
+# minimo obbligatorio. Se l'app offre tutte le funzioni obbligatorie di un
+# ruolo, la persona la può scegliere per quel ruolo; se ne mancano, non viene
+# proposta.
+#
+# Le app non si parlano mai direttamente: quando un'app chiede "scrivi una
+# nota", è il sistema che consegna la richiesta all'app del ruolo giusto.
+#
+# Ruoli e funzioni obbligatorie (APPLICAZIONI.md, sezione 9):
+#   file       "file.apri_cartella", "file.mostra"
+#   browser    "web.apri"
+#   mail       "mail.scrivi"
+#   immagini   "immagine.apri"
+#   testo      "testo.apri", "testo.nuovo"
+#   terminale  "terminale.apri"
+#
+# Questa app di note sa aprire e creare testi, quindi copre il ruolo "testo".
+
+funzioni = ["testo.apri", "testo.nuovo"]
+
+
 # --- Icone -------------------------------------------------------------------
 #
 # Un disegno SVG per ogni tema (chiaro e scuro), che va bene a qualsiasi misura.
@@ -73,59 +150,6 @@ png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.pn
 [icone.scuro]
 svg = "resources/icona-scura.svg"
 png = { 18 = "resources/icona-scura-18.png" }   # manca la 32: si rimpicciolisce l'SVG
-
-
-# --- Permessi: cosa l'app CHIEDE al sistema ----------------------------------
-#
-# L'elenco dei servizi del sistema che l'app vuole usare. Al primo avvio il
-# sistema li chiede tutti insieme alla persona; dopo, si possono spegnere dalle
-# Impostazioni.
-#
-# Per ogni permesso concesso, il sistema apre un canale tra l'app e quel
-# servizio. Senza canale l'app non può nemmeno chiedere. Il toolkit nasconde
-# tutto questo: chi sviluppa chiama le funzioni normali, e se un permesso manca
-# riceve un errore chiaro.
-#
-# REGOLA: l'app deve funzionare (o spiegare cosa non va) anche se la persona
-# dice no a uno o più permessi.
-#
-# L'elenco dei permessi possibili è DA DECIDERE. Questi sono esempi.
-
-[permessi]
-file = "leggere"            # i file della persona: "leggere" oppure "scrivere"
-notifiche = true            # mandare notifiche
-
-
-# --- Deviazioni dallo standard -----------------------------------------------
-#
-# Lo standard è: l'app ha una finestra, lavora mentre la finestra è aperta e si
-# ferma quando la chiudi. Tutto quello che si allontana da questo va dichiarato
-# qui. Non c'è niente di male, ma la persona ne viene informata.
-#
-# Se un'app si comporta in modo diverso senza averlo dichiarato (per esempio
-# non apre nessuna finestra) il sistema se ne accorge e la ferma o avvisa.
-#
-# L'elenco delle deviazioni è DA DECIDERE. Questi sono esempi.
-
-[deviazioni]
-senza_finestra = false      # l'app non mostra nessuna interfaccia grafica
-sottofondo = false          # l'app resta accesa anche quando la finestra è chiusa
-
-
-# --- Funzioni: cosa l'app OFFRE (per i ruoli) --------------------------------
-#
-# Un ruolo (per esempio "mail" o "firewall") è un insieme di funzioni, con un
-# minimo obbligatorio. Se l'app offre tutte le funzioni obbligatorie di un
-# ruolo, la persona la può scegliere per quel ruolo; se ne mancano, non viene
-# proposta.
-#
-# Le app non si parlano mai direttamente: quando un'app chiede "scrivi una
-# nota", è il sistema che consegna la richiesta all'app del ruolo giusto.
-#
-# L'elenco dei ruoli e delle loro funzioni è DA DECIDERE. Questi sono esempi.
-
-[funzioni]
-offerte = ["note.nuova", "note.apri"]
 
 
 # --- Tipi di file che l'app sa aprire ----------------------------------------
