@@ -46,13 +46,13 @@ INDIETRO = (24, 58)
 A_ICONE, A_ELENCO = (562, 58), (588, 58)
 RICERCA = (700, 58)
 RADICE = (88, 58)               # il primo nome del percorso fuori dalla casa ("Disco")
-HOME, SCRIVANIA, APPS = (60, 132), (60, 166), (60, 200)
+HOME, SCRIVANIA, APPS = (60, 141), (60, 177), (60, 213)
 VUOTO = (520, 420)             # un punto del contenuto dove non c'e' niente (sotto i file)
 
 
 def elemento(k):
     """Il centro dell'icona del k-esimo elemento (vista a icone)."""
-    return 242 + (k % 6) * 92, 134 + (k // 6) * 116
+    return 264 + (k % 5) * 104, 133 + (k // 5) * 124
 
 
 def doppio_clic(m, x, y):
@@ -148,11 +148,16 @@ def esegui(p):
     # si apre lo Store con la richiesta di installazione (nel secondo posto, 560 x 480): lo
     # si chiude con la sua X (la prova store lo prova tutto)
     m.aspetta_seriale("store: richiesta di installazione: contatore", attesa=20.0)
+    m.muovi(*PUNTO_VUOTO)
+    m.aspetta_che(lambda f: s.segno_sotto(f, "Store") > 0, 10.0, cosa="lo Store aperto nell'isola")
+    time.sleep(0.5)
+    m.aspetta_schermo_fermo()
     m.foto("pacchetto_nello_store")
     sx, sy = s.angolo(1)
     m.clic(*s.comandi(sx, sy, 560)[1])
     m.muovi(*PUNTO_VUOTO)
-    s.aspetta_zona(m, scrivania_files, corpo, attesa=10.0, cosa="lo Store chiuso")
+    # (non si confronta il corpo con com'era: dopo il doppio clic contatore.app resta scelto)
+    m.aspetta_che(lambda f: s.segno_sotto(f, "Store") == 0, 10.0, cosa="lo Store chiuso")
     p.controlla(s.segno_sotto(m.aspetta_schermo_fermo(), "Files") > 0, "Files non e' piu' aperta")
 
     # --- errore: la cartella dal nome troppo lungo, in Documenti ---
@@ -201,16 +206,16 @@ def esegui(p):
     mx, my = 250, 300                                                   # sul vuoto (sotto la prima riga)
     clic_destro(m, wx + mx, wy + my)
     menu_cartella = cambia(casa, "il menu della cartella", finestra)
-    m.muovi(wx + mx + 100, wy + my + 6 + 28 + 2 + 9 + 2 + 14)           # sopra "Ordina per"
+    m.muovi(wx + mx + 100, wy + my + 8 + 40 + 9 + 19)           # sopra "Ordina per"
     time.sleep(0.3)
-    m.muovi(wx + mx + 100, wy + my + 6 + 28 + 2 + 9 + 2 + 15)
+    m.muovi(wx + mx + 100, wy + my + 8 + 40 + 9 + 20)
     sottomenu = m.aspetta_schermo_fermo()
     m.foto("menu_cartella")
     p.controlla(not s.zona_uguale(menu_cartella, sottomenu, finestra), "il sottomenu 'Ordina per' non si apre")
     p.riferimento("files_menu_cartella", sottomenu, maschera=[(695, 25, 845, 50)])
 
     # --- nuova cartella, rinomina, elimina ---
-    m.clic(wx + mx + 100, wy + my + 6 + 14)                             # "Nuova cartella"
+    m.clic(wx + mx + 100, wy + my + 8 + 20)                             # "Nuova cartella"
     m.muovi(*PUNTO_VUOTO)
     nuova = cambia(casa, "la cartella nuova")
     m.foto("nuova_cartella")
@@ -224,7 +229,7 @@ def esegui(p):
     x, y = elemento(2)
     clic_destro(m, wx + x, wy + y)
     cambia(prova, "il menu su Prova", finestra)
-    m.clic(wx + x + 80, wy + y + 6 + 28 + 2 + 9 + 2 + 14)               # "Rinomina"
+    m.clic(wx + x + 80, wy + y + 8 + 40 + 9 + 20)               # "Rinomina"
     m.muovi(*PUNTO_VUOTO)
     time.sleep(0.5)
     cancella(m, len("Prova"))
@@ -237,7 +242,7 @@ def esegui(p):
     x, y = elemento(1)
     clic_destro(m, wx + x, wy + y)
     cambia(esempi, "il menu su Esempi", finestra)
-    m.clic(wx + x + 80, wy + y + 6 + 4 * 28 + 2 * 9 + 6 * 2 + 14)       # "Elimina"
+    m.clic(wx + x + 80, wy + y + 8 + 4 * 40 + 2 * 9 + 20)       # "Elimina"
     m.muovi(*PUNTO_VUOTO)
     s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa com'era, dopo Elimina")
 
@@ -245,7 +250,7 @@ def esegui(p):
     x, y = elemento(0)                                                  # Documenti
     clic_destro(m, wx + x, wy + y)
     cambia(casa, "il menu su Documenti", finestra)
-    m.clic(wx + x + 80, wy + y + 6 + 4 * 28 + 2 * 9 + 6 * 2 + 14)
+    m.clic(wx + x + 80, wy + y + 8 + 4 * 40 + 2 * 9 + 20)
     m.muovi(*PUNTO_VUOTO)
     avviso = cambia(casa, "l'avviso 'solo le cartelle vuote'")
     m.foto("avviso")
@@ -258,7 +263,7 @@ def esegui(p):
     x, y = elemento(4)                                                  # leggimi.txt
     clic_destro(m, wx + x, wy + y)
     cambia(casa, "il menu su leggimi.txt", finestra)
-    m.clic(wx + x + 80, wy + y + 6 + 3 * 28 + 9 + 4 * 2 + 14)           # "Informazioni"
+    m.clic(wx + x + 80, wy + y + 8 + 3 * 40 + 9 + 20)           # "Informazioni"
     m.muovi(*PUNTO_VUOTO)
     scheda = cambia(casa, "la scheda delle informazioni", finestra)
     m.foto("informazioni")
@@ -268,10 +273,10 @@ def esegui(p):
     s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la scheda chiusa")
 
     # --- un filtro (Testi): resta solo leggimi.txt; un altro clic lo spegne ---
-    clic((60, 299))
+    clic((60, 317))
     testi = cambia(casa, "il filtro Testi")
     m.foto("filtro_testi")
-    clic((60, 299))
+    clic((60, 317))
     s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="il filtro spento")
 
     # --- la tastiera: Documenti scelta, Invio la apre ---

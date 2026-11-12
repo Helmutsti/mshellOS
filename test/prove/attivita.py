@@ -7,7 +7,7 @@ LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 69,6 MB su 1972,1 
 totale e' quello che Linux dice in /proc/meminfo (MemTotal: la RAM meno quello che il
 kernel tiene per se' fin dall'avvio): 1972 MB sul PC con 2 GB, 7946 con --ram 8192. Per leggerlo senza un vero lettore di testo
 (OCR) si fa cosi':
-  - si prende la riga, e si tengono solo i pixel chiari (il testo e' bianco);
+  - si prende la riga, e si tengono solo i pixel scuri (il testo e' scuro, il tema e' chiaro);
   - si divide in PAROLE (colonne vuote larghe) e ogni parola in LETTERE (colonne vuote);
   - le ultime due parole sono il totale ("2041,7") e "MB"; del totale si tiene la parte
     prima della virgola ("2041"): la virgola e' la lettera che sta tutta in basso;
@@ -37,9 +37,9 @@ RIFERIMENTI = True
 RIGA_ESEMPIO = 5        # 0 init, 1 eventi, 2 compositore, 3 launcher, 4 scrivania
 
 
-def inchiostro(foto, area, soglia=170):
-    """La zona in bianco e nero: 255 dove c'e' testo chiaro."""
-    return foto.crop(area).convert("L").point(lambda v: 255 if v > soglia else 0)
+def inchiostro(foto, area, soglia=120):
+    """La zona in bianco e nero: 255 dove c'e' testo scuro (il tema e' chiaro)."""
+    return foto.crop(area).convert("L").point(lambda v: 255 if v < soglia else 0)
 
 
 def colonne_piene(bn):
@@ -90,9 +90,9 @@ def esegui(p):
     x, y = s.angolo(1)
 
     # --- la memoria ---
-    m.clic(x + 125, y + 58)                    # la scheda "Memoria", nella barra degli strumenti
+    m.clic(x + 128, y + 61)                    # la scheda "Memoria", nel selettore sotto il titolo
     m.muovi(*PUNTO_VUOTO)
-    riga = (x + 20, y + 95, x + 620, y + 120)
+    riga = (x + 20, y + 105, x + 620, y + 128)
     # la riga compare quando Attivita ha ridisegnato: si aspetta che ci sia testo
     f = m.aspetta_che(lambda f: inchiostro(f, riga).getbbox() is not None, 5.0,
                       cosa="la riga 'In uso ... su ...' nella scheda Memoria")
@@ -105,11 +105,11 @@ def esegui(p):
         raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
                           "memoria_totale_ottenuta.png e la foto 'memoria'") from None
     # --- terminare Esempio ---
-    m.clic(x + 49, y + 58)                     # la scheda "Processi"
+    m.clic(x + 53, y + 61)                     # la scheda "Processi"
     time.sleep(0.5)
-    m.clic(x + 150, y + 147 + 30 * RIGA_ESEMPIO)
+    m.clic(x + 150, y + 162 + 44 * RIGA_ESEMPIO)    # le righe sono alte 44, la prima ha il centro a 162
     time.sleep(0.3)
-    m.clic(x + 616, y + 58)                    # "Termina processo": la X nella barra
+    m.clic(x + 611, y + 61)                    # "Termina processo": la X a destra delle schede
     m.muovi(*PUNTO_VUOTO)
     cx, cy = s.angolo(0)
     # la barra di Esempio, sopra Attivita (e lontano dalla sua ombra)
