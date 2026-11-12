@@ -129,6 +129,45 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
 - Attività legge processi e memoria da `/proc`, e lo spazio su disco con `statvfs`.
 - Tutti i programmi sono statici, con la libreria C musl, compilati con clang.
 
+**Come si disegna: solo quello che cambia** (le "zone rovinate", come in Wayland, GTK e macOS)
+
+- **Nell'app (UIKit).** Un widget che cambia lo dice con `widget_cambiato` (tutto il suo spazio,
+  più i 24 pixel che può sbordare) o `widget_cambiato_zona` (solo un pezzo: la riga di una
+  tabella, il tile di una griglia, la voce di un menu o della barra laterale). La finestra
+  raccoglie le zone (al massimo 8; quelle che si toccano diventano una) e al ridisegno rifà
+  **solo loro**: per ogni zona ritaglia il pennello lì e disegna l'albero dal fondo, saltando i
+  widget che non la toccano. Il risultato è uguale pixel per pixel a un ridisegno intero.
+  `uikit_ridisponi` (impaginazione cambiata) e l'avviso (il velo) rifanno tutto. Un widget
+  nascosto, o in una pagina nascosta, non chiede niente.
+- **Le due immagini.** L'immagine libera è quella di due fotogrammi fa: GKit tiene per ognuna le
+  zone che le mancano (`finestra_arretrate`) e UIKit le rifà insieme a quelle nuove.
+- **Il protocollo.** `MOSTRA` porta le zone cambiate (`finestra_mostra_zone`, in `gkit.h`; 0 zone =
+  tutta la finestra, come fa Doom con `finestra_mostra`). Il compositore somma le zone dei
+  `MOSTRA` arrivati tra una composizione e l'altra e ricompone solo quei rettangoli dello
+  schermo. Il vetro smerigliato di ogni finestra (la sfocatura già ingrandita) è tenuto da parte
+  e si rifà solo quando la finestra si sposta o cambia quello che c'è dietro.
+- **Le notizie a gruppi.** Il ciclo degli eventi (`uikit_esegui`) serve tutte le notizie arrivate
+  prima di ridisegnare, una volta sola; dei movimenti del puntatore di fila conta l'ultimo. Se
+  le due immagini sono tutte e due del compositore non lo aspetta: continua a servire le notizie
+  finché una torna libera.
+- **Gli strumenti di disegno** (`gkit_disegno.h`) lavorano solo dentro il ritaglio, e le forme
+  arrotondate calcolano la distanza dal bordo solo vicino agli angoli e ai lati: il centro di
+  ogni riga si riempie diritto. Provato su più di un milione di casi a caso: stessi byte di prima.
+- **Attività** ridisegna ogni secondo solo le righe il cui testo è cambiato, e la barra e la
+  legenda solo se cambiano i numeri scritti o i pixel della barra; le schede nascoste niente.
+- Tempi nella sandbox, prima → dopo (un cambio sotto il puntatore, app + compositore): icona di
+  Files 7,2 + 3,6 ms → 0,4 + 0,4 ms; riga di Files 11,2 + 3,5 → 0,4 + 0,6; riga di Attività
+  12,8 + 3,7 → 0,4 + 0,8; aprire un menu 12,5 + 3,5 → 1,6 + 0,8; Attività ferma: un ridisegno
+  intero al secondo → niente. Trascinare una finestra resta come prima (8,5 ms a passo, tutto
+  nel compositore: ombra e sfocatura nel posto nuovo).
+
+**Il puntatore e le finestre dietro.** Una finestra che non ha il fuoco non sente il puntatore
+che passa: riceve solo il clic (che la porta davanti e le dà il fuoco) e la rotella (che la fa
+scorrere senza portarla davanti). Così nelle finestre dietro non si accende niente. Quando il
+puntatore esce dalla finestra col fuoco, o lei perde il fuoco, riceve `USCITO` e spegne quello
+che aveva acceso (anche la voce di un menu aperto). I pannelli della scrivania (userbar,
+vassoio) il puntatore lo sentono sempre.
+
 **Le cartelle del progetto**
 
 | cartella | cosa c'è |
@@ -292,6 +331,8 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 - La scrivania è quella della pagina "Scrivania" di Figma: userbar a sinistra e vassoio delle
   app (la pagina "Userbar – idea Isole" è superata).
 - La voce "Elimina" dei menu è bianca.
+- Le finestre senza fuoco ricevono solo il clic e la rotella, non il puntatore che passa:
+  niente illuminato nelle finestre dietro (vedi la sezione 4).
 
 ## 8. Da confermare (domande che aspettano la persona)
 

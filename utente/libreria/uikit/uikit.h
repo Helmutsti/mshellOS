@@ -56,6 +56,20 @@
  * quando succede qualcosa che le interessa ("quando premono questo pulsante, chiama
  * questa funzione": in GTK i segnali, in AppKit target-action).
  *
+ * SI RIDISEGNA SOLO QUELLO CHE E' CAMBIATO (le "zone rovinate" di GTK, AppKit e Wayland). Un
+ * widget che cambia lo dice con widget_cambiato (tutto il suo spazio, con i 24 pixel che puo'
+ * sbordare) o widget_cambiato_zona (solo un pezzo: la riga di una tabella sotto il
+ * puntatore). La finestra raccoglie queste zone e al ridisegno rifa' SOLO LORO: per ognuna si
+ * ritaglia il pennello li' e si disegna tutto l'albero, dal fondo della finestra in su, ma i
+ * widget che non toccano la zona si saltano e le forme grandi (il vetro, i pannelli) costano
+ * solo nel ritaglio. Il risultato e' lo stesso, pixel per pixel, di un ridisegno intero,
+ * perche' ogni pixel dipende solo da quello che c'e' in lui. Poi la finestra dice al
+ * compositore quali zone sono cambiate (finestra_mostra_zone), e lui ricompone solo li'.
+ * Quando cambia l'impaginazione (uikit_ridisponi) si rifa' tutto.
+ * Le notizie si consegnano TUTTE prima di ridisegnare: quelle arrivate mentre si disegnava si
+ * servono insieme, e si ridisegna una volta sola (i movimenti del puntatore di mezzo non si
+ * vedrebbero: conta l'ultimo).
+ *
  * IL TEMPO. Un'applicazione che deve aggiornarsi da sola (un orologio, il task manager)
  * chiede a UIKit di chiamarla ogni tanto: finestra_tk_ogni(&finestra, 1000, f, dati).
  * Il ciclo allora non dorme senza limite: aspetta le notizie fino alla prima scadenza.
@@ -150,6 +164,10 @@ static inline void widget_disponi(struct widget *w) {
 
 static inline void widget_disegna(struct widget *w, struct pennello *p) {
     if (w->nascosto) return;
+    /* tutto quello che il widget (e i suoi figli) disegna sta nel suo spazio piu' lo sbordo:
+     * se quello non tocca il ritaglio (la zona che si sta ridisegnando), non c'e' niente da fare */
+    if (w->x + w->l + WIDGET_SBORDO <= p->s.rx || w->x - WIDGET_SBORDO >= p->s.rx2 ||
+        w->y + w->a + WIDGET_SBORDO <= p->s.ry || w->y - WIDGET_SBORDO >= p->s.ry2) return;
     pennello_salva(p);
     pennello_ritaglia(p, w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO,
                      w->l + 2 * WIDGET_SBORDO, w->a + 2 * WIDGET_SBORDO);   /* anelli e ombre sbordano */
@@ -184,19 +202,48 @@ static inline struct widget *widget_in(struct widget *w, int x, int y) {
     return w;
 }
 
-/* Un widget e' cambiato (un testo nuovo, un pulsante premuto): la finestra va
- * ridisegnata. Si risale l'albero fino alla finestra. (Piu' sotto, con la finestra.) */
+/* Un widget e' cambiato (un testo nuovo, un pulsante premuto): va ridisegnato il suo spazio
+ * (con lo sbordo). Si risale l'albero fino alla finestra, che si segna la zona. Un widget
+ * nascosto (o dentro uno nascosto) non si vede: niente da ridisegnare. (Piu' sotto, con la
+ * finestra.) */
 static inline void widget_cambiato(struct widget *w);
+
+/* Solo un pezzo del widget e' cambiato: il rettangolo (x, y, l, a), in coordinate della
+ * finestra (la parte fuori dal widget e dal suo sbordo non conta). */
+static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, int a);
+
+/* Il widget si vede: ne' lui ne' chi lo contiene e' nascosto. */
+static inline int widget_visibile(const struct widget *w) {
+    for (; w; w = w->genitore)
+        if (w->nascosto) return 0;
+    return 1;
+}
 
 static inline void widget_disabilita(struct widget *w, int disabilitato) {
     w->disabilitato = disabilitato;
     widget_cambiato(w);
 }
 
-/* Mostra o nasconde un widget. Lo spazio si ridistribuisce con uikit_ridisponi. */
+static inline void widget_segna(struct widget *w);   /* piu' sotto: il suo spazio, sempre */
+
+/* Mostra o nasconde un widget. Lo spazio si ridistribuisce con uikit_ridisponi. Il posto
+ * dove stava (o dove sta) si ridisegna anche se adesso e' nascosto. */
 static inline void widget_nascondi(struct widget *w, int nascosto) {
     w->nascosto = nascosto;
-    widget_cambiato(w);
+    if (!w->genitore || widget_visibile(w->genitore)) widget_segna(w);
+}
+
+/* Di quanto un'ombra a strati esce dalla sua forma, al massimo (per sapere cosa ridisegnare
+ * quando la forma compare o sparisce). */
+static inline int ombra_sporgenza(const struct strato_ombra *strati, int n) {
+    int massimo = 0;
+    for (int i = 0; i < n; i++) {
+        if (strati[i].tipo != OMBRA_ESTERNA) continue;
+        int dx = strati[i].dx < 0 ? -strati[i].dx : strati[i].dx, dy = strati[i].dy < 0 ? -strati[i].dy : strati[i].dy;
+        int s = (dx > dy ? dx : dy) + strati[i].sfocatura + (strati[i].diffusione > 0 ? strati[i].diffusione : 0) + 2;
+        if (s > massimo) massimo = s;
+    }
+    return massimo;
 }
 
 static inline void copia_testo(char *dove, const char *da, int massimo) {
@@ -1095,7 +1142,10 @@ struct finestra_tk {
     int senza_margine;                 /* 1: il contenuto arriva fino ai bordi (finestra_tk_bordo) */
     struct finestra finestra;          /* il collegamento con il compositore */
     int attiva;                        /* ha il fuoco: e' in primo piano */
-    int da_ridisegnare;
+    int da_ridisegnare;                /* c'e' qualcosa da ridisegnare: le zone qui sotto */
+    struct zona_finestra cambiate[MAX_ZONE_MOSTRA];   /* le zone cambiate dall'ultimo ridisegno */
+    int quante_cambiate;
+    int tutta_cambiata;                /* tutta la finestra (l'impaginazione e' cambiata) */
     struct widget *catturato;          /* il widget su cui si e' premuto */
     struct widget *sotto;              /* quello che ha il puntatore sopra */
     struct widget *con_fuoco;          /* quello che riceve i tasti */
@@ -1148,12 +1198,51 @@ static inline struct finestra_tk *widget_finestra(struct widget *w) {
 
 static const struct tipo_widget tipo_finestra_tk;   /* piu' sotto */
 
+/* LE ZONE DA RIDISEGNARE della finestra (vedi in cima, "si ridisegna solo quello che e'
+ * cambiato"): un rettangolo in piu', in coordinate della finestra. */
+static inline void uikit_cambiata_zona(struct finestra_tk *f, int x, int y, int l, int a) {
+    struct zona_finestra z = zona_dentro((struct zona_finestra){ x, y, l, a },
+                                         (struct zona_finestra){ 0, 0, f->base.l, f->base.a });
+    if (zona_vuota(z)) return;
+    f->da_ridisegnare = 1;
+    if (!f->tutta_cambiata) zone_aggiungi(f->cambiate, &f->quante_cambiate, MAX_ZONE_MOSTRA, z);
+}
+
+/* Tutta la finestra (l'impaginazione e' cambiata, o il tema). */
+static inline void uikit_cambiata_tutta(struct finestra_tk *f) {
+    f->da_ridisegnare = 1;
+    f->tutta_cambiata = 1;
+}
+
+/* La testata (il titolo, i comandi riduci e chiudi), con il suo divisore. */
+static inline void uikit_cambiata_testata(struct finestra_tk *f) {
+    uikit_cambiata_zona(f, 0, 0, f->base.l, testata_altezza(f) + TITOLO_DIVISORE);
+}
+
 /* Se il widget non e' ancora in una finestra (lo si sta preparando, prima di
  * uikit_esegui), non c'e' niente da ridisegnare: la cima del suo albero non e' una
- * finestra, e non la si tocca. */
-static inline void widget_cambiato(struct widget *w) {
+ * finestra, e non la si tocca. La zona si taglia sullo spazio del widget con il suo sbordo:
+ * fuori di li' il widget non disegna. */
+static inline void widget_segna_zona(struct widget *w, int x, int y, int l, int a) {
     struct finestra_tk *f = widget_finestra(w);
-    if (f->base.tipo == &tipo_finestra_tk) f->da_ridisegnare = 1;
+    if (f->base.tipo != &tipo_finestra_tk) return;
+    struct zona_finestra z = zona_dentro((struct zona_finestra){ x, y, l, a },
+                                         (struct zona_finestra){ w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO,
+                                                                 w->l + 2 * WIDGET_SBORDO, w->a + 2 * WIDGET_SBORDO });
+    uikit_cambiata_zona(f, z.x, z.y, z.l, z.a);
+}
+
+static inline void widget_segna(struct widget *w) {
+    widget_segna_zona(w, w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO, w->l + 2 * WIDGET_SBORDO,
+                      w->a + 2 * WIDGET_SBORDO);
+}
+
+static inline void widget_cambiato(struct widget *w) {
+    if (widget_visibile(w)) widget_segna(w);
+}
+
+static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, int a) {
+    if (widget_visibile(w)) widget_segna_zona(w, x, y, l, a);
 }
 
 /* LA FINESTRA, dal file Figma. Sono DUE pezzi separati, uno sopra l'altro:
@@ -1352,7 +1441,7 @@ static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine =
  * finestra stessa, nella sua barra: basta ridisegnarla. */
 static inline void finestra_tk_titolo(struct finestra_tk *f, const char *titolo) {
     copia_testo(f->titolo, titolo, MAX_TITOLO);
-    f->da_ridisegnare = 1;
+    uikit_cambiata_testata(f);
 }
 
 /* LA MINI FINESTRA, per le cose secondarie (informazioni su un file, un avanzamento, uno
@@ -1422,7 +1511,7 @@ static inline void uikit_chiamate_scadute(struct finestra_tk *f) {
 /* Rifa' l'impaginazione dentro la finestra (dopo aver mostrato o nascosto dei widget). */
 static inline void uikit_ridisponi(struct finestra_tk *f) {
     widget_disponi(&f->base);
-    f->da_ridisegnare = 1;
+    uikit_cambiata_tutta(f);
 }
 
 /* --- la barra degli strumenti --- */
@@ -2023,8 +2112,7 @@ static inline void barra_scorrimento_passo(struct finestra_tk *f, void *dati) {
     if (opacita != b->opacita || spessore != b->spessore) {
         b->opacita = opacita;
         b->spessore = spessore;
-        b->base.nascosto = !opacita;   /* nascosta non si disegna e non prende i clic */
-        widget_cambiato(&b->base);
+        widget_nascondi(&b->base, !opacita);   /* nascosta non si disegna e non prende i clic */
     }
     if (opacita != (vista ? 255 : 0) || spessore != (spessa ? 255 : 0))
         barra_scorrimento_richiama(b, SCORRIMENTO_FOTOGRAMMA);              /* ancora in moto */
@@ -2037,7 +2125,10 @@ static inline void barra_scorrimento_passo(struct finestra_tk *f, void *dati) {
 /* Il contenuto e' stato scorso (rotella o trascinamento): la barra si mostra. */
 static inline void barra_scorrimento_usata(struct barra_scorrimento *b, int spostato) {
     b->ultimo = tempo();
-    if (spostato) widget_cambiato(&b->base);
+    if (spostato) {                    /* si e' mosso il contenuto: tutto il widget che scorre */
+        widget_cambiato(&b->base);
+        if (b->base.genitore) widget_cambiato(b->base.genitore);
+    }
     barra_scorrimento_sveglia(b);
 }
 
@@ -2140,15 +2231,36 @@ static inline void uikit_disegna_tutto(struct finestra_tk *f, struct pennello *p
     }
 }
 
+/* Ridisegna le zone cambiate e le mostra. L'immagine libera e' quella di due fotogrammi fa:
+ * oltre alle zone cambiate adesso si rifanno quelle che le mancano (finestra_arretrate).
+ * Ogni zona si ridisegna da capo, con il pennello ritagliato li': il fondo della finestra
+ * comincia pulendo (pulisci), quindi rifare una zona da' gli stessi pixel di un ridisegno
+ * intero. Al compositore si dicono solo le zone cambiate adesso. */
 static inline int uikit_ridisegna(struct finestra_tk *f) {
+    if (!f->tutta_cambiata && !f->quante_cambiate) { f->da_ridisegnare = 0; return 1; }
     unsigned int *pixel = finestra_tela(&f->finestra);
     if (!pixel) return 0;
     struct tela t = { pixel, f->base.l, f->base.a };
     struct pennello p;
-    pennello_prepara(&p, &t);
-    uikit_disegna_tutto(f, &p);
-    f->da_ridisegnare = 0;
-    return finestra_mostra(&f->finestra) >= 0;
+    struct zona_finestra zone[MAX_ZONE_MOSTRA];
+    int n = finestra_arretrate(&f->finestra, zone);
+    int tutta = f->tutta_cambiata || n < 0;
+    for (int k = 0; !tutta && k < f->quante_cambiate; k++)
+        zone_aggiungi(zone, &n, MAX_ZONE_MOSTRA, f->cambiate[k]);
+    if (tutta) {
+        pennello_prepara(&p, &t);
+        uikit_disegna_tutto(f, &p);
+    } else {
+        for (int k = 0; k < n; k++) {
+            pennello_prepara(&p, &t);
+            pennello_ritaglia(&p, zone[k].x, zone[k].y, zone[k].l, zone[k].a);
+            uikit_disegna_tutto(f, &p);
+        }
+    }
+    int fatto = (f->tutta_cambiata ? finestra_mostra(&f->finestra)
+                                   : finestra_mostra_zone(&f->finestra, f->cambiate, f->quante_cambiate)) >= 0;
+    f->da_ridisegnare = f->tutta_cambiata = f->quante_cambiate = 0;
+    return fatto;
 }
 
 /* Il puntatore sopra un widget nuovo (o su nessuno): si spegne il vecchio, si accende
@@ -2156,9 +2268,11 @@ static inline int uikit_ridisegna(struct finestra_tk *f) {
 static inline void uikit_sotto(struct finestra_tk *f, struct widget *w) {
     if (w == f->sotto) return;
     struct widget *prima = f->sotto;
-    if (prima) { prima->sopra = 0; widget_cambiato(prima); }
+    /* un widget che segue il puntatore pezzo per pezzo (ha 'movimento': una tabella, una
+     * griglia, un menu) accende le sue parti e ridisegna solo quelle: tutto il widget no */
+    if (prima) { prima->sopra = 0; if (!prima->tipo->movimento) widget_cambiato(prima); }
     f->sotto = w;
-    if (w) { w->sopra = 1; widget_cambiato(w); }
+    if (w) { w->sopra = 1; if (!w->tipo->movimento) widget_cambiato(w); }
     if (prima && prima->tipo->sopra_cambiato) prima->tipo->sopra_cambiato(prima);
     if (w && w->tipo->sopra_cambiato) w->tipo->sopra_cambiato(w);
 }
@@ -2223,11 +2337,11 @@ static inline void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned
      * altrove, su un widget) */
     int bloccata = finestra_tk_bloccata(f);   /* un avviso bloccante: niente comandi ne' trascinami */
     int comando = f->catturato || bloccata ? 0 : su_comando(f, 1, x, y) ? 2 : su_comando(f, 0, x, y) ? 1 : 0;
-    if (comando != f->comando_sopra) { f->comando_sopra = comando; f->da_ridisegnare = 1; }
+    if (comando != f->comando_sopra) { f->comando_sopra = comando; uikit_cambiata_testata(f); }
 
     if (appena_premuto) {
-        if (comando == 2 && sinistro) { f->chiudi_premuto = 1; f->da_ridisegnare = 1; return; }
-        if (comando == 1 && sinistro) { f->riduci_premuto = 1; f->da_ridisegnare = 1; return; }
+        if (comando == 2 && sinistro) { f->chiudi_premuto = 1; uikit_cambiata_testata(f); return; }
+        if (comando == 1 && sinistro) { f->riduci_premuto = 1; uikit_cambiata_testata(f); return; }
         /* la barra del titolo, e lo spazio vuoto della barra degli strumenti: "trascinami" */
         if (!bloccata && (y < testata_altezza(f) || barra_strumenti_vuota(f, x, y))) {
             if (sinistro) finestra_trascinami(&f->finestra);
@@ -2239,7 +2353,7 @@ static inline void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned
     if (f->chiudi_premuto) {
         if (!sinistro) {
             f->chiudi_premuto = 0;
-            f->da_ridisegnare = 1;
+            uikit_cambiata_testata(f);
             if (su_comando(f, 1, x, y)) f->da_chiudere = 1;
         }
         return;
@@ -2247,7 +2361,7 @@ static inline void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned
     if (f->riduci_premuto) {                /* scatta quando si lascia, se si e' ancora sopra */
         if (!sinistro) {
             f->riduci_premuto = 0;
-            f->da_ridisegnare = 1;
+            uikit_cambiata_testata(f);
             if (su_comando(f, 0, x, y)) finestra_riducimi(&f->finestra);
         }
         return;
@@ -2271,8 +2385,8 @@ static inline void avviso_apri(struct avviso *v) {
     if (f->base.tipo == &tipo_finestra_tk) {
         uikit_sotto(f, 0);
         uikit_fuoco(f, &v->base);
+        uikit_cambiata_tutta(f);           /* il velo e l'ombra: tutta la finestra */
     }
-    widget_cambiato(&v->base);
 }
 
 static inline void avviso_chiudi(struct avviso *v) {
@@ -2282,8 +2396,8 @@ static inline void avviso_chiudi(struct avviso *v) {
         if (f->con_fuoco == &v->base || f->con_fuoco == &v->annulla.base ||
             f->con_fuoco == &v->conferma.base) uikit_fuoco(f, 0);
         if (f->sotto == &v->annulla.base || f->sotto == &v->conferma.base) uikit_sotto(f, 0);
+        uikit_cambiata_tutta(f);
     }
-    widget_cambiato(&v->base);
 }
 
 /* --- la tastiera fisica: le scorciatoie (tasti.h) --- */
@@ -2340,6 +2454,8 @@ static inline int finestra_tk_apri_altra(struct finestra_tk *f, struct finestra_
     widget_disponi(&altra->base);
     altra->da_chiudere = 0;
     altra->attiva = 1;
+    altra->quante_cambiate = 0;
+    uikit_cambiata_tutta(altra);
     if (finestra_apri_come(&altra->finestra, l, a, altra->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0)
         return -1;
     finestra_tasti_fisici(&altra->finestra);
@@ -2374,7 +2490,7 @@ static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n
         f->chiudi_premuto = 0;
         f->riduci_premuto = 0;
         f->pulsanti_prima = 0;
-        if (f->comando_sopra) { f->comando_sopra = 0; f->da_ridisegnare = 1; }
+        if (f->comando_sopra) { f->comando_sopra = 0; uikit_cambiata_testata(f); }
         uikit_sotto(f, 0);
     } else if (n->tipo == ROTELLA) {
         uikit_rotella(f, n->x, n->y, n->scatti_x, n->scatti_y);
@@ -2389,13 +2505,50 @@ static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n
     } else if (n->tipo == FUOCO) {
         f->attiva = n->fuoco;
         if (!n->fuoco) f->modificatori = 0;    /* i tasti lasciati altrove non li sentiremo */
-        f->da_ridisegnare = 1;
+        uikit_cambiata_testata(f);             /* il fuoco cambia solo il titolo e i comandi */
+    }
+}
+
+/* Consegna una notizia, ma i movimenti del puntatore li tiene da parte (in 'sospesa'): se
+ * subito dopo ne arriva un altro con gli stessi pulsanti, quello prima non serve piu' (le
+ * posizioni di mezzo non le vedrebbe nessuno). Le altre notizie passano dopo il movimento
+ * tenuto da parte, nel loro ordine. */
+struct sospesa_tk {
+    struct finestra_tk *da;            /* 0: nessun movimento da parte */
+    struct notizia n;
+};
+
+static inline void uikit_consegna_sospesa(struct sospesa_tk *s) {
+    if (!s->da) return;
+    struct finestra_tk *da = s->da;
+    s->da = 0;
+    uikit_consegna(da, &s->n);
+}
+
+static inline void uikit_consegna_unendo(struct sospesa_tk *s, struct finestra_tk *da, const struct notizia *n) {
+    if (s->da && (n->tipo != PUNTATORE || s->da != da || s->n.pulsanti != n->pulsanti))
+        uikit_consegna_sospesa(s);
+    if (n->tipo == PUNTATORE) {
+        s->da = da;
+        s->n = *n;
+    } else {
+        uikit_consegna(da, n);
     }
 }
 
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il
  * compositore la chiude (1). Serve anche l'altra finestra, se c'e' (finestra_tk_apri_altra):
- * quando si chiude lei (la sua X), si chiude solo lei. */
+ * quando si chiude lei (la sua X), si chiude solo lei.
+ *
+ * IL GIRO. (1) Se c'e' qualcosa da ridisegnare e un'immagine libera, si ridisegna. (2) Si
+ * aspetta il compositore (su tutte e due le finestre) fino alla prima scadenza dei "chiamami
+ * ogni tanto", e poi si serve TUTTO quello che e' arrivato, senza aspettare piu': i clic, i
+ * tasti, la rotella, i movimenti del puntatore (dei movimenti uno di fila all'altro conta
+ * l'ultimo). (3) Si chiamano i "chiamami ogni tanto" scaduti: l'input passa davanti alle
+ * animazioni, come in GTK, cosi' due scatti veloci restano una raffica anche quando
+ * ridisegnare costa. Poi da capo: si ridisegna una volta sola per tutto quello che e'
+ * successo. Se le immagini sono tutte e due del compositore non le si aspetta: si continua a
+ * servire le notizie finche' lui ne restituisce una (RILASCIATA). */
 static inline int uikit_esegui(struct finestra_tk *f) {
     int l, a;
     widget_misura(&f->base, &l, &a);
@@ -2407,47 +2560,54 @@ static inline int uikit_esegui(struct finestra_tk *f) {
     if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
     finestra_tasti_fisici(&f->finestra);        /* per le scorciatoie (tasti.h) */
     f->aperta = 1;
-    if (!uikit_ridisegna(f)) return 1;
+    f->quante_cambiate = 0;
+    uikit_cambiata_tutta(f);
 
     struct notizia n;
     for (;;) {
-        /* Prima le notizie gia' arrivate e messe da parte (mentre si aspettava un'immagine
-         * libera per ridisegnare); poi si aspetta il compositore, su tutte e due le finestre,
-         * fino alla prima scadenza dei "chiamami ogni tanto". Scaduta, si chiama chi l'ha
-         * chiesto. Se mentre si ridisegnava e' arrivato un clic o uno scatto della rotella, si
-         * serve prima lui e poi l'animazione (come in GTK, dove l'input passa davanti ai
-         * ridisegni): cosi' due scatti veloci restano una raffica anche quando ridisegnare
-         * costa. */
-        struct finestra_tk *da = f->finestra.quante ? f : f->altra && f->altra->finestra.quante ? f->altra : 0;
-        if (da) {
-            finestra_notizia(&da->finestra, &n);
-        } else {
-            struct chiamata_tk *prima = uikit_prima_chiamata(f);
-            int resta = prima ? (int)(prima->scadenza - tempo()) : -1;
-            if (prima && resta < 0) resta = 0;
-            struct da_guardare g[2] = { { .descrittore = f->finestra.collegamento },
-                                        { .descrittore = f->altra ? f->altra->finestra.collegamento : -1 } };
-            int pronti = aspetta(g, f->altra ? 2 : 1, resta);
-            if (pronti == 0) {
-                uikit_chiamate_scadute(f);
-                if (f->da_chiudere) return 0;
-                if (f->da_ridisegnare && !uikit_ridisegna(f)) return 1;
-                continue;
+        if (f->da_ridisegnare && finestra_libera(&f->finestra) && !uikit_ridisegna(f)) return 1;
+        if (f->altra && f->altra->da_ridisegnare && finestra_libera(&f->altra->finestra) &&
+            !uikit_ridisegna(f->altra))
+            finestra_tk_chiudi_altra(f);
+
+        struct sospesa_tk sospesa = { 0 };
+        for (int servite = 0; servite < 64; servite++) {
+            /* prima le notizie messe da parte da finestra_tela, poi il compositore */
+            struct finestra_tk *da = f->finestra.quante ? f : f->altra && f->altra->finestra.quante ? f->altra : 0;
+            if (da) {
+                finestra_notizia(&da->finestra, &n);
+            } else {
+                int resta = 0;                    /* gia' servito qualcosa: non si aspetta piu' */
+                if (!servite) {
+                    struct chiamata_tk *prima = uikit_prima_chiamata(f);
+                    resta = prima ? (int)(prima->scadenza - tempo()) : -1;
+                    if (prima && resta < 0) resta = 0;
+                }
+                struct da_guardare g[2] = { { .descrittore = f->finestra.collegamento },
+                                            { .descrittore = f->altra ? f->altra->finestra.collegamento : -1 } };
+                int pronti = aspetta(g, f->altra ? 2 : 1, resta);
+                if (pronti == 0) break;           /* niente (o e' scaduta una chiamata) */
+                if (pronti < 0) {                 /* interrotta: si riprova */
+                    if (servite) break;
+                    servite--;
+                    continue;
+                }
+                da = g[0].pronto || !f->altra ? f : f->altra;
+                if (!finestra_ricevi(&da->finestra, &n)) {
+                    if (da == f) return 1;
+                    if (sospesa.da == da) sospesa.da = 0;
+                    finestra_tk_chiudi_altra(f);       /* il compositore ha chiuso l'altra */
+                    continue;
+                }
+                if (finestra_di_servizio(&n)) continue;   /* un'immagine tornata, un "ci sei?" */
             }
-            if (pronti < 0) continue;
-            da = g[0].pronto || !f->altra ? f : f->altra;
-            if (!finestra_ricevi(&da->finestra, &n)) {
-                if (da == f) return 1;
-                finestra_tk_chiudi_altra(f);           /* il compositore ha chiuso l'altra */
-                continue;
-            }
-            if (finestra_di_servizio(&n)) continue;
+            uikit_consegna_unendo(&sospesa, da, &n);
+            if (f->da_chiudere || (f->altra && f->altra->da_chiudere)) break;
         }
-        uikit_consegna(da, &n);
+        uikit_consegna_sospesa(&sospesa);
+        uikit_chiamate_scadute(f);
         if (f->altra && f->altra->da_chiudere) finestra_tk_chiudi_altra(f);
         if (f->da_chiudere) return 0;
-        if (f->da_ridisegnare && !uikit_ridisegna(f)) return 1;
-        if (f->altra && f->altra->da_ridisegnare && !uikit_ridisegna(f->altra)) finestra_tk_chiudi_altra(f);
     }
 }
 

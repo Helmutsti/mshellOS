@@ -171,15 +171,27 @@ static inline void griglia_rotella(struct widget *w, int sx, int sy) {
     barra_scorrimento_rotella(&((struct griglia_tk *)w)->barra, sy);
 }
 
+/* Il tile i va ridisegnato (solo lui, con un po' d'aria intorno: il nome puo' andare a capo). */
+static inline void griglia_tile_cambiato(struct griglia_tk *g, int i) {
+    if (i < 0 || i >= g->quanti) return;
+    int x, y;
+    griglia_tile(g, i, &x, &y);
+    widget_cambiato_zona(&g->base, x - SPAZIO_8, y - SPAZIO_8, TILE_LARGHEZZA + 2 * SPAZIO_8,
+                         TILE_ALTEZZA + 2 * SPAZIO_8);
+}
+
 static inline void griglia_movimento(struct widget *w, int x, int y) {
     struct griglia_tk *g = (struct griglia_tk *)w;
     int i = griglia_in(g, x, y);
-    if (i != g->sopra) { g->sopra = i; widget_cambiato(w); }
+    if (i == g->sopra) return;
+    griglia_tile_cambiato(g, g->sopra);
+    g->sopra = i;
+    griglia_tile_cambiato(g, i);
 }
 
 static inline void griglia_sopra(struct widget *w) {
     struct griglia_tk *g = (struct griglia_tk *)w;
-    if (!w->sopra && g->sopra >= 0) { g->sopra = -1; widget_cambiato(w); }
+    if (!w->sopra && g->sopra >= 0) { griglia_tile_cambiato(g, g->sopra); g->sopra = -1; }
 }
 
 static const struct tipo_widget tipo_griglia = {

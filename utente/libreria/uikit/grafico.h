@@ -77,6 +77,27 @@ static inline unsigned long long grafico_totale(const struct grafico *g) {
     return t;
 }
 
+/* Due grafici si vedono uguali (con la barra larga 'largo'): stessi numeri nella legenda e
+ * pezzi della barra che finiscono negli stessi pixel. Serve a non ridisegnarli se i byte sono
+ * cambiati di poco. */
+static inline int grafico_uguale(const struct grafico *a, const struct grafico *b, int largo) {
+    if (a->quanti != b->quanti) return 0;
+    unsigned long long ta = grafico_totale(a), tb = grafico_totale(b), sa = 0, sb = 0;
+    if ((ta == 0) != (tb == 0)) return 0;
+    for (int i = 0; i < a->quanti; i++) {
+        char qa[24], qb[24];
+        testo_byte(qa, a->byte[i]);
+        testo_byte(qb, b->byte[i]);
+        for (int k = 0; qa[k] || qb[k]; k++)
+            if (qa[k] != qb[k]) return 0;
+        if (i == a->resto) continue;
+        sa += a->byte[i];
+        sb += b->byte[i];
+        if (ta && sa * (unsigned int)largo / ta != sb * (unsigned int)largo / tb) return 0;
+    }
+    return 1;
+}
+
 /* --- la barra --- */
 
 struct barra_utilizzo { struct widget base; const struct grafico *grafico; };

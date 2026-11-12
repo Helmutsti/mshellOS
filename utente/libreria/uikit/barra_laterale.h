@@ -122,15 +122,24 @@ static inline void barra_laterale_puntatore(struct widget *w, int x, int y, unsi
     if (b->al_clic) b->al_clic(b, voce, b->dati);
 }
 
+/* La voce i va ridisegnata: solo lei. */
+static inline void laterale_voce_cambiata(struct barra_laterale_tk *b, int i) {
+    if (i < 0 || i >= b->quante) return;
+    widget_cambiato_zona(&b->base, b->base.x, laterale_voce_y(b, i), b->base.l, laterale_alta(&b->voci[i]));
+}
+
 static inline void barra_laterale_movimento(struct widget *w, int x, int y) {
     struct barra_laterale_tk *b = (struct barra_laterale_tk *)w;
     int voce = laterale_voce_in(b, x, y);
-    if (voce != b->sopra) { b->sopra = voce; widget_cambiato(w); }
+    if (voce == b->sopra) return;
+    laterale_voce_cambiata(b, b->sopra);
+    b->sopra = voce;
+    laterale_voce_cambiata(b, voce);
 }
 
 static inline void barra_laterale_sopra(struct widget *w) {
     struct barra_laterale_tk *b = (struct barra_laterale_tk *)w;
-    if (!w->sopra && b->sopra >= 0) { b->sopra = -1; widget_cambiato(w); }
+    if (!w->sopra && b->sopra >= 0) { laterale_voce_cambiata(b, b->sopra); b->sopra = -1; }
 }
 
 static const struct tipo_widget tipo_barra_laterale = {

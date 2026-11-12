@@ -128,6 +128,10 @@ struct finestra_compositore {
     int da_rilasciare;          /* un'immagine da restituire che non le si e' potuto
                                  * dire (casella piena): glielo si dice quando risponde */
     unsigned int generazione;   /* cresce a ogni MOSTRA: l'immagine e' cambiata */
+    /* DOVE e' cambiata, dall'ultima composizione: le zone dei MOSTRA arrivati nel frattempo
+     * (in pixel della finestra), sommate; -1: tutta */
+    struct zona_finestra cambiate[MAX_ZONE_MOSTRA];
+    int quante_cambiate;
 
     unsigned int ruolo;         /* RUOLO_FINESTRA, o una superficie speciale della scrivania */
     int raggio;                 /* gli angoli: per l'ombra e il vetro smerigliato */
@@ -261,8 +265,11 @@ static void disegna_ombra(int i) {
  *   4. la si rifa' solo quando cambia qualcosa in quello che guarda (la finestra si
  *      sposta, o cambia qualcosa sotto di lei li' intorno: vedi cosa_rifare); se no si
  *      riusa quella gia' fatta.
- * Poi, a ogni composizione, la si ingrandisce di nuovo (ogni pixel e' la media pesata
- * dei quattro vicini di quella piccola) dentro la forma arrotondata della finestra. */
+ * Rifatta, la si ingrandisce di nuovo alla misura vera della finestra (ogni pixel e' la media
+ * pesata dei quattro vicini di quella piccola) e la si tiene da parte, IL VETRO della finestra
+ * ('vetri'): a ogni composizione lo si copia dentro la forma arrotondata, solo nelle zone da
+ * rifare. Cosi' quando cambia solo un pezzo di una finestra (una riga sotto il puntatore) non
+ * si rifanno i conti dell'ingrandimento, che erano piu' di meta' del lavoro. */
 #define SCALA          4    /* la copia rimpicciolita: un pixel ogni 4x4 */
 static int raggio_media;    /* sfocatura_finestra() / SCALA / 2 = 3: medie di 7 pixel
                              * rimpiccioliti (28 veri), tre volte. Lo si chiede a UIKit in main */
@@ -275,6 +282,8 @@ struct sfocata {
     unsigned int pixel[PICCOLA_L * PICCOLA_A];
 };
 static struct sfocata sfocate[MAX_FINESTRE];
+/* il vetro di ogni finestra: la sfocatura gia' ingrandita, l x a pixel (0x00RRGGBB) */
+static unsigned int vetri[MAX_FINESTRE][MAX_LARGHEZZA * MAX_ALTEZZA];
 static unsigned int riga_media[PICCOLA_L > PICCOLA_A ? PICCOLA_L : PICCOLA_A];
 
 /* La media scorrevole su una fila di n pixel (passo 'salto' tra uno e l'altro), fatta
@@ -343,39 +352,57 @@ static void prepara_sfocatura(int i, struct sfocata *s) {
     for (int u = 0; u < s->l; u++) media_fila(&s->pixel[u], s->a, s->l);
 }
 
-/* Mette la sfocatura dentro la forma della finestra, ingrandendola di nuovo. */
-static void metti_sfocatura(int i, const struct sfocata *s) {
+/* Ingrandisce la sfocatura alla misura della finestra, nel suo vetro: tutti i suoi pixel, anche
+ * quelli fuori dallo schermo (non si usano, ma cosi' il vetro e' sempre intero). */
+static void ingrandisci_sfocatura(int i, const struct sfocata *s) {
     const struct finestra_compositore *f = &finestre[i];
-    struct tondo forma = tondo(f->x, f->y, f->l, f->a, f->raggio);
-    int y0 = f->y > zy0 ? f->y : zy0, y1 = f->y + f->a < zy1 ? f->y + f->a : zy1;
-    int x0 = f->x > zx0 ? f->x : zx0, x1 = f->x + f->l < zx1 ? f->x + f->l : zx1;
-    for (int y = y0; y < y1; y++) {
-        int vicino_sopra_sotto = y < f->y + f->raggio || y >= f->y + f->a - f->raggio;
+    unsigned int *vetro = vetri[i];
+    for (int r = 0; r < f->a; r++) {
+        int y = f->y + r;
         /* dove cade il pixel nella copia piccola, in 256esimi (centro su centro) */
         int fy = (y * 256 + 128) / SCALA - 128 - s->y * 256;
         int vy = fy >> 8, ty = fy & 255;
         if (vy < 0) { vy = 0; ty = 0; }
         if (vy >= s->a - 1) { vy = s->a - 2; ty = 255; }
-        for (int x = x0; x < x1; x++) {
-            int c = 256;
-            if (vicino_sopra_sotto && (x < f->x + f->raggio || x >= f->x + f->l - f->raggio))
-                c = coperto(distanza(&forma, x, y));        /* gli angoli arrotondati */
-            if (!c) continue;
+        for (int k = 0; k < f->l; k++) {
+            int x = f->x + k;
             int fx = (x * 256 + 128) / SCALA - 128 - s->x * 256;
             int ux = fx >> 8, tx = fx & 255;
             if (ux < 0) { ux = 0; tx = 0; }
             if (ux >= s->l - 1) { ux = s->l - 2; tx = 255; }
             const unsigned int *q = &s->pixel[vy * s->l + ux];
-            unsigned int a = q[0], b = q[1], cc = q[s->l], d = q[s->l + 1];
-            unsigned int *dst = &disegno[y * larghezza + x], px = 0xFF000000u;
-            for (int k = 0; k < 24; k += 8) {
-                int su = ((a >> k) & 0xFF) * (256 - tx) + ((b >> k) & 0xFF) * tx;
-                int giu = ((cc >> k) & 0xFF) * (256 - tx) + ((d >> k) & 0xFF) * tx;
-                int sfoc = (su * (256 - ty) + giu * ty) >> 16;
-                int prima = (*dst >> k) & 0xFF;
-                px |= (unsigned int)((sfoc * c + prima * (256 - c)) >> 8) << k;
+            unsigned int a = q[0], b = q[1], cc = q[s->l], d = q[s->l + 1], px = 0;
+            for (int c = 0; c < 24; c += 8) {
+                int su = ((a >> c) & 0xFF) * (256 - tx) + ((b >> c) & 0xFF) * tx;
+                int giu = ((cc >> c) & 0xFF) * (256 - tx) + ((d >> c) & 0xFF) * tx;
+                px |= (unsigned int)((su * (256 - ty) + giu * ty) >> 16) << c;
             }
-            *dst = px;
+            vetro[r * f->l + k] = px;
+        }
+    }
+}
+
+/* Mette il vetro della finestra (la sfocatura ingrandita) dentro la sua forma, nella zona. */
+static void metti_sfocatura(int i) {
+    const struct finestra_compositore *f = &finestre[i];
+    const unsigned int *vetro = vetri[i];
+    struct tondo forma = tondo(f->x, f->y, f->l, f->a, f->raggio);
+    int y0 = f->y > zy0 ? f->y : zy0, y1 = f->y + f->a < zy1 ? f->y + f->a : zy1;
+    int x0 = f->x > zx0 ? f->x : zx0, x1 = f->x + f->l < zx1 ? f->x + f->l : zx1;
+    for (int y = y0; y < y1; y++) {
+        int vicino_sopra_sotto = y < f->y + f->raggio || y >= f->y + f->a - f->raggio;
+        const unsigned int *riga = &vetro[(y - f->y) * f->l];   /* riga[x - f->x] */
+        unsigned int *dst = &disegno[y * larghezza];
+        for (int x = x0; x < x1; x++) {
+            int c = 256;
+            if (vicino_sopra_sotto && (x < f->x + f->raggio || x >= f->x + f->l - f->raggio))
+                c = coperto(distanza(&forma, x, y));        /* gli angoli arrotondati */
+            if (!c) continue;
+            if (c == 256) { dst[x] = 0xFF000000u | riga[x - f->x]; continue; }
+            unsigned int sfoc = riga[x - f->x], prima = dst[x], px = 0xFF000000u;
+            for (int k = 0; k < 24; k += 8)
+                px |= (unsigned int)((((sfoc >> k) & 0xFF) * c + ((prima >> k) & 0xFF) * (256 - c)) >> 8) << k;
+            dst[x] = px;
         }
     }
 }
@@ -426,11 +453,14 @@ static void disegna_finestra(int i, int ricalcola, struct sfocata *s) {
         nella_zona(k);
         if (nella_zona_si_vede(f)) disegna_ombra(i);
     }
-    if (ricalcola) prepara_sfocatura(i, s);
+    if (ricalcola) {
+        prepara_sfocatura(i, s);
+        ingrandisci_sfocatura(i, s);
+    }
     for (int k = 0; k < quante_zone; k++) {
         nella_zona(k);
         if (!nella_zona_si_vede(f)) continue;
-        metti_sfocatura(i, s);
+        metti_sfocatura(i);
         immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata],
                  f->non_risponde ? barra_congelata_altezza(MINI) : 0);
         if (f->non_risponde && f->ruolo == RUOLO_FINESTRA)
@@ -453,6 +483,12 @@ static void dai_fuoco(int i) {
     if (i == fuoco) return;
     int prima = fuoco;
     fuoco = i;
+    /* chi perde il fuoco non sente piu' il puntatore che passa (vedi al_mouse): se lo aveva
+     * sopra, gli si dice che e' uscito, cosi' spegne quello che aveva acceso */
+    if (prima >= 0 && sotto == prima && presa != prima) {
+        avvisa(prima, (struct notizia){ .tipo = USCITO });
+        sotto = -1;
+    }
     if (prima >= 0) avvisa(prima, (struct notizia){ .tipo = FUOCO, .fuoco = 0 });
     if (i >= 0) avvisa(i, (struct notizia){ .tipo = FUOCO, .fuoco = 1 });
     racconta_attiva();
@@ -600,9 +636,16 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
 static void mostra(int i, const struct mostra *m) {
     struct finestra_compositore *f = &finestre[i];
     if (!f->immagini[0] || m->immagine > 1) { scollega(i); return; }
+    if (m->quante > MAX_ZONE_MOSTRA) { scollega(i); return; }
     int prima = f->mostrata;
     f->mostrata = m->immagine;
     f->generazione++;
+    /* le zone cambiate si sommano a quelle dei MOSTRA non ancora composti (se ne arrivano due
+     * prima di una composizione, si vede solo l'ultima immagine: e' cambiata in tutte e due) */
+    if (!m->quante) f->quante_cambiate = -1;
+    struct zona_finestra tutta = { 0, 0, f->l, f->a };
+    for (unsigned int k = 0; k < m->quante && f->quante_cambiate >= 0; k++)
+        zone_aggiungi(f->cambiate, &f->quante_cambiate, MAX_ZONE_MOSTRA, zona_dentro(m->zone[k], tutta));
     if (prima < 0 && f->ruolo == RUOLO_FINESTRA) {   /* la prima volta: davanti e con il fuoco */
         in_primo_piano(i);
         dai_fuoco(i);
@@ -889,13 +932,14 @@ static void zona_aggiungi(struct zona z) {
 
 /* COSA E' CAMBIATO dall'ultimo fotogramma, finestra per finestra: i rettangoli dove i
  * suoi pixel non sono piu' quelli di prima ('danni'). */
-#define MAX_DANNI 3
+#define MAX_DANNI (MAX_ZONE_MOSTRA + 2)
 static struct zona danni[MAX_FINESTRE][MAX_DANNI];
 static int quanti_danni[MAX_FINESTRE];
 static int da_sfocare[MAX_FINESTRE];   /* il suo smerigliato va rifatto */
 
 static void danno(int i, struct zona z) {
     if (quanti_danni[i] < MAX_DANNI) danni[i][quanti_danni[i]++] = z;
+    else danni[i][MAX_DANNI - 1] = unione(danni[i][MAX_DANNI - 1], z);   /* piena: l'ultima si allarga */
 }
 
 static int danni_toccano(int i, struct zona z) {
@@ -947,6 +991,7 @@ static void cosa_rifare(void) {
         zona_aggiungi((struct zona){ 0, 0, larghezza, altezza });
         for (int i = 0; i < MAX_FINESTRE; i++) da_sfocare[i] = adesso[i].vista;
         for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
+        for (int i = 0; i < MAX_FINESTRE; i++) finestre[i].quante_cambiate = 0;
         return;
     }
 
@@ -963,8 +1008,14 @@ static void cosa_rifare(void) {
         } else if (p->col_fuoco != q->col_fuoco) {
             danno(i, impronta_con_ombra(q));
             da_sfocare[i] = 1;
-        } else if (p->non_risponde != q->non_risponde || p->generazione != q->generazione) {
+        } else if (p->non_risponde != q->non_risponde || finestre[i].quante_cambiate < 0) {
             danno(i, impronta_dentro(q));
+        } else if (p->generazione != q->generazione) {   /* solo dove l'applicazione dice */
+            const struct finestra_compositore *f = &finestre[i];
+            for (int k = 0; k < f->quante_cambiate; k++) {
+                struct zona_finestra z = f->cambiate[k];
+                if (!zona_vuota(z)) danno(i, (struct zona){ q->x + z.x, q->y + z.y, q->x + z.x + z.l, q->y + z.y + z.a });
+            }
         }
     }
 
@@ -1002,6 +1053,7 @@ static void cosa_rifare(void) {
         }
     }
     for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
+    for (int i = 0; i < MAX_FINESTRE; i++) finestre[i].quante_cambiate = 0;   /* usate */
 }
 
 /* La composizione delle zone: si puliscono, poi ci si disegnano le finestre, una alla
@@ -1092,8 +1144,13 @@ static void al_mouse(const struct evento *e) {
 
     /* a chi va il puntatore: a quella presa, se c'e'; se no a quella sotto. Anche il
      * "lasciato" va a quella presa, ovunque sia il puntatore: chi ha avuto il "premuto"
-     * deve sapere che e' finito (come in Wayland) */
+     * deve sapere che e' finito (come in Wayland).
+     * UNA FINESTRA SENZA FUOCO NON SENTE IL PUNTATORE CHE PASSA (scelta della persona): solo
+     * il clic, che la porta davanti e le da' il fuoco (qui sopra), e la rotella (alla_rotella).
+     * Cosi' sotto il puntatore non si accende niente nelle finestre dietro. I pannelli della
+     * scrivania (userbar, vassoio) non hanno mai il fuoco: loro lo sentono sempre. */
     int a_chi = presa >= 0 ? presa : finestra_sotto(px, py);
+    if (a_chi >= 0 && presa < 0 && a_chi != fuoco && finestre[a_chi].ruolo == RUOLO_FINESTRA) a_chi = -1;
     if (sotto >= 0 && sotto != a_chi) avvisa(sotto, (struct notizia){ .tipo = USCITO });
     sotto = a_chi;
     if (a_chi >= 0) {

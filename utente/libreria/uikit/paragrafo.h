@@ -109,7 +109,12 @@ static inline void paragrafo_prepara(struct paragrafo *g, const char *testo, con
 /* Cambia il testo. Se cambia il numero delle righe, chi lo contiene rifa' l'impaginazione
  * (uikit_ridisponi). */
 static inline void paragrafo_testo(struct paragrafo *g, const char *testo) {
-    copia_testo(g->testo, testo ? testo : "", PARAGRAFO_TESTO);
+    char nuovo[PARAGRAFO_TESTO];
+    copia_testo(nuovo, testo ? testo : "", PARAGRAFO_TESTO);
+    int i = 0;
+    while (nuovo[i] && nuovo[i] == g->testo[i]) i++;
+    if (nuovo[i] == g->testo[i]) return;      /* lo stesso testo: niente da ridisegnare */
+    copia_testo(g->testo, nuovo, PARAGRAFO_TESTO);
     widget_cambiato(&g->base);
 }
 
