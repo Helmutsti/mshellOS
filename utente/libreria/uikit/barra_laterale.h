@@ -1,8 +1,8 @@
 /* LA BARRA LATERALE, dal file Figma (la "Barra laterale" della finestra di Files e il componente
  * "Voce della barra laterale", pagina "Componenti complessi"). Una colonna larga
  * BARRA_LATERALE_LARGHEZZA (200), dentro l'area dei contenuti, senza un fondo suo (si vede il
- * vetro della finestra, il colore della barra del titolo), divisa da quello che ha a destra da
- * una linea BORDO_SEPARATORE di un pixel. Padding SPAZIO_8 intorno, SPAZIO_4 tra un pezzo e
+ * vetro della finestra, il colore della barra del titolo), senza linea verso quello che ha a
+ * destra (sul vetro sarebbe una riga bianca: decisione della persona, 12/11/2026). Padding SPAZIO_8 intorno, SPAZIO_4 tra un pezzo e
  * l'altro. I pezzi sono di due tipi:
  *
  *   - l'INTESTAZIONE di un gruppo ("Scorciatoie", "Filtri"): la stessa del menu (menu.h);
@@ -98,8 +98,6 @@ static inline void barra_laterale_misura(struct widget *w, int *l, int *a) {
 
 static inline void barra_laterale_disegna(struct widget *w, struct pennello *p) {
     struct barra_laterale_tk *b = (struct barra_laterale_tk *)w;
-    pennello_colore(p, BORDO_SEPARATORE);
-    riempi_rettangolo(p, w->x + w->l - 1, w->y, 1, w->a);
     int x = w->x + BARRA_LATERALE_PADDING, l = w->l - 2 * BARRA_LATERALE_PADDING;
     for (int i = 0; i < b->quante; i++) {
         const struct voce_laterale_tk *v = &b->voci[i];

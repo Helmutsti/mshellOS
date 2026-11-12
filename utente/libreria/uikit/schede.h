@@ -2,7 +2,8 @@
  *
  * Una barra di schede piatte, tutte larghe uguali, a SPAZIO_4 l'una dall'altra, che si divide la
  * larghezza che riceve (e' elastica: nella barra degli strumenti prende lo spazio che avanza).
- * Sotto, da bordo a bordo, la LINEA DI BASE di 1 pixel (BORDO_SEPARATORE). Ne e' scelta una
+ * Sotto resta 1 pixel vuoto dove Figma disegna la linea di base: la linea non si disegna (sul
+ * vetro sarebbe una riga bianca: decisione della persona, 12/11/2026). Ne e' scelta una
  * sola. Ogni scheda e' alta ALTEZZA_S (32), senza fondo e senza ombra (forma piatta), con il
  * testo del pulsante S (FONT_PULSANTE_S) al centro:
  *   - Normale: testo TESTO_SECONDARIO;
@@ -89,8 +90,6 @@ static inline void schede_disegna(struct widget *w, struct pennello *p) {
         testo_centrato(p, FONT_PULSANTE_S, x + (l - lt) / 2, w->y, alto, s->nomi[i]);
         pennello_ripristina(p);
     }
-    pennello_colore(p, BORDO_SEPARATORE);
-    riempi_rettangolo(p, w->x, w->y + ALTEZZA_S, w->l, SCHEDE_LINEA);
 }
 
 /* Sceglie la scheda i (senza chiamare al_cambio). */
