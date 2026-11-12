@@ -87,6 +87,27 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
   memoria non vale); nella radice ci sono in più `etc`, `.dockerenv` e `.sandbox`; la prova
   `avvio` (kernel, moduli, USB) non ha senso qui.
 
+**La shell di sviluppo** (solo PC, solo per le prove). Non è la shell del sistema: nel disco
+normale non c'è e init non la cerca. È una shell stupida, `utente/programmi/shell.c`, con solo
+`pwd`, `cd`, `ls` (anche `-l`), `help` ed `exit`; gira come sistema (uid 0) sulla seriale.
+Si compila con la variabile `SVILUPPO=1` (con Docker: `-e SVILUPPO=1` prima di `alpine:3.24`;
+conviene `-e USCITA=build/sviluppo`, per non sovrascrivere il disco normale): il programma va in
+`/system/bin/shell`, init la fa partire sulla seriale (`/dev/ttyS0`) e la fa ripartire quando
+finisce con `exit`. La shell abbassa da sé il livello dei messaggi del kernel (equivalente di
+`dmesg -n 1`), così non si mescolano con quello che si scrive. La riga la corregge il kernel
+(la seriale è un terminale normale: eco e backspace); Ctrl-D come `exit`.
+
+```sh
+docker run --rm --platform linux/amd64 -e SVILUPPO=1 -e USCITA=build/sviluppo -v "$PWD:/w" alpine:3.24 sh /w/build.sh x86_64
+uv run test/shell.py     # prova automatica: accende build/sviluppo/disco.img e scrive i comandi sulla seriale
+```
+
+Per usarla a mano: avvia QEMU come `run.ps1` / `run.sh` ma con `build/sviluppo/disco.img`,
+e nella finestra di QEMU apri la seriale: **View (Visualizza) -> serial0** (compare il registro
+dell'avvio e, in fondo, il prompt `/ # `). Con `-serial stdio` (come l'ARM di `run.sh`) la seriale
+è il terminale da cui parte QEMU. La finestra grafica di QEMU non cambia. Nella sandbox Docker
+non c'è kernel né seriale: per una shell si entra nel container con `docker exec -it <nome> sh`.
+
 ## 4. Com'è fatto
 
 **L'accensione, passo per passo**

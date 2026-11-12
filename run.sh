@@ -24,6 +24,8 @@
 #   usb-kbd, usb-tablet : tastiera e tavoletta USB. La tavoletta dice DOVE e' il
 #       puntatore (non di quanto si e' mosso): il mouse non va catturato, e il
 #       puntatore di mshell e' sempre sotto quello del Mac
+# LA SERIALE (x86_64): nella finestra di QEMU, menu View (Visualizza) -> serial0: il registro
+#   dell'avvio e, con il disco di sviluppo (SVILUPPO=1, vedi build.sh e STATO.md sezione 3), la shell.
 set -e
 qui="$(cd "$(dirname "$0")" && pwd)"
 cpu="${1:-x86_64}"

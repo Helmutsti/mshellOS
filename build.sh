@@ -78,6 +78,12 @@
 #   NUCLEO   quale kernel di Alpine: "virt" (linux-virt, se non si dice: piccolo, con i
 #            driver delle macchine virtuali) o "lts" (linux-lts, con i driver dei PC veri,
 #            piu' linux-firmware: vedi DA IMPLEMENTARE in fondo)
+#   SVILUPPO se vale 1, compila il disco di SVILUPPO: in piu' c'e' /system/bin/shell (una
+#            shell stupida, utente/programmi/shell.c: pwd, cd, ls, help, exit) e init la
+#            fa partire come sistema sulla seriale (/dev/ttyS0) e la fa ripartire quando
+#            finisce. Il disco normale non la contiene e init non la cerca. Con Docker:
+#            -e SVILUPPO=1 prima di alpine:3.24; conviene USCITA=build/sviluppo, per non
+#            sovrascrivere il disco normale
 #   VERSIONE_LINUX  per fissare la versione del pacchetto del kernel (per esempio
 #            6.18.63-r0): se non si dice, l'ultima di Alpine 3.24. Le versioni usate le
 #            scrive il build alla fine, per poterle rifissare.
@@ -289,10 +295,15 @@ APPS=""
 # riconosce nell'elenco dei processi). Sono programmi: 755.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
-    $CC $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
+    # la shell di prova c'e' solo con SVILUPPO=1 (vedi in cima)
+    [ "$nome" = shell ] && [ -z "$SVILUPPO" ] && continue
+    SE_SVILUPPO=""
+    [ -n "$SVILUPPO" ] && SE_SVILUPPO="-DSVILUPPO"
+    $CC $UTENTE $SE_SVILUPPO -c "$f" -o "$B/oggetti/$nome.o"
     lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o"
     case "$nome" in
         init) posto=/system/init ;;
+        shell) posto=/system/bin/shell ;;
         *)    posto=/system/services/$nome; SERVIZI="$SERVIZI $nome" ;;
     esac
     metti_file "$B/oggetti/$nome" "$posto" 755

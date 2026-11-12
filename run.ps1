@@ -4,6 +4,8 @@
 #                            \EFI\BOOT\BOOTX64.EFI, il kernel Linux con l'archivio di avvio e la
 #                            riga di comando, una UKI), system (ext4: "/", in sola lettura) e
 #                            data (ext4: /data, i file della persona e lo stato dei servizi)
+# LA SERIALE: nella finestra di QEMU, menu View (Visualizza) -> serial0: il registro dell'avvio e,
+#   se il disco e' quello di sviluppo (SVILUPPO=1, vedi build.sh e STATO.md sezione 3), la shell di prova.
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 
