@@ -19,7 +19,15 @@ e la persona ne viene informata.
 
 ## 3. Il pacchetto
 
-- Un'app si distribuisce come **un file unico con estensione `.app`**.
+- Un'app si distribuisce come **un file unico con estensione `.app`**. L'estensione resta `.app`
+  anche se su macOS è già usata (lì le app sono cartelle): un nostro pacchetto copiato su Mac
+  apparirà come un'app rotta, e lo accettiamo.
+- Il file è un **archivio zip** (come i pacchetti Android). Ha un indice, quindi durante
+  l'installazione il sistema legge prima il manifesto e le icone, mostra la richiesta di
+  installazione con permessi e avvisi, e solo dopo scompatta il resto. Si crea e si apre con
+  qualsiasi programma per gli zip.
+- Durante lo scompattamento il sistema **rifiuta i percorsi che escono dalla cartella dell'app**
+  (per esempio `../`), un trucco noto per scrivere file dove non si dovrebbe.
 - Contiene il manifesto, le icone chiare e scure e i dati dell'app.
 - **Un pacchetto per processore**: il formato è lo stesso, ma il programma si compila una volta
   per PC (x86_64) e una per ARM (arm64). Il manifesto dice per quale processore è fatto.
@@ -270,9 +278,7 @@ Da decidere, più o meno in quest'ordine:
    `it.mep.files`).
 4. **Le app la cui versione esce dal supporto**: avviso prima di aggiornare il sistema, oppure app
    che resta installata ma non si apre e spiega perché.
-5. **Che tipo di archivio** è il file `.app` (il manifesto invece è deciso: TOML, vedi `manifest-guida.toml`).
-6. **Il nome `.app`**: su macOS è già usato per le app (che lì sono cartelle). Un nostro pacchetto
-   copiato su Mac apparirebbe come un'app rotta.
-7. **La libreria per disegnare gli SVG** (per esempio nanosvg, piccola, o resvg, completa).
-8. **Cosa vede un eseguibile normale avviato dalla scrivania**: oggi ha tutti i poteri della
+5. **Le librerie** per disegnare gli SVG (per esempio nanosvg, piccola, o resvg, completa) e per
+   leggere gli zip (per esempio miniz).
+6. **Cosa vede un eseguibile normale avviato dalla scrivania**: oggi ha tutti i poteri della
     persona. macOS, per esempio, avvisa al primo avvio dei file scaricati.
