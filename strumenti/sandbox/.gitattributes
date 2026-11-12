@@ -1,0 +1,2 @@
+# Il Makefile gira in un container Linux: con fine riga CRLF make non lo capisce
+Makefile text eol=lf
