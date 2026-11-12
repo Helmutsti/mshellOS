@@ -18,10 +18,12 @@ permessi = []
 deviazioni = []
 funzioni = []
 
-# Icone provvisorie (un quadrato colorato con un'icona Lucide): quelle vere arriveranno dal
-# disegno in Figma. Niente PNG per ora: il sistema rimpicciolira' l'SVG.
+# L'icona: la faccia del giocatore dal gioco (24x29 pixel), come quadratini nell'SVG; uguale
+# nei due temi. Le PNG piccole sono la stessa faccia, a 32 pixel per pixel e a 18 rimpicciolita.
 [icone.chiaro]
 svg = "resources/icona-chiara.svg"
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png" }
 
 [icone.scuro]
 svg = "resources/icona-scura.svg"
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png" }
