@@ -82,7 +82,7 @@ class Prova:
     def nota(self, testo):
         self.note.append(testo)
 
-    def riferimento(self, nome, foto, maschera=qemu.OROLOGIO, tollerati=0, soglia=0):
+    def riferimento(self, nome, foto, maschera=None, tollerati=0, soglia=0):
         """Confronta 'foto' con la foto di riferimento riferimenti/<cpu>/<nome>.png.
         Con --riferimenti invece la salva come nuovo riferimento.
         'tollerati' pixel possono essere diversi (oltre 'soglia' di differenza)."""

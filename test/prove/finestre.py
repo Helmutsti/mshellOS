@@ -1,4 +1,4 @@
-"""finestre: portare davanti, trascinare, ridurre e riaprire dall'isola, chiudere.
+"""finestre: portare davanti, trascinare, ridurre e riaprire dalla userbar, chiudere.
 
 Si aprono Esempio (primo posto, angolo in 140,130, 320 x 220) e Impostazioni (secondo
 posto, 180,170, 460 x 420): Impostazioni copre quasi tutta Esempio, tranne una striscia a
@@ -13,9 +13,9 @@ il fuoco, grigia se no.
   3. Esempio (portata davanti con un clic) si trascina per la barra di (400, 300): il suo
      sfondo si deve spostare esattamente di tanto, e nella striscia a sinistra dove era
      prima deve tornare la scrivania.
-  4. Impostazioni si riduce ("-" nella barra): sparisce, ma nell'isola resta aperta. Un
-     clic sulla sua icona nell'isola la fa ricomparire.
-  5. Impostazioni si chiude ("x" nella barra): sparisce, e nell'isola non e' piu' aperta.
+  4. Impostazioni si riduce ("-" nella barra): sparisce, ma nella userbar resta aperta. Un
+     clic sulla sua icona nella userbar la fa ricomparire.
+  5. Impostazioni si chiude ("x" nella barra): sparisce, e nella userbar non e' piu' aperta.
 """
 
 import scrivania as s
@@ -23,7 +23,7 @@ from qemu import colore_in, riquadro_colore, PUNTO_VUOTO
 
 NOME = "finestre"
 ORDINE = 50
-DESCRIZIONE = "porta davanti, trascina, riduci e riapri dall'isola, chiudi"
+DESCRIZIONE = "porta davanti, trascina, riduci e riapri dalla userbar, chiudi"
 
 
 def esegui(p):
@@ -73,16 +73,16 @@ def esegui(p):
     p.controlla(s.zona_uguale(f, p.scrivania, vecchio),
                 "dove era Esempio non e' tornata la scrivania")
 
-    # 4. ridurre Impostazioni e riaprirla dall'isola
+    # 4. ridurre Impostazioni e riaprirla dalla userbar
     riduci, chiudi = s.comandi(ix, iy, il)
     m.clic(*riduci)
     m.muovi(*PUNTO_VUOTO)
     f = s.aspetta_zona(m, p.scrivania, impostazioni, cosa="Impostazioni sparire (ridotta)")
     m.foto("ridotta")
-    p.controlla(s.segno_sotto(f, "Impostazioni") > 0, "ridotta, Impostazioni non e' piu' aperta nell'isola")
-    m.clic(s.APP_X["Impostazioni"], s.ISOLA_Y)
+    p.controlla(s.segno_sotto(f, "Impostazioni") > 0, "ridotta, Impostazioni non e' piu' aperta nella userbar")
+    s.clic_app(m, "Impostazioni")
     m.muovi(*PUNTO_VUOTO)
-    s.aspetta_zona(m, p.scrivania, impostazioni, uguale=False, cosa="Impostazioni ricomparire dall'isola")
+    s.aspetta_zona(m, p.scrivania, impostazioni, uguale=False, cosa="Impostazioni ricomparire dalla userbar")
     m.aspetta_schermo_fermo()
     m.foto("riaperta")
 
@@ -91,4 +91,4 @@ def esegui(p):
     m.muovi(*PUNTO_VUOTO)
     s.aspetta_zona(m, p.scrivania, impostazioni, cosa="Impostazioni sparire (chiusa)")
     m.aspetta_che(lambda f: s.segno_sotto(f, "Impostazioni") == 0, 5.0,
-                  cosa="Impostazioni chiusa nell'isola (senza puntino)")
+                  cosa="Impostazioni chiusa nella userbar (senza segno)")

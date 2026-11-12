@@ -71,6 +71,14 @@ struct immagine {
     const unsigned int *pixel;
 };
 
+/* UN'IMMAGINE DA UN FILE (gkit/immagine_file.c): per ora solo PNG, decodificate da
+ * stb_image (esterni/stb). Si legge com'e', senza ingrandirla o rimpicciolirla. 0 se fatto,
+ * con i pixel in memoria nuova (si liberano con immagine_libera); -1 se il file manca o non
+ * e' una PNG, e allora 'im' resta vuota. (Solo per i programmi di mshell: nell'anteprima
+ * sul Mac non c'e'.) */
+int immagine_carica(const char *percorso, struct immagine *im);
+void immagine_libera(struct immagine *im);
+
 #define OPACO(rgb) (0xFF000000u | (unsigned int)(rgb))
 /* Un colore con opacita' da 0 a 255: VELATO(0xFFFFFF, 36) e' il bianco al 14%. */
 #define VELATO(rgb, alfa) ((unsigned int)(alfa) << 24 | (unsigned int)(rgb))

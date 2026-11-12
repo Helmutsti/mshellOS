@@ -19,7 +19,7 @@ Che non ci siano "Kernel panic" ed errori lo controlla il collaudo dopo ogni pro
 
 import re
 
-from qemu import isola_visibile
+from scrivania import userbar_visibile
 
 NOME = "avvio"
 ORDINE = 10
@@ -49,5 +49,5 @@ def esegui(p):
     p.nota(f"RAM: {totale_mb:.0f} MB su {p.ram}, {int(memoria.group(1)) / 1024:.0f} MB disponibili; "
            f"{moduli.group(1)} moduli")
 
-    # la scrivania: l'isola c'e' (l'ha gia' aspettata il collaudo; qui lo si dice)
-    p.controlla(isola_visibile(p.scrivania), "l'isola della scrivania non si vede")
+    # la scrivania: la userbar c'e' (l'ha gia' aspettata il collaudo; qui lo si dice)
+    p.controlla(userbar_visibile(p.scrivania), "la userbar della scrivania non si vede")

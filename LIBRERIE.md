@@ -36,8 +36,9 @@ pixel per pixel usa solo la base.
 
 Oggi `disegno.h`. **Come** si disegna, senza nessun gusto: rettangoli anche arrotondati, linee,
 sfumature, ritagli, testo **con il font che riceve**, immagini e icone **che riceve**. Non sa cosa
-sia una cartella né quale sia il font del sistema. Più avanti imparerà a caricare un'immagine o un
-font da un file su disco (punto 16 delle cose da fare).
+sia una cartella né quale sia il font del sistema. Sa già caricare un'immagine PNG da un file su
+disco (`immagine_carica`, in `gkit/immagine_file.c`, con stb_image): la usa la scrivania per le
+icone delle app. Più avanti imparerà anche a caricare un font (punto 16 delle cose da fare).
 
 ## UIKit
 

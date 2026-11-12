@@ -48,9 +48,6 @@ from PIL import Image, ImageChops
 
 LARGHEZZA, ALTEZZA = 1280, 800
 
-# Dove sta l'orologio dell'isola: cambia ogni minuto, nei confronti fra foto non conta.
-OROLOGIO = (695, 25, 845, 50)
-
 
 class ErroreProva(Exception):
     """Una prova e' fallita: il messaggio dice perche'."""
@@ -213,8 +210,8 @@ class Macchina:
         # bootindex=1: il firmware UEFI del PC parte da questo disco (su ARM non conta)
         argomenti += ["-drive", f"if=none,id=disco,file={disco},format=raw",
                       "-device", "virtio-blk-pci,drive=disco,bootindex=1"]
-        # Un'ora fissa (clock=vm: corre solo quando corre la macchina): l'orologio
-        # dell'isola segna sempre piu' o meno la stessa ora, prova dopo prova.
+        # Un'ora fissa (clock=vm: corre solo quando corre la macchina): le date dei file
+        # e l'ora che le app mostrano sono sempre piu' o meno le stesse, prova dopo prova.
         return argomenti + [
             "-rtc", "base=2026-01-01T10:00:00,clock=vm",
             "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",
@@ -300,7 +297,7 @@ class Macchina:
         with Image.open(file) as im:
             return im.convert("RGB")
 
-    def aspetta_schermo_fermo(self, attesa=20.0, pausa=0.4, maschera=OROLOGIO):
+    def aspetta_schermo_fermo(self, attesa=20.0, pausa=0.4, maschera=None):
         """Aspetta che due foto di fila siano uguali (fuori dall'orologio): le animazioni
         sono finite, le finestre disegnate. Torna l'ultima foto."""
         fine = time.time() + attesa
@@ -326,7 +323,7 @@ class Macchina:
 
     def aspetta_scrivania(self, attesa=120.0):
         """Aspetta il desktop: le partizioni montate e la tavoletta USB presa dal servizio
-        eventi (le righe nella seriale), poi l'isola disegnata in alto e lo schermo fermo.
+        eventi (le righe nella seriale), poi la userbar disegnata a sinistra e lo schermo fermo.
         Il puntatore va in un angolo, dove non copre niente. Sul PC l'attesa comprende il
         firmware UEFI, che parte prima del kernel.
         La tavoletta si aspetta perche' Linux prepara l'USB mentre il sistema parte: un
@@ -335,7 +332,8 @@ class Macchina:
         self.aspetta_seriale("avvio: /data montato", attesa)
         self.aspetta_seriale('eventi: tavoletta', attesa)
         self.muovi(*PUNTO_VUOTO)
-        self.aspetta_che(isola_visibile, attesa, 0.5, "l'isola della scrivania")
+        from scrivania import userbar_visibile
+        self.aspetta_che(userbar_visibile, attesa, 0.5, "la userbar della scrivania")
         return self.aspetta_schermo_fermo()
 
     # -- il mouse (la tavoletta USB: posizioni assolute) --
@@ -431,15 +429,7 @@ class Macchina:
 PUNTO_VUOTO = (1270, 790)
 
 
-def isola_visibile(foto):
-    """L'isola e' un pannello chiaro in alto al centro, sullo sfondo scuro: si guarda
-    che nella sua riga ci siano parecchi pixel chiari."""
-    riga = foto.crop((440, 36, 840, 40)).convert("L")
-    chiari = sum(1 for v in riga.getdata() if v > 150)
-    return chiari > 200
-
-
-def pixel_diversi(a, b, maschera=OROLOGIO, soglia=0):
+def pixel_diversi(a, b, maschera=None, soglia=0):
     """Quanti pixel cambiano fra due foto (fuori dalla maschera, un rettangolo o una
     lista di rettangoli). 'soglia' ignora le differenze piccole (sfumature)."""
     d = ImageChops.difference(a, b).convert("L")
@@ -453,7 +443,7 @@ def pixel_diversi(a, b, maschera=OROLOGIO, soglia=0):
     return d.histogram()[255]
 
 
-def riquadro_diverso(a, b, maschera=OROLOGIO, soglia=0):
+def riquadro_diverso(a, b, maschera=None, soglia=0):
     """Il rettangolo (x1, y1, x2, y2) che contiene tutti i pixel cambiati, o None."""
     d = ImageChops.difference(a, b).convert("L")
     if maschera:

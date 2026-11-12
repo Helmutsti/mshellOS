@@ -18,9 +18,9 @@ define lega
 ld.lld -static --gc-sections -s -o $(1) $(LIBC)/crt1.o $(LIBC)/crti.o $(2) -L$(LIBC) -lc $(RT) $(LIBC)/crtn.o
 endef
 
-# la libreria (con GKit e UIKit) e le librerie di altri (miniz, tomlc99), come build.sh
+# la libreria (con GKit e UIKit) e le librerie di altri (miniz, tomlc99, stb_image), come build.sh
 LIBRERIA := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/*.c utente/libreria/gkit/*.c utente/libreria/uikit/*.c)))
-ESTERNI  := $(O)/esterni/miniz.o $(O)/esterni/toml.o
+ESTERNI  := $(O)/esterni/miniz.o $(O)/esterni/toml.o $(O)/esterni/stb_image.o
 # per i programmi del sistema: lo schermo della sandbox al posto del DRM
 LIBRERIA_SANDBOX := $(filter-out $(O)/utente/libreria/gkit/schermo.o,$(LIBRERIA)) $(O)/strumenti/sandbox/schermo_sandbox.o
 
@@ -47,6 +47,9 @@ $(O)/esterni/miniz.o: utente/libreria/esterni/miniz/miniz.c
 	@mkdir -p $(@D)
 	$(CC) $(ESTERNI_ARG) $(DIP) -c $< -o $@
 $(O)/esterni/toml.o: utente/libreria/esterni/tomlc99/toml.c
+	@mkdir -p $(@D)
+	$(CC) $(ESTERNI_ARG) $(DIP) -c $< -o $@
+$(O)/esterni/stb_image.o: utente/libreria/esterni/stb/stb_image.c
 	@mkdir -p $(@D)
 	$(CC) $(ESTERNI_ARG) $(DIP) -c $< -o $@
 

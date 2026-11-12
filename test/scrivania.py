@@ -1,40 +1,52 @@
 """scrivania.py: quello che le prove sanno della scrivania di mshell (dove sono le cose).
 
 Sono numeri presi dallo schermo vero (1280x800). Se la scrivania o il compositore
-cambiano disegno (l'isola, dove si aprono le finestre), si cambiano QUI e basta.
+cambiano disegno (la userbar, il vassoio, dove si aprono le finestre), si cambiano QUI e
+basta.
 
-    L'ISOLA, in alto al centro (y = 38 il centro dei tondi):
-        menu (griglia)  x = 445
-        Attivita        x = 491
-        Doom            x = 529
-        Esempio         x = 567
-        Files           x = 605
-        Impostazioni    x = 643
-        Store           x = 681
-        l'ora           x = 718..858 (cambia: nei confronti fra foto si copre)
-    Sotto un'applicazione aperta c'e' un puntino (y = 57), sotto quella che ha il fuoco
-    un trattino.
+    LA USERBAR, sul bordo sinistro (x 8..48), centrata in altezza (y 260..540): in colonna
+    il pulsante App e le app del sistema, tondi di 32 pixel a 40 l'uno dall'altro, con il
+    centro in x = 28:
+        App             y = 280
+        Attivita        y = 320
+        Doom            y = 360
+        Esempio         y = 400
+        Files           y = 440
+        Impostazioni    y = 480
+        Store           y = 520
+    A sinistra di un'app aperta, nel margine della barra (x 9..11), c'e' un segno scuro
+    (nel tema chiaro): un puntino alto 4, una lineetta alta 14 per quella in primo piano.
+
+    IL VASSOIO DELLE APP si apre con il pulsante App, a destra della barra (x = 52), centrato
+    sul pulsante App: tutte le app installate, 3 per riga, voci di 80 x 68 a 88 l'una
+    dall'altra. Con le 6 app del sistema: 288 x 176, angolo in (52, 192); il centro del
+    tondo della prima voce in (108, 232).
 
     LE FINESTRE si aprono "a scala": la prima con l'angolo in (140, 130), ognuna delle
-    successive 40 pixel piu' in basso e a destra.
-
-    LA CARTELLA HOME, sullo sfondo in alto a sinistra: l'elemento (84 x 93) con l'angolo in
-    (16, 16), l'icona al centro in (58, 52).
+    successive 40 pixel piu' in basso e a destra (a destra della userbar).
 """
 
 import time
 
-from qemu import ErroreProva, pixel_diversi, PUNTO_VUOTO
+from qemu import pixel_diversi
 
-ISOLA_Y = 38
-MENU_X = 445
-# Contatore non e' piu' nell'isola: non e' un'app del sistema, il suo pacchetto sta sulla
+FISSATE = ["Attivita", "Doom", "Esempio", "Files", "Impostazioni", "Store"]
+BARRA_X = 8                       # la userbar: bordo sinistro, larga 40
+BARRA_Y = (800 - (8 + 7 * 32 + 6 * 8)) // 2   # 260: centrata, con App e 6 app
+VOCE_X = BARRA_X + 4 + 16         # il centro dei tondi
+APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 280)
+# Contatore non e' nella userbar: non e' un'app del sistema, il suo pacchetto sta sulla
 # Scrivania della persona (build.sh). Le misure della sua finestra restano in MISURE, per
-# la prova pacchetti, che la installa e la apre. Con lo Store (un'app in piu') l'isola e'
-# piu' larga di una voce, e tutto si e' spostato di 19 pixel a sinistra.
-APP_X = {"Attivita": 491, "Doom": 529, "Esempio": 567, "Files": 605, "Impostazioni": 643, "Store": 681}
-HOME = (58, 52)       # il centro dell'icona della cartella Home sulla scrivania
-SEGNO_Y = 57          # il puntino / trattino sotto le applicazioni aperte
+# la prova pacchetti, che la installa e la apre.
+APP = {nome: (VOCE_X, APP_PULSANTE[1] + 40 * (i + 1)) for i, nome in enumerate(FISSATE)}
+SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine a sinistra
+
+# Il vassoio con le 6 app del sistema (con Contatore installata ha una riga in piu', e
+# si apre piu' in alto: VASSOIO vale solo per le 6).
+VASSOIO_ANGOLO = (52, 192)
+VASSOIO = {nome: (52 + 16 + 40 + 88 * (i % 3), 192 + 16 + 24 + 76 * (i // 3))
+           for i, nome in enumerate(FISSATE)}
+VASSOIO_RETTANGOLO = (52, 192, 52 + 288, 192 + 176)
 
 # Le misure delle finestre (larghezza, altezza), senza l'ombra.
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),
@@ -59,20 +71,42 @@ def comandi(x, y, larghezza):
     return (x + larghezza - 49, y + 18), (x + larghezza - 21, y + 18)
 
 
+def _luce(foto, rettangolo):
+    zona = foto.crop(rettangolo).convert("L")
+    valori = list(zona.getdata())
+    return sum(valori) / len(valori)
+
+
+def userbar_visibile(foto):
+    """La userbar c'e': il pulsante App (Primario, pieno) si stacca dal vetro della barra
+    intorno, in tutti e due i temi. Senza userbar li' c'e' solo lo sfondo, uniforme."""
+    x, y = APP_PULSANTE
+    pulsante = _luce(foto, (x - 14, y - 2, x - 11, y + 2))      # dentro il tondo, a sinistra dell'icona
+    vetro = _luce(foto, (x - 4, y + 18, x + 4, y + 22))          # tra App e la prima app
+    return abs(pulsante - vetro) > 60
+
+
 def segno_sotto(foto, app):
-    """Quanti pixel chiari ci sono sotto l'icona dell'applicazione nell'isola: 0 se e'
-    chiusa, qualcuno (il puntino o il trattino) se e' aperta."""
-    x = APP_X[app]
-    zona = foto.crop((x - 10, SEGNO_Y - 2, x + 11, SEGNO_Y + 3)).convert("L")
-    return sum(1 for v in zona.getdata() if v > 170)
+    """Quanti pixel scuri (il segno nel tema chiaro) ci sono a sinistra dell'icona
+    dell'applicazione nella userbar: 0 se e' chiusa, qualcuno (il puntino o la lineetta)
+    se e' aperta."""
+    _x, y = APP[app]
+    zona = foto.crop((SEGNO_X[0], y - 8, SEGNO_X[1], y + 8)).convert("L")
+    return sum(1 for v in zona.getdata() if v < 110)
+
+
+def clic_app(m, app):
+    """Un clic sull'applicazione nella userbar."""
+    m.clic(*APP[app])
 
 
 def apri(m, app, attesa=15.0):
-    """Clicca l'applicazione nell'isola, rimette il puntatore in un angolo e aspetta
-    che sotto l'icona compaia il segno 'aperta' e che lo schermo si fermi."""
-    m.clic(APP_X[app], ISOLA_Y)
+    """Clicca l'applicazione nella userbar, rimette il puntatore in un angolo e aspetta
+    che accanto all'icona compaia il segno 'aperta' e che lo schermo si fermi."""
+    from qemu import PUNTO_VUOTO
+    clic_app(m, app)
     m.muovi(*PUNTO_VUOTO)
-    m.aspetta_che(lambda f: segno_sotto(f, app) > 0, attesa, cosa=f"{app} aperta nell'isola")
+    m.aspetta_che(lambda f: segno_sotto(f, app) > 0, attesa, cosa=f"{app} aperta nella userbar")
     return m.aspetta_schermo_fermo()
 
 
@@ -92,4 +126,3 @@ def pausa_breve():
     """Dopo un clic che non cambia niente di visibile (per esempio "porta davanti" una
     finestra che lo e' gia'), un attimo per lasciarlo arrivare."""
     time.sleep(0.3)
-

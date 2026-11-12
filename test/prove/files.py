@@ -1,6 +1,6 @@
-"""files: Files, il gestore dei file, e la cartella Home sulla scrivania.
+"""files: Files, il gestore dei file.
 
-Files si apre dall'isola (la sua finestra, 800 x 480, nel primo posto: angolo in (140, 130))
+Files si apre dalla userbar (la sua finestra, 800 x 480, nel primo posto: angolo in (140, 130))
 sulla casa, /home, dove build.sh ha copiato la cartella file/ del repository:
     Documenti/   appunti.txt, elenco della spesa.txt e una cartella con un nome lungo
     Immagini/    due .png
@@ -30,9 +30,9 @@ Si prova, una cosa dopo l'altra:
   - eliminare Documenti (non e' vuota) non si puo': compare l'avviso in basso;
   - le informazioni di un file (dal menu) si aprono in una mini finestra; Esc la chiude;
   - un filtro (Testi) e la tastiera: Invio apre la cartella scelta; le scorciatoie scritte
-    nei menu (Ctrl+Maiusc+N, F2, Ctrl+D, Ctrl+I, Canc, Esc);
-  - il doppio clic sulla Home della scrivania apre un'altra finestra di Files (secondo
-    posto) sulla casa.
+    nei menu (Ctrl+Maiusc+N, F2, Ctrl+D, Ctrl+I, Canc, Esc).
+La cartella Home sulla scrivania non c'e' piu' (la scrivania del disegno non la ha): il passo
+che la apriva con un doppio clic e' stato tolto.
 Lo stato "permesso negato" non si prova piu': il disegno non ha la scorciatoia Apps nella
 barra laterale, e dalla casa non si arriva alle cartelle del sistema.
 Le foto di riferimento sono in riferimenti/<cpu>/files_*.png (l'ora coperta).
@@ -45,7 +45,7 @@ from qemu import PUNTO_VUOTO
 
 NOME = "files"
 ORDINE = 65
-DESCRIZIONE = "Files: viste, ordine, cartelle, stati, menu, scorciatoie, informazioni; la Home sulla scrivania"
+DESCRIZIONE = "Files: viste, ordine, cartelle, stati, menu, scorciatoie, informazioni"
 RIFERIMENTI = True
 
 # dentro la finestra di Files (dall'angolo in alto a sinistra)
@@ -127,7 +127,7 @@ def esegui(p):
     l, a = s.MISURE["Files"]
     finestra = (wx, wy, wx + l, wy + a)
     corpo = (wx + 1, wy + CORPO_Y, wx + l - 1, wy + a - 1)
-    schermo = (0, 70, 1280, 800)                           # tutto, tranne l'isola (l'ora)
+    schermo = (0, 0, 1280, 800)                            # tutto lo schermo
 
     def clic(punto):
         """Un clic nella finestra; poi il puntatore va nell'angolo (niente resta acceso)."""
@@ -149,7 +149,7 @@ def esegui(p):
     def torna(foto, cosa, zona=corpo):
         return s.aspetta_zona(m, foto, zona, attesa=10.0, cosa=cosa)
 
-    # --- dall'isola: la casa, a icone e a elenco; l'ordine dall'intestazione ---
+    # --- dalla userbar: la casa, a icone e a elenco; l'ordine dall'intestazione ---
     s.apri(m, "Files")
     casa = ferma("casa_icone")
     p.riferimento("files_icone", casa)
@@ -182,7 +182,7 @@ def esegui(p):
     # si chiude con la sua X (la prova store lo prova tutto)
     m.aspetta_seriale("store: richiesta di installazione: contatore", attesa=20.0)
     m.muovi(*PUNTO_VUOTO)
-    m.aspetta_che(lambda f: s.segno_sotto(f, "Store") > 0, 10.0, cosa="lo Store aperto nell'isola")
+    m.aspetta_che(lambda f: s.segno_sotto(f, "Store") > 0, 10.0, cosa="lo Store aperto nella userbar")
     time.sleep(0.5)
     m.aspetta_schermo_fermo()
     m.foto("pacchetto_nello_store")
@@ -336,14 +336,3 @@ def esegui(p):
     m.premi("esc")                                                      # Esc: niente e' scelto
     torna(casa, "la scelta tolta con Esc")
     p.controlla(not s.zona_uguale(tasti, copia, corpo), "le scorciatoie non hanno fatto niente")
-
-    # --- dalla scrivania: il doppio clic sulla Home apre Files (un'altra finestra) ---
-    prima = m.aspetta_schermo_fermo()
-    doppio_clic(m, *s.HOME)
-    x2, y2 = s.angolo(1)
-    m.muovi(*PUNTO_VUOTO)
-    s.aspetta_zona(m, prima, (x2, y2, x2 + l, y2 + s.BARRA), uguale=False, attesa=15.0,
-                   cosa="Files aperta dalla Home della scrivania")
-    dalla_scrivania = m.aspetta_schermo_fermo()
-    m.foto("dalla_scrivania")
-    p.riferimento("files_dalla_scrivania", dalla_scrivania)

@@ -1,19 +1,34 @@
 /* LA USERBAR E IL VASSOIO DELLE APP, dal file Figma ("Userbar", "Vassoio app", "Voce del
- * vassoio"). Qui c'e' solo il DISEGNO e il "su quale voce e' il puntatore": dove stanno sullo
- * schermo, quali app ci sono e cosa fa un clic lo decide il programma della scrivania.
+ * vassoio", pagina "Scrivania"). Qui c'e' solo il DISEGNO e il "su quale voce e' il
+ * puntatore": dove stanno sullo schermo, quali app ci sono e cosa fa un clic lo decide il
+ * programma della scrivania.
  *
- * LA USERBAR: un'isola di vetro sul bordo SINISTRO dello schermo, a USERBAR_DAL_BORDO (8) dal
+ * LA USERBAR: una pillola di vetro sul bordo SINISTRO dello schermo, a USERBAR_DAL_BORDO (8) dal
  * bordo, centrata in altezza. In colonna: il pulsante App (Primario S, tondo, l'icona della
  * griglia) e sotto le app FISSATE alla barra (Secondario S, tondi, la loro icona), senza
  * nessun contenitore. SPAZIO_4 di margine intorno, SPAZIO_8 tra un pulsante e l'altro; raggio
  * a pillola, fondo SUPERFICIE_VETRO, ombra "barra". Per ora solo le icone delle app: niente
  * ora, stato o notifiche.
  *
+ * IL SEGNO DELLE APP APERTE (il disegno non lo mostra; scelta nostra, con i token): una
+ * lineetta verticale TESTO_PRIMARIO larga 2 nel margine a sinistra del pulsante, come il
+ * puntino del Dock del Mac quando sta a sinistra. Alta 4 (un puntino) se l'app e' aperta,
+ * USERBAR_SEGNO_ATTIVA (14) se e' quella in primo piano.
+ *
  * IL VASSOIO DELLE APP: si apre a DESTRA del pulsante App, a SPAZIO_4 dalla barra, centrato in
  * altezza sul pulsante App (i menu si aprono sempre centrati sull'icona da cui partono). Un
  * pannello (SUPERFICIE_ELEVATA, raggio RAGGIO_PANNELLO, ombra "sovrapposto", SPAZIO_16 di
  * margine) con le app in una griglia di VASSOIO_COLONNE colonne, SPAZIO_8 tra le voci. Ogni
  * voce: un pulsante Secondario L tondo con l'icona e sotto il nome (FONT_PICCOLO_NUOVO).
+ *
+ * LE ICONE DELLE APP: l'icona vera dell'app (una PNG del suo pacchetto, gia' caricata da chi
+ * disegna: 'immagine'), messa al centro del pulsante cosi' com'e', senza rimpicciolirla. Se
+ * l'app non ne ha una, il simbolo 'icona' (ICONA_..., del sistema).
+ *
+ * LE OMBRE ESTERNE. Sulla scrivania la userbar e il vassoio sono pannelli del compositore
+ * (gkit.h), che disegna lui le ombre fuori dalla forma, come per le finestre: userbar_disegna
+ * e vassoio_disegna disegnano solo la forma e quello che c'e' dentro (con le ombre interne).
+ * Chi li disegna su una tela sua (l'anteprima) chiama prima userbar_ombra e vassoio_ombra.
  *
  * Gli STATI si passano come numeri: la voce sotto il puntatore e quella premuta (-1 nessuna).
  * Nella userbar la voce 0 e' il pulsante App, 1..n le app fissate. */
@@ -26,13 +41,30 @@
 #define USERBAR_MARGINE     SPAZIO_4
 #define USERBAR_SPAZIO      SPAZIO_8
 #define USERBAR_LARGHEZZA   (ALTEZZA_S + 2 * USERBAR_MARGINE)    /* 40 */
+#define USERBAR_RAGGIO      (USERBAR_LARGHEZZA / 2)              /* a pillola */
+#define USERBAR_SEGNO_LARGO 2
+#define USERBAR_SEGNO_APERTA 4
+#define USERBAR_SEGNO_ATTIVA 14
 
 #define VASSOIO_COLONNE     3
 #define VASSOIO_MARGINE     SPAZIO_16
 #define VASSOIO_SPAZIO      SPAZIO_8
 #define VASSOIO_DALLA_BARRA SPAZIO_4
+#define VASSOIO_RAGGIO      RAGGIO_PANNELLO
 #define VOCE_VASSOIO_LARGA  80
 #define VOCE_VASSOIO_ALTA   (ALTEZZA_L + SPAZIO_4 + INTERLINEA_PICCOLO)   /* 48 + 4 + 16 = 68 */
+
+/* Un'app nella userbar o nel vassoio. */
+struct voce_app {
+    int icona;                          /* ICONA_...: se non c'e' l'immagine */
+    const struct immagine *immagine;    /* l'icona vera, o 0 */
+    const char *nome;                   /* nel vassoio, sotto il pulsante */
+};
+
+/* Lo stato di un'app fissata, per il segno a sinistra */
+#define APP_CHIUSA  0
+#define APP_APERTA  1
+#define APP_ATTIVA  2   /* aperta e in primo piano */
 
 /* --- la userbar --- */
 
@@ -51,11 +83,12 @@ static inline void userbar_posto(int schermo_a, int fissate, int *x, int *y) {
 /* Il centro in altezza del pulsante App, rispetto all'alto della userbar (per il vassoio). */
 static inline int userbar_centro_app(void) { return USERBAR_MARGINE + ALTEZZA_S / 2; }
 
-/* Un pulsante tondo di UIKit disegnato fuori da una finestra: stesso aspetto, stessi stati. */
+/* Un pulsante tondo di UIKit disegnato fuori da una finestra: stesso aspetto, stessi stati.
+ * Con 'immagine' l'icona e' quella, al centro; se no il simbolo 'icona_'. */
 static inline void userbar_tondo(struct pennello *p, int x, int y, int tipo, int misura, int icona_,
-                                 int sopra, int premuto) {
+                                 const struct immagine *immagine, int sopra, int premuto) {
     struct pulsante b;
-    pulsante_prepara(&b, "", icona_, 0, 0);
+    pulsante_prepara(&b, "", immagine ? NESSUNA_ICONA : icona_, 0, 0);
     b.colore = tipo;
     b.dimensione = misura;
     int lato = misure_pulsante[misura].altezza;
@@ -63,21 +96,36 @@ static inline void userbar_tondo(struct pennello *p, int x, int y, int tipo, int
     b.base.sopra = sopra || premuto;
     b.premuto = b.dentro = premuto;
     pulsante_disegna(&b.base, p);
+    if (immagine) disegna_immagine(p, immagine, x + (lato - immagine->l) / 2, y + (lato - immagine->a) / 2);
 }
 
-/* Disegna la userbar con l'angolo in alto a sinistra in (x, y). 'icone' sono le icone delle
- * app fissate (ICONA_...), 'sopra' e 'premuta' le voci (0 App, 1..n le app; -1 nessuna). */
-static inline void userbar_disegna(struct pennello *p, int x, int y, const int *icone, int fissate,
-                                   int sopra, int premuta) {
-    struct tondo t = tondo(x, y, USERBAR_LARGHEZZA, userbar_altezza(fissate), USERBAR_LARGHEZZA / 2);
+/* Le ombre esterne della userbar (solo fuori da un pannello del compositore, vedi in cima). */
+static inline void userbar_ombra(struct pennello *p, int x, int y, int fissate) {
+    struct tondo t = tondo(x, y, USERBAR_LARGHEZZA, userbar_altezza(fissate), USERBAR_RAGGIO);
     ombre_strati_fuori(p, &t, OMBRA_TAB(barra), OMBRA_N(barra));
+}
+
+/* Disegna la userbar con l'angolo in alto a sinistra in (x, y). 'app' sono le app fissate,
+ * 'stati' il loro APP_... (0 se non serve il segno), 'sopra' e 'premuta' le voci (0 App,
+ * 1..n le app; -1 nessuna). */
+static inline void userbar_disegna(struct pennello *p, int x, int y, const struct voce_app *app,
+                                   const int *stati, int fissate, int sopra, int premuta) {
+    struct tondo t = tondo(x, y, USERBAR_LARGHEZZA, userbar_altezza(fissate), USERBAR_RAGGIO);
     pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &t);
     ombre_strati_dentro(p, &t, OMBRA_TAB(barra), OMBRA_N(barra));
     int vx = x + USERBAR_MARGINE, vy = y + USERBAR_MARGINE;
-    for (int i = 0; i <= fissate; i++, vy += ALTEZZA_S + USERBAR_SPAZIO)
+    for (int i = 0; i <= fissate; i++, vy += ALTEZZA_S + USERBAR_SPAZIO) {
         userbar_tondo(p, vx, vy, i ? SECONDARIO : PRIMARIO, MISURA_S,
-                      i ? icone[i - 1] : ICONA_LAYOUT_GRID, sopra == i, premuta == i);
+                      i ? app[i - 1].icona : ICONA_LAYOUT_GRID, i ? app[i - 1].immagine : 0,
+                      sopra == i, premuta == i);
+        int stato = i && stati ? stati[i - 1] : APP_CHIUSA;
+        if (stato == APP_CHIUSA) continue;
+        int alto = stato == APP_ATTIVA ? USERBAR_SEGNO_ATTIVA : USERBAR_SEGNO_APERTA;
+        pennello_colore(p, TESTO_PRIMARIO);
+        riempi_tondo(p, x + (USERBAR_MARGINE - USERBAR_SEGNO_LARGO) / 2, vy + (ALTEZZA_S - alto) / 2,
+                     USERBAR_SEGNO_LARGO, alto, USERBAR_SEGNO_LARGO / 2);
+    }
 }
 
 /* La voce della userbar nel punto (px, py) (coordinate come quelle di userbar_disegna): 0 il
@@ -91,11 +139,6 @@ static inline int userbar_voce_sotto(int x, int y, int fissate, int px, int py) 
 }
 
 /* --- il vassoio delle app --- */
-
-struct voce_vassoio {
-    int icona;              /* ICONA_... */
-    const char *nome;
-};
 
 static inline void vassoio_misura(int quante, int *l, int *a) {
     int colonne = quante < VASSOIO_COLONNE ? (quante ? quante : 1) : VASSOIO_COLONNE;
@@ -120,12 +163,19 @@ static inline void vassoio_voce_posto(int x, int y, int i, int *vx, int *vy) {
     *vy = y + VASSOIO_MARGINE + (i / VASSOIO_COLONNE) * (VOCE_VASSOIO_ALTA + VASSOIO_SPAZIO);
 }
 
-static inline void vassoio_disegna(struct pennello *p, int x, int y, const struct voce_vassoio *voci,
+/* Le ombre esterne del vassoio (solo fuori da un pannello del compositore, vedi in cima). */
+static inline void vassoio_ombra(struct pennello *p, int x, int y, int quante) {
+    int l, a;
+    vassoio_misura(quante, &l, &a);
+    struct tondo t = tondo(x, y, l, a, VASSOIO_RAGGIO);
+    ombre_strati_fuori(p, &t, OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
+}
+
+static inline void vassoio_disegna(struct pennello *p, int x, int y, const struct voce_app *voci,
                                    int quante, int sopra, int premuta) {
     int l, a;
     vassoio_misura(quante, &l, &a);
-    struct tondo t = tondo(x, y, l, a, RAGGIO_PANNELLO);
-    ombre_strati_fuori(p, &t, OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
+    struct tondo t = tondo(x, y, l, a, VASSOIO_RAGGIO);
     pennello_colore(p, SUPERFICIE_ELEVATA);
     riempi_forma(p, &t);
     ombre_strati_dentro(p, &t, OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
@@ -133,7 +183,7 @@ static inline void vassoio_disegna(struct pennello *p, int x, int y, const struc
         int vx, vy;
         vassoio_voce_posto(x, y, i, &vx, &vy);
         userbar_tondo(p, vx + (VOCE_VASSOIO_LARGA - ALTEZZA_L) / 2, vy, SECONDARIO, MISURA_L,
-                      voci[i].icona, sopra == i, premuta == i);
+                      voci[i].icona, voci[i].immagine, sopra == i, premuta == i);
         pennello_colore(p, TESTO_PRIMARIO);
         int nl = larghezza_testo(FONT_PICCOLO_NUOVO, voci[i].nome);
         testo_centrato(p, FONT_PICCOLO_NUOVO, vx + (VOCE_VASSOIO_LARGA - nl) / 2,

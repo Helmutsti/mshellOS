@@ -190,10 +190,13 @@ done
 #     Senza le funzioni sui FILE della libreria C e senza i nomi di zlib (pacchetto.c fa
 #     le stesse scelte).
 #   tomlc99 (MIT), commit 62ce93c del 4/11/2026: leggere il TOML (i manifesti).
+#   stb_image 2.30 (pubblico dominio o MIT), commit f58f558: leggere le PNG (le icone delle
+#     app), per immagine_carica di GKit. Solo PNG e senza FILE (esterni/stb/stb_image.c).
 # Non sono nostre: i loro avvisi del compilatore si spengono (-w), per non coprire i nostri.
 ESTERNI="-w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES"
 $CC $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/libreria/miniz.o"
 $CC $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/libreria/toml.o"
+$CC $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/libreria/stb_image.o"
 LIBRERIA="$B/oggetti/libreria/*.o"
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle

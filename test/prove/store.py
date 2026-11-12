@@ -2,7 +2,7 @@
 
 Come farebbe una persona, sul disco normale (contatore.app sta sulla Scrivania della
 persona, build.sh):
-  - Files dall'isola (primo posto, angolo in (140, 130)); nella barra laterale la Scrivania,
+  - Files dalla userbar (primo posto, angolo in (140, 130)); nella barra laterale la Scrivania,
     e il doppio clic su contatore.app (il primo elemento): il launcher fa partire lo Store
     con il file, e lo Store (secondo posto, angolo in (180, 170), 600 x 600) mostra la
     richiesta di installazione ("store: richiesta di installazione: contatore");
@@ -10,7 +10,7 @@ persona, build.sh):
   - "Apri": parte Contatore (al posto dello Store, che si chiude); la si chiude;
   - di nuovo il doppio clic su contatore.app: ora e' gia' installata, con la stessa versione
     ("store: gia' installata: contatore"); "Chiudi";
-  - lo Store dall'isola: l'elenco, con Contatore tra le tue app (7 app, 1 tua); un clic su
+  - lo Store dalla userbar: l'elenco, con Contatore tra le tue app (7 app, 1 tua); un clic su
     Contatore mostra il dettaglio;
   - "Svuota dati" e la conferma: il launcher svuota i dati;
   - "Togli app" e "Togli app e dati": il launcher la toglie, e l'elenco torna a 6 app.
@@ -80,7 +80,7 @@ def esegui(p):
     passo(lambda: doppio_clic(m, *PACCHETTO), "store: gia' installata: contatore", "gia_installata")
     passo(lambda: m.clic(*CHIUDI), None, "store_chiuso")
 
-    passo(lambda: m.clic(s.APP_X["Store"], s.ISOLA_Y), "store: elenco: 7 app, 1 tue", "elenco")
+    passo(lambda: s.clic_app(m, "Store"), "store: elenco: 7 app, 1 tue", "elenco")
     passo(lambda: m.clic(*RIGA_CONTATORE), None, "dettaglio")
     passo(lambda: m.clic(*SVUOTA), None, "conferma_svuota")
     passo(lambda: m.clic(*CONFERMA_SVUOTA), "store: dati svuotati di contatore", "dati_svuotati")

@@ -37,6 +37,12 @@ void barra_congelata_disegna(struct pennello *p, int x, int y, int l, int a, con
  * (dentro la finestra) l'applicazione. */
 const struct strato_ombra *ombra_finestra(int *quanti);
 
+/* L'ombra di un pannello della scrivania nel tema in uso: quella di una barra ("ombra/barra",
+ * la userbar) o, se 'sopra' e' 1, quella di cio' che si apre sopra il resto ("ombra/
+ * sovrapposto", il vassoio delle app, come i menu). Come per le finestre, gli strati
+ * esterni li disegna il compositore, gli interni la scrivania. */
+const struct strato_ombra *ombra_pannello(int sopra, int *quanti);
+
 /* Quanto si sfoca lo sfondo sotto il vetro di una finestra: il raggio di Figma, in pixel. */
 int sfocatura_finestra(void);
 

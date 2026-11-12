@@ -59,7 +59,7 @@ TEST = REPO / "test"
 sys.path.insert(0, str(TEST))                    # qemu.py e scrivania.py: le stesse misure
 
 import qemu                                      # noqa: E402
-from qemu import ErroreProva, OROLOGIO, PUNTO_VUOTO, isola_visibile, pixel_diversi  # noqa: E402
+from qemu import ErroreProva, PUNTO_VUOTO, pixel_diversi  # noqa: E402
 
 LARGHEZZA, ALTEZZA = 1280, 800
 IMMAGINE = "mshell-sandbox"
@@ -92,7 +92,7 @@ ABS_X, ABS_Y, REL_WHEEL, SYN_REPORT = 0, 1, 8, 0
 PULSANTI = {"left": 0x110, "right": 0x111, "middle": 0x112}
 TASTIERA, TAVOLETTA = 0, 1
 
-# le applicazioni dell'isola: id (come nei manifesti) -> nome in test/scrivania.py
+# le applicazioni della userbar: id (come nei manifesti) -> nome in test/scrivania.py
 APP = {"attivita": "Attivita", "doom": "Doom", "esempio": "Esempio", "files": "Files",
        "impostazioni": "Impostazioni", "store": "Store"}
 
@@ -309,7 +309,7 @@ class Sandbox:
             immagine.save(self.lavoro / f"{self.foto_fatte:03d}_{nome}.png")
         return immagine
 
-    def aspetta_schermo_fermo(self, attesa=20.0, pausa=0.25, maschera=OROLOGIO):
+    def aspetta_schermo_fermo(self, attesa=20.0, pausa=0.25, maschera=None):
         fine = time.time() + attesa
         prima = self.foto()
         while time.time() < fine:
@@ -333,16 +333,17 @@ class Sandbox:
     def aspetta_scrivania(self, attesa=20.0):
         self.aspetta_seriale("eventi: tavoletta", attesa)
         self.muovi(*PUNTO_VUOTO)
-        self.aspetta_che(isola_visibile, attesa, 0.1, "l'isola della scrivania")
+        from scrivania import userbar_visibile
+        self.aspetta_che(userbar_visibile, attesa, 0.1, "la userbar della scrivania")
         return self.aspetta_schermo_fermo()
 
     def apri(self, app, attesa=15.0):
-        """Apre un'applicazione dall'isola (per id: "files", "attivita"...) e aspetta che
+        """Apre un'applicazione dalla userbar (per id: "files", "attivita"...) e aspetta che
         lo schermo si fermi. Torna la foto."""
         import scrivania
         nome = APP.get(app.lower(), app)
-        if nome not in scrivania.APP_X:
-            raise ErroreProva(f"'{app}' non e' nell'isola ({', '.join(APP)})")
+        if nome not in scrivania.APP:
+            raise ErroreProva(f"'{app}' non e' nella userbar ({', '.join(APP)})")
         return scrivania.apri(self, nome, attesa)
 
     # -- il mouse (la tavoletta: posizioni da 0 a 32767, come la usb-tablet di QEMU) --
@@ -501,7 +502,7 @@ def main():
     sotto = a.add_subparsers(dest="comando", required=True)
     sotto.add_parser("compila", help="compila (solo cio' che e' cambiato) e rifa' l'immagine")
     f = sotto.add_parser("foto", help="accende, apre un'app (se si dice) e salva un PNG")
-    f.add_argument("app", nargs="?", help=f"una app dell'isola: {', '.join(APP)}")
+    f.add_argument("app", nargs="?", help=f"una app della userbar: {', '.join(APP)}")
     f.add_argument("--uscita", help="il file PNG (se no sandbox_<app>_<tema>.png)")
     p = sotto.add_parser("prova", help="esegue prove di test/prove/ nella sandbox")
     p.add_argument("prove", nargs="+")

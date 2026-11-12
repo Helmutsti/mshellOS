@@ -2,16 +2,16 @@
 riferimento (test/riferimenti/<cpu>/<scena>.png).
 
 Serve ad accorgersi di un cambiamento NON voluto nel disegno (il compositore, UIKit,
-i caratteri, il vetro). L'ora dell'isola cambia e si copre (x 695..845, y 25..50); l'ora
-del PC virtuale e' comunque fissa (qemu.py: -rtc base=2026-01-01T10:00:00).
+i caratteri, il vetro). La scrivania non mostra l'ora (la vecchia isola si'): niente da
+coprire; l'ora del PC virtuale e' comunque fissa (qemu.py: -rtc base=2026-01-01T10:00:00).
+Con la userbar al posto dell'isola (e senza la cartella Home) i riferimenti vanno rifatti,
+dopo averli guardati.
 Le scene, una dopo l'altra nella stessa accensione:
   scrivania     appena accesa, niente aperto
   esempio       Esempio aperta, con due quadretti e un tasto premuto (sfondo azzurro)
   impostazioni  in piu' Impostazioni
 Attivita non c'e': i suoi numeri cambiano da soli. Contatore non c'e' piu': non e' un'app del
-sistema (va installata dal suo pacchetto). Per questo i riferimenti di "scrivania" (nell'isola
-c'era Contatore), "esempio" e "impostazioni" (dietro c'era la finestra di Contatore) vanno
-rifatti, dopo averli guardati.
+sistema (va installata dal suo pacchetto).
 
 Quando un cambiamento del disegno E' voluto, si rifanno i riferimenti:
     uv run test/collaudo.py --riferimenti
