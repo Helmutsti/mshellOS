@@ -276,6 +276,9 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 13. **Definire meglio il confine tra libreria grafica che parla con il composer e il toolkit.**
 14. **Integrazione a pannelli.**
 15. **Ragionare sulla title bar.**
+16. **Spostare tutte le risorse su disco** (font, icone, immagini), invece di compilarle dentro i
+    programmi. Fino ad allora le icone SVG dei pacchetti non si disegnano (lo Store mostra un
+    segnaposto) e la scelta della libreria per gli SVG è rimandata.
 
 Non servono più: priorità e tempo reale (li dà Linux); la chiamata "chi sono io" (su Linux
 c'è `getuid`).
