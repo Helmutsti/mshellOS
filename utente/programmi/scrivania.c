@@ -9,7 +9,8 @@
  *
  * LE APPLICAZIONI INSTALLATE le legge da /system/apps (quelle del sistema) e poi da
  * /data/apps (quelle installate dalla persona): una cartella per applicazione, con il suo
- * manifest (nome, programma, icona, colore: descrizione.h). QUALI SONO APERTE glielo dice
+ * manifest.toml (descrizione.h). Le legge una volta, all'avvio: un'app installata dopo si
+ * vede quando la scrivania riparte. QUALI SONO APERTE glielo dice
  * il compositore, che a un pannello racconta ogni finestra che compare o sparisce, con il
  * programma a cui appartiene.
  *
@@ -52,16 +53,19 @@ struct app {
 static struct app app[MAX_APP];
 static int quante_app;
 
-static const struct { const char *nome; int icona; } nomi_icone[] = {
-    { "save", ICONA_SAVE }, { "check", ICONA_CHECK }, { "minus", ICONA_MINUS },
-    { "plus", ICONA_PLUS }, { "x", ICONA_X }, { "user", ICONA_USER },
-    { "triangle-alert", ICONA_TRIANGLE_ALERT }, { "layout-grid", ICONA_LAYOUT_GRID },
-    { "settings", ICONA_SETTINGS }, { "square", ICONA_SQUARE }, { "activity", ICONA_ACTIVITY },
-    { "folder", ICONA_FOLDER },
-};
-static const struct { const char *nome; unsigned int colore; } nomi_colori[] = {
-    { "neutro", 0 }, { "blu", BLU_NORMALE }, { "verde", VERDE_NORMALE },
-    { "rosso", ROSSO_NORMALE }, { "arancio", ARANCIO_NORMALE },
+/* LE ICONE DELL'ISOLA: TEMPORANEE. Ogni app ha le sue icone SVG nel pacchetto
+ * (resources/icona-chiara.svg e icona-scura.svg, vedi il manifesto), ma la scrivania non
+ * sa ancora disegnare gli SVG: per ora mostra le icone Lucide di sempre, in un tondo
+ * colorato, scelte da questa tabella in base all'id dell'app. Un'app che non e' qui ha il
+ * quadrato su vetro. Quando la scrivania disegnera' gli SVG, la tabella sparisce. */
+static const struct { const char *id; int icona; unsigned int colore; } icone_temporanee[] = {
+    { "attivita", ICONA_ACTIVITY, VERDE_NORMALE },
+    { "contatore", ICONA_PLUS, BLU_NORMALE },
+    { "doom", ICONA_TRIANGLE_ALERT, ROSSO_NORMALE },
+    { "esempio", ICONA_SQUARE, ARANCIO_NORMALE },
+    { "files", ICONA_FOLDER, BLU_NORMALE },
+    { "impostazioni", ICONA_SETTINGS, 0 },
+    { "store", ICONA_SAVE, 0 },        /* fra le icone Lucide di oggi non c'e' "package" */
 };
 
 static int uguali(const char *a, const char *b) { return descrizione_uguali(a, b); }
@@ -91,10 +95,11 @@ static void leggi_applicazioni_in(const char *cartelle) {
         *a = (struct app){ .icona = ICONA_SQUARE };
         copia(a->cartella, v.nome, sizeof a->cartella);
         copia(a->programma, desc.programma, sizeof a->programma);
-        for (unsigned int i = 0; i < sizeof nomi_icone / sizeof nomi_icone[0]; i++)
-            if (uguali(desc.icona, nomi_icone[i].nome)) a->icona = nomi_icone[i].icona;
-        for (unsigned int i = 0; i < sizeof nomi_colori / sizeof nomi_colori[0]; i++)
-            if (uguali(desc.colore, nomi_colori[i].nome)) a->colore = nomi_colori[i].colore;
+        for (unsigned int i = 0; i < sizeof icone_temporanee / sizeof icone_temporanee[0]; i++)
+            if (uguali(desc.id, icone_temporanee[i].id)) {
+                a->icona = icone_temporanee[i].icona;
+                a->colore = icone_temporanee[i].colore;
+            }
     }
     if (d >= 0) chiudi(d);
 }

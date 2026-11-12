@@ -1,39 +1,167 @@
-/* Il launcher: il servizio del sistema che fa partire le applicazioni.
+/* Il launcher: il servizio del sistema che fa partire le applicazioni e le installa.
  *
  * Non ha finestre, come LaunchServices sul Mac o systemd per GNOME: l'interfaccia (le
- * icone da cliccare) e' della scrivania, che gli chiede "apri Contatore". Lui:
- *   1. controlla che sia un'applicazione installata: una cartella con il suo manifest
- *      in /system/apps (quelle del sistema) o, se li' non c'e', in /data/apps (quelle
- *      installate dalla persona: descrizione.h);
- *   2. dal manifest prende quale programma far partire (code, nella stessa cartella);
- *   3. lo fa partire come APPLICAZIONE (uid 1000), con l'argomento della richiesta se
- *      c'e' (launcher.h), non come sistema: e' per questo che
- *      il launcher e' del sistema (uid 0), perche' solo il sistema puo' far partire un
- *      programma con un altro uid;
- *   4. risponde "fatto" (con il numero del compito) o "non si puo'".
+ * icone da cliccare, lo Store) e' di altri, che gli chiedono le cose (il protocollo e'
+ * in launcher.h). Lui:
+ *   - APRI_APPLICAZIONE: controlla che sia un'applicazione installata (una cartella con
+ *     il suo manifest.toml in /system/apps o, se li' non c'e', in /data/apps:
+ *     descrizione.h), prende dal manifesto quale programma far partire e lo fa partire
+ *     come APPLICAZIONE (uid 1000), con l'argomento della richiesta se c'e'. E' per questo
+ *     che il launcher e' del sistema (uid 0): solo il sistema puo' far partire un
+ *     programma con un altro uid;
+ *   - APRI_FILE: un pacchetto .app non si apre mai da solo: si fa partire lo Store su di
+ *     lui, se e' installato; se no si risponde che le app vanno installate prima;
+ *   - RIMUOVI_PACCHETTO, SVUOTA_DATI: togliere un'app della persona, svuotare i dati di
+ *     un'app (pacchetto_togli, pacchetto_svuota_dati), con lo stesso permesso di installare;
+ *   - DESCRIVI_PACCHETTO, INSTALLA_PACCHETTO, AGGIORNA_PACCHETTO, ELENCO_APP: il lavoro lo
+ *     fa pacchetto.c; il launcher controlla chi puo' installare, legge il file che chi
+ *     chiede gli passa gia' aperto, e risponde con il resoconto in un foglio. E' lui a
+ *     farlo perche' /data/apps lo puo' scrivere solo il sistema.
  *
  * Il suo nome, "launcher", lo tiene init, che glielo presta al descrittore 0: se il
  * launcher cade, nessun altro puo' prenderlo, e chi chiede nel frattempo aspetta.
- * Chi chiede, per ora, puo' essere chiunque. */
+ * Le richieste si servono una alla volta: un'installazione grossa fa aspettare gli altri
+ * per il tempo di scompattarla. */
 #include "libreria.h"
 #include "launcher.h"
 #include "descrizione.h"
+#include "pacchetto.h"
 
 #define D_ASCOLTO 0      /* prestato da init */
 #define MAX_CLIENTI 8
 
+static void messaggio(struct risposta_launcher *r, const char *testo) {
+    descrizione_copia(r->messaggio, testo, MAX_MESSAGGIO_LAUNCHER);
+}
+
+static void registro(const char *a, const char *b) {
+    scrivi_testo("launcher: ");
+    scrivi_testo(a);
+    scrivi_testo(b);
+    scrivi_testo("\n");
+}
+
+/* Finisce con 'ext'? */
+static int finisce_con(const char *s, const char *ext) {
+    int ls = lunghezza(s), le = lunghezza(ext);
+    return ls > le && descrizione_uguali(s + ls - le, ext);
+}
+
+static void apri_app(struct richiesta_launcher *r, struct risposta_launcher *risposta) {
+    struct descrizione desc;
+    risposta->esito = LAUNCHER_NON_INSTALLATA;
+    if (leggi_descrizione(r->applicazione, &desc) < 0) {
+        messaggio(risposta, "Quest'app non \xc3\xa8 installata.");
+        return;
+    }
+    risposta->numero = avvia_come_con(desc.programma, UID_APPLICAZIONI, r->argomento);
+    risposta->esito = risposta->numero >= 0 ? LAUNCHER_FATTO : LAUNCHER_ERRORE;
+}
+
+static void apri_un_file(struct richiesta_launcher *r, struct risposta_launcher *risposta) {
+    if (!finisce_con(r->argomento, ESTENSIONE_PACCHETTO)) {
+        risposta->esito = LAUNCHER_NON_SUPPORTATO;
+        messaggio(risposta, "Per ora il sistema non sa aprire questo tipo di file.");
+        return;
+    }
+    struct descrizione store;
+    if (leggi_descrizione(ID_STORE, &store) < 0) {
+        risposta->esito = LAUNCHER_SERVE_STORE;
+        messaggio(risposta, "Le app vanno installate prima di aprirle.");
+        registro("le app vanno installate prima di aprirle: ", r->argomento);
+        return;
+    }
+    risposta->numero = avvia_come_con(store.programma, UID_APPLICAZIONI, r->argomento);
+    risposta->esito = risposta->numero >= 0 ? LAUNCHER_FATTO : LAUNCHER_ERRORE;
+}
+
+/* Chi c'e' all'altro capo puo' installare? Il sistema, o un'app del sistema con il
+ * permesso "app.gestire". */
+static int puo_installare(int d) {
+    if (chi(d) == UID_SISTEMA) return 1;
+    char programma[MAX_PERCORSO];
+    return programma_di(d, programma) == 0 && pacchetto_puo_gestire(programma);
+}
+
+/* Le richieste sui pacchetti: il lavoro in un foglio, che si allega alla risposta. */
+static void pacchetti(int d, struct richiesta_launcher *r, int file, struct risposta_launcher *risposta) {
+    unsigned int byte = r->tipo == ELENCO_APP ? sizeof(struct elenco_app) : sizeof(struct resoconto);
+    int f = foglio(byte);
+    void *dove = f >= 0 ? mappa(f, 0) : 0;
+    if (!dove) {
+        if (f >= 0) chiudi(f);
+        manda_subito(d, risposta, sizeof *risposta);
+        return;
+    }
+    if (r->tipo == ELENCO_APP) {
+        pacchetto_elenco(dove);
+        risposta->esito = LAUNCHER_FATTO;
+    } else if (file < 0) {
+        messaggio(risposta, "Manca il file del pacchetto.");
+    } else if (r->tipo == DESCRIVI_PACCHETTO) {
+        risposta->esito = pacchetto_descrivi(file, PACCHETTO_DESCRIVI, dove) == 0 ? LAUNCHER_FATTO
+                                                                                  : LAUNCHER_PACCHETTO_NON_VALIDO;
+    } else if (!puo_installare(d)) {
+        risposta->esito = LAUNCHER_NON_PERMESSO;
+        messaggio(risposta, "Solo lo Store pu\xc3\xb2 installare o aggiornare le app.");
+    } else {
+        int cosa = r->tipo == INSTALLA_PACCHETTO ? PACCHETTO_INSTALLA : PACCHETTO_AGGIORNA;
+        struct resoconto *res = dove;
+        risposta->esito = pacchetto_installa(file, cosa, res) == 0 ? LAUNCHER_FATTO : LAUNCHER_PACCHETTO_NON_VALIDO;
+        if (res->manifesto_letto)
+            registro(risposta->esito == LAUNCHER_FATTO ? (cosa == PACCHETTO_INSTALLA ? "installata " : "aggiornata ")
+                                                       : "pacchetto rifiutato: ", res->m.id);
+    }
+    togli(dove);
+    manda_foglio(d, risposta, sizeof *risposta, f);
+    chiudi(f);
+}
+
+/* Togliere un'app o svuotarne i dati: lo stesso permesso di installare. */
+static void togli_o_svuota(int d, struct richiesta_launcher *r, struct risposta_launcher *risposta) {
+    if (!puo_installare(d)) {
+        risposta->esito = LAUNCHER_NON_PERMESSO;
+        messaggio(risposta, "Solo lo Store pu\xc3\xb2 togliere le app o svuotarne i dati.");
+        return;
+    }
+    char id[MAX_ID];
+    descrizione_copia(id, r->applicazione, MAX_ID);
+    if (lunghezza(r->applicazione) >= MAX_ID) id[0] = 0;   /* troppo lungo: non valido */
+    int esito = r->tipo == RIMUOVI_PACCHETTO
+                    ? pacchetto_togli(id, (r->opzioni & LAUNCHER_TIENI_DATI) != 0, risposta->messaggio, MAX_MESSAGGIO_LAUNCHER)
+                    : pacchetto_svuota_dati(id, risposta->messaggio, MAX_MESSAGGIO_LAUNCHER);
+    switch (esito) {
+    case TOGLI_FATTO:          risposta->esito = LAUNCHER_FATTO; break;
+    case TOGLI_DEL_SISTEMA:    risposta->esito = LAUNCHER_DEL_SISTEMA; break;
+    case TOGLI_NON_INSTALLATA: risposta->esito = LAUNCHER_NON_INSTALLATA; break;
+    case TOGLI_IN_USO:         risposta->esito = LAUNCHER_IN_USO; break;
+    default:                   risposta->esito = LAUNCHER_ERRORE; break;
+    }
+    if (esito == TOGLI_FATTO)
+        registro(r->tipo == RIMUOVI_PACCHETTO ? (r->opzioni & LAUNCHER_TIENI_DATI ? "tolta (dati tenuti) " : "tolta ")
+                                              : "dati svuotati di ", id);
+}
+
 static void rispondi(int d) {
     struct richiesta_launcher r;
-    int n = ricevi(d, &r, sizeof r);
-    if (n != sizeof r || r.tipo != APRI_APPLICAZIONE) return;
-    r.applicazione[MAX_NOME_FILE - 1] = 0;
-    r.argomento[MAX_PERCORSO - 1] = 0;
-    struct risposta_launcher risposta = { -1, -1 };
-    struct descrizione desc;
-    if (leggi_descrizione(r.applicazione, &desc) == 0) {
-        risposta.numero = avvia_come_con(desc.programma, UID_APPLICAZIONI, r.argomento);
-        if (risposta.numero >= 0) risposta.esito = 0;
+    int file = -1;
+    int n = ricevi_foglio(d, &r, sizeof r, &file);
+    struct risposta_launcher risposta = { LAUNCHER_ERRORE, -1, { 0 } };
+    if (n == sizeof r) {
+        r.applicazione[MAX_NOME_FILE - 1] = 0;
+        r.argomento[MAX_PERCORSO - 1] = 0;
+        switch (r.tipo) {
+        case APRI_APPLICAZIONE: apri_app(&r, &risposta); break;
+        case APRI_FILE: apri_un_file(&r, &risposta); break;
+        case RIMUOVI_PACCHETTO: case SVUOTA_DATI: togli_o_svuota(d, &r, &risposta); break;
+        case DESCRIVI_PACCHETTO: case INSTALLA_PACCHETTO: case AGGIORNA_PACCHETTO: case ELENCO_APP:
+            pacchetti(d, &r, file, &risposta);
+            if (file >= 0) chiudi(file);
+            return;
+        default: break;
+        }
     }
+    if (file >= 0) chiudi(file);
     manda_subito(d, &risposta, sizeof risposta);   /* chi chiede non ci blocca mai */
 }
 

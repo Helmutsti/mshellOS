@@ -177,7 +177,7 @@ autorizzato ("chiavi a due livelli").
 | `processi` | vedere i programmi in esecuzione e fermarli | Attività |
 | `impostazioni.sistema` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
 | `spegnimento` | spegnere e riavviare il computer | (scrivania) |
-| `app.gestire` | installare, aggiornare e togliere app | (il futuro installatore) |
+| `app.gestire` | installare, aggiornare e togliere app | Store |
 
 ### Deviazioni dallo standard: si dichiarano, la persona viene informata
 
@@ -213,6 +213,7 @@ finestra come pannello di controllo. Non sono nell'elenco finché non esiste que
 | Files | `file.scrivere` | — | file |
 | Attività | `processi` (di sistema) | — | — |
 | Impostazioni | `impostazioni.sistema` (di sistema) | — | — |
+| Store | `app.gestire` (di sistema) | — | — |
 | Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |
 | Contatore, Esempio | — | — | — |
 

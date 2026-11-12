@@ -1,0 +1,27 @@
+# Il manifesto di Attività (la guida voce per voce: manifest-guida.toml; le regole: APPLICAZIONI.md).
+# Lo leggono il launcher, la scrivania e, dentro il pacchetto attivita.app, chi lo installa.
+
+id = "attivita"
+nome = "Attività"
+versione = "1.0.0"
+autore = "mshell"
+descrizione = "I programmi in esecuzione, la memoria e lo spazio sul disco."
+
+# "@PROCESSORE@" lo sostituisce build.sh con il processore per cui compila (x86_64 o arm64):
+# lo stesso sorgente diventa un pacchetto per ogni processore.
+processore = "@PROCESSORE@"
+sistema_minimo = 1
+
+programma = "code"
+
+permessi = ["processi"]
+deviazioni = []
+funzioni = []
+
+# Icone provvisorie (un quadrato colorato con un'icona Lucide): quelle vere arriveranno dal
+# disegno in Figma. Niente PNG per ora: il sistema rimpicciolira' l'SVG.
+[icone.chiaro]
+svg = "resources/icona-chiara.svg"
+
+[icone.scuro]
+svg = "resources/icona-scura.svg"

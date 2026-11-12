@@ -15,9 +15,11 @@ viene copiato prima di ogni prova: `build/` non si tocca.
 | `mouse`        | il puntatore gira in tondo per 8 s (e 4 s sopra una finestra): segue, non si blocca, arriva preciso |
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
-| `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Contatore |
+| `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Esempio |
 | `scorrimento`  | con 4 applicazioni aperte e 6 processi "riempitivi" (vedi sotto) la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
-| `files`        | Files: la casa a icone e a elenco, entrare in una cartella e tornare indietro, gli stati (vuota, errore, permesso negato), i menu del tasto destro, nuova cartella / rinomina / elimina, l'avviso, le informazioni, un filtro, Invio; il doppio clic sulla Home della scrivania apre Files |
+| `files`        | Files: la casa a icone e a elenco, entrare in una cartella e tornare indietro, aprire `contatore.app` (si apre lo Store), gli stati (vuota, errore, permesso negato), i menu del tasto destro, nuova cartella / rinomina / elimina, l'avviso, le informazioni, un filtro, Invio; il doppio clic sulla Home della scrivania apre Files |
+| `pacchetti`    | con il disco `disco_pacchetti.img`: il programma `utente/prove/pacchetti.c` chiede al launcher l'elenco delle app, di aprire un file che non è un pacchetto (no), di descrivere `contatore.app`, installarlo (anche due volte: la seconda no), svuotarne i dati, aprirlo e toglierlo mentre è acceso (no); togliere un'app del sistema o un id con `../` non si può; la finestra di Contatore compare. La libreria dei pacchetti da sola si prova senza QEMU con `test/pacchetti/prova.sh` (in Docker) |
+| `store`        | lo Store come lo userebbe una persona: doppio clic su `contatore.app` in Files, la richiesta di installazione, Installa, Apri; riaperto, il pacchetto risulta già installato; dall'isola l'elenco delle app, il dettaglio di Contatore, Svuota dati e Togli app (con le loro conferme) |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
 Dopo ogni prova si controlla anche che nella seriale non ci siano `Kernel panic`, `PANICO`,
@@ -101,7 +103,7 @@ DESCRIZIONE = "una riga per --elenco"
 
 def esegui(p):
     m = p.m                  # la macchina, gia' accesa, con la scrivania pronta
-    s.apri(m, "Contatore")   # clic sull'isola, aspetta che si apra
+    s.apri(m, "Esempio")     # clic sull'isola, aspetta che si apra
     foto = m.foto("aperta")  # la foto resta in risultati/ se la prova fallisce
     p.controlla(..., "cosa non va")
 ```

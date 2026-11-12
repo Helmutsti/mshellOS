@@ -4,13 +4,14 @@ Sono numeri presi dallo schermo vero (1280x800). Se la scrivania o il compositor
 cambiano disegno (l'isola, dove si aprono le finestre), si cambiano QUI e basta.
 
     L'ISOLA, in alto al centro (y = 38 il centro dei tondi):
-        menu (griglia)  x = 464
-        Attivita        x = 510
-        Contatore       x = 548
-        Esempio         x = 586
-        Files           x = 624
-        Impostazioni    x = 662
-        l'ora           x = 699..839 (cambia: nei confronti fra foto si copre)
+        menu (griglia)  x = 445
+        Attivita        x = 491
+        Doom            x = 529
+        Esempio         x = 567
+        Files           x = 605
+        Impostazioni    x = 643
+        Store           x = 681
+        l'ora           x = 718..858 (cambia: nei confronti fra foto si copre)
     Sotto un'applicazione aperta c'e' un puntino (y = 57), sotto quella che ha il fuoco
     un trattino.
 
@@ -26,8 +27,12 @@ import time
 from qemu import ErroreProva, pixel_diversi, PUNTO_VUOTO
 
 ISOLA_Y = 38
-MENU_X = 464
-APP_X = {"Attivita": 510, "Contatore": 548, "Esempio": 586, "Files": 624, "Impostazioni": 662}
+MENU_X = 445
+# Contatore non e' piu' nell'isola: non e' un'app del sistema, il suo pacchetto sta sulla
+# Scrivania della persona (build.sh). Le misure della sua finestra restano in MISURE, per
+# la prova pacchetti, che la installa e la apre. Con lo Store (un'app in piu') l'isola e'
+# piu' larga di una voce, e tutto si e' spostato di 19 pixel a sinistra.
+APP_X = {"Attivita": 491, "Doom": 529, "Esempio": 567, "Files": 605, "Impostazioni": 643, "Store": 681}
 HOME = (58, 52)       # il centro dell'icona della cartella Home sulla scrivania
 SEGNO_Y = 57          # il puntino / trattino sotto le applicazioni aperte
 

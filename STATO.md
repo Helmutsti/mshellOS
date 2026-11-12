@@ -88,7 +88,7 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
 **Le cartelle nel sistema** (nomi in inglese minuscolo, scelta della persona):
 
 - `/system/init`, `/system/services/<nome>` (un file per servizio),
-  `/system/apps/<app>/{code, manifest, resources}`, `/system/bin`,
+  `/system/apps/<app>/{code, manifest.toml, resources}`, `/system/bin`,
   `/system/lib` (vuota, tenuta per una futura libreria condivisa),
   `/system/resources/{fonts, icons, wallpapers}`, `/system/firmware`, `/system/modules`.
 - `/data/apps` (app installate), `/data/system` (identità, utenti, permessi, elenco delle
@@ -113,7 +113,8 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
 | `utente/libreria/` | la libreria comune: disegno, finestre, toolkit, stile (`stile.h` riprende le variabili del file Figma) |
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
-| `utente/applicazioni/` | Attivita, Contatore, Doom, Esempio, Files, Impostazioni (una cartella ciascuna, con il manifest) |
+| `utente/applicazioni/` | Attivita, Contatore, Doom, Esempio, Files, Impostazioni (una cartella ciascuna, con `manifest.toml` e `resources/`) |
+| `utente/libreria/esterni/` | librerie di altri: miniz (zip) e tomlc99 (TOML), con le loro licenze |
 | `utente/prove/` | programmi solo per le prove (vanno solo nel disco delle prove) |
 | `file/` | quello che finisce nella casa della persona (`/data/users/1000/home`) |
 | `strumenti/grafica/` | genera font e icone (anche dagli SVG esportati da Figma) |
@@ -361,6 +362,83 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
 - Anteprime: `strumenti/anteprima/anteprima.sh <scena>` (campo, pulsanti, impostazioni, files, token,
   primitive, font, scorrimento; `TEMA=scuro`, `SFONDO=bianco`). Non simulano il vetro del compositore:
   per le finestre vale la foto vera da QEMU.
+
+## 13. Le app come pacchetti .app (il cuore, fatto)
+
+Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida.toml`.
+
+**Fatto**
+- Ogni app ha un `manifest.toml` (al posto del vecchio `manifest`) e due icone provvisorie in
+  `resources/` (un quadrato colorato con un'icona Lucide, tema chiaro e scuro; quelle vere
+  arriveranno da Figma). Permessi come nella tabella "Le app di oggi". La versione del sistema
+  è 1 (`descrizione.h`).
+- Il processore nel manifesto lo scrive `build.sh`: nel sorgente c'è `processore = "@PROCESSORE@"`,
+  e per ogni processore lo sostituisce con `x86_64` o `arm64`.
+- `build.sh` fa un pacchetto per ogni app: `build/<cpu>/pacchetti/<id>.app` (uno zip con
+  manifesto, programma e `resources/`). Le app del sistema stanno anche scompattate in
+  `/system/apps/<id>`, con lo stesso contenuto.
+- **Contatore non è più un'app del sistema.** Il suo pacchetto `contatore.app` sta sulla
+  Scrivania della persona (`/data/users/1000/home/Scrivania/`), per provare l'installazione.
+  Nell'isola quindi non c'è più.
+- Due librerie di altri, in `utente/libreria/esterni/`: miniz 3.0.2 (zip) e tomlc99 (TOML),
+  tutte e due con licenza MIT.
+- Una libreria nuova per i pacchetti (`pacchetto.c`): legge un `.app` senza scompattarlo, lo
+  controlla (errori che fermano l'installazione e avvisi, ognuno con una frase per la persona),
+  lo installa in `/data/apps/<id>` (anche come aggiornamento, tutto in un colpo, senza toccare i
+  dati della persona) e dà l'elenco delle app installate. Rifiuta i percorsi che escono dalla
+  cartella dell'app e i collegamenti.
+- Installa il launcher, perché solo il sistema può scrivere in `/data/apps`. Le richieste per il
+  futuro Store (descrivi, installa, aggiorna, elenco, apri un file) sono scritte in `launcher.h`.
+  Può installare solo un'app del sistema con il permesso `app.gestire` (lo Store).
+- Aprire un `.app` (doppio clic in Files) non avvia mai l'app: si apre lo Store su quel file, e se
+  lo Store non c'è compare l'avviso "Le app vanno installate prima di aprirle".
+
+**Prove**
+- `test/pacchetti/prova.sh` (in Docker, senza QEMU): i controlli sulla libreria dei pacchetti.
+- `test/prove/pacchetti.py`: in QEMU, con un disco suo (`disco_pacchetti.img`), installa
+  contatore.app chiedendolo al launcher, ne svuota i dati e la apre.
+- Le prove che usavano Contatore ora usano Esempio, Impostazioni o Files. Le foto di
+  riferimento di `immagini` (e alcune di `files`) vanno rifatte dopo averle guardate.
+
+**Lo Store (le funzioni di base, fatte)** — `utente/applicazioni/Store/`, un'app del sistema
+con il permesso `app.gestire`. L'aspetto è provvisorio (i widget del toolkit di oggi): quello
+vero arriverà dal disegno in Figma.
+- Aperto dall'isola: l'elenco delle app installate, in due gruppi ("Le tue app", "App del
+  sistema"), con nome, autore e versione. Scegliendone una, a destra il dettaglio: descrizione,
+  i permessi che chiede (se la persona li ha concessi non è ancora scritto da nessuna parte),
+  "Cosa fa di diverso" (le deviazioni) e i ruoli.
+- Nel dettaglio "Svuota dati" (per ogni app) e "Togli app" (solo per quelle installate dalla
+  persona), ognuno con la sua domanda di conferma: "Togli app e dati", "Togli solo l'app" (i
+  dati restano per quando la si reinstalla), "Annulla". Le domande stanno al posto del
+  dettaglio, perché il toolkit non ha ancora le finestre di conferma.
+- Aprendo un `.app` (doppio clic in Files): la richiesta di installazione con nome, autore,
+  versione, descrizione, i permessi che chiederà al primo avvio, le deviazioni, i ruoli, gli
+  avvisi e gli errori. "Installa" / "Annulla" per un'app nuova, "Aggiorna" / "Annulla" per una
+  versione più nuova, solo "Chiudi" se ci sono errori o se il file è rovinato. Dopo: "<nome> è
+  installata" con "Apri" e "Chiudi". Se è già installata con la stessa versione lo dice, con
+  "Apri" e "Chiudi".
+- I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
+  Store li traduce (`Store/testo437.h`; nella libreria una funzione così non c'era).
+- Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
+  e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
+  persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati
+  di una persona si cancellano con un processo che ha la sua identità, non come sistema.
+- Nell'isola lo Store ha per ora l'icona Lucide "save" (fra le icone di oggi non c'è "package").
+
+**Prove**
+- `test/pacchetti/prova.sh`: 78 controlli (con togliere, svuotare, gli id con "/" e "..", i
+  collegamenti che puntano fuori, un'app accesa).
+- `test/prove/store.py`: in QEMU, tutto il giro dello Store con contatore.app.
+
+**Non c'è ancora**
+- La scrivania legge le app solo all'avvio: un'app appena installata (o tolta) compare (o
+  sparisce) quando riparte.
+- La scrivania mostra ancora le sue icone di prima (una tabella provvisoria in `scrivania.c`):
+  disegnare gli SVG è un passo successivo. Anche lo Store mostra un quadrato al posto
+  dell'icona dell'app.
+- Nello Store: "Installa da file…", la ricerca automatica degli aggiornamenti (aspettano la
+  decisione della persona).
+- I permessi chiesti al primo avvio, l'isolamento, le firme.
 
 ## Per chi continua il lavoro
 

@@ -1,7 +1,8 @@
 """applicazioni: ogni applicazione si apre dall'isola.
 
-Si cliccano una dopo l'altra le cinque applicazioni dell'isola (Files per ultima: la
-sua finestra, 800 x 480, al quinto posto sta ancora tutta nello schermo). Per ognuna:
+Si cliccano una dopo l'altra le applicazioni dell'isola, tranne Doom (pesante, e la sua
+finestra non e' del toolkit), con Files per ultima (la sua finestra, 800 x 480, al quarto
+posto sta ancora tutta nello schermo). Per ognuna:
   - sotto la sua icona deve comparire il segno "aperta" (il puntino o il trattino);
   - la sua finestra deve comparire dove la mette il compositore (a scala: la prima in
     (140, 130), le altre 40 pixel piu' in basso e a destra), cioe' quella zona dello
@@ -23,7 +24,7 @@ DESCRIZIONE = "ogni applicazione si apre dall'isola; il pulsante del menu non ro
 def esegui(p):
     m = p.m
     prima = p.scrivania
-    for posto, app in enumerate(["Attivita", "Contatore", "Esempio", "Impostazioni", "Files"]):
+    for posto, app in enumerate(["Attivita", "Esempio", "Impostazioni", "Files"]):
         p.controlla(s.segno_sotto(prima, app) == 0, f"{app} risulta gia' aperta nell'isola")
         dopo = s.apri(m, app)
         x, y = s.angolo(posto)
@@ -41,9 +42,9 @@ def esegui(p):
     time.sleep(0.5)
     dopo = m.aspetta_schermo_fermo()
     p.controlla(isola_visibile(dopo), "dopo il menu l'isola non si vede piu'")
-    # e il sistema risponde ancora: Contatore (gia' aperta) torna davanti
-    m.clic(s.APP_X["Contatore"], s.ISOLA_Y)
+    # e il sistema risponde ancora: Esempio (gia' aperta) torna davanti
+    m.clic(s.APP_X["Esempio"], s.ISOLA_Y)
     m.muovi(*PUNTO_VUOTO)
     x, y = s.angolo(1)
-    s.aspetta_zona(m, dopo, (x, y, x + 200, y + s.BARRA), uguale=False,
-                   cosa="Contatore tornare davanti dopo il menu")
+    s.aspetta_zona(m, dopo, (x, y, x + s.MISURE["Esempio"][0], y + s.BARRA), uguale=False,
+                   cosa="Esempio tornare davanti dopo il menu")

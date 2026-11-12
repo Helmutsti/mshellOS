@@ -24,7 +24,8 @@
  *     percorso (un clic su un nome torna a quella cartella), icone o elenco, la ricerca
  *     (mostra solo i file il cui nome contiene quello che si scrive).
  *   - IL CONTENUTO: un clic sceglie un file, il doppio clic su una cartella la apre (gli
- *     altri file per ora non si aprono: non ci sono ancora applicazioni per guardarli).
+ *     altri file per ora non si aprono, tranne i pacchetti .app, che si chiedono al
+ *     launcher: lui fa partire lo Store, o dice che le app vanno installate prima).
  *     Nella vista a elenco le colonne Nome, Tipo, Dimensione, Modificato. Si scorre con la
  *     rotella o con la barra di scorrimento del toolkit.
  *   - IL TASTO DESTRO apre un menu dove si e' cliccato: su un file Apri, Rinomina,
@@ -49,6 +50,7 @@
  * il nome nuovo. Le altre scorciatoie scritte nei menu (F2, Ctrl+D...) non arrivano. */
 #include "toolkit.h"
 #include "elemento_file.h"
+#include "launcher.h"     /* aprire un pacchetto .app: lo chiede al launcher */
 
 #define MAX_ELEMENTI 256
 #define MAX_LUNGO    256     /* un percorso in Files: anche piu' lungo di quelli che si aprono */
@@ -1012,13 +1014,29 @@ static void elimina(int e) {
     rileggi(0);
 }
 
-/* Apre un elemento: una cartella ci si entra; gli altri file per ora no. */
+/* Un pacchetto .app (un'app da installare, vedi pacchetto.h)? */
+static const char *const estensioni_pacchetti[] = { "app", 0 };
+
+static int e_pacchetto(int e) {
+    return e >= 0 && elementi[e].tipo == TIPO_FILE && ha_estensione(elementi[e].nome, estensioni_pacchetti);
+}
+
+/* Apre un elemento: una cartella ci si entra; un pacchetto .app lo si chiede al launcher,
+ * che fa partire lo Store (o dice che le app vanno installate prima: launcher.h); gli
+ * altri file per ora no. */
 static void apri_elemento(int e) {
-    if (e < 0 || elementi[e].tipo != TIPO_CARTELLA) return;
+    if (e < 0 || (elementi[e].tipo != TIPO_CARTELLA && !e_pacchetto(e))) return;
     char percorso[MAX_LUNGO];
     percorso_di(percorso, qui, elementi[e].nome);
-    if (!percorso[0]) { avvisa("Il percorso \x8A troppo lungo"); return; }
-    vai(percorso, 1);
+    if (!percorso[0] || (e_pacchetto(e) && lunghezza(percorso) >= MAX_PERCORSO)) {
+        avvisa("Il percorso \x8A troppo lungo");
+        return;
+    }
+    if (elementi[e].tipo == TIPO_CARTELLA) { vai(percorso, 1); return; }
+    struct risposta_launcher risposta;
+    int esito = apri_file(percorso, &risposta);
+    if (esito == LAUNCHER_SERVE_STORE) avvisa("Le app vanno installate prima di aprirle");
+    else if (esito < 0) avvisa("Non si riesce ad aprire il pacchetto");
 }
 
 /* --- il menu del tasto destro e la scheda delle informazioni --- */
@@ -1121,7 +1139,7 @@ static int voce_y(const struct pannello *pn, int i, int *alta) {
  * li apra), Duplica solo i file. */
 static int voce_attiva(int azione) {
     int e = menu.bersaglio;
-    if (azione == APRI) return e >= 0 && elementi[e].tipo == TIPO_CARTELLA;
+    if (azione == APRI) return e >= 0 && (elementi[e].tipo == TIPO_CARTELLA || e_pacchetto(e));
     if (azione == DUPLICA) return e >= 0 && elementi[e].tipo == TIPO_FILE;
     if (azione == NUOVA_CARTELLA) return !errore_qui;
     return 1;

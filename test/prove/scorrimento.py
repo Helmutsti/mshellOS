@@ -7,9 +7,9 @@ I PROCESSI IN PIU'. Questa prova accende il sistema con il disco delle prove
 quelli del sistema), e la tabella ha abbastanza righe da traboccare. Le applicazioni si aprono una sola volta
 ciascuna: senza i riempitivi le righe sarebbero 9, e nella tabella ne stanno 9 giuste.
 
-Si aprono Contatore, Esempio e Impostazioni, e per ultima Attivita (quarto posto, angolo
+Si aprono Files, Esempio e Impostazioni, e per ultima Attivita (quarto posto, angolo
 in 260,250). Le righe sono 15: 0..4 il sistema (init, eventi, compositore, launcher,
-scrivania), 5..10 i riempitivi, 11 Contatore, 12 Esempio, 13 Impostazioni, 14 Attivita.
+scrivania), 5..10 i riempitivi, 11 Files, 12 Esempio, 13 Impostazioni, 14 Attivita.
 Sono alte 30 pixel; nella vista ne entrano 272 (9 righe), il contenuto ne e' alto
 2 + 15 * 30 = 452: si puo' scorrere di 180 pixel. La rotella accelera come sul Mac
 (stile.h): uno scatto da solo fa 10 pixel; due scatti di fila, veloci, 10 + 20 = 30.
@@ -102,7 +102,7 @@ def salite_di(dopo, prima, r, d):
 
 def esegui(p):
     m = p.m
-    for app in ("Contatore", "Esempio", "Impostazioni", "Attivita"):
+    for app in ("Files", "Esempio", "Impostazioni", "Attivita"):
         s.apri(m, app)
     x, y = s.angolo(3)
     striscia, righe = zona(x, y, STRISCIA), zona(x, y, RIGHE)
@@ -203,4 +203,4 @@ def esegui(p):
                   cosa="Impostazioni chiusa (il clic dopo lo scorrimento ha scelto un'altra riga?)")
     f = m.foto("terminata")
     p.controlla(s.segno_sotto(f, "Esempio") > 0, "e' stata chiusa Esempio invece di Impostazioni")
-    p.controlla(s.segno_sotto(f, "Contatore") > 0, "e' stata chiusa Contatore")
+    p.controlla(s.segno_sotto(f, "Files") > 0, "e' stata chiusa Files")

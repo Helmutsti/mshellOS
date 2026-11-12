@@ -1,0 +1,8 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Icona provvisoria di Esempio (tema chiaro): un quadrato arrotondato con il glifo "square"
+     di Lucide (https://lucide.dev, licenza ISC). Quella vera arrivera' da Figma. -->
+<rect width="64" height="64" rx="14" fill="#F97316"/>
+<g transform="translate(16 16) scale(1.3333)">
+<path d="M5 3H19C20.1046 3 21 3.89543 21 5V19C21 20.1046 20.1046 21 19 21H5C3.89543 21 3 20.1046 3 19V5C3 3.89543 3.89543 3 5 3Z" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>

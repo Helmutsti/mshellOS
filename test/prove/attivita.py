@@ -1,7 +1,7 @@
 """attivita: la pagina Memoria di Attivita dice quanta RAM c'e', e si puo' terminare
 un'applicazione.
 
-Si apre prima Contatore (primo posto) e poi Attivita (secondo posto, angolo in 180,170).
+Si apre prima Esempio (primo posto) e poi Attivita (secondo posto, angolo in 180,170).
 
 LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 69,6 MB su 1972,1 MB". Il
 totale e' quello che Linux dice in /proc/meminfo (MemTotal: la RAM meno quello che il
@@ -18,10 +18,10 @@ kernel tiene per se' fin dall'avvio): 1972 MB sul PC con 2 GB, 7946 con --ram 81
 Il riferimento si rifa' con --riferimenti (con --ram, per un'altra RAM), e va guardato a
 occhio una volta.
 
-TERMINARE. Nella scheda "Processi" si sceglie la riga di Contatore (il primo processo
+TERMINARE. Nella scheda "Processi" si sceglie la riga di Esempio (il primo processo
 dopo quelli del sistema: init, eventi, compositore, launcher, scrivania) e si preme
-"Termina processo" (la X a destra nella barra degli strumenti): la finestra di Contatore
-deve sparire, e nell'isola Contatore non deve piu' risultare aperta.
+"Termina processo" (la X a destra nella barra degli strumenti): la finestra di Esempio
+deve sparire, e nell'isola Esempio non deve piu' risultare aperta.
 """
 
 import time
@@ -31,10 +31,10 @@ from qemu import ErroreProva, PUNTO_VUOTO
 
 NOME = "attivita"
 ORDINE = 60
-DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); termina Contatore"
+DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); termina Esempio"
 RIFERIMENTI = True
 
-RIGA_CONTATORE = 5        # 0 init, 1 eventi, 2 compositore, 3 launcher, 4 scrivania
+RIGA_ESEMPIO = 5        # 0 init, 1 eventi, 2 compositore, 3 launcher, 4 scrivania
 
 
 def inchiostro(foto, area, soglia=170):
@@ -85,7 +85,7 @@ def parte_intera_del_totale(foto, area):
 
 def esegui(p):
     m = p.m
-    s.apri(m, "Contatore")
+    s.apri(m, "Esempio")
     s.apri(m, "Attivita")
     x, y = s.angolo(1)
 
@@ -104,17 +104,17 @@ def esegui(p):
     except ErroreProva as e:
         raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
                           "memoria_totale_ottenuta.png e la foto 'memoria'") from None
-    # --- terminare Contatore ---
+    # --- terminare Esempio ---
     m.clic(x + 49, y + 58)                     # la scheda "Processi"
     time.sleep(0.5)
-    m.clic(x + 150, y + 147 + 30 * RIGA_CONTATORE)
+    m.clic(x + 150, y + 147 + 30 * RIGA_ESEMPIO)
     time.sleep(0.3)
     m.clic(x + 616, y + 58)                    # "Termina processo": la X nella barra
     m.muovi(*PUNTO_VUOTO)
     cx, cy = s.angolo(0)
-    # la barra di Contatore, sopra Attivita (e lontano dalla sua ombra)
-    striscia = (cx, cy, cx + s.MISURE["Contatore"][0], cy + 16)
-    s.aspetta_zona(m, p.scrivania, striscia, attesa=5.0, cosa="la finestra di Contatore sparire")
-    m.aspetta_che(lambda f: s.segno_sotto(f, "Contatore") == 0, 5.0,
-                  cosa="Contatore chiusa nell'isola")
+    # la barra di Esempio, sopra Attivita (e lontano dalla sua ombra)
+    striscia = (cx, cy, cx + s.MISURE["Esempio"][0], cy + 16)
+    s.aspetta_zona(m, p.scrivania, striscia, attesa=5.0, cosa="la finestra di Esempio sparire")
+    m.aspetta_che(lambda f: s.segno_sotto(f, "Esempio") == 0, 5.0,
+                  cosa="Esempio chiusa nell'isola")
     m.foto("terminata")
