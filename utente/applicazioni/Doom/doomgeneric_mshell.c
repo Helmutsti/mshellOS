@@ -31,17 +31,22 @@ static struct finestra fin;
 static int fuoco = 1;
 static unsigned int pulsanti_prima;
 
-/* --- i tasti: codice di Linux (KEY_...) -> tasto di Doom --- */
+/* --- i tasti: codice di Linux (KEY_...) -> tasto di Doom ---
+ * Sparare e usare sono i tasti "virtuali" di doomgeneric, KEY_FIRE e KEY_USE (i comandi
+ * predefiniti, m_controls.c: key_fire e key_use), non KEY_RCTRL e lo spazio del Doom
+ * originale: Ctrl (sinistro e destro) da' KEY_FIRE, Spazio KEY_USE, come nelle tabelle di
+ * doomgeneric (i_input.c). Maiusc corre (key_speed = KEY_RSHIFT), Alt (sinistro e Alt Gr)
+ * va di lato (key_strafe = KEY_RALT). */
 static const unsigned char da_linux[128] = {
     [1] = KEY_ESCAPE,
     [2] = '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', KEY_BACKSPACE, KEY_TAB,
-    [16] = 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', KEY_ENTER, KEY_RCTRL,
+    [16] = 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', KEY_ENTER, KEY_FIRE,
     'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', KEY_RSHIFT, '\\',
     'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', KEY_RSHIFT,
-    [55] = '*', KEY_RALT, ' ', KEY_CAPSLOCK,
+    [55] = '*', KEY_RALT, KEY_USE, KEY_CAPSLOCK,
     [59] = KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_F7, KEY_F8, KEY_F9, KEY_F10,
     [87] = KEY_F11, KEY_F12,
-    [96] = KEY_ENTER, KEY_RCTRL, '/',
+    [96] = KEY_ENTER, KEY_FIRE, '/',
     [100] = KEY_RALT,
     [102] = KEY_HOME, KEY_UPARROW, KEY_PGUP, KEY_LEFTARROW, KEY_RIGHTARROW, KEY_END,
             KEY_DOWNARROW, KEY_PGDN, KEY_INS, KEY_DEL,

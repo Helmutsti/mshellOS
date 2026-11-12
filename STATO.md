@@ -308,8 +308,12 @@ di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
 una barra (trascinamento e X). Si apre dalla scrivania (icona rossa con il triangolo).
 - Comandi: frecce, Ctrl spara, Spazio usa/apre, Maiusc corre, Alt passi laterali, Invio ed Esc
   per il menu. Salvataggi in `/data/users/1000/appsdata/doom`.
-- **Provato a mano su ARM (Mac): funziona.** Su x86 compila ma non è stato provato (in QEMU
-  emulato sarà più lento).
+- Ctrl e Spazio diventano i tasti "virtuali" di doomgeneric `KEY_FIRE` e `KEY_USE` (i comandi
+  predefiniti di `m_controls.c`), non `KEY_RCTRL` e `' '` del Doom originale: fino alla
+  correzione Ctrl non sparava e Spazio non apriva le porte (sbaglio presente da quando c'è
+  Doom). Maiusc dà `KEY_RSHIFT` (corre), Alt e Alt Gr `KEY_RALT` (passi laterali).
+- Provato su x86 nella sandbox e in QEMU con la prova `tasti_speciali` (Invio per cominciare,
+  Ctrl tenuto giù spara di continuo, freccia tenuta giù cammina, Esc apre e chiude il menu).
 - Non c'è l'audio né il mouse. Se parte male l'errore è silenzioso (`I_Error` scrive su uno
   stdout che in mshell non va da nessuna parte).
 
@@ -319,6 +323,10 @@ attiva che l'ha chiesto con `finestra_tasti_fisici()` (messaggio `VOGLIO_TASTI_F
 notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. UIKit chiede i tasti
 fisici per ogni sua finestra e li passa agli "ascoltatori" delle scorciatoie (`uikit/tasti.h`,
 `finestra_tk_ascolta_tasti`); mentre Ctrl o Alt sono giù i caratteri non arrivano ai campi.
+Esc non è un carattere (arriva solo come tasto fisico): su un avviso (bloccante, o con il
+fuoco) UIKit lo usa come Annulla, prima degli ascoltatori. La prova `tasti_speciali`
+(`test/prove/`) controlla Doom, le scorciatoie di Files (Ctrl+Maiusc+N, Ctrl+D, Ctrl+I, Canc,
+Esc), Esc sull'avviso e il campo della ricerca (Maiusc, Alt Gr, niente caratteri con Ctrl/Alt).
 
 **Anteprima su Mac**: `strumenti/anteprima/anteprima.sh <scena> [scala]` disegna in un PNG
 (`strumenti/anteprima/out/`) in circa un secondo. Scene: `campo`, `pulsanti`, `impostazioni`,
