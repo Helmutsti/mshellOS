@@ -47,7 +47,7 @@
 #define MANDA_SUBITO 1
 
 #define MAX_NOME       32  /* lettere di un nome di socket, compreso lo 0 finale */
-#define MAX_MESSAGGIO 512  /* byte di un messaggio */
+#define MAX_MESSAGGIO 5120 /* byte di un messaggio (basta per un percorso lungo MAX_PERCORSO e il resto) */
 #define MAX_GUARDATI   16  /* descrittori in un elenco di aspetta */
 
 struct da_guardare {
@@ -178,7 +178,8 @@ struct data_ora {
     unsigned int ore, minuti, secondi;
 };
 
-#define MAX_PERCORSO 64    /* lettere di un percorso, compreso lo 0 finale */
+#define MAX_PERCORSO 4096  /* lettere di un percorso, compreso lo 0 finale (come PATH_MAX di Linux) */
+#define MAX_PERCORSO_PROGRAMMA 64   /* il percorso del programma di un'app (/system/apps/<id>/code): corto, viaggia nei messaggi */
 
 /* LO SCHERMO (il DRM di Linux, /dev/dri/card0). apri_schermo da' un descrittore dello
  * schermo a un solo programma alla volta (il "padrone" dello schermo, il DRM master);

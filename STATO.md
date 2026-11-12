@@ -212,8 +212,11 @@ di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
 **Non c'è ancora**:
 - aprire i file che non sono cartelle (non esiste ancora un visore: "Apri" è grigio);
 - eliminare cartelle piene e duplicare cartelle;
-- la libreria accetta percorsi di al massimo 63 lettere (la prova "errore" usa proprio una
-  cartella con un percorso più lungo): va alzato a 4096 come su Linux;
+- (fatto) i percorsi arrivano a 4096 lettere come su Linux (`MAX_PERCORSO`; i nomi a 255,
+  `MAX_NOME_FILE`): la cartella dal nome lungo di Documenti ora si apre. I messaggi del
+  launcher hanno posto per un percorso intero (`MAX_MESSAGGIO` 5120); il percorso del
+  *programma* di un'app resta corto (`MAX_PERCORSO_PROGRAMMA` 64) perché viaggia nelle notizie
+  del compositore;
 - l'icona Home della scrivania (`elemento_file.h`) usa ancora le icone di file di prima.
 
 ## 6b. Doom, tasti fisici e anteprima

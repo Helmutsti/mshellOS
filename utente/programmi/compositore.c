@@ -132,7 +132,7 @@ struct finestra_compositore {
     unsigned int ruolo;         /* RUOLO_FINESTRA, o una superficie speciale della scrivania */
     int raggio;                 /* gli angoli: per l'ombra e il vetro smerigliato */
     unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
-    char programma[MAX_PERCORSO];   /* di quale programma e': lo dice il kernel */
+    char programma[MAX_PERCORSO_PROGRAMMA];   /* di quale programma e': lo dice il kernel */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
@@ -505,7 +505,7 @@ static int finestra_sotto(int x, int y) {
  * normale e' comparsa, o non c'e' piu'. */
 static void racconta_a(int pannello, int i, unsigned int tipo) {
     struct notizia n = { .tipo = tipo, .numero = finestre[i].id };
-    for (int k = 0; k < MAX_PERCORSO; k++) n.testo[k] = finestre[i].programma[k];
+    for (int k = 0; k < MAX_PERCORSO_PROGRAMMA; k++) n.testo[k] = finestre[i].programma[k];
     avvisa(pannello, n);
 }
 

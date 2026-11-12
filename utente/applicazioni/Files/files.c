@@ -53,7 +53,7 @@
 #include "launcher.h"     /* aprire un pacchetto .app: lo chiede al launcher */
 
 #define MAX_ELEMENTI 256
-#define MAX_LUNGO    256     /* un percorso in Files: anche piu' lungo di quelli che si aprono */
+#define MAX_LUNGO    MAX_PERCORSO   /* un percorso in Files */
 #define MAX_STORIA    32
 #define CASA         OGGETTO_CASA
 
@@ -513,8 +513,11 @@ static void rileggi(const char *nome) {
 /* Un nome che non c'e' ancora nella cartella: 'base', poi "base 2", "base 3"... prima
  * dell'estensione ("foto copia.png", "foto copia 2.png"). */
 static void nome_libero(char *dove, const char *base, const char *est) {
+    if (lunghezza(est) > 64) est = "";                       /* un'estensione assurda: niente */
+    int massimo = MAX_NOME_FILE - 1 - lunghezza(est) - 4;    /* il posto per " 999" e per lo 0 */
     for (int n = 1; n < 1000; n++) {
-        char *d = metti_testo(dove, base);
+        char *d = dove;
+        for (const char *s = base; *s && d - dove < massimo; s++) *d++ = *s;   /* un nome lungo si accorcia */
         if (n > 1) { *d++ = ' '; d = metti_numero(d, (unsigned long long)n); }
         metti_testo(d, est);
         char p[MAX_LUNGO];
@@ -823,7 +826,7 @@ static void tasto_contenuto(unsigned int tasto) {
         int n = lunghezza(nome_nuovo);
         if (tasto == '\n') { finisci_rinomina(); return; }
         if (tasto == '\b') { if (n) nome_nuovo[n - 1] = 0; }
-        else if (tasto >= ' ' && tasto != 0x7F && tasto != '/' && n < MAX_PERCORSO - 8) {
+        else if (tasto >= ' ' && tasto != 0x7F && tasto != '/' && n < MAX_NOME_FILE - 1) {
             nome_nuovo[n] = (char)tasto;
             nome_nuovo[n + 1] = 0;
         } else return;

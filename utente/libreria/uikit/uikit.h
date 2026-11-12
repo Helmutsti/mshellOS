@@ -1745,7 +1745,23 @@ static inline void nome_percorso_disegna(struct widget *w, struct pennello *p) {
     pennello_salva(p);
     pennello_ritaglia(p, w->x, w->y, w->l, w->a);       /* l'ultimo puo' essere tagliato */
     pennello_colore(p, qui || w->sopra ? TESTO_PRIMARIO : TESTO_SECONDARIO);
-    testo_centrato(p, percorso_font(pc, n->indice), w->x, w->y, w->a, n->nome);
+    const struct font *f = percorso_font(pc, n->indice);
+    const char *testo = n->nome;
+    char tagliato[MAX_TESTO_WIDGET + 4];
+    if (larghezza_testo(f, n->nome) > w->l) {            /* non ci sta: finisce con tre punti (il font non ha il carattere dei puntini) */
+        int lungo = 0;                                   /* quante lettere del nome stanno, con i puntini */
+        for (int k = 0; n->nome[k]; k++) {
+            if (((unsigned char)n->nome[k] & 0xC0) == 0x80) continue;   /* in mezzo a una lettera UTF-8 */
+            for (int j = 0; j < k; j++) tagliato[j] = n->nome[j];
+            tagliato[k] = '.'; tagliato[k + 1] = '.'; tagliato[k + 2] = '.'; tagliato[k + 3] = 0;
+            if (larghezza_testo(f, tagliato) > w->l) break;
+            lungo = k;
+        }
+        for (int j = 0; j < lungo; j++) tagliato[j] = n->nome[j];
+        tagliato[lungo] = '.'; tagliato[lungo + 1] = '.'; tagliato[lungo + 2] = '.'; tagliato[lungo + 3] = 0;
+        testo = tagliato;
+    }
+    testo_centrato(p, f, w->x, w->y, w->a, testo);
     pennello_ripristina(p);
 }
 

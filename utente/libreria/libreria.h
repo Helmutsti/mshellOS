@@ -90,7 +90,7 @@ int aspetta(struct da_guardare *elenco, int quanti, int ms);
 int chi(int d);
 
 /* Il percorso del programma all'altro capo del collegamento 'd', in 'dove'
- * (MAX_PERCORSO byte). 0, o -1. */
+ * (MAX_PERCORSO_PROGRAMMA byte). 0, o -1. */
 int programma_di(int d, char *dove);
 
 /* Chiude il programma all'altro capo del collegamento 'd'. 0 se fatto, o -1. */

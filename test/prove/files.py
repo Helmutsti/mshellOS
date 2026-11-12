@@ -20,8 +20,8 @@ Si prova, una cosa dopo l'altra:
   - il doppio clic su Documenti ci entra, "indietro" (+216, +65) torna alla casa;
   - nella Scrivania (barra laterale) c'e' contatore.app: il doppio clic NON lo avvia (non
     e' installato): si apre lo Store con la richiesta di installazione, e lo si chiude;
-  - in Documenti, la cartella col nome lungo non si apre (il suo percorso supera i 63
-    caratteri della libreria): lo stato "errore";
+  - in Documenti, la cartella col nome lungo si apre (i percorsi arrivano a 4096
+    caratteri, come in Linux) e mostra leggimi.txt;
   - il tasto destro su un file apre il menu del file; sul vuoto il menu della cartella,
     e sopra "Ordina per" il suo sottomenu;
   - Nuova cartella: compare "Nuova cartella" con il nome da scrivere; si scrive "Prova",
@@ -192,15 +192,14 @@ def esegui(p):
     m.aspetta_che(lambda f: s.segno_sotto(f, "Store") == 0, 10.0, cosa="lo Store chiuso")
     p.controlla(s.segno_sotto(m.aspetta_schermo_fermo(), "Files") > 0, "Files non e' piu' aperta")
 
-    # --- errore: la cartella dal nome troppo lungo, in Documenti ---
+    # --- la cartella dal nome lungo (percorso oltre i 63 caratteri di una volta), in Documenti ---
     clic(HOME)
     torna(casa, "la casa dalla barra laterale")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])
     torna(documenti, "di nuovo Documenti")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])          # la cartella lunga
-    errore = cambia(documenti, "lo stato 'errore'")
-    m.foto("errore")
-    p.riferimento("files_errore", errore)
+    cambia(documenti, "la cartella dal nome lungo aperta (c'e' leggimi.txt)")
+    m.foto("cartella_lunga")
 
     # --- i menu del tasto destro ---
     clic(HOME)

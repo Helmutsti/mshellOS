@@ -168,7 +168,7 @@ struct notizia {
     unsigned int tasto;      /* TASTO */
     unsigned int fuoco;      /* FUOCO */
     unsigned int numero;     /* PING, FINESTRA_APERTA, FINESTRA_CHIUSA */
-    char testo[MAX_PERCORSO];   /* FINESTRA_APERTA */
+    char testo[MAX_PERCORSO_PROGRAMMA];   /* FINESTRA_APERTA */
     int scatti_x, scatti_y;  /* ROTELLA */
     unsigned int premuto;    /* TASTO_FISICO (il codice e' in 'tasto') */
 };

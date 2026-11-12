@@ -161,7 +161,7 @@ int manifesto_leggi(char *testo, struct manifesto *m, char *errore, int max_erro
 #define MAX_TESTO_MANIFESTO 16384
 
 int manifesto_dell_app(const char *cartella_app, struct manifesto *m) {
-    char percorso[MAX_PERCORSO + 32];
+    char percorso[MAX_PERCORSO_PROGRAMMA + 32];
     if (strlen(cartella_app) + 1 + sizeof NOME_MANIFESTO > sizeof percorso) return -1;
     strcpy(percorso, cartella_app);
     strcat(percorso, "/" NOME_MANIFESTO);
@@ -187,7 +187,7 @@ int leggi_descrizione(const char *app, struct descrizione *d) {
     if (!m) return -1;
     int esito = -1;
     for (int i = 0; i < QUANTE_CARTELLE_APPLICAZIONI && esito < 0; i++) {
-        char cartella[MAX_PERCORSO];
+        char cartella[MAX_PERCORSO_PROGRAMMA];
         if (strlen(cartelle_applicazioni[i]) + 1 + strlen(app) >= sizeof cartella) continue;
         strcpy(cartella, cartelle_applicazioni[i]);
         strcat(cartella, "/");

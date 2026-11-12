@@ -45,7 +45,7 @@
 
 struct app {
     char cartella[MAX_NOME_FILE];   /* il nome della sua cartella: lo si chiede al launcher */
-    char programma[MAX_PERCORSO];   /* il percorso completo del programma */
+    char programma[MAX_PERCORSO_PROGRAMMA];   /* il percorso completo del programma */
     int icona;
     unsigned int colore;            /* 0: neutra (di vetro) */
 };
@@ -113,7 +113,7 @@ static void leggi_applicazioni(void) {
 
 #define MAX_APERTE 32
 
-static struct { unsigned int id; char programma[MAX_PERCORSO]; } aperte[MAX_APERTE];
+static struct { unsigned int id; char programma[MAX_PERCORSO_PROGRAMMA]; } aperte[MAX_APERTE];
 static int quante_aperte;
 static unsigned int attiva;   /* la finestra che ha il fuoco (0 nessuna) */
 
@@ -141,7 +141,7 @@ static int e_aperta(const struct app *a) {
 static int notizia(const struct notizia *n) {
     if (n->tipo == FINESTRA_APERTA && quante_aperte < MAX_APERTE) {
         aperte[quante_aperte].id = n->numero;
-        copia(aperte[quante_aperte].programma, n->testo, MAX_PERCORSO);
+        copia(aperte[quante_aperte].programma, n->testo, MAX_PERCORSO_PROGRAMMA);
         quante_aperte++;
         return 1;
     }

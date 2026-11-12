@@ -24,7 +24,7 @@
 #ifndef DESCRIZIONE_H
 #define DESCRIZIONE_H
 
-#include "chiamate.h"   /* MAX_PERCORSO */
+#include "chiamate.h"   /* MAX_PERCORSO_PROGRAMMA */
 
 /* LA VERSIONE DEL SISTEMA. Un'app dice nel manifesto la versione minima che le serve
  * (sistema_minimo): se e' piu' alta di questa, non si installa. Si alza quando il sistema
@@ -134,7 +134,7 @@ extern const char *cartelle_applicazioni[QUANTE_CARTELLE_APPLICAZIONI];
 struct descrizione {
     char id[MAX_ID];
     char nome[MAX_NOME_APP];
-    char programma[MAX_PERCORSO];   /* il percorso completo: /system/apps/<id>/code */
+    char programma[MAX_PERCORSO_PROGRAMMA];   /* il percorso completo: /system/apps/<id>/code */
     int di_sistema;                 /* 1 se sta in /system/apps */
 };
 

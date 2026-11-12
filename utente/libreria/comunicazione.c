@@ -198,8 +198,8 @@ int programma_di(int d, char *dove) {
     do { cifre[k++] = (char)('0' + n % 10); n /= 10; } while (n);
     while (k) percorso[p++] = cifre[--k];
     memcpy(percorso + p, "/exe", 5);
-    ssize_t l = readlink(percorso, dove, MAX_PERCORSO);
-    if (l <= 0 || l >= MAX_PERCORSO) return -1;
+    ssize_t l = readlink(percorso, dove, MAX_PERCORSO_PROGRAMMA);
+    if (l <= 0 || l >= MAX_PERCORSO_PROGRAMMA) return -1;
     dove[l] = 0;
     return 0;
 }

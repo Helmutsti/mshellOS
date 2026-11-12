@@ -79,7 +79,7 @@ static void apri_un_file(struct richiesta_launcher *r, struct risposta_launcher 
  * permesso "app.gestire". */
 static int puo_installare(int d) {
     if (chi(d) == UID_SISTEMA) return 1;
-    char programma[MAX_PERCORSO];
+    char programma[MAX_PERCORSO_PROGRAMMA];
     return programma_di(d, programma) == 0 && pacchetto_puo_gestire(programma);
 }
 
