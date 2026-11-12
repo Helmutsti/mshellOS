@@ -199,7 +199,7 @@ class Macchina:
             cpu_qemu = ["-accel", "hvf", "-cpu", "host"] if veloce else ["-cpu", "cortex-a72"]
             riga = (self.build / "riga_kernel.txt").read_text().strip()
             argomenti = [trova_qemu("qemu-system-aarch64"), "-M", "virt", *cpu_qemu,
-                         "-m", str(self.ram),
+                         "-m", str(self.ram), "-smp", "4",
                          "-kernel", str(self.build / "linux"),
                          "-initrd", str(self.build / "avvio.img"),
                          "-append", riga,
@@ -207,7 +207,7 @@ class Macchina:
         else:
             programma = trova_qemu("qemu-system-x86_64")
             firmware = trova_firmware(programma)
-            argomenti = [programma, "-machine", "pc", "-m", str(self.ram),
+            argomenti = [programma, "-machine", "pc", "-m", str(self.ram), "-smp", "4",
                          "-drive", f"if=pflash,format=raw,readonly=on,file={firmware}",
                          "-vga", "none", "-device", "virtio-vga,xres=1280,yres=800"]
         # bootindex=1: il firmware UEFI del PC parte da questo disco (su ARM non conta)

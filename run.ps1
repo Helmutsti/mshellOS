@@ -10,7 +10,8 @@ $qui = $PSScriptRoot
 docker run --rm --platform linux/amd64 -v "${qui}:/w" alpine:3.24 sh /w/build.sh x86_64
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-# -machine pc -m 2048 : un PC con 2 GB di RAM (si puo' dare di piu': -m 8192)
+# -machine pc -m 2048 -smp 4 : un PC con 2 GB di RAM (si puo' dare di piu': -m 8192) e 4
+#   processori: compositore e app lavorano insieme invece di darsi il turno su uno solo
 # -drive if=pflash ... edk2-x86_64-code.fd : il firmware UEFI (OVMF, del progetto EDK2),
 #   che viene con QEMU. Parte, trova nel disco la partizione EFI (avvio) e lancia
 #   \EFI\BOOT\BOOTX64.EFI
@@ -21,7 +22,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 # qemu-xhci, usb-kbd, usb-tablet : il controllore USB 3, con tastiera e tavoletta USB. La
 #   tavoletta dice DOVE e' il puntatore: il mouse non va catturato, e il puntatore e'
 #   sempre sotto quello di Windows
-& "C:\Program Files\qemu\qemu-system-x86_64.exe" -machine pc -m 2048 -rtc base=localtime `
+& "C:\Program Files\qemu\qemu-system-x86_64.exe" -machine pc -m 2048 -smp 4 -rtc base=localtime `
     -drive "if=pflash,format=raw,readonly=on,file=C:\Program Files\qemu\share\edk2-x86_64-code.fd" `
     -drive "if=none,id=disco,file=$qui\build\x86_64\disco.img,format=raw" `
     -device "virtio-blk-pci,drive=disco,bootindex=1" `
