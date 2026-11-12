@@ -18,10 +18,12 @@ permessi = ["impostazioni.sistema"]
 deviazioni = []
 funzioni = []
 
-# Icone provvisorie (un quadrato colorato con un'icona Lucide): quelle vere arriveranno dal
-# disegno in Figma. Niente PNG per ora: il sistema rimpicciolira' l'SVG.
+# L'icona, dal disegno in Figma: SVG a 96 pixel (il sistema lo ridimensiona) e le PNG a 32 e a 18,
+# una per tema.
 [icone.chiaro]
 svg = "resources/icona-chiara.svg"
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png" }
 
 [icone.scuro]
 svg = "resources/icona-scura.svg"
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png" }

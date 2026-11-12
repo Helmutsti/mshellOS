@@ -672,4 +672,29 @@ static inline void disegna_immagine(struct pennello *p, const struct immagine *i
     p->s.colore = colore;
 }
 
+/* Un'immagine a colori ritagliata a CERCHIO (bordo sfumato), centrata nel quadrato di lato
+ * 'lato' con l'angolo in (x, y). Il cerchio e' quello dell'immagine intera (il piu' piccolo
+ * dei suoi lati), al centro del quadrato: se l'immagine e' piu' piccola del quadrato, il
+ * cerchio e' piu' piccolo e resta centrato. L'immagine non si ingrandisce mai. */
+static inline void disegna_immagine_tonda(struct pennello *p, const struct immagine *im, int x, int y,
+                                          int lato) {
+    int ix = x + (lato - im->l) / 2, iy = y + (lato - im->a) / 2;
+    int d = im->l < im->a ? im->l : im->a;
+    struct tondo t = tondo(ix + (im->l - d) / 2, iy + (im->a - d) / 2, d, d, d / 2);
+    unsigned int colore = p->s.colore;
+    for (int r = 0; r < im->a; r++)
+        for (int k = 0; k < im->l; k++) {
+            unsigned int px = im->pixel[r * im->l + k];
+            unsigned int a = px >> 24;
+            if (!a) continue;
+            int m = coperto(distanza(&t, ix + k, iy + r));
+            if (!m) continue;
+            unsigned int rr = ((px >> 16) & 0xFF) * 255 / a, gg = ((px >> 8) & 0xFF) * 255 / a,
+                         bb = (px & 0xFF) * 255 / a;
+            p->s.colore = OPACO(rr << 16 | gg << 8 | bb);
+            copri(p, ix + k, iy + r, (int)((a + (a >> 7)) * m >> 8));
+        }
+    p->s.colore = colore;
+}
+
 #endif

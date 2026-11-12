@@ -22,8 +22,13 @@
  * voce: un pulsante Secondario L tondo con l'icona e sotto il nome (FONT_PICCOLO_NUOVO).
  *
  * LE ICONE DELLE APP: l'icona vera dell'app (una PNG del suo pacchetto, gia' caricata da chi
- * disegna: 'immagine'), messa al centro del pulsante cosi' com'e', senza rimpicciolirla. Se
- * l'app non ne ha una, il simbolo 'icona' (ICONA_..., del sistema).
+ * disegna: 'immagine'). Se l'app non ne ha una, il simbolo 'icona' (ICONA_..., del sistema),
+ * nel pulsante tondo. Due modi, con USERBAR_ICONE_TONDE qui sotto:
+ *   1 (scelto per ora): l'icona e' TONDA, ritagliata a cerchio, e riempie il posto del
+ *     pulsante: niente cerchio dietro. Sopra il puntatore e premuta si scurisce con un velo
+ *     tondo trasparente. Serve la PNG di 32 pixel (48 nel
+ *     vassoio: se non c'e' si usa la piu' vicina, al suo posto, senza ingrandirla).
+ *   0 (il vecchio): l'icona piccola (16 nella userbar, 20 nel vassoio) dentro il pulsante tondo.
  *
  * LE OMBRE ESTERNE. Sulla scrivania la userbar e il vassoio sono pannelli del compositore
  * (gkit.h), che disegna lui le ombre fuori dalla forma, come per le finestre: userbar_disegna
@@ -36,6 +41,23 @@
 #define USERBAR_H
 
 #include "uikit.h"
+
+/* UN SOLO INTERRUTTORE tra le due maniere (vedi in cima): 1 icone tonde, 0 icona piccola nel
+ * cerchio. Lo legge anche la scrivania per scegliere la misura della PNG da caricare. */
+#ifndef USERBAR_ICONE_TONDE
+#define USERBAR_ICONE_TONDE 1
+#endif
+#if USERBAR_ICONE_TONDE
+#define USERBAR_PNG_BARRA   ALTEZZA_S
+#define USERBAR_PNG_VASSOIO ALTEZZA_L
+#else
+#define USERBAR_PNG_BARRA   ICONA_S
+#define USERBAR_PNG_VASSOIO ICONA_L
+#endif
+
+/* Il velo sull'icona tonda: nero trasparente (alfa 0x29 = 16%, 0x4D = 30%) */
+#define USERBAR_VELO_SOPRA  0x29000000u
+#define USERBAR_VELO_PREMUTA 0x4D000000u
 
 #define USERBAR_DAL_BORDO   SPAZIO_8
 #define USERBAR_MARGINE     SPAZIO_4
@@ -84,14 +106,26 @@ static inline void userbar_posto(int schermo_a, int fissate, int *x, int *y) {
 static inline int userbar_centro_app(void) { return USERBAR_MARGINE + ALTEZZA_S / 2; }
 
 /* Un pulsante tondo di UIKit disegnato fuori da una finestra: stesso aspetto, stessi stati.
- * Con 'immagine' l'icona e' quella, al centro; se no il simbolo 'icona_'. */
+ * Con 'immagine' l'icona e' quella: tonda al posto del pulsante (USERBAR_ICONE_TONDE 1) o al
+ * centro del pulsante (0); se no il simbolo 'icona_' nel pulsante. */
 static inline void userbar_tondo(struct pennello *p, int x, int y, int tipo, int misura, int icona_,
                                  const struct immagine *immagine, int sopra, int premuto) {
+    int lato = misure_pulsante[misura].altezza;
+#if USERBAR_ICONE_TONDE
+    if (immagine) {
+        disegna_immagine_tonda(p, immagine, x, y, lato);
+        if (sopra || premuto) {
+            int d = immagine->l < immagine->a ? immagine->l : immagine->a;
+            pennello_colore(p, premuto ? USERBAR_VELO_PREMUTA : USERBAR_VELO_SOPRA);
+            riempi_tondo(p, x + (lato - d) / 2, y + (lato - d) / 2, d, d, d / 2);
+        }
+        return;
+    }
+#endif
     struct pulsante b;
     pulsante_prepara(&b, "", immagine ? NESSUNA_ICONA : icona_, 0, 0);
     b.colore = tipo;
     b.dimensione = misura;
-    int lato = misure_pulsante[misura].altezza;
     b.base.x = x; b.base.y = y; b.base.l = lato; b.base.a = lato;
     b.base.sopra = sopra || premuto;
     b.premuto = b.dentro = premuto;

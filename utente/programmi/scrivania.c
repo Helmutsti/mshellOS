@@ -23,7 +23,7 @@
  *
  * LE ICONE sono quelle vere delle app: la PNG piccola del pacchetto (il manifesto le elenca
  * per tema e per misura), caricata con immagine_carica di GKit. Si prende quella del tema in
- * uso con la misura piu' vicina a quella del disegno (16 nella userbar, 20 nel vassoio); se
+ * uso con la misura piu' vicina a quella del posto (USERBAR_PNG_BARRA e USERBAR_PNG_VASSOIO, in userbar.h); se
  * nel tema non ce n'e' nessuna, quella dell'altro tema (APPLICAZIONI.md, "Icone mancanti").
  * Gli SVG non si sanno ancora disegnare: un'app che ha solo l'SVG ha il simbolo "pacchetto".
  *
@@ -136,8 +136,8 @@ static void leggi_applicazioni_in(const char *cartelle) {
         if (manifesto_dell_app(cartella_app, &m) < 0) continue;
         const char *gia[2];
         int quante = 0;
-        voci_barra[i].immagine = carica_icona(a, cartella_app, png_per(&m, ICONA_S), gia, &quante);
-        voci_vassoio[i].immagine = carica_icona(a, cartella_app, png_per(&m, ICONA_L), gia, &quante);
+        voci_barra[i].immagine = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_BARRA), gia, &quante);
+        voci_vassoio[i].immagine = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_VASSOIO), gia, &quante);
     }
     if (d >= 0) chiudi(d);
 }
