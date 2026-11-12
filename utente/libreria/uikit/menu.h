@@ -213,6 +213,27 @@ static inline const struct voce_menu_tk *menu_voce_di(const struct menu_tk *m, i
     return id < 0 ? 0 : &m->pannelli[id / 100].voci[id % 100];
 }
 
+/* COSA RIDISEGNARE. Il menu copre tutta la finestra (per sentire il clic fuori), ma si vede
+ * solo nei suoi pannelli: si ridisegnano solo loro (con l'ombra, che sborda) o solo le voci
+ * che si accendono e si spengono. */
+static inline void menu_segna_pannello(struct menu_tk *m, const struct pannello_menu_tk *pn) {
+    int s = ombra_sporgenza(OMBRA_TAB(sovrapposto), OMBRA_N(sovrapposto));
+    widget_cambiato_zona(&m->base, pn->x - s, pn->y - s, m->larghezza + 2 * s, menu_altezza(m, pn) + 2 * s);
+}
+
+static inline void menu_segna_voce(struct menu_tk *m, int id) {
+    if (id < 0 || id / 100 >= m->quanti) return;
+    const struct pannello_menu_tk *pn = &m->pannelli[id / 100];
+    int i = id % 100;
+    if (i >= pn->quante) return;
+    widget_cambiato_zona(&m->base, pn->x, menu_voce_y(m, pn, i), m->larghezza, menu_alta_voce(m, &pn->voci[i]));
+}
+
+/* Tutti i pannelli aperti. */
+static inline void menu_segna(struct menu_tk *m) {
+    for (int n = 0; n < m->quanti; n++) menu_segna_pannello(m, &m->pannelli[n]);
+}
+
 /* Il sottomenu della voce i del menu: accanto, a destra (a sinistra se non ci sta). */
 static inline void menu_apri_sottomenu(struct menu_tk *m, int i) {
     const struct pannello_menu_tk *pn = &m->pannelli[0];
@@ -245,7 +266,12 @@ static inline void menu_puntatore(struct widget *w, int x, int y, unsigned int p
     if (id < 0 || id != premuta) return;
     const struct voce_menu_tk *v = menu_voce_di(m, id);
     if (!menu_voce_attiva(m, v->azione)) return;
-    if (v->sottomenu) { menu_apri_sottomenu(m, id % 100); widget_cambiato(w); return; }
+    if (v->sottomenu) {
+        menu_segna(m);
+        menu_apri_sottomenu(m, id % 100);
+        menu_segna(m);
+        return;
+    }
     int azione = v->azione;
     menu_chiudi(m);
     if (m->al_scelta) m->al_scelta(m, azione, m->dati);
@@ -258,16 +284,41 @@ static inline void menu_movimento(struct widget *w, int x, int y) {
     int id = menu_voce_in(m, x, y);
     if (id < -1) id = -1;
     if (id == m->sopra) return;
+    /* prima: la voce accesa e, se c'e', il sottomenu con la voce che lo apre */
+    int prima_quanti = m->quanti, prima_da = m->aperta_da;
+    struct pannello_menu_tk prima_sotto = m->pannelli[1];
+    menu_segna_voce(m, m->sopra);
     m->sopra = id;
     const struct voce_menu_tk *v = menu_voce_di(m, id);
     if (v && id / 100 == 0) {
         if (v->sottomenu && menu_voce_attiva(m, v->azione)) menu_apri_sottomenu(m, id % 100);
         else m->quanti = 1;
     }
-    widget_cambiato(w);
+    menu_segna_voce(m, id);
+    int cambiato = prima_quanti != m->quanti ||
+                   (m->quanti > 1 && (prima_da != m->aperta_da || prima_sotto.voci != m->pannelli[1].voci));
+    if (cambiato && prima_quanti > 1) {
+        menu_segna_pannello(m, &prima_sotto);
+        menu_segna_voce(m, prima_da);
+    }
+    if (cambiato && m->quanti > 1) {
+        menu_segna_pannello(m, &m->pannelli[1]);
+        menu_segna_voce(m, m->aperta_da);
+    }
 }
 
-static const struct tipo_widget tipo_menu_tk = { 0, 0, menu_disegna, menu_puntatore, 0, 0, 0, menu_movimento, 0 };
+/* Il puntatore e' uscito dal menu (dalla finestra, o la finestra ha perso il fuoco): la voce
+ * accesa si spegne. */
+static inline void menu_sopra_cambiato(struct widget *w) {
+    struct menu_tk *m = (struct menu_tk *)w;
+    if (w->sopra || m->sopra < 0) return;
+    menu_segna_voce(m, m->sopra);
+    m->sopra = -1;
+}
+
+static const struct tipo_widget tipo_menu_tk = {
+    0, 0, menu_disegna, menu_puntatore, 0, 0, menu_sopra_cambiato, menu_movimento, 0
+};
 
 static inline void menu_prepara(struct menu_tk *m, int misura, int larghezza, domanda_menu attiva,
                                 domanda_menu spuntata, al_scelta_menu al_scelta, void *dati) {
@@ -297,6 +348,7 @@ static inline int menu_tasto(struct finestra_tk *f, unsigned int codice, unsigne
  * quanto basta perche' stia tutto nella finestra (sotto la testata). */
 static inline void menu_apri(struct menu_tk *m, const struct voce_menu_tk *voci, int quante, int x, int y) {
     struct finestra_tk *f = widget_finestra(&m->base);
+    if (!m->base.nascosto) menu_segna(m);    /* era gia' aperto altrove */
     m->quanti = 1;
     m->sopra = m->premuta = m->aperta_da = -1;
     m->base.x = m->base.y = 0;
@@ -309,7 +361,8 @@ static inline void menu_apri(struct menu_tk *m, const struct voce_menu_tk *voci,
     if (pn->y + a > m->base.a - MENU_BORDO) pn->y = m->base.a - MENU_BORDO - a;
     if (pn->x < MENU_BORDO) pn->x = MENU_BORDO;
     if (pn->y < testata_altezza(f)) pn->y = testata_altezza(f);
-    widget_nascondi(&m->base, 0);
+    m->base.nascosto = 0;
+    menu_segna(m);
     if (f->base.tipo == &tipo_finestra_tk) {
         uikit_sotto(f, 0);
         finestra_tk_ascolta_tasti(f, menu_tasto, m);
@@ -318,8 +371,9 @@ static inline void menu_apri(struct menu_tk *m, const struct voce_menu_tk *voci,
 
 static inline void menu_chiudi(struct menu_tk *m) {
     if (!m->quanti) return;
+    menu_segna(m);
     m->quanti = 0;
-    widget_nascondi(&m->base, 1);
+    m->base.nascosto = 1;
     struct finestra_tk *f = widget_finestra(&m->base);
     if (f->base.tipo == &tipo_finestra_tk) {
         finestra_tk_smetti_tasti(f, menu_tasto, m);

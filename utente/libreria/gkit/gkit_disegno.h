@@ -153,39 +153,128 @@ static inline unsigned int sopra_a(unsigned int sopra, unsigned int sotto) {
     unsigned int resto = 255 - (sopra >> 24);
     if (resto == 255) return sotto;
     if (resto == 0) return sopra;
+    /* sotto vuoto: ogni byte e' quello di sopra piu' diviso_255(0), cioe' piu' 0 */
+    if (!sotto) return sopra;
     unsigned int r = 0;
     for (int b = 0; b < 32; b += 8)
         r |= (((sopra >> b) & 0xFF) + diviso_255(((sotto >> b) & 0xFF) * resto)) << b;
     return r;
 }
 
+/* Il colore del pennello, coperto per 'copertura', gia' premoltiplicato: il pixel da
+ * mettere sopra. In 'a' la sua opacita' (0-255): se e' 0 non c'e' niente da mettere. */
+static inline unsigned int colore_coperto(const struct pennello *p, int copertura, unsigned int *a) {
+    unsigned int c = p->s.colore;
+    *a = ((c >> 24) * copertura >> 8) * (p->s.opacita + 1) >> 8;   /* 0-255 */
+    return *a << 24 | diviso_255(((c >> 16) & 0xFF) * *a) << 16 |
+           diviso_255(((c >> 8) & 0xFF) * *a) << 8 | diviso_255((c & 0xFF) * *a);
+}
+
+/* Come copri (qui sotto), ma su un pixel gia' trovato e gia' dentro il ritaglio: lo usano
+ * i disegni che hanno gia' tagliato i loro giri al ritaglio, per non controllarlo di nuovo
+ * a ogni pixel. */
+static inline void copri_pixel(const struct pennello *p, unsigned int *d, int copertura) {
+    if (copertura <= 0) return;
+    if (copertura > 256) copertura = 256;
+    unsigned int a, premolt = colore_coperto(p, copertura, &a);
+    if (!a) return;
+    *d = sopra_a(premolt, *d);
+}
+
 /* Il colore del pennello, coperto per 'copertura' (0-256), sul pixel (x, y). TUTTO il
- * disegno passa da qui: ritaglio, opacita', trasparenza. */
+ * disegno passa da qui (o da copri_pixel, che e' lo stesso conto): ritaglio, opacita',
+ * trasparenza. */
 static inline void copri(struct pennello *p, int x, int y, int copertura) {
     if (copertura <= 0 || x < p->s.rx || x >= p->s.rx2 || y < p->s.ry || y >= p->s.ry2) return;
-    if (copertura > 256) copertura = 256;
-    unsigned int c = p->s.colore;
-    unsigned int a = ((c >> 24) * copertura >> 8) * (p->s.opacita + 1) >> 8;   /* 0-255 */
-    if (!a) return;
-    unsigned int premolt = a << 24 | diviso_255(((c >> 16) & 0xFF) * a) << 16 |
-                           diviso_255(((c >> 8) & 0xFF) * a) << 8 | diviso_255((c & 0xFF) * a);
-    unsigned int *d = &p->tela->pixel[y * p->tela->larghezza + x];
-    *d = sopra_a(premolt, *d);
+    copri_pixel(p, &p->tela->pixel[y * p->tela->larghezza + x], copertura);
+}
+
+/* UNA STRISCIA di 'n' pixel tutti coperti per intero: e' copri con copertura 256 su ogni
+ * pixel, ma il colore si calcola una volta sola ('premolt' e 'a' vengono da
+ * colore_coperto(p, 256, ...)). E' la parte piu' grande di quasi ogni disegno: l'interno
+ * di un rettangolo, di un vetro, di un pulsante. Due scorciatoie, con lo stesso
+ * risultato di sopra_a: un colore opaco copre e basta, e il conto di sopra_a si fa su
+ * due byte alla volta (vedi qui sotto). */
+static inline void stendi(unsigned int *d, int n, unsigned int premolt, unsigned int a) {
+    if (!a || n <= 0) return;
+    unsigned int alfa = premolt >> 24;
+    if (alfa == 0) return;                       /* sopra_a restituirebbe 'sotto' */
+    if (alfa == 255) {
+        for (int i = 0; i < n; i++) d[i] = premolt;
+        return;
+    }
+    /* DUE BYTE ALLA VOLTA. sopra_a fa, per ogni byte, sopra + diviso_255(sotto * resto).
+     * Si possono mettere due byte di 'sotto' in un numero, a 16 bit di distanza (rosso e
+     * blu, poi alfa e verde): ognuno per 'resto' fa al massimo 255 * 255 + 128 = 65153, che
+     * sta nei suoi 16 bit, e anche il "+ (x >> 8)" di diviso_255 ci sta (65407): i due
+     * conti non si toccano e vengono uguali a quelli fatti uno per uno. Poi si somma
+     * 'sopra': se ogni suo byte non supera la sua opacita' (un colore premoltiplicato vero,
+     * come quelli di colore_coperto), byte + diviso_255(sotto * resto) <= opacita' + resto
+     * = 255, quindi non ci sono riporti da un byte all'altro e la somma e' uguale all'OR
+     * di sopra_a. Se no (un'opacita' del pennello fuori misura), si usa sopra_a. */
+    int vero = ((premolt >> 16) & 0xFF) <= alfa && ((premolt >> 8) & 0xFF) <= alfa &&
+               (premolt & 0xFF) <= alfa;
+    if (!vero) {
+        for (int i = 0; i < n; i++) d[i] = sopra_a(premolt, d[i]);
+        return;
+    }
+    unsigned int resto = 255 - alfa;
+    for (int i = 0; i < n; i++) {
+        unsigned int sotto = d[i];
+        unsigned int rb = (sotto & 0x00FF00FFu) * resto + 0x00800080u;
+        rb = ((rb + ((rb >> 8) & 0x00FF00FFu)) >> 8) & 0x00FF00FFu;
+        unsigned int ag = ((sotto >> 8) & 0x00FF00FFu) * resto + 0x00800080u;
+        ag = (ag + ((ag >> 8) & 0x00FF00FFu)) & 0xFF00FF00u;
+        d[i] = premolt + rb + ag;
+    }
+}
+
+/* LA ZONA DA DISEGNARE: il rettangolo (x, y, l, a) tagliato al ritaglio del pennello (e
+ * alla tela, per sicurezza). In (*x0, *y0) - (*x1, *y1) i pixel da guardare, estremi
+ * x1 e y1 esclusi. 0 se non resta niente. Ogni disegno guarda solo questi pixel: quando
+ * si ridisegna un pezzetto di finestra (il ritaglio stretto attorno a quello che e'
+ * cambiato), una forma grande costa solo per il pezzetto. */
+static inline int zona_da_disegnare(const struct pennello *p, int x, int y, int l, int a,
+                                    int *x0, int *y0, int *x1, int *y1) {
+    int xa = x, ya = y, xb = x + l, yb = y + a;
+    if (xa < p->s.rx) xa = p->s.rx;
+    if (ya < p->s.ry) ya = p->s.ry;
+    if (xb > p->s.rx2) xb = p->s.rx2;
+    if (yb > p->s.ry2) yb = p->s.ry2;
+    if (xa < 0) xa = 0;
+    if (ya < 0) ya = 0;
+    if (xb > p->tela->larghezza) xb = p->tela->larghezza;
+    if (yb > p->tela->altezza) yb = p->tela->altezza;
+    *x0 = xa; *y0 = ya; *x1 = xb; *y1 = yb;
+    return xa < xb && ya < yb;
+}
+
+/* Un pennello che non lascia segni: colore del tutto trasparente, o opacita' 0. (Per
+ * copri l'opacita' 'a' viene 0 qualunque sia la copertura.) */
+static inline int pennello_invisibile(const struct pennello *p) {
+    return (p->s.colore >> 24) == 0 || p->s.opacita == 0;
 }
 
 /* Tutta la zona del ritaglio trasparente: si comincia sempre cosi', perche' le forme
  * semitrasparenti si sommano a quello che c'e' gia' sotto. */
 static inline void pulisci(struct pennello *p) {
-    for (int y = p->s.ry; y < p->s.ry2; y++)
-        for (int x = p->s.rx; x < p->s.rx2; x++)
-            p->tela->pixel[y * p->tela->larghezza + x] = 0;
+    int x0, y0, x1, y1;
+    if (!zona_da_disegnare(p, p->s.rx, p->s.ry, p->s.rx2 - p->s.rx, p->s.ry2 - p->s.ry,
+                           &x0, &y0, &x1, &y1)) return;
+    for (int y = y0; y < y1; y++) {
+        unsigned int *riga = p->tela->pixel + y * p->tela->larghezza;
+        for (int x = x0; x < x1; x++) riga[x] = 0;
+    }
 }
 
 /* --- le forme dritte --- */
 
 static inline void riempi_rettangolo(struct pennello *p, int x, int y, int l, int a) {
-    for (int r = y; r < y + a; r++)
-        for (int k = x; k < x + l; k++) copri(p, k, r, 256);
+    int x0, y0, x1, y1;
+    if (pennello_invisibile(p) || !zona_da_disegnare(p, x, y, l, a, &x0, &y0, &x1, &y1)) return;
+    unsigned int alfa, pieno = colore_coperto(p, 256, &alfa);
+    for (int r = y0; r < y1; r++)
+        stendi(p->tela->pixel + r * p->tela->larghezza + x0, x1 - x0, pieno, alfa);
 }
 
 /* Il contorno di un rettangolo, spesso quanto il pennello, verso l'interno. */
@@ -272,9 +361,37 @@ static inline int coperto(int distanza) {
     return c < 0 ? 0 : c > 256 ? 256 : c;
 }
 
+/* PERCHE' SI PUO' SALTARE L'INTERNO. Su una riga, 'distanza' e' fatta di due meta': nella
+ * meta' sinistra usa un raggio solo e, andando verso il centro, non cresce mai (ci si
+ * allontana dal bordo sinistro, e la radice intera non torna indietro); nella meta' destra
+ * lo stesso, a specchio. Quindi i pixel di una riga che stanno "abbastanza dentro"
+ * (distanza al massimo un certo valore) sono SEMPRE una striscia sola, senza buchi: la
+ * fine della meta' sinistra piu' l'inizio della destra. Basta cercarne i due capi, dai
+ * due lati della riga, e tutto quello che sta in mezzo e' dentro senza calcolarlo.
+ * (La prova, pixel per pixel contro il modo lento, e' in un programma di prova fuori dal
+ * sistema.) */
+
 static inline void riempi_forma(struct pennello *p, const struct tondo *t) {
-    for (int y = t->y; y < t->y + t->a; y++)
-        for (int x = t->x; x < t->x + t->l; x++) copri(p, x, y, coperto(distanza(t, x, y)));
+    int x0, y0, x1, y1;
+    if (pennello_invisibile(p) || !zona_da_disegnare(p, t->x, t->y, t->l, t->a, &x0, &y0, &x1, &y1))
+        return;
+    unsigned int alfa, pieno = colore_coperto(p, 256, &alfa);
+    for (int y = y0; y < y1; y++) {
+        unsigned int *riga = p->tela->pixel + y * p->tela->larghezza;
+        /* da sinistra fino al primo pixel coperto tutto, poi da destra lo stesso */
+        int a = x0, b = x1;
+        for (; a < b; a++) {
+            int c = coperto(distanza(t, a, y));
+            if (c == 256) break;
+            copri_pixel(p, &riga[a], c);
+        }
+        for (; b > a; b--) {
+            int c = coperto(distanza(t, b - 1, y));
+            if (c == 256) break;
+            copri_pixel(p, &riga[b - 1], c);
+        }
+        stendi(riga + a, b - a, pieno, alfa);   /* in mezzo, tutto coperto */
+    }
 }
 
 static inline void riempi_tondo(struct pennello *p, int x, int y, int l, int a, int raggio) {
@@ -285,11 +402,26 @@ static inline void riempi_tondo(struct pennello *p, int x, int y, int l, int a, 
 /* Il bordo interno della forma, spesso 'spessore' 256esimi di pixel (256 = 1 pixel,
  * 384 = 1,5): quello che e' dentro la forma ma non dentro la forma ristretta. */
 static inline void contorna_forma(struct pennello *p, const struct tondo *t, int spessore) {
-    for (int y = t->y; y < t->y + t->a; y++)
-        for (int x = t->x; x < t->x + t->l; x++) {
-            int d = distanza(t, x, y);
-            copri(p, x, y, coperto(d) - coperto(d + spessore));
+    int x0, y0, x1, y1;
+    /* con spessore 0 o meno la forma ristretta copre almeno quanto la forma: niente */
+    if (spessore <= 0 || pennello_invisibile(p) ||
+        !zona_da_disegnare(p, t->x, t->y, t->l, t->a, &x0, &y0, &x1, &y1)) return;
+    for (int y = y0; y < y1; y++) {
+        unsigned int *riga = p->tela->pixel + y * p->tela->larghezza;
+        /* dove anche la forma ristretta copre tutto, la differenza e' 0: si salta (vedi
+         * "perche' si puo' saltare l'interno", sopra riempi_forma) */
+        int a = x0, b = x1;
+        for (; a < b; a++) {
+            int d = distanza(t, a, y);
+            if (coperto(d + spessore) == 256) break;
+            copri_pixel(p, &riga[a], coperto(d) - coperto(d + spessore));
         }
+        for (; b > a; b--) {
+            int d = distanza(t, b - 1, y);
+            if (coperto(d + spessore) == 256) break;
+            copri_pixel(p, &riga[b - 1], coperto(d) - coperto(d + spessore));
+        }
+    }
 }
 
 static inline void contorna_tondo(struct pennello *p, int x, int y, int l, int a, int raggio,
@@ -339,20 +471,30 @@ static inline void ombra_forma_diffusa(struct pennello *p, const struct tondo *t
     if (s < 256) s = 256;
     int fuori_dal_bordo = sfocatura + (diffusione > 0 ? diffusione : 0);
     if (diffusione && sfocatura < 1) fuori_dal_bordo++;      /* la sfumatura di 1 px minimo */
-    int y0 = o.y - fuori_dal_bordo, y1 = o.y + o.a + fuori_dal_bordo;
-    int x0 = o.x - fuori_dal_bordo, x1 = o.x + o.l + fuori_dal_bordo;
     /* non si calcola quello che il ritaglio butterebbe via */
-    if (y0 < p->s.ry) y0 = p->s.ry;
-    if (y1 > p->s.ry2) y1 = p->s.ry2;
-    if (x0 < p->s.rx) x0 = p->s.rx;
-    if (x1 > p->s.rx2) x1 = p->s.rx2;
-    for (int y = y0; y < y1; y++)
-        for (int x = x0; x < x1; x++) {
-            int fuori = 256 - coperto(distanza(t, x, y));
-            if (!fuori) continue;
-            int dolce = sfuma(distanza(&o, x, y) - diffusione * 256, s);
-            if (dolce) copri(p, x, y, dolce * fuori >> 8);
+    int x0, y0, x1, y1;
+    if (pennello_invisibile(p) ||
+        !zona_da_disegnare(p, o.x - fuori_dal_bordo, o.y - fuori_dal_bordo,
+                           o.l + 2 * fuori_dal_bordo, o.a + 2 * fuori_dal_bordo, &x0, &y0, &x1, &y1))
+        return;
+    for (int y = y0; y < y1; y++) {
+        unsigned int *riga = p->tela->pixel + y * p->tela->larghezza;
+        /* sotto la forma (coperta tutta) l'ombra non si vede: si salta, come in
+         * riempi_forma, cercando i due capi dell'interno dai due lati della riga */
+        int a = x0, b = x1;
+        for (; a < b; a++) {
+            int fuori = 256 - coperto(distanza(t, a, y));
+            if (!fuori) break;
+            int dolce = sfuma(distanza(&o, a, y) - diffusione * 256, s);
+            if (dolce) copri_pixel(p, &riga[a], dolce * fuori >> 8);
         }
+        for (; b > a; b--) {
+            int fuori = 256 - coperto(distanza(t, b - 1, y));
+            if (!fuori) break;
+            int dolce = sfuma(distanza(&o, b - 1, y) - diffusione * 256, s);
+            if (dolce) copri_pixel(p, &riga[b - 1], dolce * fuori >> 8);
+        }
+    }
 }
 
 /* L'ombra di sempre: nessuna diffusione. */
@@ -379,18 +521,27 @@ static inline void ombra_interna_diffusa(struct pennello *p, const struct tondo 
     buco.y += dy;
     int s = sfocatura * 256;
     if (s < 256) s = 256;
-    int y0 = t->y, y1 = t->y + t->a, x0 = t->x, x1 = t->x + t->l;
-    if (y0 < p->s.ry) y0 = p->s.ry;
-    if (y1 > p->s.ry2) y1 = p->s.ry2;
-    if (x0 < p->s.rx) x0 = p->s.rx;
-    if (x1 > p->s.rx2) x1 = p->s.rx2;
-    for (int y = y0; y < y1; y++)
-        for (int x = x0; x < x1; x++) {
-            int dentro = coperto(distanza(t, x, y));
-            if (!dentro) continue;
-            int ombra = 256 - sfuma(distanza(&buco, x, y) + diffusione * 256, s);
-            if (ombra) copri(p, x, y, ombra * dentro >> 8);
+    int x0, y0, x1, y1;
+    if (pennello_invisibile(p) || !zona_da_disegnare(p, t->x, t->y, t->l, t->a, &x0, &y0, &x1, &y1))
+        return;
+    for (int y = y0; y < y1; y++) {
+        unsigned int *riga = p->tela->pixel + y * p->tela->larghezza;
+        /* dove il buco copre tutto (sfuma = 256) non c'e' ombra: e' una striscia sola
+         * nel mezzo della riga (il buco e' un tondo anche lui), e si salta */
+        int a = x0, b = x1;
+        for (; a < b; a++) {
+            int ombra = 256 - sfuma(distanza(&buco, a, y) + diffusione * 256, s);
+            if (!ombra) break;
+            int dentro = coperto(distanza(t, a, y));
+            if (dentro) copri_pixel(p, &riga[a], ombra * dentro >> 8);
         }
+        for (; b > a; b--) {
+            int ombra = 256 - sfuma(distanza(&buco, b - 1, y) + diffusione * 256, s);
+            if (!ombra) break;
+            int dentro = coperto(distanza(t, b - 1, y));
+            if (dentro) copri_pixel(p, &riga[b - 1], ombra * dentro >> 8);
+        }
+    }
 }
 
 static inline void ombra_interna(struct pennello *p, const struct tondo *t, int dx, int dy,
@@ -597,9 +748,26 @@ static inline void riempi_arco_dritto(struct pennello *p, int cx, int cy, int ra
 static inline void luce_sopra(struct pennello *p, const struct tondo *t) {
     struct tondo giu = *t;
     giu.y += 1;
-    for (int y = t->y; y < t->y + t->a; y++)
-        for (int x = t->x; x < t->x + t->l; x++)
-            copri(p, x, y, coperto(distanza(t, x, y)) - coperto(distanza(&giu, x, y)));
+    int x0, y0, x1, y1;
+    if (pennello_invisibile(p) || !zona_da_disegnare(p, t->x, t->y, t->l, t->a, &x0, &y0, &x1, &y1))
+        return;
+    for (int y = y0; y < y1; y++) {
+        unsigned int *riga = p->tela->pixel + y * p->tela->larghezza;
+        /* dove tutte e due le forme coprono tutto la differenza e' 0: due strisce
+         * senza buchi (vedi sopra riempi_forma) si incrociano in una striscia sola, e
+         * si salta */
+        int a = x0, b = x1;
+        for (; a < b; a++) {
+            int c = coperto(distanza(t, a, y)), g = coperto(distanza(&giu, a, y));
+            if (c == 256 && g == 256) break;
+            copri_pixel(p, &riga[a], c - g);
+        }
+        for (; b > a; b--) {
+            int c = coperto(distanza(t, b - 1, y)), g = coperto(distanza(&giu, b - 1, y));
+            if (c == 256 && g == 256) break;
+            copri_pixel(p, &riga[b - 1], c - g);
+        }
+    }
 }
 
 /* --- il testo --- */
@@ -621,14 +789,19 @@ static inline int larghezza_testo(const struct font *f, const char *s) {
  * dove finisce (la x dopo l'ultima lettera). */
 static inline int testo(struct pennello *p, const struct font *f, int x, int y, const char *s) {
     int base = y + f->ascesa;
+    int invisibile = pennello_invisibile(p);
     for (; *s; s++) {
         const struct glifo *g = glifo_di(f, (unsigned char)*s);
         const unsigned char *alfa = f->alfa + g->inizio;
         int gx = x + g->x, gy = base - g->y;
-        for (int r = 0; r < g->a; r++)
-            for (int k = 0; k < g->l; k++) {
-                int v = alfa[r * g->l + k];
-                if (v) copri(p, gx + k, gy + r, v + (v >> 7));
+        int x0, y0, x1, y1;
+        /* solo la parte della lettera dentro il ritaglio (una lettera fuori: niente) */
+        if (!invisibile && zona_da_disegnare(p, gx, gy, g->l, g->a, &x0, &y0, &x1, &y1))
+            for (int r = y0; r < y1; r++) {
+                unsigned int *d = p->tela->pixel + r * p->tela->larghezza + x0;
+                const unsigned char *v = alfa + (r - gy) * g->l + (x0 - gx);
+                for (int k = 0; k < x1 - x0; k++)
+                    if (v[k]) copri_pixel(p, &d[k], v[k] + (v[k] >> 7));
             }
         x += g->avanzo;
     }
@@ -648,27 +821,35 @@ static inline void disegna_icona(struct pennello *p, const struct icona *misure,
     int l = scelta->lato;
     x += (lato - l) / 2;
     y += (lato - l) / 2;
-    for (int r = 0; r < l; r++)
-        for (int k = 0; k < l; k++) {
-            int v = scelta->alfa[r * l + k];
-            if (v) copri(p, x + k, y + r, v + (v >> 7));
-        }
+    int x0, y0, x1, y1;
+    if (pennello_invisibile(p) || !zona_da_disegnare(p, x, y, l, l, &x0, &y0, &x1, &y1)) return;
+    for (int r = y0; r < y1; r++) {
+        unsigned int *d = p->tela->pixel + r * p->tela->larghezza + x0;
+        const unsigned char *v = scelta->alfa + (r - y) * l + (x0 - x);
+        for (int k = 0; k < x1 - x0; k++)
+            if (v[k]) copri_pixel(p, &d[k], v[k] + (v[k] >> 7));
+    }
 }
 
 /* Un'immagine a colori (gia' premoltiplicata) con l'angolo in (x, y). */
 static inline void disegna_immagine(struct pennello *p, const struct immagine *im, int x, int y) {
+    int x0, y0, x1, y1;
+    if (p->s.opacita == 0 || !zona_da_disegnare(p, x, y, im->l, im->a, &x0, &y0, &x1, &y1)) return;
     unsigned int colore = p->s.colore;
-    for (int r = 0; r < im->a; r++)
-        for (int k = 0; k < im->l; k++) {
-            unsigned int px = im->pixel[r * im->l + k];
+    for (int r = y0; r < y1; r++) {
+        unsigned int *d = p->tela->pixel + r * p->tela->larghezza + x0;
+        const unsigned int *sorgente = im->pixel + (r - y) * im->l + (x0 - x);
+        for (int k = 0; k < x1 - x0; k++) {
+            unsigned int px = sorgente[k];
             unsigned int a = px >> 24;
             if (!a) continue;
             /* si torna al colore non premoltiplicato, e lo si copre per la sua opacita' */
             unsigned int rr = ((px >> 16) & 0xFF) * 255 / a, gg = ((px >> 8) & 0xFF) * 255 / a,
                          bb = (px & 0xFF) * 255 / a;
             p->s.colore = OPACO(rr << 16 | gg << 8 | bb);
-            copri(p, x + k, y + r, a + (a >> 7));
+            copri_pixel(p, &d[k], a + (a >> 7));
         }
+    }
     p->s.colore = colore;
 }
 
@@ -681,19 +862,24 @@ static inline void disegna_immagine_tonda(struct pennello *p, const struct immag
     int ix = x + (lato - im->l) / 2, iy = y + (lato - im->a) / 2;
     int d = im->l < im->a ? im->l : im->a;
     struct tondo t = tondo(ix + (im->l - d) / 2, iy + (im->a - d) / 2, d, d, d / 2);
+    int x0, y0, x1, y1;
+    if (p->s.opacita == 0 || !zona_da_disegnare(p, ix, iy, im->l, im->a, &x0, &y0, &x1, &y1)) return;
     unsigned int colore = p->s.colore;
-    for (int r = 0; r < im->a; r++)
-        for (int k = 0; k < im->l; k++) {
-            unsigned int px = im->pixel[r * im->l + k];
+    for (int r = y0; r < y1; r++) {
+        unsigned int *d = p->tela->pixel + r * p->tela->larghezza + x0;
+        const unsigned int *sorgente = im->pixel + (r - iy) * im->l + (x0 - ix);
+        for (int k = 0; k < x1 - x0; k++) {
+            unsigned int px = sorgente[k];
             unsigned int a = px >> 24;
             if (!a) continue;
-            int m = coperto(distanza(&t, ix + k, iy + r));
+            int m = coperto(distanza(&t, x0 + k, r));
             if (!m) continue;
             unsigned int rr = ((px >> 16) & 0xFF) * 255 / a, gg = ((px >> 8) & 0xFF) * 255 / a,
                          bb = (px & 0xFF) * 255 / a;
             p->s.colore = OPACO(rr << 16 | gg << 8 | bb);
-            copri(p, ix + k, iy + r, (int)((a + (a >> 7)) * m >> 8));
+            copri_pixel(p, &d[k], (int)((a + (a >> 7)) * m >> 8));
         }
+    }
     p->s.colore = colore;
 }
 

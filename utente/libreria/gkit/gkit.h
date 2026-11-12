@@ -129,10 +129,69 @@ struct porta_davanti {
     unsigned int numero;
 };
 
+/* LE ZONE CAMBIATE. Con MOSTRA l'applicazione dice anche DOVE l'immagine nuova e' diversa da
+ * quella che il compositore mostrava prima: al massimo MAX_ZONE_MOSTRA rettangoli, in pixel
+ * della finestra (0 rettangoli: tutta la finestra, come la prima volta). Il compositore
+ * ricompone solo li' (come wl_surface.damage di Wayland): se una riga cambia colore sotto il
+ * puntatore, non si rifa' tutta la finestra con la sua ombra e il suo vetro smerigliato.
+ * Fuori dalle zone l'immagine nuova DEVE essere uguale a quella di prima: e' l'applicazione
+ * a garantirlo (finestra_arretrate, qui sotto, la aiuta con le due immagini). */
+#define MAX_ZONE_MOSTRA 8
+
+struct zona_finestra {
+    int x, y, l, a;                    /* x <= ... < x + l, y <= ... < y + a */
+};
+
 struct mostra {
     unsigned int tipo;
     unsigned int immagine;             /* 0 o 1 */
+    unsigned int quante;               /* le zone cambiate; 0: tutta la finestra */
+    struct zona_finestra zone[MAX_ZONE_MOSTRA];
 };
+
+/* --- i rettangoli: un elenco di zone che non si sovrappongono troppo ---
+ * Lo usano l'applicazione (le zone da ridisegnare e da mandare) e il compositore. Si aggiunge
+ * un rettangolo alla volta: se tocca una zona gia' nell'elenco, o se unirle costa poco in piu'
+ * (meno di un quarto della loro area), le due diventano il rettangolo che le contiene, e si
+ * ricontrolla; se l'elenco e' pieno, tutto diventa un solo rettangolo. Due zone che si
+ * sovrappongono vorrebbero dire disegnare due volte gli stessi pixel. */
+static inline int zona_vuota(struct zona_finestra z) { return z.l <= 0 || z.a <= 0; }
+
+static inline struct zona_finestra zona_unione(struct zona_finestra p, struct zona_finestra q) {
+    int x0 = p.x < q.x ? p.x : q.x, y0 = p.y < q.y ? p.y : q.y;
+    int x1 = p.x + p.l > q.x + q.l ? p.x + p.l : q.x + q.l;
+    int y1 = p.y + p.a > q.y + q.a ? p.y + p.a : q.y + q.a;
+    return (struct zona_finestra){ x0, y0, x1 - x0, y1 - y0 };
+}
+
+/* La parte comune (vuota se non si toccano). */
+static inline struct zona_finestra zona_dentro(struct zona_finestra p, struct zona_finestra q) {
+    int x0 = p.x > q.x ? p.x : q.x, y0 = p.y > q.y ? p.y : q.y;
+    int x1 = p.x + p.l < q.x + q.l ? p.x + p.l : q.x + q.l;
+    int y1 = p.y + p.a < q.y + q.a ? p.y + p.a : q.y + q.a;
+    if (x1 <= x0 || y1 <= y0) return (struct zona_finestra){ 0, 0, 0, 0 };
+    return (struct zona_finestra){ x0, y0, x1 - x0, y1 - y0 };
+}
+
+static inline void zone_aggiungi(struct zona_finestra *zone, int *quante, int massimo,
+                                 struct zona_finestra z) {
+    if (zona_vuota(z)) return;
+    for (int k = 0; k < *quante; k++) {
+        struct zona_finestra u = zona_unione(z, zone[k]);
+        long long piu = (long long)u.l * u.a - (long long)z.l * z.a - (long long)zone[k].l * zone[k].a;
+        int tocca = !zona_vuota(zona_dentro(z, zone[k]));
+        if (tocca || piu * 4 <= (long long)z.l * z.a + (long long)zone[k].l * zone[k].a) {
+            z = u;
+            zone[k] = zone[--*quante];
+            k = -1;                    /* la nuova, piu' grande, puo' toccarne altre */
+        }
+    }
+    if (*quante == massimo) {
+        for (int k = 0; k < *quante; k++) z = zona_unione(z, zone[k]);
+        *quante = 0;
+    }
+    zone[(*quante)++] = z;
+}
 
 struct trascinami {
     unsigned int tipo;
@@ -216,6 +275,13 @@ int schermo_cambiato(int d, const struct zona_schermo *zone, int quante);
  * nel frattempo (un clic, un tasto) si mettono da parte, e finestra_notizia le
  * consegnera' dopo, in ordine.
  *
+ * RIDISEGNARE SOLO UN PEZZO. Chi cambia solo una parte della finestra la ridisegna e la
+ * mostra con finestra_mostra_zone. Ma l'immagine che riceve da finestra_tela e' quella di DUE
+ * fotogrammi fa (l'altra e' del compositore): le mancano anche le zone cambiate nel
+ * fotogramma di mezzo. Gliele dice finestra_arretrate (e' l'"eta' del buffer" di EGL e
+ * Wayland): chi disegna rifa' le sue zone PIU' quelle arretrate, e l'immagine torna giusta
+ * dappertutto. La prima volta (e dopo un finestra_mostra intero) e' tutta da rifare.
+ *
  * LE NOTIZIE per l'applicazione sono quelle della parte 1: PUNTATORE, USCITO, TASTO,
  * FUOCO e ROTELLA (la rotella del mouse, con il punto della finestra in cui e' il
  * puntatore: sta all'applicazione decidere cosa scorre li' sotto). */
@@ -230,6 +296,9 @@ struct finestra {
     int in_uso;                /* l'immagine data dall'ultima finestra_tela */
     struct notizia messe_da_parte[DA_PARTE];
     int quante;
+    /* le zone che mancano a ogni immagine rispetto all'ultima mostrata (-1: tutta) */
+    struct zona_finestra arretrate[2][MAX_ZONE_MOSTRA];
+    int quante_arretrate[2];
 };
 
 /* Si collega al compositore; se non e' ancora pronto riprova per qualche secondo. */
@@ -275,6 +344,7 @@ static inline int finestra_apri_superficie(struct finestra *f, int larghezza, in
     f->libera[0] = f->libera[1] = 1;
     f->in_uso = 0;
     f->quante = 0;
+    f->quante_arretrate[0] = f->quante_arretrate[1] = -1;   /* tutte e due da fare da capo */
 
     struct voglio_finestra m = { .tipo = VOGLIO_FINESTRA, .larghezza = larghezza, .altezza = altezza,
                                  .ruolo = ruolo, .x = x, .y = y, .raggio = raggio,
@@ -347,12 +417,44 @@ static inline unsigned int *finestra_tela(struct finestra *f) {
     return f->immagini[f->in_uso];
 }
 
-/* L'immagine data dall'ultima finestra_tela e' pronta: il compositore la mostra. */
-static inline int finestra_mostra(struct finestra *f) {
+/* C'e' un'immagine libera, senza aspettare? (Per non bloccarsi su finestra_tela mentre
+ * arrivano altre notizie.) */
+static inline int finestra_libera(const struct finestra *f) { return f->libera[0] || f->libera[1]; }
+
+/* Le zone che mancano all'immagine data dall'ultima finestra_tela (vedi "ridisegnare solo un
+ * pezzo"): le copia in 'zone' (al massimo MAX_ZONE_MOSTRA) e dice quante sono; -1 se
+ * l'immagine e' tutta da rifare. */
+static inline int finestra_arretrate(const struct finestra *f, struct zona_finestra *zone) {
+    int n = f->quante_arretrate[f->in_uso];
+    for (int k = 0; k < n; k++) zone[k] = f->arretrate[f->in_uso][k];
+    return n;
+}
+
+/* L'immagine data dall'ultima finestra_tela e' pronta: il compositore la mostra. E' cambiata
+ * solo nelle 'quante' zone (in pixel della finestra; 0: tutta). Da adesso l'altra immagine,
+ * quando tornera' libera, sara' indietro anche di queste zone. */
+static inline int finestra_mostra_zone(struct finestra *f, const struct zona_finestra *zone, int quante) {
     struct mostra m = { .tipo = MOSTRA, .immagine = f->in_uso };
+    struct zona_finestra tutta = { 0, 0, f->larghezza, f->altezza };
+    int n = 0;
+    for (int k = 0; k < quante; k++) zone_aggiungi(m.zone, &n, MAX_ZONE_MOSTRA, zona_dentro(zone[k], tutta));
+    if (quante > 0 && !n) {            /* niente di cambiato dentro la finestra: una zona vuota */
+        m.zone[0] = (struct zona_finestra){ 0, 0, 0, 0 };
+        n = 1;
+    }
+    m.quante = (unsigned int)n;
+    int altra = 1 - f->in_uso;
+    if (quante <= 0) f->quante_arretrate[altra] = -1;
+    else if (f->quante_arretrate[altra] >= 0)
+        for (int k = 0; k < n; k++)
+            zone_aggiungi(f->arretrate[altra], &f->quante_arretrate[altra], MAX_ZONE_MOSTRA, m.zone[k]);
+    f->quante_arretrate[f->in_uso] = 0;
     f->libera[f->in_uso] = 0;
     return manda(f->collegamento, &m, sizeof m);
 }
+
+/* Tutta l'immagine e' nuova (chi ridisegna sempre tutto, come Doom). */
+static inline int finestra_mostra(struct finestra *f) { return finestra_mostra_zone(f, 0, 0); }
 
 /* Da chiamare quando si preme sulla propria barra del titolo: il compositore sposta la
  * finestra seguendo il mouse, finche' il pulsante resta premuto. */

@@ -236,15 +236,25 @@ static inline void tabella_tk_rotella(struct widget *w, int sx, int sy) {
     barra_scorrimento_rotella(&((struct tabella_tk *)w)->barra, sy);
 }
 
+/* La riga k va ridisegnata: solo lei (il campo per rinominare sporge di poco). */
+static inline void tabella_tk_riga_cambiata(struct tabella_tk *t, int k) {
+    if (k < 0 || k >= t->righe) return;
+    widget_cambiato_zona(&t->base, t->base.x, tabella_tk_riga_y(t, k) - SPAZIO_4, t->base.l,
+                         TABELLA_ALTEZZA_RIGA + 2 * SPAZIO_4);
+}
+
 static inline void tabella_tk_movimento(struct widget *w, int x, int y) {
     struct tabella_tk *t = (struct tabella_tk *)w;
     int k = tabella_tk_riga_in(t, x, y);
-    if (k != t->sopra) { t->sopra = k; widget_cambiato(w); }
+    if (k == t->sopra) return;
+    tabella_tk_riga_cambiata(t, t->sopra);
+    t->sopra = k;
+    tabella_tk_riga_cambiata(t, k);
 }
 
 static inline void tabella_tk_sopra(struct widget *w) {
     struct tabella_tk *t = (struct tabella_tk *)w;
-    if (!w->sopra && t->sopra >= 0) { t->sopra = -1; widget_cambiato(w); }
+    if (!w->sopra && t->sopra >= 0) { tabella_tk_riga_cambiata(t, t->sopra); t->sopra = -1; }
 }
 
 static const struct tipo_widget tipo_tabella_tk = {
@@ -275,8 +285,9 @@ static inline void tabella_tk_aggiorna(struct tabella_tk *t, int righe) {
 
 static inline void tabella_tk_scegli(struct tabella_tk *t, int riga) {
     if (t->scelta == riga) return;
+    tabella_tk_riga_cambiata(t, t->scelta);
     t->scelta = riga;
-    widget_cambiato(&t->base);
+    tabella_tk_riga_cambiata(t, riga);
 }
 
 /* Il nome della prima colonna della riga diventa un campo con 'testo' (che l'applicazione

@@ -120,6 +120,33 @@ static void dati_riga(struct tabella_tk *t, int k, struct riga_tk *r, void *dati
     testo_byte(r->testi[COL_MEMORIA], pr->memoria);
 }
 
+/* LE RIGHE CHE SI VEDONO, come erano all'ultimo aggiornamento: ogni secondo si ridisegnano
+ * solo le righe il cui testo e' cambiato davvero (di solito nessuna, o la memoria di un
+ * processo), non tutta la tabella. */
+static struct riga_tk righe_viste[MAX_PROCESSI];
+
+static int stessa_riga(const struct riga_tk *a, const struct riga_tk *b) {
+    for (int c = 0; c < MAX_COLONNE_TABELLA; c++)
+        for (int i = 0; i < MAX_CELLA; i++) {
+            if (a->testi[c][i] != b->testi[c][i]) return 0;
+            if (!a->testi[c][i]) break;
+        }
+    return a->oggetto == b->oggetto;
+}
+
+/* Dopo aver riletto e ordinato i processi: le righe cambiate si ridisegnano; se e' cambiato
+ * quante sono, tutta la tabella. */
+static void righe_cambiate(int prima) {
+    for (int k = 0; k < quanti_processi; k++) {
+        struct riga_tk r = { .oggetto = -1 };
+        dati_riga(&tabella, k, &r, 0);
+        if (k >= prima || !stessa_riga(&r, &righe_viste[k])) {
+            tabella_tk_riga_cambiata(&tabella, k);
+            righe_viste[k] = r;
+        }
+    }
+}
+
 /* --- le pagine Memoria e Disco: il riepilogo, la barra di utilizzo e la legenda di UIKit --- */
 
 struct pagina_grafico {
@@ -129,6 +156,7 @@ struct pagina_grafico {
     struct barra_utilizzo barra;
     struct legenda legenda;
     struct grafico grafico;
+    struct grafico visto;              /* com'era quando lo si e' disegnato l'ultima volta */
 };
 
 static void pagina_grafico_prepara(struct pagina_grafico *pg, int quanti, const char *const *nomi,
@@ -146,9 +174,14 @@ static void pagina_grafico_prepara(struct pagina_grafico *pg, int quanti, const 
     pagina_aggiungi(&pg->pagina, &pg->legenda.base);
 }
 
+/* Il grafico e' stato riletto: la barra e la legenda si ridisegnano solo se quello che
+ * mostrano e' cambiato (i numeri scritti nella legenda, i pezzi della barra). */
 static void pagina_grafico_cambiata(struct pagina_grafico *pg) {
-    widget_cambiato(&pg->barra.base);
-    widget_cambiato(&pg->legenda.base);
+    if (!grafico_uguale(&pg->grafico, &pg->visto, pg->barra.base.l)) {
+        widget_cambiato(&pg->barra.base);
+        widget_cambiato(&pg->legenda.base);
+    }
+    pg->visto = pg->grafico;
 }
 
 /* "In uso 312,4 MB su 2 GB" */
@@ -281,10 +314,14 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     for (int i = 0; i < quanti_processi; i++)
         if (processi[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)processi[i].uid;
     if (!processo_scelto()) scelto = -1;           /* e' finito: non e' piu' scelto */
-    int sopra = tabella.sopra;
-    tabella_tk_aggiorna(&tabella, quanti_processi);
-    tabella.sopra = sopra < quanti_processi ? sopra : -1;   /* la riga sotto il puntatore resta accesa */
+    int prima = tabella.righe;
+    if (quanti_processi != prima) {                 /* un processo in piu' o in meno: tutta */
+        int sopra = tabella.sopra;
+        tabella_tk_aggiorna(&tabella, quanti_processi);
+        tabella.sopra = sopra < quanti_processi ? sopra : -1;   /* la riga sotto il puntatore resta accesa */
+    }
     ordina();
+    righe_cambiate(prima);
     aggiorna_azioni();
     aggiorna_riassunto_processi();
 
