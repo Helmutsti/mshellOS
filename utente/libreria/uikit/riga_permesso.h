@@ -47,11 +47,12 @@ static inline void riga_permesso_disegna(struct widget *w, struct pennello *p) {
     struct riga_permesso *r = (struct riga_permesso *)w;
     char righe[RIGA_PERMESSO_RIGHE][PARAGRAFO_RIGA];
     int n = riga_permesso_righe(r, w->l, righe);
-    pennello_colore(p, TESTO_PRIMARIO);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_SECONDARIO));   /* come la "Riga di permesso" del disegno */
     icona(p, r->simbolo, RIGA_PERMESSO_SIMBOLO, w->x, w->y + (w->a - RIGA_PERMESSO_SIMBOLO) / 2);
     int x = w->x + RIGA_PERMESSO_SIMBOLO + SPAZIO_12, y = w->y;
     pennello_salva(p);
     pennello_ritaglia(p, x, w->y, riga_permesso_testi(r, w->l), w->a);
+    pennello_colore(p, TESTO_PRIMARIO);
     testo_centrato(p, FONT_CORPO_MEDIO, x, y, INTERLINEA_CORPO, r->nome);
     y += INTERLINEA_CORPO;
     pennello_colore(p, TESTO_SECONDARIO);

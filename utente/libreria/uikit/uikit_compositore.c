@@ -64,7 +64,7 @@ void barra_congelata_disegna(struct pennello *p, int x, int y, int l, int a, con
         int cx = x + congelata_comando_x(l, mini, chiudi), cy = y + congelata_comando_y(mini);
         pennello_colore(p, CONTROLLO_SFONDO_NUOVO);
         riempi_cerchio(p, cx + lato / 2, cy + lato / 2, lato / 2);
-        pennello_colore(p, chiudi ? STATO_ERRORE : TESTO_PRIMARIO);
+        pennello_colore(p, chiudi ? STATO_ERRORE : COLORE_ICONA(COLORE_ICONA_PRIMARIO));
         icona(p, chiudi ? ICONA_X : ICONA_MINUS, segno, cx + (lato - segno) / 2, cy + (lato - segno) / 2);
     }
     struct tondo tutta = tondo(x, y, l, a, RAGGIO_FINESTRA_NUOVO);

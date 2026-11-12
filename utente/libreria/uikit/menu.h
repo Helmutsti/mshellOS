@@ -143,7 +143,8 @@ static inline void voce_menu_disegna(struct pennello *p, const struct voce_menu_
         riempi_tondo(p, x, y, l, a, RAGGIO_CONTROLLO_NUOVO);
     }
     int tx = x + VOCE_MENU_DENTRO, destra = x + l - VOCE_MENU_DENTRO;
-    pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_DISABILITATO);
+    /* le icone nel colore d'icona Primario (Attenuato se la voce e' spenta), come i ghost */
+    pennello_colore(p, COLORE_ICONA(attiva ? COLORE_ICONA_PRIMARIO : COLORE_ICONA_ATTENUATO));
     if (v->icona != NESSUNA_ICONA) {
         icona(p, v->icona, VOCE_MENU_SIMBOLO, tx, y + (a - VOCE_MENU_SIMBOLO) / 2);
         tx += VOCE_MENU_SIMBOLO + VOCE_MENU_GAP;
@@ -158,8 +159,8 @@ static inline void voce_menu_disegna(struct pennello *p, const struct voce_menu_
         pennello_colore(p, attiva ? TESTO_SECONDARIO : TESTO_DISABILITATO);
         testo_centrato(p, FONT_PICCOLO_NUOVO, destra - sl, y, a, v->scorciatoia);
         fine_testo -= sl + VOCE_MENU_GAP;
-        pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_DISABILITATO);
     }
+    pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_DISABILITATO);
     testo_tagliato(p, FONT_CORPO, tx, y, a, fine_testo - tx, v->testo, 0);
 }
 

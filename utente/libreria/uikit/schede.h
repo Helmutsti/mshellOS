@@ -74,6 +74,10 @@ static inline void schede_disegna(struct widget *w, struct pennello *p) {
         int x, l;
         scheda_posto(s, i, &x, &l);
         int scelta = i == s->scelta;
+        if (!scelta && i == s->sopra) {   /* la "Scheda" del disegno, stato Sopra: un fondo leggero */
+            pennello_colore(p, CONTROLLO_SFONDO_NUOVO);
+            riempi_tondo(p, x, w->y, l, ALTEZZA_S, RAGGIO_CONTROLLO_NUOVO);
+        }
         if (scelta) {
             pennello_colore(p, AZIONE_SFONDO);
             riempi_pillola(p, x, w->y + alto, l, SCHEDE_INDICATORE);

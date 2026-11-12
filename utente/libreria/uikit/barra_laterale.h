@@ -82,9 +82,10 @@ static inline void voce_laterale_disegna(struct pennello *p, int x, int y, int l
         riempi_tondo(p, x, y, l, VOCE_LATERALE_ALTA, RAGGIO_CONTROLLO_NUOVO);
     }
     int tx = x + VOCE_LATERALE_DENTRO;
-    pennello_colore(p, TESTO_PRIMARIO);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_PRIMARIO));
     icona(p, icona_, VOCE_LATERALE_SIMBOLO, tx, y + (VOCE_LATERALE_ALTA - VOCE_LATERALE_SIMBOLO) / 2);
     tx += VOCE_LATERALE_SIMBOLO + VOCE_LATERALE_GAP;
+    pennello_colore(p, TESTO_PRIMARIO);
     testo_tagliato(p, selezionata ? FONT_CORPO_MEDIO : FONT_CORPO, tx, y, VOCE_LATERALE_ALTA,
                    x + l - VOCE_LATERALE_DENTRO - tx, testo, 0);
 }

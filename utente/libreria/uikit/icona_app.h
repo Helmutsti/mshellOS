@@ -13,7 +13,7 @@ static inline void icona_app_disegna_in(struct pennello *p, int x, int y, int la
     pennello_colore(p, CONTROLLO_SFONDO_SOPRA);
     riempi_tondo(p, x, y, lato, lato, (lato * 22 + 48) / 96);
     int simbolo = lato * 20 / 32;
-    pennello_colore(p, TESTO_SECONDARIO);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_SECONDARIO));
     icona(p, ICONA_PACKAGE, simbolo, x + (lato - simbolo) / 2, y + (lato - simbolo) / 2);
 }
 
