@@ -4,7 +4,7 @@ Files si apre dall'isola (la sua finestra, 800 x 480, nel primo posto: angolo in
 sulla casa, /home, dove build.sh ha copiato la cartella file/ del repository:
     Documenti/   appunti.txt, elenco della spesa.txt e una cartella con un nome lungo
     Immagini/    due .png
-    Scrivania/   vuota
+    Scrivania/   contatore.app (il pacchetto di Contatore, da installare: build.sh)
     dati.bin, leggimi.txt
 Nella vista a icone gli elementi stanno in righe da 6, larghi 84 a 92 pixel l'uno
 dall'altro: il primo con l'angolo in (+200, +98) dalla finestra, l'icona al centro in
@@ -14,7 +14,9 @@ Si prova, una cosa dopo l'altra:
   - la casa a icone e a elenco (la pillola nella barra: +562 e +588, y +58), confrontate
     con le foto di riferimento;
   - il doppio clic su Documenti ci entra, "indietro" (+24, +58) torna alla casa;
-  - la Scrivania (nella barra laterale) e' vuota: lo stato "vuota";
+  - nella Scrivania (barra laterale) c'e' contatore.app: il doppio clic NON lo avvia (non
+    e' installato e lo Store non c'e'): il launcher scrive nella seriale "le app vanno
+    installate prima di aprirle" e Files mostra l'avviso in basso;
   - in Documenti, la cartella col nome lungo non si apre (il suo percorso supera i 63
     caratteri della libreria): lo stato "errore";
   - /data/system (del sistema, 700) non si puo' aprire: lo stato "permesso negato". Ci si
@@ -137,11 +139,17 @@ def esegui(p):
     clic(INDIETRO)
     s.aspetta_zona(m, casa, corpo, attesa=10.0, cosa="la casa dopo 'indietro'")
 
-    # --- vuota: la Scrivania ---
+    # --- la Scrivania, con il pacchetto contatore.app: aprirlo non lo avvia ---
+    # (prima era vuota e serviva per lo stato "vuota": ora lo stato vuoto non si prova,
+    # finche' non si sceglie un'altra cartella vuota da mettere nella casa)
     clic(SCRIVANIA)
-    vuota = cambia(casa, "la Scrivania (vuota)")
-    m.foto("vuota")
-    p.riferimento("files_vuota", vuota)
+    scrivania_files = cambia(casa, "la Scrivania (con contatore.app)")
+    m.foto("scrivania")
+    doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])           # contatore.app
+    m.aspetta_seriale("le app vanno installate prima di aprirle", attesa=10.0)
+    cambia(scrivania_files, "l'avviso 'Le app vanno installate prima di aprirle'")
+    m.foto("pacchetto_non_installato")
+    p.controlla(s.segno_sotto(m.aspetta_schermo_fermo(), "Files") > 0, "Files non e' piu' aperta")
 
     # --- errore: la cartella dal nome troppo lungo, in Documenti ---
     clic(HOME)

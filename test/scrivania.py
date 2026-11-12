@@ -6,7 +6,7 @@ cambiano disegno (l'isola, dove si aprono le finestre), si cambiano QUI e basta.
     L'ISOLA, in alto al centro (y = 38 il centro dei tondi):
         menu (griglia)  x = 464
         Attivita        x = 510
-        Contatore       x = 548
+        Doom            x = 548
         Esempio         x = 586
         Files           x = 624
         Impostazioni    x = 662
@@ -27,7 +27,10 @@ from qemu import ErroreProva, pixel_diversi, PUNTO_VUOTO
 
 ISOLA_Y = 38
 MENU_X = 464
-APP_X = {"Attivita": 510, "Contatore": 548, "Esempio": 586, "Files": 624, "Impostazioni": 662}
+# Contatore non e' piu' nell'isola: non e' un'app del sistema, il suo pacchetto sta sulla
+# Scrivania della persona (build.sh). Le misure della sua finestra restano in MISURE, per
+# la prova pacchetti, che la installa e la apre.
+APP_X = {"Attivita": 510, "Doom": 548, "Esempio": 586, "Files": 624, "Impostazioni": 662}
 HOME = (58, 52)       # il centro dell'icona della cartella Home sulla scrivania
 SEGNO_Y = 57          # il puntino / trattino sotto le applicazioni aperte
 

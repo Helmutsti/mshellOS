@@ -16,7 +16,7 @@
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
-#   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c e il manifest)
+#   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c, manifest.toml e resources/)
 #   utente/prove/      programmi che servono solo alle prove automatiche (test/): vanno
 #                      solo in disco_prove.img, mai nel disco normale
 #   file/              quello che si mette qui finisce nel disco, nella casa della persona
@@ -28,6 +28,7 @@
 #       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
 #                      UEFI (una "UKI", Unified Kernel Image)
 #       riga_kernel.txt (solo ARM) la riga di comando del kernel, per QEMU -append
+#       pacchetti/<id>.app  il pacchetto di ogni applicazione (uno ZIP), per questo processore
 #       disco.img      IL DISCO, uno solo, con una tabella delle partizioni GPT e tre
 #                      partizioni (vedi IL DISCO qui sotto)
 #       disco_prove.img  il disco delle prove automatiche: lo stesso, con in piu' i
@@ -46,7 +47,8 @@
 #       init                     il primo programma (il processo 1)
 #       services/<servizio>      i servizi: eventi, compositore, launcher, scrivania
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
-#                                manifest (nome, icona, colore) e resources/
+#                                manifest.toml e resources/ (lo stesso contenuto del loro
+#                                pacchetto .app, scompattato)
 #       bin/                     i comandi (per ora nessuno)
 #       lib/                     per le librerie condivise (per ora nessuna: vedi sotto)
 #       resources/fonts, icons, wallpapers   le risorse del sistema (per ora i caratteri e
@@ -55,7 +57,7 @@
 #       modules/                 i moduli del kernel da caricare dal disco (per ora tutti
 #                                quelli che servono stanno nell'archivio di avvio)
 #   /data                        (lettura e scrittura)
-#       apps/<app>/              le applicazioni installate dalla persona (per ora nessuna)
+#       apps/<app>/              le applicazioni installate dalla persona (all'inizio nessuna)
 #       users/<uid>/home         la casa della persona: i suoi file (/home per i programmi)
 #       users/<uid>/bin          i comandi della persona, cercati DOPO /system/bin (l'elenco
 #                                dei posti dove cercarli, come il PATH, e' della shell:
@@ -133,7 +135,7 @@ SCARICO=/w/build/scarico
 mkdir -p "$SCARICO/host" "$SCARICO/$ARCH"
 # e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
 # FAT della partizione di avvio, scritta senza montarla
-apk add --cache-dir "$SCARICO/host" clang lld e2fsprogs sfdisk mtools $ATTREZZI_CPU >/dev/null
+apk add --cache-dir "$SCARICO/host" clang lld e2fsprogs sfdisk mtools zip $ATTREZZI_CPU >/dev/null
 
 # LA RADICE DI ALPINE PER LA CPU: un albero con i pacchetti di Alpine PER QUELLA CPU
 # (apk --arch, anche se il container e' x86_64), da cui si prendono:
@@ -179,6 +181,16 @@ UTENTE="-Iutente/libreria"
 for f in utente/libreria/*.c; do
     $CC $UTENTE -c "$f" -o "$B/oggetti/libreria/$(basename "$f" .c).o"
 done
+# Le librerie di altri (utente/libreria/esterni/, ognuna con la sua LICENSE), legate nella
+# libreria come i nostri file (--gc-sections ne tiene solo quello che un programma usa):
+#   miniz 3.0.2 (MIT), la release "amalgamata": leggere gli ZIP (i pacchetti .app).
+#     Senza le funzioni sui FILE della libreria C e senza i nomi di zlib (pacchetto.c fa
+#     le stesse scelte).
+#   tomlc99 (MIT), commit 62ce93c del 4/11/2026: leggere il TOML (i manifesti).
+# Non sono nostre: i loro avvisi del compilatore si spengono (-w), per non coprire i nostri.
+ESTERNI="-w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES"
+$CC $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/libreria/miniz.o"
+$CC $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/libreria/toml.o"
 LIBRERIA="$B/oggetti/libreria/*.o"
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
@@ -280,11 +292,29 @@ for f in utente/programmi/*.c; do
     metti_file "$B/oggetti/$nome" "$posto" 755
 done
 
-# Le applicazioni (utente/applicazioni/<Nome>/): ognuna diventa una cartella
-# /system/apps/<nome>/ (il nome della cartella dei sorgenti, in minuscolo) con dentro:
-#   code        il programma (i suoi .c legati insieme), 755
-#   manifest    il manifest (nome, programma = code, icona, colore), 644
-#   resources/  tutto il resto che c'e' nella cartella dei sorgenti, da leggere (644)
+# Le applicazioni (utente/applicazioni/<Nome>/). Per ognuna:
+#   1. si compila il programma, code (i suoi .c legati insieme);
+#   2. si prepara il suo PACCHETTO, una cartella con dentro (APPLICAZIONI.md, sezione 3):
+#        manifest.toml  il manifesto, con "@PROCESSORE@" sostituito dal processore per cui
+#                       si compila (x86_64 o arm64): il sorgente e' uno, i pacchetti uno per
+#                       processore, e cosi' il manifesto non puo' sbagliare processore
+#        code           il programma
+#        resources/     le icone (la cartella resources/ dei sorgenti) e tutti gli altri file
+#                       della cartella dei sorgenti che non sono .c, .h o il manifesto (per
+#                       esempio doom1.wad)
+#      e lo si chiude in uno ZIP: $B/pacchetti/<id>.app (le date fisse, per avere sempre lo
+#      stesso file);
+#   3. le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
+#      contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
+#      Le app di DA_INSTALLARE invece no: il loro pacchetto va sulla Scrivania della persona,
+#      per provare l'installazione (si apre con Files: senza lo Store, il launcher risponde
+#      che le app vanno installate prima di aprirle).
+# L'id dell'app (nel manifesto) deve essere il nome della cartella dei sorgenti in minuscolo.
+DA_INSTALLARE="contatore"
+PACCHETTI="$B/pacchetti"
+SCRIVANIA_PACCHETTI=""
+mkdir -p "$PACCHETTI"
+PACCHETTI_ASSOLUTO=$(cd "$PACCHETTI" && pwd)
 for cartella in utente/applicazioni/*/; do
     nome=$(basename "$cartella" | tr A-Z a-z)
     mkdir -p "$B/oggetti/applicazioni/$nome"
@@ -295,22 +325,50 @@ for cartella in utente/applicazioni/*/; do
         oggetti="$oggetti $o"
     done
     lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti
-    metti_file "$B/oggetti/applicazioni/$nome/code" "/system/apps/$nome/code" 755
-    [ -f "${cartella}manifest" ] || { echo "build.sh: manca ${cartella}manifest"; exit 1; }
-    metti_file "${cartella}manifest" "/system/apps/$nome/manifest" 644
-    metti_cartella "/system/apps/$nome/resources" 0 755
+
+    manifesto="${cartella}manifest.toml"
+    [ -f "$manifesto" ] || { echo "build.sh: manca $manifesto"; exit 1; }
+    grep -q "^id = \"$nome\"" "$manifesto" || { echo "build.sh: in $manifesto l'id non e' \"$nome\""; exit 1; }
+    grep -q '^processore = "@PROCESSORE@"' "$manifesto" ||
+        { echo "build.sh: in $manifesto manca processore = \"@PROCESSORE@\""; exit 1; }
+    pacchetto="$B/oggetti/pacchetti/$nome"
+    mkdir -p "$pacchetto/resources"
+    sed "s/@PROCESSORE@/$CPU/" "$manifesto" > "$pacchetto/manifest.toml"
+    cp "$B/oggetti/applicazioni/$nome/code" "$pacchetto/code"
     for r in "$cartella"*; do
-        case "$r" in *.c|*.h|*/manifest) continue ;; esac
-        [ -f "$r" ] && metti_file "$r" "/system/apps/$nome/resources/$(basename "$r")" 644
+        case "$r" in *.c|*.h|*/manifest.toml) continue ;; esac
+        [ -f "$r" ] && cp "$r" "$pacchetto/resources/"
     done
-    APPS="$APPS $nome"
+    [ -d "${cartella}resources" ] && cp -R "${cartella}resources/." "$pacchetto/resources/"
+    find "$pacchetto" -type d -exec chmod 755 {} +
+    find "$pacchetto" -type f -exec chmod 644 {} +
+    chmod 755 "$pacchetto/code"
+    find "$pacchetto" -exec touch -d "2026-01-01 00:00:00" {} +
+    rm -f "$PACCHETTI/$nome.app"
+    (cd "$pacchetto" && find manifest.toml code resources | sort | zip -X -q -D "$PACCHETTI_ASSOLUTO/$nome.app" -@)
+    printf '  %-40s %7s byte  pacchetto\n' "$PACCHETTI/$nome.app" "$(wc -c < "$PACCHETTI/$nome.app")"
+
+    case " $DA_INSTALLARE " in
+    *" $nome "*)
+        SCRIVANIA_PACCHETTI="$SCRIVANIA_PACCHETTI $nome"
+        ;;
+    *)
+        (cd "$pacchetto" && find . -type f | sort) | while read -r f; do
+            f=${f#./}
+            permessi=644
+            [ "$f" = code ] && permessi=755
+            metti_file "$pacchetto/$f" "/system/apps/$nome/$f" $permessi
+        done
+        APPS="$APPS $nome"
+        ;;
+    esac
 done
 
 # --- la partizione data: /data, in lettura e scrittura ---
 
-# Le applicazioni installate dalla persona: per ora nessuna. Le installera' il sistema
-# (come quelle di /system/apps: di 0, 755); il launcher e la scrivania le cercano qui
-# dopo /system/apps.
+# Le applicazioni installate dalla persona: all'inizio nessuna. Le installa il launcher
+# (pacchetto.c), come quelle di /system/apps (di 0, 755); il launcher e la scrivania le
+# cercano qui dopo /system/apps.
 metti_cartella /data/apps 0 755
 
 # Le cose del solo sistema: chi sono gli utenti, i loro permessi, le applicazioni
@@ -349,6 +407,14 @@ for r in file/* file/.[!.]*; do
         find "$CASA_VERA/$(basename "$r")" -type f -exec chmod 644 {} +
         printf '  %-40s da file/\n' "$CASA/home/$(basename "$r")"
     fi
+done
+# I pacchetti delle app da installare (DA_INSTALLARE, sopra) sulla Scrivania della persona,
+# suoi (644): per provare l'installazione come la farebbe lei.
+for nome in $SCRIVANIA_PACCHETTI; do
+    cp "$PACCHETTI/$nome.app" "$CASA_VERA/Scrivania/$nome.app"
+    chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Scrivania/$nome.app"
+    chmod 644 "$CASA_VERA/Scrivania/$nome.app"
+    printf '  %-40s da installare\n' "$CASA/home/Scrivania/$nome.app"
 done
 # Le date dei file della casa sono fisse (l'ultima sera prima dell'orologio delle prove,
 # 1/1/2026: Files le scrive "ieri, 18:02"), non quelle della compilazione: cosi' quello
@@ -503,8 +569,19 @@ for i in $(seq $RIEMPITIVI); do
     metti_file "$B/oggetti/prove/riempitivo" "/data/tests/riempitivo-$i" 755 >/dev/null
 done
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_prove.img" $((MISURA_DATI * MB / 4096))
-rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco_prove.img pronto: con $RIEMPITIVI riempitivi in /data/tests"
+
+# IL DISCO DELLE PROVE DEI PACCHETTI: come disco_prove.img, ma in /data/tests c'e' solo il
+# programma pacchetti (utente/prove/pacchetti.c), che chiede al launcher di descrivere e
+# installare contatore.app. Sta in un disco suo perche' installa davvero (in /data/apps):
+# le altre prove non devono vederlo. Lo usa test/prove/pacchetti.py.
+cp "$B/disco.img" "$B/disco_pacchetti.img"
+rm -f "$(vero /data/tests)"/riempitivo-*
+metti_file "$B/oggetti/prove/pacchetti" "/data/tests/pacchetti" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_pacchetti.img" $((MISURA_DATI * MB / 4096))
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+echo "$B/disco_pacchetti.img pronto: con il programma pacchetti in /data/tests"
 
 rm -rf "$B/oggetti"
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"

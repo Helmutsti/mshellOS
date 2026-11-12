@@ -1,6 +1,0 @@
-# Il manifest di Impostazioni: lo leggono la scrivania (per l'isola) e il launcher.
-# Una riga "chiave = valore" per voce; le righe che cominciano con # sono commenti.
-nome = Impostazioni
-programma = code
-icona = settings
-colore = neutro
