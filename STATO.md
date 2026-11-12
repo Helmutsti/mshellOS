@@ -272,6 +272,9 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 10. **Internet** (più avanti).
 11. **Sistema in sola lettura come immagine erofs + dm-verity, con aggiornamenti A/B** (futuro).
 12. **Prove più veloci sul PC Windows** con l'accelerazione hardware (WHPX, vedi la sezione 3).
+13. **Definire meglio il confine tra libreria grafica che parla con il composer e il toolkit.**
+14. **Integrazione a pannelli.**
+15. **Ragionare sulla title bar.**
 
 Non servono più: priorità e tempo reale (li dà Linux); la chiamata "chi sono io" (su Linux
 c'è `getuid`).

@@ -267,7 +267,24 @@ vede informazioni private (con chi parla ogni app); si valuterà solo dopo le fi
 **Nessuno per ora.** Si aggiungono uno alla volta, solo quando arriva un'app che ne ha davvero
 bisogno. Il primo candidato è il "filtro della rete", per il firewall.
 
-## 11. Sul tavolo
+## 11. Lo Store
+
+Un'app del sistema (`store`, con il permesso `app.gestire`) per **installare** un'app aprendo un file
+`.app`, **aggiornarla** aprendo un file `.app` più nuovo, **vedere** le app installate con la loro
+scheda e **togliere** un'app installata dalla persona (le app del sistema non si possono togliere).
+Il disegno è sulla pagina "App – Store" di Figma.
+
+- **Togli app** (solo app installate dalla persona): una finestra di conferma, come su iPhone, chiede
+  se togliere **l'app e i suoi dati** oppure **solo l'app**; in questo caso i dati restano e una
+  reinstallazione li ritrova.
+- **Svuota dati** (per ogni app, anche del sistema): un pulsante a parte, con conferma, che cancella i
+  dati salvati dall'app per la persona; l'app resta installata e riparte da zero.
+- Un'app aperta non si toglie e non si svuota: prima va chiusa.
+- Nello Store le deviazioni dallo standard si chiamano **"Cosa fa di diverso"**.
+- Per ora lo Store non cerca da solo gli aggiornamenti e non ha un pulsante "Installa da file…":
+  si installa e si aggiorna solo aprendo il file.
+
+## 12. Sul tavolo
 
 Da decidere, più o meno in quest'ordine:
 
