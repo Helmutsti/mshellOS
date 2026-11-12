@@ -331,8 +331,20 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   migrazione)", con i vecchi nomi dei pulsanti (NEUTRO, BLU...) come alias.
 
 **Da fare**
-- Migrare Files e Attività: usano ancora `CONTENUTO_*`/`VETRO_*` (testo bianco, illeggibile sul vetro
-  chiaro) e il disegno a mano di righe e icone; vanno sui token nuovi e sui tile da 96 px.
+- Files e Attività sono sul disegno nuovo (fatto), ma restano da confermare le scelte dove Figma non
+  dice niente. Files: barra laterale senza fondo (solo una riga a destra), margine 16 della griglia,
+  campo di rinomina (32 px nell'elenco, 24 sul tile), avviso a pillola coi colori del suggerimento,
+  pannello informazioni come il menu, stato vuoto, icone nei menu. Attività: grigi dei pezzi della
+  barra del disco (in scuro "Altro" si vede poco), "Altro" nel grigio più chiaro, pallino del libero
+  incassato, colonna Numero 76 px, Nome in testo primario, messaggio d'errore senza rosso, spazi 12.
+- Mancano nella libreria: menu, tabella, griglia, barra a pezzi e legenda come widget (oggi Files e
+  Attività li disegnano a mano), frecce su/giù, testo con spaziatura delle lettere.
+  `elemento_file.h` (icona Home della scrivania) usa ancora i nomi vecchi. Il campo
+  `disegna_disabilitato` di `toolkit.h` dà avvisi "missing field initializer" in ogni app.
+- Prove da aggiornare: in `test/scrivania.py` le posizioni delle icone dell'isola sono di prima di
+  Doom (circa 20 px più a destra del vero), quindi falliscono tutte le prove che aprono un'app;
+  `test/prove/files.py`, `attivita.py` e `scorrimento.py` hanno le misure vecchie (righe ora ogni
+  44 px; `attivita.py` legge la memoria tenendo solo i pixel chiari, che col tema chiaro non va).
 - Widget nuovi: interruttore, menu contestuale e a tendina, suggerimento, schede, tabella, griglia
   come widget, puntatore con le sue forme (idle, link, caricamento, paragrafo, disabilitato).
 - Userbar "Isole minima" (solo il pulsante App, che apre un vassoio di app verso il basso) al posto
