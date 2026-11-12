@@ -5,12 +5,279 @@
  * compositore, che disegna la barra di un'applicazione che non risponde (lei non puo'
  * piu' ridisegnarsi). Cambiare un valore qui cambia l'aspetto di tutto il sistema.
  *
- * L'aspetto e' "a vetro": pannelli bianchi semitrasparenti sopra lo sfondo. I colori
- * sono 0xAARRGGBB (vedi disegno.h): VELATO(0xFFFFFF, 36) e' il bianco al 14%. */
+ * Ci sono DUE stili. Il nuovo (in alto): scala di grigi, colori semantici letti dal tema in
+ * uso (Chiaro o Scuro, scelto a tempo di esecuzione: tema.h). Il vecchio (in fondo): "a
+ * vetro", pannelli bianchi semitrasparenti sopra lo sfondo, che si toglie quando tutto sara'
+ * migrato. I colori sono 0xAARRGGBB (vedi disegno.h): VELATO(0xFFFFFF, 36) e' il bianco al 14%. */
 #ifndef STILE_H
 #define STILE_H
 
 #include "disegno.h"
+#include "tema.h"
+
+/* =====================================================================================
+ * IL NUOVO STILE (fase 0C): scala di grigi, colori semantici, due temi
+ * =====================================================================================
+ * Viene da strumenti/grafica/token-figma.json. Il vecchio stile "a vetro scuro" (sotto, in
+ * "VECCHIO STILE") resta finche' toolkit, Files, Attivita, scrivania e compositore non sono
+ * migrati; poi si cancella. Dove un nome nuovo sarebbe uguale a uno vecchio, il nuovo ha il
+ * suffisso _NUOVO (si toglie, insieme al vecchio, a fine migrazione). */
+
+/* --- i colori: SEMANTICI, dipendono dal tema in uso ---
+ * Ogni macro e' un'espressione di colore (0xAARRGGBB non premoltiplicato, come OPACO e
+ * VELATO) che legge dal tema corrente a ogni uso: funziona ovunque un colore e' ammesso,
+ * anche dentro altre macro, e cambia da sola se cambia 'tema_corrente' (tema.h).
+ * CONTROLLO_SFONDO e SCORRIMENTO_CURSORE_TRASCINATO esistono gia' nel vecchio stile (valori
+ * "a vetro"): i nuovi hanno il suffisso _NUOVO. */
+#define SUPERFICIE_SCENA                         (tema_corrente->superficie_scena)
+#define SUPERFICIE_ELEVATA                       (tema_corrente->superficie_elevata)
+#define SUPERFICIE_VETRO                         (tema_corrente->superficie_vetro)
+#define SUPERFICIE_INCASSATA                     (tema_corrente->superficie_incassata)
+#define CONTROLLO_SFONDO_NUOVO                   (tema_corrente->controllo_sfondo)   /* vecchio CONTROLLO_SFONDO: vedi sotto */
+#define CONTROLLO_SFONDO_SOPRA                   (tema_corrente->controllo_sfondo_sopra)
+#define CONTROLLO_SFONDO_PREMUTO                 (tema_corrente->controllo_sfondo_premuto)
+#define CONTROLLO_SFONDO_DISABILITATO            (tema_corrente->controllo_sfondo_disabilitato)
+#define AZIONE_SFONDO                            (tema_corrente->azione_sfondo)
+#define AZIONE_SFONDO_SOPRA                      (tema_corrente->azione_sfondo_sopra)
+#define AZIONE_SFONDO_PREMUTO                    (tema_corrente->azione_sfondo_premuto)
+#define AZIONE_TESTO                             (tema_corrente->azione_testo)
+#define TESTO_PRIMARIO                           (tema_corrente->testo_primario)
+#define TESTO_SECONDARIO                         (tema_corrente->testo_secondario)
+#define TESTO_DISABILITATO                       (tema_corrente->testo_disabilitato)
+#define TESTO_INVERSO                            (tema_corrente->testo_inverso)
+#define BORDO_CONTROLLO                          (tema_corrente->bordo_controllo)
+#define BORDO_SEPARATORE                         (tema_corrente->bordo_separatore)
+#define BORDO_FOCUS                              (tema_corrente->bordo_focus)
+#define CURSORE_RIEMPIMENTO                      (tema_corrente->cursore_riempimento)
+#define CURSORE_CONTORNO                         (tema_corrente->cursore_contorno)
+#define OGGETTO_RIEMPIMENTO                      (tema_corrente->oggetto_riempimento)
+#define OGGETTO_RIEMPIMENTO_FORTE                (tema_corrente->oggetto_riempimento_forte)
+#define OGGETTO_TRATTO                           (tema_corrente->oggetto_tratto)
+#define SCORRIMENTO_CURSORE                      (tema_corrente->scorrimento_cursore)
+#define SCORRIMENTO_CURSORE_SOPRA                (tema_corrente->scorrimento_cursore_sopra)
+#define SCORRIMENTO_CURSORE_TRASCINATO_NUOVO     (tema_corrente->scorrimento_cursore_trascinato)   /* vecchio SCORRIMENTO_CURSORE_TRASCINATO: vedi sotto */
+#define SUGGERIMENTO_SFONDO                      (tema_corrente->suggerimento_sfondo)
+#define SUGGERIMENTO_TESTO                       (tema_corrente->suggerimento_testo)
+#define SUGGERIMENTO_TESTO_SECONDARIO            (tema_corrente->suggerimento_testo_secondario)
+/* --- le misure del nuovo design (non dipendono dal tema), in pixel ---
+ * Controlli S/M/L: altezza, icona, padding ai lati, gap tra icona e testo. */
+#define ALTEZZA_S               32
+#define ALTEZZA_M               40
+#define ALTEZZA_L               48
+#define ALTEZZA_BARRA           40
+#define ICONA_S                 16
+#define ICONA_M                 18
+#define ICONA_L                 20
+#define ICONA_OGGETTO           48   /* l'icona di un file o di una cartella (grande) */
+#define ICONA_OGGETTO_PICCOLA   24   /* la stessa, piccola */
+#define PADDING_S               12
+#define PADDING_M               16
+#define PADDING_L               20
+#define GAP_S                    6
+#define GAP_M                    8
+#define GAP_L                    8
+#define GRUPPO_PADDING           4   /* dentro un gruppo di pulsanti (la pillola) */
+/* la scala degli spazi */
+#define SPAZIO_0                 0
+#define SPAZIO_4                 4
+#define SPAZIO_8                 8
+#define SPAZIO_12               12
+#define SPAZIO_16               16
+#define SPAZIO_24               24
+#define SPAZIO_32               32
+/* i raggi. Azioni (pulsanti, gruppi, ricerca) = pillola: il raggio e' meta' altezza, quindi
+ * RAGGIO_PILLOLA e' un raggio "grande a piacere" che il disegno limita a meta' altezza. I
+ * campi di testo sono rettangoli arrotondati (RAGGIO_CAMPO_S/M/L, uno per altezza).
+ * Nomi uguali a quelli vecchi: RAGGIO_CONTROLLO (vecchio 5) e RAGGIO_FINESTRA (vecchio 12,
+ * lo usa il codice) hanno qui il suffisso _NUOVO (12 e 28). */
+#define RAGGIO_PILLOLA         999
+#define RAGGIO_CASELLA           6
+#define RAGGIO_CONTROLLO_NUOVO  12
+#define RAGGIO_PANNELLO         20
+#define RAGGIO_FINESTRA_NUOVO   28
+#define RAGGIO_CAMPO_S          10
+#define RAGGIO_CAMPO_M          12
+#define RAGGIO_CAMPO_L          14
+#define TILE_LARGHEZZA          96   /* un elemento a icone (file, cartella) */
+/* la barra di scorrimento: la striscia (zona sensibile) e' larga 14, il binario 12, il
+ * cursore 8 per almeno 64 di lunghezza. SCORRIMENTO_CURSORE_NUOVO e' lo spessore del cursore
+ * (il vecchio SCORRIMENTO_SPESSO/SOTTILE restano); il colore SCORRIMENTO_CURSORE e' un'altra cosa. */
+#define SCORRIMENTO_ZONA        14
+#define SCORRIMENTO_BINARIO     12
+#define SCORRIMENTO_CURSORE_NUOVO     8
+#define SCORRIMENTO_CURSORE_LUNGHEZZA 64
+#define INDICATORE_SPESSORE      2   /* la lineetta sotto la scheda scelta */
+/* la finestra: titolo alto 40 con 4 di margine intorno ai comandi, contenuto con 24 di padding */
+#define TITOLO_ALTEZZA          40
+#define TITOLO_MARGINE           4
+#define FINESTRA_PADDING        24
+#define TITOLO_DIVISORE          1   /* la linea (BORDO_SEPARATORE) sotto la testata, da bordo a bordo */
+#define TITOLO_COMANDI_LARGHEZZA (2 * ALTEZZA_S + 3 * TITOLO_MARGINE)   /* riduci e chiudi, con i margini: 76 */
+#define OPACITA_COMANDI_INATTIVI 128   /* i comandi di una finestra sullo sfondo: 50% */
+/* la barra degli strumenti e il gruppo di pulsanti (la pillola) */
+#define STRUMENTI_MARGINE_LATI  SPAZIO_12   /* ai lati della barra (sopra e sotto c'e' TITOLO_MARGINE) */
+#define GRUPPO_ELEMENTO         24   /* l'altezza di una voce dentro il gruppo: ALTEZZA_S - 2 * GRUPPO_PADDING */
+#define SCORRIMENTO_CURSORE_MARGINE 2   /* tra il binario e il cursore, per lato */
+
+/* --- i font del nuovo design ---
+ * Il disegno usa IBM Plex Sans (font plex_*, generati da strumenti/grafica). Ogni stile di testo
+ * (Plex dimensione/interlinea/spaziatura) ha il suo font; dove il disegno chiede una
+ * dimensione o un peso che non e' stato generato si usa il piu' vicino:
+ *   titolo          SemiBold 24/32 (-1)   ->  plex_semigrassetto_24
+ *   titolo-finestra SemiBold 14/20        ->  plex_semigrassetto_14
+ *   sezione         SemiBold 15/20        ->  plex_semigrassetto_15
+ *   corpo           Regular  14/20        ->  plex_14
+ *   corpo-medio     Medium   14/20        ->  plex_medio_14
+ *   piccolo         Regular  12/16        ->  plex_12
+ *   etichetta       Medium   12/16 (+2)   ->  plex_medio_12
+ *   pulsante-s/m/l  Medium   13/16, 14/20, 16/24  ->  plex_medio_13, _14, _16
+ * (FONT_TITOLO, FONT_SEZIONE e FONT_PICCOLO esistono gia' nel vecchio stile: _NUOVO.) */
+#define FONT_TITOLO_NUOVO       (&plex_semigrassetto_24)
+#define FONT_TITOLO_FINESTRA    (&plex_semigrassetto_14)
+#define FONT_SEZIONE_NUOVO      (&plex_semigrassetto_15)
+#define FONT_CORPO              (&plex_14)
+#define FONT_CORPO_MEDIO        (&plex_medio_14)
+#define FONT_PICCOLO_NUOVO      (&plex_12)
+#define FONT_ETICHETTA          (&plex_medio_12)
+#define FONT_PULSANTE_S         (&plex_medio_13)
+#define FONT_PULSANTE_M         (&plex_medio_14)
+#define FONT_PULSANTE_L         (&plex_medio_16)
+/* l'interlinea (altezza della riga) di ogni stile, e la spaziatura delle lettere in pixel
+ * (negativa = piu' stretto; l'etichetta e' spaziata di 2) */
+#define INTERLINEA_TITOLO       32
+#define INTERLINEA_TITOLO_FINESTRA 20
+#define INTERLINEA_SEZIONE      20
+#define INTERLINEA_CORPO        20
+#define INTERLINEA_PICCOLO      16
+#define INTERLINEA_ETICHETTA    16
+#define INTERLINEA_PULSANTE_S   16
+#define INTERLINEA_PULSANTE_M   20
+#define INTERLINEA_PULSANTE_L   24
+#define SPAZIATURA_TITOLO       (-1)
+#define SPAZIATURA_ETICHETTA     2
+
+/* --- le ombre: strati sovrapposti ---
+ * Una tabella di 'struct strato_ombra' (disegno.h) per ogni livello di profondita' e per ogni
+ * tema, nell'ordine dei token: la PRIMA riga sta sopra a tutte (vedi il commento delle ombre
+ * a strati in disegno.h per l'ordine in cui si disegnano). Livelli: incassato (campi,
+ * binari), sollevato (pulsanti), sollevato_pieno (pulsante d'azione), sovrapposto (menu,
+ * suggerimento), barra, finestra, focus (l'anello), puntatore. Si sceglie la tabella del
+ * tema in uso (tema_corrente == &tema_scuro ? ..._scuro : ..._chiaro) e si passa a
+ * ombre_strati_fuori / ombre_strati_dentro; il numero di righe e' OMBRA_STRATI(tabella).
+ * Il JSON ha anche degli strati "BB" (sfocatura dello sfondo, solo un raggio) per barra e
+ * finestra: struct strato_ombra non li puo' dire, e non sono ombre; sono le due misure
+ * qui sotto, per chi sfoca quello che sta sotto. */
+#define OMBRA_STRATI(tabella)          ((int)(sizeof(tabella) / sizeof((tabella)[0])))
+#define OMBRA_BARRA_SFOCATURA_SFONDO   20
+#define OMBRA_FINESTRA_SFOCATURA_SFONDO 28
+static const struct strato_ombra ombra_incassato_chiaro[] = {
+    { VELATO(0x14141A, 18), OMBRA_INTERNA, 0, 1, 2, 0 },
+    { VELATO(0x14141A, 10), OMBRA_ESTERNA, 0, 1, 0, 0 },
+};
+static const struct strato_ombra ombra_sollevato_chiaro[] = {
+    { VELATO(0x14141A, 15), OMBRA_ESTERNA, 0, 1, 1, 0 },
+    { VELATO(0x14141A, 18), OMBRA_ESTERNA, 0, 2, 4, -1 },
+    { VELATO(0x14141A, 15), OMBRA_ESTERNA, 0, 6, 12, -4 },
+};
+static const struct strato_ombra ombra_sollevato_pieno_chiaro[] = {
+    { VELATO(0x1F1F26, 26), OMBRA_ESTERNA, 0, 1, 1, 0 },
+    { VELATO(0x1F1F26, 41), OMBRA_ESTERNA, 0, 4, 8, -2 },
+    { VELATO(0x1F1F26, 46), OMBRA_ESTERNA, 0, 10, 20, -6 },
+};
+static const struct strato_ombra ombra_sovrapposto_chiaro[] = {
+    { VELATO(0x14141A, 13), OMBRA_ESTERNA, 0, 1, 2, 0 },
+    { VELATO(0x14141A, 20), OMBRA_ESTERNA, 0, 8, 16, -4 },
+    { VELATO(0x14141A, 36), OMBRA_ESTERNA, 0, 20, 40, -12 },
+};
+static const struct strato_ombra ombra_barra_chiaro[] = {
+    { VELATO(0x14141A, 15), OMBRA_ESTERNA, 0, 1, 2, 0 },
+    { VELATO(0x14141A, 26), OMBRA_ESTERNA, 0, 6, 14, -4 },
+    { VELATO(0x14141A, 41), OMBRA_ESTERNA, 0, 16, 32, -10 },
+};
+static const struct strato_ombra ombra_finestra_chiaro[] = {
+    { VELATO(0x14141A, 13), OMBRA_ESTERNA, 0, 2, 4, 0 },
+    { VELATO(0x14141A, 26), OMBRA_ESTERNA, 0, 12, 24, -6 },
+    { VELATO(0x14141A, 51), OMBRA_ESTERNA, 0, 32, 64, -16 },
+};
+static const struct strato_ombra ombra_focus_chiaro[] = {
+    { VELATO(0x14141A, 18), OMBRA_INTERNA, 0, 1, 2, 0 },
+    { VELATO(0x14141A, 36), OMBRA_ESTERNA, 0, 0, 0, 3 },
+};
+static const struct strato_ombra ombra_puntatore_chiaro[] = {
+    { VELATO(0x000000, 51), OMBRA_ESTERNA, 0, 1, 1, 0 },
+    { VELATO(0x000000, 66), OMBRA_ESTERNA, 0, 3, 6, -1 },
+};
+static const struct strato_ombra ombra_incassato_scuro[] = {
+    { VELATO(0x000000, 89), OMBRA_INTERNA, 0, 1, 3, 0 },
+};
+static const struct strato_ombra ombra_sollevato_scuro[] = {
+    { VELATO(0xFFFFFF, 15), OMBRA_INTERNA, 0, 1, 0, 0 },
+    { VELATO(0x000000, 51), OMBRA_ESTERNA, 0, 1, 1, 0 },
+    { VELATO(0x000000, 61), OMBRA_ESTERNA, 0, 3, 6, -1 },
+    { VELATO(0x000000, 56), OMBRA_ESTERNA, 0, 8, 14, -4 },
+};
+static const struct strato_ombra ombra_sollevato_pieno_scuro[] = {
+    { VELATO(0xFFFFFF, 77), OMBRA_INTERNA, 0, 1, 0, 0 },
+    { VELATO(0x000000, 56), OMBRA_ESTERNA, 0, 1, 1, 0 },
+    { VELATO(0x000000, 77), OMBRA_ESTERNA, 0, 4, 8, -2 },
+    { VELATO(0x000000, 77), OMBRA_ESTERNA, 0, 12, 22, -6 },
+};
+static const struct strato_ombra ombra_sovrapposto_scuro[] = {
+    { VELATO(0xFFFFFF, 13), OMBRA_INTERNA, 0, 1, 0, 0 },
+    { VELATO(0x000000, 51), OMBRA_ESTERNA, 0, 2, 3, 0 },
+    { VELATO(0x000000, 77), OMBRA_ESTERNA, 0, 10, 20, -4 },
+    { VELATO(0x000000, 97), OMBRA_ESTERNA, 0, 24, 44, -12 },
+};
+static const struct strato_ombra ombra_barra_scuro[] = {
+    { VELATO(0xFFFFFF, 18), OMBRA_INTERNA, 0, 1, 0, 0 },
+    { VELATO(0x000000, 61), OMBRA_ESTERNA, 0, 1, 2, 0 },
+    { VELATO(0x000000, 82), OMBRA_ESTERNA, 0, 8, 16, -4 },
+    { VELATO(0x000000, 107), OMBRA_ESTERNA, 0, 20, 36, -10 },
+};
+static const struct strato_ombra ombra_finestra_scuro[] = {
+    { VELATO(0xFFFFFF, 18), OMBRA_INTERNA, 0, 1, 0, 0 },
+    { VELATO(0x000000, 56), OMBRA_ESTERNA, 0, 2, 4, 0 },
+    { VELATO(0x000000, 87), OMBRA_ESTERNA, 0, 16, 28, -6 },
+    { VELATO(0x000000, 128), OMBRA_ESTERNA, 0, 40, 72, -16 },
+};
+static const struct strato_ombra ombra_focus_scuro[] = {
+    { VELATO(0x000000, 89), OMBRA_INTERNA, 0, 1, 3, 0 },
+    { VELATO(0xFFFFFF, 36), OMBRA_ESTERNA, 0, 0, 0, 3 },
+};
+static const struct strato_ombra ombra_puntatore_scuro[] = {
+    { VELATO(0x000000, 140), OMBRA_ESTERNA, 0, 1, 1, 0 },
+    { VELATO(0x000000, 140), OMBRA_ESTERNA, 0, 3, 6, -1 },
+};
+
+/* Le tabelle del tema in uso: OMBRA_TAB(sollevato) da' la tabella giusta per il tema
+ * corrente, e OMBRA_N(sollevato) il suo numero di righe. Si usano con ombre_strati_fuori /
+ * ombre_strati_dentro. (Le due varianti hanno la stessa forma, ma righe diverse.) */
+/* ATTENZIONE: il tema in uso si riconosce dal VALORE (la superficie di scena, diversa nei due
+ * temi), non dall'indirizzo. tema_scuro e' 'static const' in tema.h: ogni file .c ne ha una
+ * copia sua, e 'tema_corrente' (debole, unico per programma) punta a quella del file che ha
+ * chiamato tema_scegli (libreria.c), che non e' la copia di toolkit.h: confrontare gli
+ * indirizzi darebbe sempre "chiaro" nelle applicazioni. */
+#define TEMA_SCURO_IN_USO (tema_corrente->superficie_scena == tema_scuro.superficie_scena)
+#define OMBRA_TAB(nome)  (TEMA_SCURO_IN_USO ? ombra_##nome##_scuro : ombra_##nome##_chiaro)
+#define OMBRA_N(nome)    (TEMA_SCURO_IN_USO ? OMBRA_STRATI(ombra_##nome##_scuro) \
+                                                       : OMBRA_STRATI(ombra_##nome##_chiaro))
+
+/* altre misure del nuovo design nate nei controlli (non hanno un token) */
+/* Quanto un widget puo' disegnare fuori dal suo rettangolo (il toolkit ritaglia li'): l'anello
+ * del fuoco (3) e le ombre a strati, la piu' lunga e' quella del pulsante primario (giu' di
+ * 10 + sfocatura 20 - diffusione 6 = 24). */
+#define WIDGET_SBORDO           24
+#define CASELLA_LATO            18   /* il quadratino della casella e il tondo della scelta */
+#define CASELLA_GAP              8   /* tra il quadratino e il suo testo */
+#define SCELTA_PUNTO             8   /* il punto al centro della scelta accesa */
+#define BORDO_FOCUS_SPESSORE   384   /* 1,5 px in 256esimi: il bordo di un campo con il fuoco */
+#define RICERCA_LARGHEZZA_NUOVA 180
+
+/* =====================================================================================
+ * VECCHIO STILE (da eliminare a fine migrazione)
+ * =====================================================================================
+ * Il tema scuro "vetro" di prima, con i nomi di prima: tutto il sistema lo usa ancora. */
+
 
 /* --- il testo --- */
 #define CONTENUTO_PRINCIPALE    OPACO(0xFFFFFF)

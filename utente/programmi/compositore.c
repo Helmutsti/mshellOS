@@ -149,52 +149,100 @@ static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto
 static unsigned int prossimo_ping = 1;
 static unsigned int prossimo_id = 1;
 
-/* L'OMBRA di una finestra: morbida, spostata in giu' e larga quanto la sfocatura, come
- * nel disegno. Calcolarla costa (le distanze dal bordo arrotondato), e dipende solo
- * dalla misura della finestra: la si calcola una volta, quando la finestra nasce, come
- * una tabella di coperture, e a ogni composizione la si "versa" con il suo colore. */
-#define OMBRA_MARGINE FINESTRA_OMBRA_SFOCATA
+/* L'OMBRA di una finestra: a STRATI, come nel disegno (token "ombra/finestra", in stile.h:
+ * ombra_finestra_chiaro / _scuro). Sono tre ombre esterne sovrapposte, una vicina e netta e
+ * una larga e leggera, ognuna spostata in giu' e con una diffusione negativa (piu' stretta
+ * della finestra, cosi' si vede soprattutto sotto, come con una luce alta). Calcolarla costa
+ * (le distanze dal bordo arrotondato per ogni strato), e dipende solo dalla misura della
+ * finestra: la si calcola una volta, quando la finestra nasce, come una tabella di
+ * coperture, e a ogni composizione la si "versa" con il suo colore.
+ *
+ * UNA SOLA TABELLA PER TUTTI GLI STRATI. Gli strati esterni dei token hanno tutti lo stesso
+ * colore (nel chiaro 0x14141A, nello scuro nero) e cambiano solo l'opacita': mescolati uno
+ * sopra l'altro danno ancora quel colore, con l'opacita' composta
+ *     alfa = 1 - (1 - a1) * (1 - a2) * (1 - a3)
+ * e quindi basta una tabella di un byte per pixel, con l'alfa gia' dentro. Il colore si
+ * legge dal primo strato esterno al momento di versarla. (Gli strati INTERNI della tabella
+ * dello scuro, il filo di luce sul bordo alto, li disegna l'applicazione dentro la sua
+ * immagine: sono dentro la finestra, il compositore non c'entra.)
+ *
+ * QUANTO E' GRANDE. La piu' larga e lontana e' l'ultima: sfocatura 64 (72 nello scuro),
+ * diffusione -16, spostata di 32 (40) in giu'. Arriva a 48 (56) pixel dai lati e dall'alto
+ * (meno lo spostamento) e a 80 (96) sotto. OMBRA_MARGINE e OMBRA_MARGINE_GIU sono i valori
+ * del tema piu' grande. */
+#define OMBRA_MARGINE      56
+#define OMBRA_MARGINE_GIU  96
 #define OMBRA_L(f) ((f)->l + 2 * OMBRA_MARGINE)
-#define OMBRA_A(f) ((f)->a + 2 * OMBRA_MARGINE + FINESTRA_OMBRA_GIU)
+#define OMBRA_A(f) ((f)->a + OMBRA_MARGINE + OMBRA_MARGINE_GIU)
 static unsigned char ombre[MAX_FINESTRE][(MAX_LARGHEZZA + 2 * OMBRA_MARGINE) *
-                                         (MAX_ALTEZZA + 2 * OMBRA_MARGINE + FINESTRA_OMBRA_GIU)];
+                                         (MAX_ALTEZZA + OMBRA_MARGINE + OMBRA_MARGINE_GIU)];
+
+/* Una finestra che non ha il fuoco ha un'ombra piu' leggera (nel vecchio disegno il 22%
+ * contro il 38%, cioe' il 58%). Il Figma ha una sola ombra per la finestra: questo e' un
+ * ritocco nostro; per toglierlo basta mettere 256. In 256esimi. */
+#define OMBRA_SENZA_FUOCO  150
 
 /* Il pannello (l'isola) ha un'ombra piu' corta di quella delle finestre: nel disegno,
- * spostata di 10 e sfocata di 15, al 28%. */
+ * spostata di 10 e sfocata di 15, al 28%. Il pannello e' della scrivania, che non e'
+ * ancora migrata al nuovo stile: la sua ombra resta quella di prima, ma come una tabella
+ * di un solo strato (cosi' si calcola con lo stesso codice delle finestre). */
 #define PANNELLO_OMBRA_GIU      10
 #define PANNELLO_OMBRA_SFOCATA  15
-#define PANNELLO_OMBRA          VELATO(0x050A24, 71)
+static const struct strato_ombra ombra_pannello[] = {
+    { VELATO(0x050A24, 71), OMBRA_ESTERNA, 0, PANNELLO_OMBRA_GIU, PANNELLO_OMBRA_SFOCATA, 0 },
+};
+
+/* La tabella degli strati di una finestra, secondo il suo ruolo e il tema in uso. */
+static const struct strato_ombra *strati_ombra(const struct finestra *f, int *quanti) {
+    if (f->ruolo == RUOLO_PANNELLO) { *quanti = OMBRA_STRATI(ombra_pannello); return ombra_pannello; }
+    *quanti = OMBRA_N(finestra);
+    return OMBRA_TAB(finestra);
+}
 
 static void prepara_ombra(int i) {
     const struct finestra *f = &finestre[i];
-    int pannello = f->ruolo == RUOLO_PANNELLO;
-    int quanto_giu = pannello ? PANNELLO_OMBRA_GIU : FINESTRA_OMBRA_GIU;
+    int n;
+    const struct strato_ombra *strati = strati_ombra(f, &n);
     struct tondo forma = tondo(0, 0, f->l, f->a, f->raggio);
-    struct tondo giu = tondo(0, quanto_giu, f->l, f->a, f->raggio);
-    int s = (pannello ? PANNELLO_OMBRA_SFOCATA : FINESTRA_OMBRA_SFOCATA) * 256;
     for (int y = 0; y < OMBRA_A(f); y++)
         for (int x = 0; x < OMBRA_L(f); x++) {
             int wx = x - OMBRA_MARGINE, wy = y - OMBRA_MARGINE;
             int fuori = 256 - coperto(distanza(&forma, wx, wy));   /* sotto la finestra no */
-            int v = fuori ? (s - distanza(&giu, wx, wy)) * 128 / s : 0;
-            if (v < 0) v = 0;
-            if (v > 256) v = 256;
-            int dolce = v * v * (768 - 2 * v) >> 16;            /* smoothstep */
-            ombre[i][y * OMBRA_L(f) + x] = (dolce * fuori >> 8) * 255 >> 8;
+            int passa = 255;                      /* quanta luce passa attraverso gli strati */
+            if (fuori)
+                for (int k = 0; k < n; k++) {
+                    if (strati[k].tipo != OMBRA_ESTERNA) continue;
+                    struct tondo spostata = forma;
+                    spostata.x += strati[k].dx;
+                    spostata.y += strati[k].dy;
+                    int s = strati[k].sfocatura * 256;
+                    if (s < 256) s = 256;
+                    int dolce = sfuma(distanza(&spostata, wx, wy) - strati[k].diffusione * 256, s);
+                    if (!dolce) continue;
+                    int alfa = (dolce * (int)(strati[k].colore >> 24)) >> 8;   /* 0-255 */
+                    passa = passa * (255 - alfa) / 255;
+                }
+            int v = (255 - passa) * fuori >> 8;
+            ombre[i][y * OMBRA_L(f) + x] = (unsigned char)v;
         }
 }
 
 static void disegna_ombra(int i) {
     const struct finestra *f = &finestre[i];
-    pennello_colore(&pennello, f->ruolo == RUOLO_PANNELLO ? PANNELLO_OMBRA
-                               : i == fuoco ? FINESTRA_OMBRA : FINESTRA_OMBRA_SFONDO);
+    int n;
+    const struct strato_ombra *strati = strati_ombra(f, &n);
+    unsigned int rgb = 0;
+    for (int k = 0; k < n; k++)
+        if (strati[k].tipo == OMBRA_ESTERNA) { rgb = strati[k].colore & 0xFFFFFF; break; }
+    pennello_colore(&pennello, OPACO(rgb));
+    int quota = f->ruolo == RUOLO_FINESTRA && i != fuoco ? OMBRA_SENZA_FUOCO : 256;
     int ox = f->x - OMBRA_MARGINE, oy = f->y - OMBRA_MARGINE;   /* dove comincia l'ombra */
     int y0 = zy0 - oy > 0 ? zy0 - oy : 0, y1 = zy1 - oy < OMBRA_A(f) ? zy1 - oy : OMBRA_A(f);
     int x0 = zx0 - ox > 0 ? zx0 - ox : 0, x1 = zx1 - ox < OMBRA_L(f) ? zx1 - ox : OMBRA_L(f);
     for (int y = y0; y < y1; y++)
         for (int x = x0; x < x1; x++) {
             int v = ombre[i][y * OMBRA_L(f) + x];
-            if (v) copri(&pennello, f->x - OMBRA_MARGINE + x, f->y - OMBRA_MARGINE + y, v + (v >> 7));
+            if (v) copri(&pennello, ox + x, oy + y, ((v + (v >> 7)) * quota) >> 8);
         }
 }
 
@@ -207,14 +255,18 @@ static void disegna_ombra(int i) {
  *      SOMMA CHE SCORRE (si aggiunge il pixel che entra, si toglie quello che esce): il
  *      costo non dipende da quanto e' larga la sfocatura;
  *   3. tre medie una dopo l'altra danno una sfocatura morbida quasi uguale a quella
- *      "vera" (gaussiana) del disegno: qui, circa 20 pixel;
+ *      "vera" (gaussiana) del disegno. Nel disegno la sfocatura dello sfondo della finestra
+ *      e' 28 (OMBRA_FINESTRA_SFOCATURA_SFONDO, in stile.h): in Figma il raggio vale due
+ *      deviazioni standard, quindi sigma = 14 pixel. Tre medie larghe L pixel hanno
+ *      sigma = L * 0.5 (radice di 3 * L^2 / 12): per sigma 14 serve L = 28, cioe' 7 pixel
+ *      rimpiccioliti, RAGGIO_MEDIA 3 (prima erano medie di 11: sigma 22, troppo sfocato);
  *   4. la si rifa' solo quando cambia qualcosa in quello che guarda (la finestra si
  *      sposta, o cambia qualcosa sotto di lei li' intorno: vedi cosa_rifare); se no si
  *      riusa quella gia' fatta.
  * Poi, a ogni composizione, la si ingrandisce di nuovo (ogni pixel e' la media pesata
  * dei quattro vicini di quella piccola) dentro la forma arrotondata della finestra. */
 #define SCALA          4    /* la copia rimpicciolita: un pixel ogni 4x4 */
-#define RAGGIO_MEDIA   5    /* in pixel rimpiccioliti: medie di 11, tre volte */
+#define RAGGIO_MEDIA   (OMBRA_FINESTRA_SFOCATURA_SFONDO / SCALA / 2)   /* 3: medie di 7 pixel rimpiccioliti (28 veri), tre volte */
 #define BORDO_PICCOLO 16    /* quanto si prende intorno alla finestra, in pixel rimpiccioliti */
 #define PICCOLA_L (MAX_LARGHEZZA / SCALA + 2 * BORDO_PICCOLO + 2)
 #define PICCOLA_A (MAX_ALTEZZA / SCALA + 2 * BORDO_PICCOLO + 2)
@@ -329,23 +381,31 @@ static void metti_sfocatura(int i, const struct sfocata *s) {
     }
 }
 
-/* I due comandi della barra, come li mette il toolkit: riduci e chiudi, a destra. */
+/* I due comandi della barra, come li mette il toolkit (finestra_tk, toolkit.h): riduci e
+ * chiudi, tondi da ALTEZZA_S, a destra, a TITOLO_MARGINE dal bordo e l'uno dall'altro. */
 static int comando_x(const struct finestra *f, int chiudi) {
-    return f->x + f->l - BARRA_MARGINE - BARRA_COMANDO - (chiudi ? 0 : BARRA_COMANDO + 6);
+    return f->x + f->l - TITOLO_MARGINE - ALTEZZA_S - (chiudi ? 0 : ALTEZZA_S + TITOLO_MARGINE);
 }
-static int comando_y(const struct finestra *f) { return f->y + (BARRA_ALTEZZA - BARRA_COMANDO) / 2; }
+static int comando_y(const struct finestra *f) { return f->y + TITOLO_MARGINE; }
 
 static int sul_chiudi(const struct finestra *f, int x, int y) {
-    return x >= comando_x(f, 1) && x < comando_x(f, 1) + BARRA_COMANDO &&
-           y >= comando_y(f) && y < comando_y(f) + BARRA_COMANDO;
+    return x >= comando_x(f, 1) && x < comando_x(f, 1) + ALTEZZA_S &&
+           y >= comando_y(f) && y < comando_y(f) + ALTEZZA_S;
 }
 
-/* La barra di una finestra che non risponde, al posto di quella dell'applicazione:
- * rossa, con l'avviso e il titolo al centro e il "chiudi" rosso. Come nel disegno. */
+/* La testata di una finestra che non risponde, al posto di quella dell'applicazione: il
+ * vetro della finestra (SUPERFICIE_VETRO) con sopra un velo rosso, l'avviso e il titolo al
+ * centro, e i due comandi tondi come quelli del toolkit, col "chiudi" in rosso. Alta
+ * TITOLO_ALTEZZA, con i soli angoli in alto arrotondati: il divisore e tutto il resto
+ * sono ancora dell'applicazione (si disegna la sua immagine da TITOLO_ALTEZZA in giu').
+ *
+ * IL FONDO SCURO. Prima qui c'era VETRO_FONDO sotto il vetro, per far leggere il testo
+ * bianco sopra uno sfondo chiaro. Il nuovo vetro ha il suo testo (scuro sul vetro chiaro,
+ * chiaro sul vetro scuro): il fondo serve solo a contraddire il tema, e non c'e' piu'. */
 static void barra_non_risponde(const struct finestra *f) {
     struct pennello *p = &pennello;
-    struct tondo barra = { f->x, f->y, f->l, BARRA_ALTEZZA, { RAGGIO_FINESTRA, RAGGIO_FINESTRA, 0, 0 } };
-    pennello_colore(p, VETRO_FONDO);
+    struct tondo barra = { f->x, f->y, f->l, TITOLO_ALTEZZA, { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
+    pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &barra);
     pennello_colore(p, STATO_ERRORE_VELO);
     riempi_forma(p, &barra);
@@ -355,22 +415,24 @@ static void barra_non_risponde(const struct finestra *f) {
     for (const char *c = f->titolo; *c; c++) avviso[n++] = *c;
     for (const char *c = " non risponde"; *c; c++) avviso[n++] = *c;
     avviso[n] = 0;
-    int largo = 14 + 6 + larghezza_testo(FONT_BARRA, avviso);
+    int largo = ICONA_S + GAP_S + larghezza_testo(FONT_TITOLO_FINESTRA, avviso);
     int x = f->x + (f->l - largo) / 2;
     pennello_salva(p);
-    pennello_ritaglia(p, f->x, f->y, f->l, BARRA_ALTEZZA);
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    icona(p, ICONA_TRIANGLE_ALERT, 14, x, f->y + (BARRA_ALTEZZA - 14) / 2);
-    testo(p, FONT_BARRA, x + 14 + 6, f->y + (BARRA_ALTEZZA - FONT_BARRA->altezza) / 2, avviso);
+    pennello_ritaglia(p, f->x, f->y, f->l, TITOLO_ALTEZZA);
+    pennello_colore(p, TESTO_PRIMARIO);
+    icona(p, ICONA_TRIANGLE_ALERT, ICONA_S, x, f->y + (TITOLO_ALTEZZA - ICONA_S) / 2);
+    testo(p, FONT_TITOLO_FINESTRA, x + ICONA_S + GAP_S,
+          f->y + (TITOLO_ALTEZZA - FONT_TITOLO_FINESTRA->altezza) / 2, avviso);
     pennello_ripristina(p);
 
     for (int chiudi = 0; chiudi < 2; chiudi++) {
-        pennello_colore(p, chiudi ? STATO_ERRORE : VETRO_SUPERFICIE);
-        riempi_tondo(p, comando_x(f, chiudi), comando_y(f), BARRA_COMANDO, BARRA_COMANDO, BARRA_COMANDO / 2);
-        pennello_colore(p, CONTENUTO_PRINCIPALE);
-        icona(p, chiudi ? ICONA_X : ICONA_MINUS, 12, comando_x(f, chiudi) + 5, comando_y(f) + 5);
+        pennello_colore(p, CONTROLLO_SFONDO_NUOVO);
+        riempi_cerchio(p, comando_x(f, chiudi) + ALTEZZA_S / 2, comando_y(f) + ALTEZZA_S / 2, ALTEZZA_S / 2);
+        pennello_colore(p, chiudi ? STATO_ERRORE : TESTO_PRIMARIO);
+        icona(p, chiudi ? ICONA_X : ICONA_MINUS, ICONA_S, comando_x(f, chiudi) + (ALTEZZA_S - ICONA_S) / 2,
+              comando_y(f) + (ALTEZZA_S - ICONA_S) / 2);
     }
-    struct tondo tutta = tondo(f->x, f->y, f->l, f->a, RAGGIO_FINESTRA);
+    struct tondo tutta = tondo(f->x, f->y, f->l, f->a, RAGGIO_FINESTRA_NUOVO);
     pennello_colore(p, STATO_ERRORE);
     contorna_forma(p, &tutta, 256);
 }
@@ -379,7 +441,7 @@ static void barra_non_risponde(const struct finestra *f) {
 static struct zona con_ombra(unsigned int ruolo, int x, int y, int l, int a) {
     if (ruolo == RUOLO_SFONDO) return (struct zona){ x, y, x + l, y + a };
     return (struct zona){ x - OMBRA_MARGINE, y - OMBRA_MARGINE,
-                          x + l + OMBRA_MARGINE, y + a + OMBRA_MARGINE + FINESTRA_OMBRA_GIU };
+                          x + l + OMBRA_MARGINE, y + a + OMBRA_MARGINE_GIU };
 }
 
 static int si_toccano(struct zona p, struct zona q) {
@@ -420,7 +482,7 @@ static void disegna_finestra(int i, int ricalcola, struct sfocata *s) {
         nella_zona(k);
         if (!nella_zona_si_vede(f)) continue;
         metti_sfocatura(i, s);
-        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? BARRA_ALTEZZA : 0);
+        immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], f->non_risponde ? TITOLO_ALTEZZA : 0);
         if (f->non_risponde && f->ruolo == RUOLO_FINESTRA) barra_non_risponde(f);
     }
 }

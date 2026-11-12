@@ -460,7 +460,7 @@ static void laterale_disegna(struct widget *w, struct pennello *p) {
     struct laterale *lt = (struct laterale *)w;
     /* il fondo, un po' piu' scuro del contenuto; in basso a sinistra segue l'angolo
      * arrotondato della finestra */
-    struct tondo fondo = { w->x, w->y, w->l, w->a, { 0, 0, 0, RAGGIO_FINESTRA } };
+    struct tondo fondo = { w->x, w->y, w->l, w->a, { 0, 0, 0, RAGGIO_FINESTRA_NUOVO } };
     pennello_colore(p, VETRO_PREMUTO);
     riempi_forma(p, &fondo);
     for (int i = 0; i < RIGHE_LATERALI; i++) {
@@ -1314,7 +1314,7 @@ static void apri_menu(const struct voce_menu *voci, int quante, int x, int y, in
     if (pn->x + MENU_LARGHEZZA > m->base.l - 4) pn->x = m->base.l - 4 - MENU_LARGHEZZA;
     if (pn->y + a > m->base.a - 4) pn->y = m->base.a - 4 - a;
     if (pn->x < 4) pn->x = 4;
-    if (pn->y < BARRA_ALTEZZA) pn->y = BARRA_ALTEZZA;
+    if (pn->y < TITOLO_ALTEZZA) pn->y = TITOLO_ALTEZZA;
     widget_nascondi(&m->base, 0);
 }
 

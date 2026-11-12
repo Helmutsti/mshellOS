@@ -301,6 +301,52 @@ uv run test/collaudo.py --cpu arm64
 - Prima ancora c'era un vecchio mshell basato su Linux: si trova nella storia prima del
   commit `2987153` ("Tolto il vecchio mshell su Linux"), per esempio in `2987153~1`.
 
+## 12. Nuova grafica "Flusso" (in corso)
+
+Il nuovo disegno (file Figma "mshell – interfaccia", pagine "Token e dimensioni", "Componenti base",
+"Componenti complessi", "Puntatore" dentro "Componenti base", "Userbar – idea Isole") sostituisce il
+vetro scuro con Inter. Decisioni della persona: font **IBM Plex Sans** (Inter sparisce a fine
+lavoro), scala di grigi, **due temi Chiaro e Scuro a tempo di esecuzione** (oggi non si possono
+cambiare da Impostazioni), lavoro direttamente su `main`.
+
+**Regole del disegno** (anche in `strumenti/grafica/token-figma.json`, chiave "regole"):
+- Profondità: *incassato* = contiene o riceve (campi, caselle, scelte, binari: ombra interna, mai
+  bordo); *sollevato* = si preme o si sposta (pulsanti, pezzo mobile); *sovrapposto* = sta sopra il
+  contenuto (menu, barre, finestre, suggerimento); *piatto* = il resto, premuto e disabilitato inclusi.
+- Controlli S 32 / M 40 / L 48. Azioni (pulsanti, solo icona, gruppi, ricerca) a pillola; campi dati
+  a rettangolo arrotondato (raggio 10/12/14). Titolo e contenuto della finestra sono separati
+  (titolo 40 px, divisore da bordo a bordo, finestra raggio 28).
+
+**Fatto**
+- Fase 0: font Plex in `grafica_dati.h` (`plex_*`, TTF e licenza OFL in `strumenti/grafica/font/`,
+  Inter ancora presente); nuove primitive in `disegno.h` (ombra con diffusione, ombra interna, ombre a
+  strati, pillola, cerchio, archi: tutto intero, niente float); token e temi in `tema.h` e nella
+  sezione nuova di `stile.h` (29 colori semantici per tema, misure, font, ombre); il tema si sceglie
+  all'avvio dal file `/data/users/1000/preferences/tema` ("chiaro" o "scuro", predefinito chiaro).
+- Fase 1: pulsante (Primario/Secondario/Ghost, S/M/L, solo icona tondo), campo incassato, ricerca a
+  pillola, casella, scelta, gruppo di pulsanti incassato, barra degli strumenti, barra di scorrimento
+  con binario che compare sotto il puntatore, titolo e contenuto della finestra separati, compositore
+  con ombra a strati e raggio 28. Impostazioni è già nel nuovo disegno (provato in QEMU su ARM).
+- Il vecchio stile resta in `stile.h` sotto il banner "VECCHIO STILE (da eliminare a fine
+  migrazione)", con i vecchi nomi dei pulsanti (NEUTRO, BLU...) come alias.
+
+**Da fare**
+- Migrare Files e Attività: usano ancora `CONTENUTO_*`/`VETRO_*` (testo bianco, illeggibile sul vetro
+  chiaro) e il disegno a mano di righe e icone; vanno sui token nuovi e sui tile da 96 px.
+- Widget nuovi: interruttore, menu contestuale e a tendina, suggerimento, schede, tabella, griglia
+  come widget, puntatore con le sue forme (idle, link, caricamento, paragrafo, disabilitato).
+- Userbar "Isole minima" (solo il pulsante App, che apre un vassoio di app verso il basso) al posto
+  dell'isola di `scrivania.c`; dove vanno ora ora e notifiche è ancora da decidere.
+- Impostazioni: la scelta del tema deve scrivere il file e chiamarsi Chiaro/Scuro. I servizi già
+  avviati non si accorgono del cambio finché non ripartono.
+- Token del disabilitato di campi, caselle e scelte: oggi è quasi uguale al normale (da rivedere in Figma).
+- Il carattere "…" e "–" non esistono nel font (solo code page 437): usare "..." e "-".
+- Foto di riferimento delle prove (`test/riferimenti`): da rifare con `--riferimenti` solo dopo aver
+  guardato le schermate. Sul Mac `uv` non c'è: le prove non partono finché non si installa.
+- Anteprime: `strumenti/anteprima/anteprima.sh <scena>` (campo, pulsanti, impostazioni, files, token,
+  primitive, font, scorrimento; `TEMA=scuro`, `SFONDO=bianco`). Non simulano il vetro del compositore:
+  per le finestre vale la foto vera da QEMU.
+
 ## Per chi continua il lavoro
 
 - Le decisioni sono della persona: si chiede prima di fare, con domanda, contesto ed esempi.

@@ -110,6 +110,8 @@ int main(int argc, char **argv) {
     const char *uscita = argc > 1 ? argv[1] : "anteprima.png";
     int scala = argc > 2 ? atoi(argv[2]) : 1;
     if (scala < 1) scala = 1;
+    /* TEMA=chiaro|scuro sceglie il tema dei colori semantici (tema.h); senza, il chiaro. */
+    tema_scegli(getenv("TEMA"));
     ((int (*)())scena_main)(0, 0);   /* main() o main(argc, argv): qui e' lo stesso */
     if (!catturata) { fprintf(stderr, "la scena non ha chiamato toolkit_esegui\n"); return 1; }
     struct finestra_tk *f = catturata;

@@ -96,6 +96,9 @@ struct tipo_widget {
      * interessa). Serve a chi deve sapere SOPRA QUALE SUA PARTE e' il puntatore (i file
      * di una cartella, per illuminare quello li' sotto), non solo se e' sopra di lui */
     void (*movimento)(struct widget *w, int x, int y);
+    /* 1: il widget sa disegnarsi disabilitato (piatto, con i colori _DISABILITATO del
+     * tema) e il toolkit NON lo sbiadisce al 40%. 0 (gli altri): il vecchio modo, 40%. */
+    int disegna_disabilitato;
 };
 
 #define MAX_FIGLI 16
@@ -133,8 +136,9 @@ static inline void widget_disponi(struct widget *w) {
 static inline void widget_disegna(struct widget *w, struct pennello *p) {
     if (w->nascosto) return;
     pennello_salva(p);
-    pennello_ritaglia(p, w->x - 4, w->y - 4, w->l + 8, w->a + 8);   /* anelli e ombre sbordano un po' */
-    if (w->disabilitato) pennello_opacita(p, OPACITA_DISABILITATO);
+    pennello_ritaglia(p, w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO,
+                     w->l + 2 * WIDGET_SBORDO, w->a + 2 * WIDGET_SBORDO);   /* anelli e ombre sbordano */
+    if (w->disabilitato && !w->tipo->disegna_disabilitato) pennello_opacita(p, OPACITA_DISABILITATO);
     if (w->tipo->disegna) w->tipo->disegna(w, p);
     for (int i = 0; i < w->quanti_figli; i++) widget_disegna(w->figli[i], p);
     pennello_ripristina(p);
@@ -298,7 +302,7 @@ static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichett
 
 static inline void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font) {
     *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font,
-                             .colore = CONTENUTO_PRINCIPALE };
+                             .colore = TESTO_PRIMARIO };
     copia_testo(e->testo, testo, MAX_TESTO_WIDGET);
 }
 
@@ -309,27 +313,30 @@ static inline void etichetta_testo(struct etichetta *e, const char *testo) {
     widget_cambiato(&e->base);
 }
 
-/* --- il pulsante: 5 colori, 3 misure, con o senza icona, anche solo icona --- */
+/* --- il pulsante: 3 tipi, 3 misure, con o senza icona, anche solo icona --- */
 
-enum { NEUTRO, BLU, VERDE, ROSSO, ARANCIO };
-enum { PICCOLO, MEDIO, GRANDE };
+/* I TIPI. Primario (l'azione principale: fondo scuro nel chiaro, chiaro nello scuro, ombra
+ * "sollevato-pieno"), Secondario (fondo di controllo, ombra "sollevato"), Ghost (senza
+ * fondo: compare solo sotto il puntatore, premuto e disabilitato sono piatti come gli
+ * altri). Il colore NON dice piu' il significato (blu/verde/rosso/arancio non esistono
+ * nella scala di grigi): chi vuole un'azione di rilievo usa il Primario. */
+enum { PRIMARIO, SECONDARIO, GHOST };
+/* Le MISURE: S 32, M 40, L 48 (ALTEZZA_S/M/L in stile.h). */
+enum { MISURA_S, MISURA_M, MISURA_L };
+/* VECCHIO: da eliminare quando le app saranno migrate. I nomi di prima restano come
+ * sinonimi, cosi' Files, Impostazioni, Attivita e Contatore compilano senza toccarli:
+ * NEUTRO e' il Secondario, tutti i colori (blu, verde, rosso, arancio) il Primario;
+ * PICCOLO, MEDIO e GRANDE sono S, M e L. */
+enum { NEUTRO = SECONDARIO, BLU = PRIMARIO, VERDE = PRIMARIO, ROSSO = PRIMARIO, ARANCIO = PRIMARIO };
+enum { PICCOLO = MISURA_S, MEDIO = MISURA_M, GRANDE = MISURA_L };
 
-/* Le misure del disegno: altezza, margine ai lati, spazio icona-testo, lato
- * dell'icona, raggio degli angoli, font. */
-struct misure_pulsante { int altezza, margine, spazio, icona, raggio; const struct font *font; };
+/* Le misure del disegno: altezza, margine ai lati, spazio icona-testo, lato dell'icona,
+ * font. Il raggio non c'e': i pulsanti sono pillole (raggio = meta' altezza). */
+struct misure_pulsante { int altezza, margine, spazio, icona; const struct font *font; };
 static const struct misure_pulsante misure_pulsante[] = {
-    { 28, 10, 6, 14, RAGGIO_PICCOLO, &inter_medio_13 },
-    { 36, 14, 8, 16, RAGGIO_MEDIO,   &inter_medio_14 },
-    { 44, 18, 8, 20, RAGGIO_GRANDE,  &inter_medio_16 },
-};
-
-/* normale, sopra, premuto (il neutro e' di vetro) */
-static const unsigned int colori_pulsante[][3] = {
-    { VETRO_SUPERFICIE, VETRO_SOPRA,   VETRO_PREMUTO   },
-    { BLU_NORMALE,      BLU_SOPRA,     BLU_PREMUTO     },
-    { VERDE_NORMALE,    VERDE_SOPRA,   VERDE_PREMUTO   },
-    { ROSSO_NORMALE,    ROSSO_SOPRA,   ROSSO_PREMUTO   },
-    { ARANCIO_NORMALE,  ARANCIO_SOPRA, ARANCIO_PREMUTO },
+    { ALTEZZA_S, PADDING_S, GAP_S, ICONA_S, FONT_PULSANTE_S },
+    { ALTEZZA_M, PADDING_M, GAP_M, ICONA_M, FONT_PULSANTE_M },
+    { ALTEZZA_L, PADDING_L, GAP_L, ICONA_L, FONT_PULSANTE_L },
 };
 
 struct pulsante;
@@ -337,9 +344,9 @@ typedef void (*al_clic_pulsante)(struct pulsante *p, void *dati);
 
 struct pulsante {
     struct widget base;
-    char testo[MAX_TESTO_WIDGET];      /* vuoto: pulsante solo icona */
+    char testo[MAX_TESTO_WIDGET];      /* vuoto: pulsante solo icona (tondo) */
     int icona;                         /* ICONA_..., o NESSUNA_ICONA */
-    int colore, dimensione;
+    int colore, dimensione;            /* il tipo (PRIMARIO...) e la misura (MISURA_S...); 'colore' per compatibilita' */
     al_clic_pulsante al_clic;          /* chi chiamare quando viene premuto */
     void *dati;                        /* passato cosi' com'e' ad al_clic */
     int premuto;                       /* il pulsante del mouse e' giu', premuto qui sopra */
@@ -350,36 +357,55 @@ static inline void pulsante_misura(struct widget *w, int *l, int *a) {
     struct pulsante *b = (struct pulsante *)w;
     const struct misure_pulsante *m = &misure_pulsante[b->dimensione];
     *a = m->altezza;
-    if (!b->testo[0]) { *l = m->altezza; return; }             /* solo icona: quadrato */
+    if (!b->testo[0]) { *l = m->altezza; return; }             /* solo icona: tondo, lato = altezza */
     *l = 2 * m->margine + larghezza_testo(m->font, b->testo);
     if (b->icona != NESSUNA_ICONA) *l += m->icona + m->spazio;
 }
 
+/* LA PROFONDITA' del pulsante. Si preme, quindi e' SOLLEVATO: il Primario ha l'ombra
+ * "sollevato-pieno", il Secondario "sollevato", e le ombre ci sono sia a riposo sia sotto
+ * il puntatore. Premuto "scende" e disabilitato "si spegne": tutti e due PIATTI, senza
+ * ombra. Ghost e' sempre piatto. L'ordine e' quello di disegno.h: ombre esterne, fondo,
+ * ombre interne (nel tema scuro c'e' un filo di luce sul bordo alto), poi icona e testo. */
 static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
     struct pulsante *b = (struct pulsante *)w;
     const struct misure_pulsante *m = &misure_pulsante[b->dimensione];
     int premuto = b->premuto && b->dentro;
-    int stato = premuto ? 2 : w->sopra ? 1 : 0;
-    struct tondo t = tondo(w->x, w->y, w->l, w->a, m->raggio);
+    int sopra = w->sopra, spento = w->disabilitato;
+    if (spento) premuto = sopra = 0;
+    struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
+    const struct strato_ombra *ombre = 0;
+    int quante = 0;
+    if (!premuto && !spento && b->colore == PRIMARIO) {
+        ombre = OMBRA_TAB(sollevato_pieno); quante = OMBRA_N(sollevato_pieno);
+    } else if (!premuto && !spento && b->colore == SECONDARIO) {
+        ombre = OMBRA_TAB(sollevato); quante = OMBRA_N(sollevato);
+    }
+    if (ombre) ombre_strati_fuori(p, &t, ombre, quante);
 
-    if (!premuto) {                    /* premuto, il pulsante "scende" e l'ombra sparisce */
-        pennello_colore(p, PULSANTE_OMBRA);
-        ombra_forma(p, &t, 0, 2, 3);
+    unsigned int fondo = 0, testo = TESTO_PRIMARIO;
+    if (spento) {
+        if (b->colore != GHOST) fondo = CONTROLLO_SFONDO_DISABILITATO;
+        testo = TESTO_DISABILITATO;
+    } else if (b->colore == PRIMARIO) {
+        fondo = premuto ? AZIONE_SFONDO_PREMUTO : sopra ? AZIONE_SFONDO_SOPRA : AZIONE_SFONDO;
+        testo = AZIONE_TESTO;
+    } else if (b->colore == SECONDARIO) {
+        fondo = premuto ? CONTROLLO_SFONDO_PREMUTO : sopra ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO;
+    } else {                           /* Ghost: nessun fondo a riposo */
+        fondo = premuto ? CONTROLLO_SFONDO_SOPRA : sopra ? CONTROLLO_SFONDO_NUOVO : 0;
     }
-    pennello_colore(p, colori_pulsante[b->colore][stato]);
-    riempi_forma(p, &t);
-    pennello_colore(p, b->colore == NEUTRO ? VETRO_BORDO : PULSANTE_BORDO_COLORATO);
-    contorna_forma(p, &t, 256);
-    if (!premuto) {
-        pennello_colore(p, VETRO_LUCE);
-        luce_sopra(p, &t);
+    if (fondo) {
+        pennello_colore(p, fondo);
+        riempi_forma(p, &t);
     }
+    if (ombre) ombre_strati_dentro(p, &t, ombre, quante);
 
     /* icona e testo, centrati insieme */
     int largo = b->testo[0] ? larghezza_testo(m->font, b->testo) : 0;
     if (b->icona != NESSUNA_ICONA) largo += m->icona + (b->testo[0] ? m->spazio : 0);
     int x = w->x + (w->l - largo) / 2;
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
+    pennello_colore(p, testo);
     if (b->icona != NESSUNA_ICONA) {
         icona(p, b->icona, m->icona, x, w->y + (w->a - m->icona) / 2);
         x += m->icona + m->spazio;
@@ -415,17 +441,19 @@ static inline void pulsante_puntatore(struct widget *w, int x, int y, unsigned i
 }
 
 static const struct tipo_widget tipo_pulsante = {
-    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0, 0, 0, 0
+    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0, 0, 0, 0, 1
 };
 
-/* Un pulsante neutro, di misura media. Per un pulsante solo icona, testo "". */
+/* Un pulsante secondario, di misura media. Per un pulsante solo icona, testo "". */
 static inline void pulsante_prepara(struct pulsante *b, const char *testo, int icona,
                                     al_clic_pulsante al_clic, void *dati) {
     *b = (struct pulsante){ .base = { .tipo = &tipo_pulsante }, .icona = icona,
-                            .colore = NEUTRO, .dimensione = MEDIO, .al_clic = al_clic, .dati = dati };
+                            .colore = SECONDARIO, .dimensione = MISURA_M, .al_clic = al_clic, .dati = dati };
     copia_testo(b->testo, testo, MAX_TESTO_WIDGET);
 }
 
+/* Il tipo (PRIMARIO, SECONDARIO, GHOST) e la misura (MISURA_S, _M, _L). Accetta anche i
+ * vecchi nomi (NEUTRO, BLU..., PICCOLO...): sono sinonimi. */
 static inline void pulsante_stile(struct pulsante *b, int colore, int dimensione) {
     b->colore = colore;
     b->dimensione = dimensione;
@@ -454,41 +482,43 @@ struct casella {
 
 static inline void casella_misura(struct widget *w, int *l, int *a) {
     struct casella *c = (struct casella *)w;
-    *l = CONTROLLO_LATO + 8 + larghezza_testo(FONT_TESTO, c->testo);
-    *a = CONTROLLO_LATO > FONT_TESTO->altezza ? CONTROLLO_LATO : FONT_TESTO->altezza;
+    *l = CASELLA_LATO + CASELLA_GAP + larghezza_testo(FONT_CORPO, c->testo);
+    *a = CASELLA_LATO > FONT_CORPO->altezza ? CASELLA_LATO : FONT_CORPO->altezza;
 }
 
+/* La casella e la scelta CONTENGONO una risposta, quindi sono INCASSATE: fondo
+ * SUPERFICIE_INCASSATA, ombra interna (e una sottile esterna), mai bordo. Accese cambiano
+ * solo il colore del fondo (AZIONE_SFONDO, come un'azione) e mettono il segno sopra; il
+ * livello non cambia. Disabilitate sono piatte: fondo CONTROLLO_SFONDO_DISABILITATO, niente
+ * ombra, segno e testo TESTO_DISABILITATO. Il tondo della scelta accesa e' un punto di 8 px
+ * disegnato con riempi_cerchio (non piu' un'immagine precalcolata). */
 static inline void casella_disegna(struct widget *w, struct pennello *p) {
     struct casella *c = (struct casella *)w;
-    int x = w->x, y = w->y + (w->a - CONTROLLO_LATO) / 2;
-    int raggio = c->tonda ? CONTROLLO_LATO / 2 : RAGGIO_CONTROLLO;
-    struct tondo t = tondo(x, y, CONTROLLO_LATO, CONTROLLO_LATO, raggio);
+    int spento = w->disabilitato, acceso = c->valore != SPENTO;
+    int x = w->x, y = w->y + (w->a - CASELLA_LATO) / 2;
+    struct tondo t = tondo(x, y, CASELLA_LATO, CASELLA_LATO, c->tonda ? CASELLA_LATO / 2 : RAGGIO_CASELLA);
+    const struct strato_ombra *ombre = OMBRA_TAB(incassato);
+    int quante = OMBRA_N(incassato);
 
-    if (w->sopra && !(c->tonda && c->valore == ACCESO)) {   /* l'anello azzurro intorno */
-        struct tondo anello = tondo(x - 3, y - 3, CONTROLLO_LATO + 6, CONTROLLO_LATO + 6, raggio + 3);
-        pennello_colore(p, ANELLO_SOPRA);
-        contorna_forma(p, &anello, 3 * 256);
+    if (!spento) ombre_strati_fuori(p, &t, ombre, quante);
+    unsigned int fondo = SUPERFICIE_INCASSATA;
+    if (spento) fondo = CONTROLLO_SFONDO_DISABILITATO;
+    else if (acceso && !c->tonda) fondo = w->sopra ? AZIONE_SFONDO_SOPRA : AZIONE_SFONDO;
+    pennello_colore(p, fondo);
+    riempi_forma(p, &t);
+    if (!spento) ombre_strati_dentro(p, &t, ombre, quante);
+
+    unsigned int segno = spento ? TESTO_DISABILITATO : AZIONE_SFONDO;
+    if (acceso && c->tonda) {
+        pennello_colore(p, segno);
+        riempi_cerchio(p, x + CASELLA_LATO / 2, y + CASELLA_LATO / 2, SCELTA_PUNTO / 2);
+    } else if (acceso) {
+        pennello_colore(p, spento ? TESTO_DISABILITATO : AZIONE_TESTO);
+        int lato = CASELLA_LATO - 4;                     /* il segno, 2 px di margine */
+        icona(p, c->valore == ACCESO ? ICONA_CHECK : ICONA_MINUS, lato, x + 2, y + 2);
     }
-    if (c->tonda && c->valore == ACCESO) {
-        /* la scelta accesa e' l'immagine del disegno (cerchio blu con il punto bianco;
-         * quella "sopra" ha gia' l'anello, ed e' piu' grande di 3 pixel per lato) */
-        if (w->sopra) disegna_immagine(p, &scelta_accesa_sopra, x - 3, y - 3);
-        else disegna_immagine(p, &scelta_accesa, x, y);
-    } else if (c->valore != SPENTO) {
-        pennello_colore(p, w->sopra ? BLU_SOPRA : BLU_NORMALE);
-        riempi_forma(p, &t);
-        pennello_colore(p, CAMPO_BORDO);
-        contorna_forma(p, &t, 256);
-        pennello_colore(p, CONTENUTO_PRINCIPALE);
-        icona(p, c->valore == ACCESO ? ICONA_CHECK : ICONA_MINUS, 14, x + 2, y + 2);
-    } else {
-        pennello_colore(p, w->sopra ? VETRO_SOPRA : CONTROLLO_SFONDO);
-        riempi_forma(p, &t);
-        pennello_colore(p, CONTROLLO_BORDO);
-        contorna_forma(p, &t, 256);
-    }
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    testo_centrato(p, FONT_TESTO, x + CONTROLLO_LATO + 8, w->y, w->a, c->testo);
+    pennello_colore(p, spento ? TESTO_DISABILITATO : TESTO_PRIMARIO);
+    testo_centrato(p, FONT_CORPO, x + CASELLA_LATO + CASELLA_GAP, w->y, w->a, c->testo);
 }
 
 static inline void casella_puntatore(struct widget *w, int x, int y, unsigned int pulsanti);
@@ -528,7 +558,7 @@ static inline void casella_puntatore(struct widget *w, int x, int y, unsigned in
 }
 
 static const struct tipo_widget tipo_casella = {
-    casella_misura, 0, casella_disegna, casella_puntatore, 0, 0, 0, 0
+    casella_misura, 0, casella_disegna, casella_puntatore, 0, 0, 0, 0, 1
 };
 
 static inline void casella_prepara(struct casella *c, const char *testo, int valore,
@@ -555,46 +585,71 @@ struct campo {
     char testo[MAX_TESTO_WIDGET];
     char suggerimento[MAX_TESTO_WIDGET];   /* quello che si vede, piu' chiaro, quando e' vuoto */
     int icona;
-    int errore;                            /* bordo rosso */
-    int piccolo;                           /* 1: la ricerca piccola della barra degli strumenti */
+    int errore;                            /* bordo del fuoco + triangolo di avviso (stato di errore) */
+    int piccolo;                           /* 1: la RICERCA (pillola, 180 di larghezza, altezza S) */
+    int misura;                            /* MISURA_S, _M (default) o _L: altezza, margini, font */
     al_cambio_campo al_cambio;
     void *dati;
 };
 
-/* Le misure del disegno, normale e piccolo: larghezza e altezza, margine ai lati
- * (dentro), lato dell'icona e spazio dopo di lei, raggio degli angoli, font, e se ha il
- * bordo anche senza fuoco. */
-struct misure_campo { int larghezza, altezza, margine, icona, spazio, raggio; const struct font *font; int bordo; };
+/* Le misure del disegno, una riga per misura: altezza, margine ai lati (dentro), lato
+ * dell'icona, spazio dopo di lei, raggio degli angoli (RAGGIO_CAMPO_S/M/L: il campo e' un
+ * rettangolo arrotondato, NON una pillola; la ricerca ha il raggio = meta' altezza) e font.
+ * Il font e' Plex Regular (non Medium come i pulsanti: si scrive, non si preme) della stessa
+ * dimensione del testo dei pulsanti: 13, 14, 16. Larghezza: 280 il campo (di solito si
+ * allarga), 180 la ricerca. */
+struct misure_campo { int altezza, margine, icona, spazio, raggio; const struct font *font; };
 static const struct misure_campo misure_campo[] = {
-    { 280, CAMPO_ALTEZZA, 10, 16, 8, RAGGIO_MEDIO, FONT_TESTO, 1 },
-    { RICERCA_LARGHEZZA, RICERCA_ALTEZZA, RICERCA_MARGINE, RICERCA_ICONA, RICERCA_SPAZIO,
-      RAGGIO_PICCOLO, FONT_STRUMENTI, 0 },
+    { ALTEZZA_S, PADDING_S, ICONA_S, GAP_S, RAGGIO_CAMPO_S, &plex_13 },
+    { ALTEZZA_M, PADDING_M, ICONA_M, GAP_M, RAGGIO_CAMPO_M, &plex_14 },
+    { ALTEZZA_L, PADDING_L, ICONA_L, GAP_L, RAGGIO_CAMPO_L, &plex_16 },
 };
+#define CAMPO_LARGHEZZA_NORMALE 280
 
 static inline void campo_misura(struct widget *w, int *l, int *a) {
-    const struct misure_campo *m = &misure_campo[((struct campo *)w)->piccolo];
-    *l = m->larghezza;                     /* la misura del disegno; il campo normale di solito si allarga */
-    *a = m->altezza;
+    struct campo *c = (struct campo *)w;
+    *l = c->piccolo ? RICERCA_LARGHEZZA_NUOVA : CAMPO_LARGHEZZA_NORMALE;   /* il campo normale di solito si allarga */
+    *a = misure_campo[c->misura].altezza;
 }
 
+/* Un campo CONTIENE quello che si scrive, quindi e' INCASSATO: fondo SUPERFICIE_INCASSATA,
+ * ombra interna e una sottile esterna, mai bordo a riposo. Il fuoco NON cambia livello: il
+ * campo resta incassato e aggiunge il bordo BORDO_FOCUS di 1,5 px (dentro) e l'anello
+ * "focus" (la tabella ombra_focus_*: stessa ombra interna, ma la esterna e' un anello di
+ * 3 px). L'errore non ha rosso (scala di grigi): ha lo stesso bordo del fuoco, piu' il
+ * triangolo di avviso a destra e il testo secondario. Disabilitato e' piatto. */
 static inline void campo_disegna(struct widget *w, struct pennello *p) {
     struct campo *c = (struct campo *)w;
-    const struct misure_campo *m = &misure_campo[c->piccolo];
-    struct tondo t = tondo(w->x, w->y, w->l, w->a, m->raggio);
-    pennello_colore(p, w->fuoco ? CAMPO_SFONDO_ATTIVO : CAMPO_SFONDO);
-    riempi_forma(p, &t);
-    if (c->errore || w->fuoco) {           /* errore o fuoco: bordo di un pixel e mezzo */
-        pennello_colore(p, c->errore ? STATO_ERRORE : STATO_ATTIVO);
-        contorna_forma(p, &t, 384);
-    } else if (m->bordo) {                 /* la ricerca piccola, a riposo, non ha bordo */
-        pennello_colore(p, CAMPO_BORDO);
-        contorna_forma(p, &t, 256);
+    const struct misure_campo *m = &misure_campo[c->misura];
+    int spento = w->disabilitato;
+    struct tondo t = tondo(w->x, w->y, w->l, w->a, c->piccolo ? w->a / 2 : m->raggio);
+    if (!spento) {
+        const struct strato_ombra *ombre = w->fuoco ? OMBRA_TAB(focus) : OMBRA_TAB(incassato);
+        int quante = w->fuoco ? OMBRA_N(focus) : OMBRA_N(incassato);
+        ombre_strati_fuori(p, &t, ombre, quante);
+        pennello_colore(p, SUPERFICIE_INCASSATA);
+        riempi_forma(p, &t);
+        ombre_strati_dentro(p, &t, ombre, quante);
+        if (c->errore || w->fuoco) {       /* errore o fuoco: bordo di un pixel e mezzo */
+            pennello_colore(p, BORDO_FOCUS);
+            contorna_forma(p, &t, BORDO_FOCUS_SPESSORE);
+        }
+    } else {
+        pennello_colore(p, CONTROLLO_SFONDO_DISABILITATO);
+        riempi_forma(p, &t);
     }
 
     pennello_salva(p);
     pennello_ritaglia(p, w->x + 1, w->y + 1, w->l - 2, w->a - 2);
+    unsigned int colore_testo = spento ? TESTO_DISABILITATO : c->errore ? TESTO_SECONDARIO : TESTO_PRIMARIO;
     int x = w->x + m->margine;
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
+    int destra = w->x + w->l - m->margine;
+    if (c->errore && !spento) {            /* il triangolo di avviso, a destra */
+        pennello_colore(p, TESTO_SECONDARIO);
+        icona(p, ICONA_TRIANGLE_ALERT, m->icona, destra - m->icona, w->y + (w->a - m->icona) / 2);
+        destra -= m->icona + m->spazio;
+    }
+    pennello_colore(p, colore_testo);
     if (c->icona != NESSUNA_ICONA) {
         icona(p, c->icona, m->icona, x, w->y + (w->a - m->icona) / 2);
         x += m->icona + m->spazio;
@@ -606,7 +661,6 @@ static inline void campo_disegna(struct widget *w, struct pennello *p) {
          * testo. Il cursore e' sempre in fondo (la tastiera non manda ancora le frecce),
          * quindi basta guardare la fine del testo: scrivendo il testo va a sinistra,
          * cancellando torna a destra. Senza fuoco si vede l'inizio, come sul Mac. */
-        int destra = w->x + w->l - m->margine;
         int fine = larghezza_testo(m->font, c->testo) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
         int scorrimento = w->fuoco && x + fine > destra ? x + fine - destra : 0;
         pennello_ritaglia(p, x - 2, w->y, destra - (x - 2), w->a);  /* 2: le lettere che sbordano */
@@ -617,7 +671,7 @@ static inline void campo_disegna(struct widget *w, struct pennello *p) {
             riempi_forma(p, &cursore);
         }
     } else {
-        pennello_colore(p, CONTENUTO_SECONDARIO);
+        pennello_colore(p, spento ? TESTO_DISABILITATO : TESTO_SECONDARIO);
         testo_centrato(p, m->font, x, w->y, w->a, c->suggerimento);
     }
     pennello_ripristina(p);
@@ -647,15 +701,21 @@ static inline void campo_tasto(struct widget *w, unsigned int tasto) {
 }
 
 static const struct tipo_widget tipo_campo = {
-    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto, 0, 0, 0
+    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto, 0, 0, 0, 1
 };
 
 static inline void campo_prepara(struct campo *c, const char *testo, const char *suggerimento,
                                  int icona, al_cambio_campo al_cambio, void *dati) {
-    *c = (struct campo){ .base = { .tipo = &tipo_campo, .largo = 1 }, .icona = icona,
+    *c = (struct campo){ .base = { .tipo = &tipo_campo, .largo = 1 }, .icona = icona, .misura = MISURA_M,
                          .al_cambio = al_cambio, .dati = dati };
     copia_testo(c->testo, testo, MAX_TESTO_WIDGET);
     copia_testo(c->suggerimento, suggerimento, MAX_TESTO_WIDGET);
+}
+
+/* La misura del campo o della ricerca: MISURA_S (32), MISURA_M (40, il default del campo), MISURA_L (48). */
+static inline void campo_stile(struct campo *c, int misura) {
+    c->misura = misura;
+    widget_cambiato(&c->base);
 }
 
 static inline void campo_errore(struct campo *c, int errore) {
@@ -664,12 +724,13 @@ static inline void campo_errore(struct campo *c, int errore) {
 }
 
 /* La ricerca piccola, per la barra degli strumenti: un campo di testo come gli altri
- * (si scrive, si cancella, al_cambio a ogni tasto), ma basso, largo 180, con la lente e
- * senza bordo finche' non ha il fuoco. Non si allarga da solo (se deve, 'elastico'). */
+ * (si scrive, si cancella, al_cambio a ogni tasto), ma a PILLOLA, alta 32, larga 180, con la
+ * lente. Come il campo e' incassata, e col fuoco ha bordo e anello. Non si allarga da solo (se deve, 'elastico'). */
 static inline void ricerca_prepara(struct campo *c, const char *suggerimento,
                                    al_cambio_campo al_cambio, void *dati) {
     campo_prepara(c, "", suggerimento, ICONA_SEARCH, al_cambio, dati);
     c->piccolo = 1;
+    c->misura = MISURA_S;
     c->base.largo = 0;
 }
 
@@ -723,24 +784,43 @@ static inline void widget_cambiato(struct widget *w) {
     if (f->base.tipo == &tipo_finestra_tk) f->da_ridisegnare = 1;
 }
 
-/* Dove stanno i due comandi nella barra: riduci e chiudi, a destra. */
+/* LA FINESTRA, dal file Figma. Sono DUE pezzi separati, uno sopra l'altro:
+ *
+ *   - la TESTATA (il titolo): alta TITOLO_ALTEZZA (40), con i soli angoli in ALTO
+ *     arrotondati. Dentro, tre cose in fila: a sinistra uno spazio vuoto, al centro il
+ *     titolo, a destra i comandi riduci e chiudi. I comandi sono pulsanti S (ALTEZZA_S, 32)
+ *     tondi e "ghost" (senza fondo, il fondo compare solo sotto il puntatore), a
+ *     TITOLO_MARGINE (4) dal bordo e l'uno dall'altro: 4 + 32 + 4 = 40, cioe' proprio
+ *     l'altezza della testata. Lo spazio vuoto a sinistra e' largo quanto il gruppo dei
+ *     comandi (TITOLO_COMANDI_LARGHEZZA), cosi' il titolo resta centrato nella finestra.
+ *     Sotto la testata c'e' un divisore di 1 pixel (BORDO_SEPARATORE) da bordo a bordo,
+ *     senza margini ai lati;
+ *   - il CONTENUTO: tutto quello che sta sotto il divisore, con i soli angoli in BASSO
+ *     arrotondati. Comincia con la barra degli strumenti, se c'e', poi il contenuto
+ *     dell'applicazione, con FINESTRA_PADDING (24) intorno (a meno di finestra_tk_bordo).
+ *
+ * La testata non e' contenuto: ha la sua funzione di disegno e le sue misure, e quello che
+ * l'applicazione mette nella finestra comincia sempre sotto di lei (finestra_tk_corpo).
+ *
+ * Dove stanno i due comandi nella testata: riduci e chiudi, a destra. */
 static inline int comando_x(const struct widget *w, int chiudi) {
-    return w->l - BARRA_MARGINE - BARRA_COMANDO - (chiudi ? 0 : BARRA_COMANDO + 6);
+    return w->l - TITOLO_MARGINE - ALTEZZA_S - (chiudi ? 0 : ALTEZZA_S + TITOLO_MARGINE);
 }
-#define COMANDO_Y ((BARRA_ALTEZZA - BARRA_COMANDO) / 2)
+#define COMANDO_Y TITOLO_MARGINE
 
 static inline int su_comando(const struct widget *w, int chiudi, int x, int y) {
     int cx = comando_x(w, chiudi);
-    return x >= cx && x < cx + BARRA_COMANDO && y >= COMANDO_Y && y < COMANDO_Y + BARRA_COMANDO;
+    return x >= cx && x < cx + ALTEZZA_S && y >= COMANDO_Y && y < COMANDO_Y + ALTEZZA_S;
 }
 
-/* Dove comincia il corpo della finestra: sotto la barra del titolo e, se c'e' (e non e'
- * nascosta), sotto la barra degli strumenti. */
+/* Dove comincia il corpo della finestra: sotto la testata col suo divisore e, se c'e' (e non
+ * e' nascosta), sotto la barra degli strumenti. */
 static inline int finestra_tk_corpo(const struct finestra_tk *f) {
-    return BARRA_ALTEZZA + (f->strumenti && !f->strumenti->nascosto ? STRUMENTI_ALTEZZA : 0);
+    return TITOLO_ALTEZZA + TITOLO_DIVISORE +
+           (f->strumenti && !f->strumenti->nascosto ? ALTEZZA_BARRA : 0);
 }
 
-/* Il contenuto, piu' il margine e le barre; abbastanza larga per il titolo e i comandi, e
+/* Il contenuto, piu' il padding e le barre; abbastanza larga per il titolo e i comandi, e
  * per quello che sta nella barra degli strumenti. Con una misura fissa, la misura e' di
  * tutta la finestra: la barra degli strumenti la prende al contenuto. */
 static inline void finestra_tk_misura(struct widget *w, int *l, int *a) {
@@ -748,28 +828,29 @@ static inline void finestra_tk_misura(struct widget *w, int *l, int *a) {
     if (f->l_fissa) { *l = f->l_fissa; *a = f->a_fissa; return; }
     int cl = 0, ca = 0;
     if (w->quanti_figli) widget_misura(w->figli[0], &cl, &ca);
-    int barra = 2 * (BARRA_MARGINE + BARRA_EQUILIBRIO + 8) + larghezza_testo(FONT_BARRA, f->titolo);
-    *l = 2 * FINESTRA_MARGINE + cl;
+    /* il titolo sta tra i due gruppi (lo spazio vuoto e i comandi), con un po' d'aria */
+    int barra = 2 * (TITOLO_COMANDI_LARGHEZZA + SPAZIO_8) + larghezza_testo(FONT_TITOLO_FINESTRA, f->titolo);
+    *l = 2 * FINESTRA_PADDING + cl;
     if (*l < barra) *l = barra;
     if (f->strumenti && !f->strumenti->nascosto) {
         int sl, sa;
         widget_misura(f->strumenti, &sl, &sa);
         if (*l < sl) *l = sl;
     }
-    *a = finestra_tk_corpo(f) + 2 * FINESTRA_MARGINE + ca;
+    *a = finestra_tk_corpo(f) + 2 * FINESTRA_PADDING + ca;
 }
 
 static inline void finestra_tk_disponi(struct widget *w) {
     struct finestra_tk *f = (struct finestra_tk *)w;
     if (!w->quanti_figli) return;
-    if (f->strumenti) {                     /* tutta la larghezza, senza margine */
+    if (f->strumenti) {                     /* tutta la larghezza, subito sotto il divisore */
         f->strumenti->x = 0;
-        f->strumenti->y = BARRA_ALTEZZA;
+        f->strumenti->y = TITOLO_ALTEZZA + TITOLO_DIVISORE;
         f->strumenti->l = w->l;
-        f->strumenti->a = STRUMENTI_ALTEZZA;
+        f->strumenti->a = ALTEZZA_BARRA;
     }
     int corpo = finestra_tk_corpo(f);
-    int margine = f->senza_margine ? 0 : FINESTRA_MARGINE;
+    int margine = f->senza_margine ? 0 : FINESTRA_PADDING;
     struct widget *c = w->figli[0];
     c->x = margine;
     c->y = corpo + margine;
@@ -777,58 +858,81 @@ static inline void finestra_tk_disponi(struct widget *w) {
     c->a = w->a - corpo - 2 * margine;
 }
 
-/* La finestra disegna il vetro (la barra un po' piu' chiara del corpo), il bordo, il
- * titolo al centro e i comandi. L'ombra intorno la disegna il compositore: e' fuori
- * dalla finestra. Se c'e' la barra degli strumenti, il vetro della barra scende fin
- * sotto di lei: titolo e strumenti sono un pezzo solo, e si spengono insieme quando la
- * finestra non e' in primo piano. */
+/* IL CONTENUTO della finestra, cioe' il suo fondo: il vetro (SUPERFICIE_VETRO, bianco o
+ * grafite al 72%) che lascia vedere lo sfondo che il compositore ha sfocato qui sotto, con i
+ * soli angoli in basso arrotondati. Quello che sta nel contenuto (la barra degli strumenti,
+ * il widget dell'applicazione) lo disegnano i figli, dopo. */
+static inline void finestra_tk_contenuto_disegna(struct finestra_tk *f, struct pennello *p) {
+    int inizio = TITOLO_ALTEZZA + TITOLO_DIVISORE;
+    struct tondo contenuto = { 0, inizio, f->base.l, f->base.a - inizio,
+                               { 0, 0, RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO } };
+    pennello_colore(p, SUPERFICIE_VETRO);
+    riempi_forma(p, &contenuto);
+}
+
+/* LA TESTATA: il fondo (lo stesso vetro, soli angoli in alto arrotondati), il divisore di
+ * 1 pixel da bordo a bordo, il titolo centrato e i comandi. Una finestra che non ha il
+ * fuoco (non e' in primo piano) ha il titolo in TESTO_SECONDARIO e i comandi al 50%.
+ *
+ * Il VETRO e' lo stesso del contenuto: i due pezzi si toccano lungo il divisore, e le
+ * coperture dei loro bordi dritti sono piene, quindi in mezzo non resta nessuna cucitura. */
+static inline void finestra_tk_titolo_disegna(struct finestra_tk *f, struct pennello *p) {
+    struct widget *w = &f->base;
+    struct tondo testata = { 0, 0, w->l, TITOLO_ALTEZZA,
+                             { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
+    pennello_colore(p, SUPERFICIE_VETRO);
+    riempi_forma(p, &testata);
+    pennello_colore(p, BORDO_SEPARATORE);
+    riempi_rettangolo(p, 0, TITOLO_ALTEZZA, w->l, TITOLO_DIVISORE);
+
+    /* il titolo, al centro della finestra: tra lo spazio vuoto a sinistra (largo quanto i
+     * comandi) e i comandi non entra mai nei comandi, un titolo lungo si taglia */
+    pennello_salva(p);
+    int margine = TITOLO_COMANDI_LARGHEZZA + SPAZIO_8;
+    pennello_ritaglia(p, margine, 0, w->l - 2 * margine, TITOLO_ALTEZZA);
+    pennello_colore(p, f->attiva ? TESTO_PRIMARIO : TESTO_SECONDARIO);
+    testo_centrato(p, FONT_TITOLO_FINESTRA, (w->l - larghezza_testo(FONT_TITOLO_FINESTRA, f->titolo)) / 2, 0,
+                   TITOLO_ALTEZZA, f->titolo);
+    pennello_ripristina(p);
+
+    /* i comandi: due pulsanti ghost S tondi. Senza fondo a riposo; sotto il puntatore
+     * CONTROLLO_SFONDO, premuto CONTROLLO_SFONDO_SOPRA (come ogni ghost del toolkit). */
+    pennello_salva(p);
+    if (!f->attiva) pennello_opacita(p, OPACITA_COMANDI_INATTIVI);
+    for (int chiudi = 0; chiudi < 2; chiudi++) {
+        int cx = comando_x(w, chiudi);
+        int sopra = f->comando_sopra == 1 + chiudi;
+        int premuto = sopra && (chiudi ? f->chiudi_premuto : f->riduci_premuto);
+        if (sopra) {
+            pennello_colore(p, premuto ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
+            riempi_cerchio(p, cx + ALTEZZA_S / 2, COMANDO_Y + ALTEZZA_S / 2, ALTEZZA_S / 2);
+        }
+        pennello_colore(p, TESTO_PRIMARIO);
+        icona(p, chiudi ? ICONA_X : ICONA_MINUS, ICONA_S, cx + (ALTEZZA_S - ICONA_S) / 2,
+              COMANDO_Y + (ALTEZZA_S - ICONA_S) / 2);
+    }
+    pennello_ripristina(p);
+}
+
+/* La finestra: pulisce, disegna il contenuto e la testata (due pezzi separati, vedi sopra),
+ * e infine il filo di luce interno del tema scuro (gli strati INTERNI della tabella
+ * "finestra": nel chiaro non ce ne sono). Le ombre ESTERNE e la sfocatura dello sfondo non
+ * sono qui: stanno fuori dalla finestra, le fa il compositore. Non c'e' nessun bordo.
+ *
+ * IL FONDO SCURO. Prima, sotto il vetro, c'era VETRO_FONDO (un blu scuro al 50%) perche' il
+ * testo era bianco e sopra uno sfondo chiaro non si sarebbe letto. Ora il testo cambia col
+ * tema: scuro sul vetro bianco (tema chiaro), chiaro sul vetro grafite (tema scuro). Il vetro
+ * bianco al 72% sopra lo sfondo sfocato resta chiaro (il testo scuro si legge: sotto, il
+ * colore dello sfondo conta per il 28%); il vetro grafite al 72% resta scuro. Un fondo scuro
+ * in piu' renderebbe grigio il vetro chiaro, e non c'e' nel disegno: tolto in tutti e due i
+ * temi. */
 static inline void finestra_tk_disegna(struct widget *w, struct pennello *p) {
     struct finestra_tk *f = (struct finestra_tk *)w;
     pulisci(p);
-    int inizio = finestra_tk_corpo(f);
-    struct tondo barra = { 0, 0, w->l, inizio, { RAGGIO_FINESTRA, RAGGIO_FINESTRA, 0, 0 } };
-    struct tondo corpo = { 0, inizio, w->l, w->a - inizio,
-                           { 0, 0, RAGGIO_FINESTRA, RAGGIO_FINESTRA } };
-    struct tondo tutta = tondo(0, 0, w->l, w->a, RAGGIO_FINESTRA);
-    pennello_colore(p, VETRO_FONDO);          /* sotto il vetro, il fondo scuro */
-    riempi_forma(p, &tutta);
-    pennello_colore(p, f->attiva ? BARRA_ATTIVA : BARRA_INATTIVA);
-    riempi_forma(p, &barra);
-    pennello_colore(p, CAMPO_SFONDO);
-    riempi_forma(p, &corpo);
-    if (f->attiva) {
-        pennello_colore(p, BARRA_BORDO_ATTIVA);
-        contorna_forma(p, &tutta, 256);
-    }
-
-    /* il titolo, al centro della barra (lo spazio vuoto a sinistra pareggia i comandi) */
-    pennello_salva(p);
-    int margine = BARRA_MARGINE + BARRA_EQUILIBRIO + 8;
-    pennello_ritaglia(p, margine, 0, w->l - 2 * margine, BARRA_ALTEZZA);
-    pennello_colore(p, f->attiva ? CONTENUTO_PRINCIPALE : CONTENUTO_SECONDARIO);
-    testo_centrato(p, FONT_BARRA, (w->l - larghezza_testo(FONT_BARRA, f->titolo)) / 2, 0,
-                   BARRA_ALTEZZA, f->titolo);
-    pennello_ripristina(p);
-
-    /* i comandi: due tondi di vetro con l'icona */
-    pennello_salva(p);
-    if (!f->attiva) pennello_opacita(p, OPACITA_INATTIVO);
-    for (int chiudi = 0; chiudi < 2; chiudi++) {
-        int cx = comando_x(w, chiudi);
-        /* riduci come un pulsante neutro: piu' chiaro sotto il puntatore, piu' scuro
-         * premuto. Chiudi sotto il puntatore diventa rosso (piu' scuro premuto): avvisa
-         * che la finestra se ne andra' ("Comando della finestra" nel disegno) */
-        int sopra = f->comando_sopra == 1 + chiudi;
-        int premuto = sopra && (chiudi ? f->chiudi_premuto : f->riduci_premuto);
-        if (chiudi)
-            pennello_colore(p, premuto ? ROSSO_PREMUTO : sopra ? ROSSO_SOPRA : VETRO_SUPERFICIE);
-        else
-            pennello_colore(p, premuto ? VETRO_PREMUTO : sopra ? VETRO_SOPRA : VETRO_SUPERFICIE);
-        riempi_tondo(p, cx, COMANDO_Y, BARRA_COMANDO, BARRA_COMANDO, BARRA_COMANDO / 2);
-        pennello_colore(p, CONTENUTO_PRINCIPALE);
-        icona(p, chiudi ? ICONA_X : ICONA_MINUS, 12, cx + 5, COMANDO_Y + 5);
-    }
-    pennello_ripristina(p);
+    finestra_tk_contenuto_disegna(f, p);
+    finestra_tk_titolo_disegna(f, p);
+    struct tondo tutta = tondo(0, 0, w->l, w->a, RAGGIO_FINESTRA_NUOVO);
+    ombre_strati_dentro(p, &tutta, OMBRA_TAB(finestra), OMBRA_N(finestra));
 }
 
 static const struct tipo_widget tipo_finestra_tk = {
@@ -922,18 +1026,16 @@ static inline void toolkit_ridisponi(struct finestra_tk *f) {
 
 /* --- la barra degli strumenti --- */
 
-/* LA BARRA DEGLI STRUMENTI, dal file Figma. Una striscia alta 40 attaccata sotto la barra
- * del titolo, larga quanto tutta la finestra (non sta nel margine del contenuto), come
- * nel Finder del Mac. Dentro, da sinistra a destra, le sue cose: alte al massimo 28,
- * centrate in altezza, a 8 pixel l'una dall'altra, a 10 dai bordi. Una cosa 'elastica'
- * (il percorso, o uno spazio) prende la larghezza che avanza.
+/* LA BARRA DEGLI STRUMENTI, dal file Figma. Una riga alta ALTEZZA_BARRA (40) sotto la
+ * testata, DENTRO la finestra: e' parte del contenuto e non ha un fondo suo (si vede il
+ * vetro della finestra), larga quanto tutta la finestra (non sta nel padding del
+ * contenuto), come nel Finder del Mac. Dentro, da sinistra a destra, le sue cose: controlli
+ * S (32 di altezza) con TITOLO_MARGINE (4) sopra e sotto, centrati in altezza, a GAP_M (8)
+ * l'una dall'altra, a STRUMENTI_MARGINE_LATI dai bordi. Una cosa 'elastica' (il percorso, o
+ * uno spazio) prende la larghezza che avanza.
  *
- * Il fondo non lo disegna lei: e' il vetro della barra del titolo, che la finestra
- * allunga fin sotto la barra degli strumenti (finestra_tk_disegna). Stesso colore,
- * stessa sfocatura: un pezzo solo, senza righe in mezzo.
- *
- * Un clic sullo spazio vuoto della barra trascina la finestra, come sulla barra del
- * titolo (cosi' fa il Mac): vedi toolkit_puntatore.
+ * Un clic sullo spazio vuoto della barra trascina la finestra, come sulla testata (cosi'
+ * fa il Mac): vedi toolkit_puntatore.
  *
  *     barra_strumenti_prepara(&strumenti);
  *     barra_strumenti_aggiungi(&strumenti, &frecce.base);
@@ -950,16 +1052,16 @@ struct barra_strumenti {
 static inline void barra_strumenti_misura(struct widget *w, int *l, int *a) {
     struct barra_strumenti *b = (struct barra_strumenti *)w;
     widget_misura(&b->riga.base, l, a);
-    *l += 2 * STRUMENTI_MARGINE;
-    *a = STRUMENTI_ALTEZZA;
+    *l += 2 * STRUMENTI_MARGINE_LATI;
+    *a = ALTEZZA_BARRA;
 }
 
 static inline void barra_strumenti_disponi(struct widget *w) {
     struct barra_strumenti *b = (struct barra_strumenti *)w;
-    b->riga.base.x = w->x + STRUMENTI_MARGINE;
-    b->riga.base.y = w->y + (w->a - STRUMENTI_CONTENUTO) / 2;
-    b->riga.base.l = w->l - 2 * STRUMENTI_MARGINE;
-    b->riga.base.a = STRUMENTI_CONTENUTO;
+    b->riga.base.x = w->x + STRUMENTI_MARGINE_LATI;
+    b->riga.base.y = w->y + TITOLO_MARGINE;
+    b->riga.base.l = w->l - 2 * STRUMENTI_MARGINE_LATI;
+    b->riga.base.a = ALTEZZA_S;
 }
 
 static const struct tipo_widget tipo_barra_strumenti = {
@@ -968,7 +1070,7 @@ static const struct tipo_widget tipo_barra_strumenti = {
 
 static inline void barra_strumenti_prepara(struct barra_strumenti *b) {
     *b = (struct barra_strumenti){ .base = { .tipo = &tipo_barra_strumenti } };
-    riga_prepara(&b->riga, STRUMENTI_SPAZIO);
+    riga_prepara(&b->riga, GAP_M);
     widget_aggiungi(&b->base, &b->riga.base);
 }
 
@@ -984,15 +1086,19 @@ static inline int barra_strumenti_vuota(struct finestra_tk *f, int x, int y) {
     return !w || w == s || w == s->figli[0] || w->tipo == &tipo_spazio;
 }
 
-/* IL PULSANTE DELLA BARRA: solo un'icona (16) in un quadrato di 24, angoli di 4, senza
- * fondo; sotto il puntatore appena velato, premuto o ACCESO piu' chiaro. Sta in una
- * pillola (sotto). Scatta come i pulsanti normali, quando si lascia. Disabilitato (per
- * esempio "avanti" quando non c'e' dove andare) e' al 40% e non sente niente.
+/* IL PULSANTE DELLA BARRA, dal file Figma. Fuori da un gruppo e' un pulsante GHOST S: senza
+ * fondo a riposo, CONTROLLO_SFONDO sotto il puntatore, CONTROLLO_SFONDO_SOPRA premuto (gli
+ * stessi stati del pulsante ghost). Solo icona e' TONDO (32 x 32, icona 16); con un testo
+ * (pulsante_barra_testo) e' una PILLOLA, larga quanto il testo piu' PADDING_S per lato.
+ * Scatta come i pulsanti normali, quando si lascia. Disabilitato (per esempio "avanti"
+ * quando non c'e' dove andare) e' al 40% e non sente niente.
  *
- * Al posto dell'icona puo' avere un TESTO (pulsante_barra_testo): e' una SCHEDA, come
- * "Processi" e "Memoria" in Attivita'. Alta 24 come le altre, larga quanto il testo piu'
- * 10 per lato; il testo e' grigio, e bianco quando la scheda e' accesa (quella scelta).
- * Fondo, puntatore e pressione come con l'icona. */
+ * Dentro una PILLOLA (il gruppo, sotto) cambia misura e aspetto: e' una voce alta 24
+ * (GRUPPO_ELEMENTO). Se il gruppo e' a scelta, la voce accesa e' SOLLEVATA (SUPERFICIE_ELEVATA
+ * con l'ombra "sollevato", testo e icona TESTO_PRIMARIO) e le altre sono senza fondo con
+ * TESTO_SECONDARIO; sotto il puntatore, una voce spenta prende un fondo piatto leggero
+ * (CONTROLLO_SFONDO). Nei gruppi non a scelta (indietro / avanti) le voci non si accendono
+ * mai: sono ghost di 24 con il testo TESTO_PRIMARIO. */
 struct pulsante_barra;
 typedef void (*al_clic_pulsante_barra)(struct pulsante_barra *b, void *dati);
 
@@ -1006,40 +1112,69 @@ struct pulsante_barra {
     int premuto, dentro;               /* come il pulsante (vedi pressione) */
 };
 
-static inline void pulsante_barra_misura(struct widget *w, int *l, int *a) {
-    struct pulsante_barra *b = (struct pulsante_barra *)w;
-    *l = *a = SEGMENTO_LATO;
-    if (b->testo[0]) *l = 2 * SEGMENTO_TESTO_MARGINE + larghezza_testo(FONT_SEGMENTO, b->testo);
-}
+static const struct tipo_widget tipo_pillola;   /* piu' sotto */
 
-static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) {
-    struct pulsante_barra *b = (struct pulsante_barra *)w;
-    int premuto = b->premuto && b->dentro;
-    if (premuto || b->acceso || w->sopra) {
-        pennello_colore(p, premuto || b->acceso ? SEGMENTO_PREMUTO : SEGMENTO_SOPRA);
-        riempi_tondo(p, w->x, w->y, w->l, w->a, RAGGIO_SEGMENTO);
-    }
-    if (b->testo[0]) {
-        pennello_colore(p, b->acceso ? CONTENUTO_PRINCIPALE : CONTENUTO_SECONDARIO);
-        testo_centrato(p, FONT_SEGMENTO, w->x + SEGMENTO_TESTO_MARGINE, w->y, w->a, b->testo);
-        return;
-    }
-    pennello_colore(p, CONTENUTO_PRINCIPALE);
-    icona(p, b->icona, SEGMENTO_ICONA, w->x + (w->l - SEGMENTO_ICONA) / 2,
-          w->y + (w->a - SEGMENTO_ICONA) / 2);
-}
-
-/* LA PILLOLA: un gruppo di pulsanti della barra, attaccati in una forma sola (vetro,
- * angoli di 6, 2 pixel intorno e tra un pulsante e l'altro: alta 28). I pulsanti con
- * l'icona sono quadrati, quelli con un testo larghi quanto il testo. Puo' essere:
- *   - di pulsanti semplici: ognuno fa la sua cosa (indietro, avanti);
- *   - a SCELTA: ne e' acceso uno solo, quello premuto per ultimo (griglia o lista), come
- *     le scelte singole. Il clic si fa sentire anche sul pulsante gia' acceso. */
+/* La pillola (il gruppo, descritto sotto): qui serve solo sapere se e' a scelta. */
 struct pillola {
     struct widget base;
     int a_scelta;
 };
 
+/* Il gruppo (la pillola) in cui sta il pulsante, o 0 se sta da solo nella barra. */
+static inline struct widget *pulsante_barra_gruppo(const struct widget *w) {
+    return w->genitore && w->genitore->tipo == &tipo_pillola ? w->genitore : 0;
+}
+
+static inline void pulsante_barra_misura(struct widget *w, int *l, int *a) {
+    struct pulsante_barra *b = (struct pulsante_barra *)w;
+    *a = pulsante_barra_gruppo(w) ? GRUPPO_ELEMENTO : ALTEZZA_S;
+    *l = *a;                                                  /* solo icona: tondo */
+    if (b->testo[0]) *l = 2 * PADDING_S + larghezza_testo(FONT_PULSANTE_S, b->testo);
+}
+
+static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) {
+    struct pulsante_barra *b = (struct pulsante_barra *)w;
+    struct widget *gruppo = pulsante_barra_gruppo(w);
+    int a_scelta = gruppo && ((struct pillola *)gruppo)->a_scelta;
+    int premuto = b->premuto && b->dentro;
+    int sopra = w->sopra && !w->disabilitato;
+    struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
+    unsigned int colore = a_scelta ? TESTO_SECONDARIO : TESTO_PRIMARIO;
+
+    if (a_scelta && b->acceso) {
+        /* la voce scelta: SOLLEVATA dentro il binario. Le ombre non devono uscire dalla
+         * pillola (nel disegno il binario ritaglia): si ritaglia sul suo rettangolo. */
+        pennello_salva(p);
+        pennello_ritaglia(p, gruppo->x, gruppo->y, gruppo->l, gruppo->a);
+        if (!premuto) ombre_strati_fuori(p, &t, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
+        pennello_colore(p, SUPERFICIE_ELEVATA);
+        riempi_forma(p, &t);
+        if (!premuto) ombre_strati_dentro(p, &t, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
+        pennello_ripristina(p);
+        colore = TESTO_PRIMARIO;
+    } else if (premuto || sopra) {
+        pennello_colore(p, premuto ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
+        riempi_forma(p, &t);
+        if (a_scelta) colore = TESTO_PRIMARIO;
+    }
+    pennello_colore(p, colore);
+    if (b->testo[0]) {
+        testo_centrato(p, FONT_PULSANTE_S, w->x + PADDING_S, w->y, w->a, b->testo);
+        return;
+    }
+    icona(p, b->icona, ICONA_S, w->x + (w->l - ICONA_S) / 2, w->y + (w->a - ICONA_S) / 2);
+}
+
+/* LA PILLOLA: un gruppo di pulsanti, il "gruppo di pulsanti" del disegno. E' un binario
+ * INCASSATO (contiene e riceve): fondo SUPERFICIE_INCASSATA con l'ombra "incassato" (la
+ * parte interna, che lo scava, e un filo esterno), MAI un bordo. Alto ALTEZZA_S (32),
+ * pillola (raggio = meta' altezza), con GRUPPO_PADDING (4) intorno alle voci, che sono alte
+ * GRUPPO_ELEMENTO (24): 4 + 24 + 4. Le voci con l'icona sono tonde (24 x 24), quelle con un
+ * testo larghe quanto il testo piu' PADDING_S per lato. Puo' essere:
+ *   - di pulsanti semplici: ognuno fa la sua cosa (indietro, avanti);
+ *   - a SCELTA: ne e' acceso uno solo, quello premuto per ultimo (griglia o lista), come
+ *     le scelte singole; la voce accesa e' il pezzo mobile, SOLLEVATO dentro il binario. Il
+ *     clic si fa sentire anche sul pulsante gia' acceso. */
 static inline void pillola_misura(struct widget *w, int *l, int *a) {
     int visti = 0, largo = 0;
     for (int i = 0; i < w->quanti_figli; i++) {
@@ -1049,28 +1184,31 @@ static inline void pillola_misura(struct widget *w, int *l, int *a) {
         largo += fl;
         visti++;
     }
-    *l = 2 * PILLOLA_MARGINE + largo + (visti ? visti - 1 : 0) * PILLOLA_SPAZIO;
-    *a = 2 * PILLOLA_MARGINE + SEGMENTO_LATO;
+    *l = 2 * GRUPPO_PADDING + largo + (visti ? visti - 1 : 0) * PILLOLA_SPAZIO;
+    *a = ALTEZZA_S;
 }
 
 static inline void pillola_disponi(struct widget *w) {
-    int x = w->x + PILLOLA_MARGINE;
+    int x = w->x + GRUPPO_PADDING;
     for (int i = 0; i < w->quanti_figli; i++) {
         struct widget *f = w->figli[i];
         if (f->nascosto) continue;
         int fl, fa;
         widget_misura(f, &fl, &fa);
         f->x = x;
-        f->y = w->y + (w->a - SEGMENTO_LATO) / 2;
+        f->y = w->y + GRUPPO_PADDING;
         f->l = fl;
-        f->a = SEGMENTO_LATO;
+        f->a = GRUPPO_ELEMENTO;
         x += fl + PILLOLA_SPAZIO;
     }
 }
 
 static inline void pillola_disegna(struct widget *w, struct pennello *p) {
-    pennello_colore(p, VETRO_SUPERFICIE);
-    riempi_tondo(p, w->x, w->y, w->l, w->a, RAGGIO_PICCOLO);
+    struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
+    ombre_strati_fuori(p, &t, OMBRA_TAB(incassato), OMBRA_N(incassato));
+    pennello_colore(p, SUPERFICIE_INCASSATA);
+    riempi_forma(p, &t);
+    ombre_strati_dentro(p, &t, OMBRA_TAB(incassato), OMBRA_N(incassato));
 }
 
 static const struct tipo_widget tipo_pillola = {
@@ -1124,9 +1262,10 @@ static inline void pillola_aggiungi(struct pillola *p, struct pulsante_barra *b)
 }
 
 /* IL PERCORSO: dove si e', come nel Finder. La casetta, poi i nomi delle cartelle, dalla
- * piu' esterna a quella in cui si e', separati da una freccetta. I nomi sono grigi, e
- * bianchi sotto il puntatore: un clic su un nome chiama al_clic con il suo numero (0 il
- * primo). L'ultimo, la cartella in cui si e', e' bianco in semigrassetto e non si clicca.
+ * piu' esterna a quella in cui si e', separati da una freccetta. I nomi sono in
+ * FONT_CORPO e TESTO_SECONDARIO, e TESTO_PRIMARIO sotto il puntatore: un clic su un nome
+ * chiama al_clic con il suo numero (0 il primo). L'ultimo, la cartella in cui si e', e' in
+ * FONT_CORPO_MEDIO e TESTO_PRIMARIO, e non si clicca.
  * Il percorso e' elastico: prende la larghezza che avanza nella barra. Se non ci sta,
  * si tolgono i nomi dal principio (restano gli ultimi, i piu' utili); se non ci sta
  * neanche l'ultimo, lo si taglia.
@@ -1155,7 +1294,7 @@ struct percorso {
 };
 
 static inline const struct font *percorso_font(const struct percorso *p, int i) {
-    return i == p->quanti - 1 ? FONT_PERCORSO_QUI : FONT_STRUMENTI;
+    return i == p->quanti - 1 ? FONT_CORPO_MEDIO : FONT_CORPO;
 }
 
 static inline int percorso_largo(const struct percorso *p, int i) {
@@ -1177,7 +1316,7 @@ static inline void percorso_misura(struct widget *w, int *l, int *a) {
     int ultimo = p->quanti ? percorso_largo(p, p->quanti - 1) : 0;
     if (ultimo > PERCORSO_ULTIMO_MINIMO) ultimo = PERCORSO_ULTIMO_MINIMO;
     *l = percorso_inizio(p) + ultimo;
-    *a = STRUMENTI_CONTENUTO;
+    *a = ALTEZZA_S;
 }
 
 /* Da destra a sinistra: si mettono i nomi finche' ci stanno. (Il primo nome non ha uno
@@ -1210,7 +1349,7 @@ static inline void percorso_disponi(struct widget *w) {
 /* La casetta e le freccette; i nomi si disegnano da se'. */
 static inline void percorso_disegna(struct widget *w, struct pennello *p) {
     struct percorso *pc = (struct percorso *)w;
-    pennello_colore(p, CONTENUTO_SECONDARIO);
+    pennello_colore(p, TESTO_SECONDARIO);
     if (!pc->senza_casa) icona(p, ICONA_HOUSE, PERCORSO_CASA, w->x, w->y + (w->a - PERCORSO_CASA) / 2);
     for (int i = 0; i < pc->quanti - 1; i++) {
         struct widget *n = &pc->nomi[i].base;
@@ -1230,7 +1369,7 @@ static inline void nome_percorso_disegna(struct widget *w, struct pennello *p) {
     int qui = n->indice == pc->quanti - 1;
     pennello_salva(p);
     pennello_ritaglia(p, w->x, w->y, w->l, w->a);       /* l'ultimo puo' essere tagliato */
-    pennello_colore(p, qui || w->sopra ? CONTENUTO_PRINCIPALE : CONTENUTO_SECONDARIO);
+    pennello_colore(p, qui || w->sopra ? TESTO_PRIMARIO : TESTO_SECONDARIO);
     testo_centrato(p, percorso_font(pc, n->indice), w->x, w->y, w->a, n->nome);
     pennello_ripristina(p);
 }
@@ -1341,13 +1480,13 @@ static inline int scorrimento_rotella(struct scorrimento *s, int scatti) {
 /* LA BARRA DI SCORRIMENTO, dal file Figma (il componente "Barra di scorrimento"). Sta
  * SOPRA il contenuto, in una striscia larga 14 pixel lungo il suo bordo destro, e:
  *   - a riposo non si vede (e non si sente: i clic vanno al contenuto sotto);
- *   - quando si scorre compare (in 100 ms): il cursore, sottile (6 pixel, a 4 dal bordo),
- *     senza guida; resta un secondo dopo l'ultimo scatto, poi svanisce (in 300 ms);
- *   - con il puntatore sopra, o mentre la si trascina, il cursore si allarga a 10 pixel
- *     (in 150 ms) e dietro compare la guida, appena chiara. Finche' il puntatore e' sopra
- *     non svanisce.
- * Il cursore e' lungo quanto la parte che si vede, in proporzione (almeno 32 pixel), e sta
- * dove si e' nel contenuto. Trascinandolo il contenuto scorre; un clic sulla guida porta
+ *   - quando si scorre compare (in 100 ms): il cursore, sottile (8 pixel), da solo, senza
+ *     binario; resta un secondo dopo l'ultimo scatto, poi svanisce (in 300 ms);
+ *   - con il puntatore sopra, o mentre la si trascina, dietro al cursore compare (in 150 ms)
+ *     il binario da 12 pixel, incassato; il cursore resta dov'e', con 2 pixel di margine per
+ *     lato. Finche' il puntatore e' sopra non svanisce.
+ * Il cursore e' lungo quanto la parte che si vede, in proporzione (almeno SCORRIMENTO_CURSORE_LUNGHEZZA, 64 pixel), e sta
+ * dove si e' nel contenuto. Trascinandolo il contenuto scorre; un clic sul binario porta
  * li' il centro del cursore. Se il contenuto ci sta tutto, la barra non compare mai.
  *
  * LE ANIMAZIONI. A ogni passo si guarda quanto tempo e' passato, e opacita' e spessore si
@@ -1367,7 +1506,7 @@ struct barra_scorrimento {
     struct widget base;
     struct scorrimento scorrimento;
     int opacita;                       /* 0 nascosta, 255 del tutto visibile */
-    int spessore;                      /* 0 sottile (6 pixel), 255 spessa (10) */
+    int spessore;                      /* quanto si vede il binario: 0 niente, 255 tutto */
     unsigned int ultimo;               /* tempo() dell'ultimo scatto o trascinamento */
     unsigned int passo_prima;          /* tempo() del passo di animazione di prima */
     unsigned int attesa;               /* ogni quanti ms la si chiama ora (0: non la si chiama) */
@@ -1378,32 +1517,53 @@ struct barra_scorrimento {
 /* Il cursore: dove comincia (y) e quanto e' lungo. */
 static inline void barra_scorrimento_cursore(const struct barra_scorrimento *b, int *y, int *lungo) {
     const struct scorrimento *s = &b->scorrimento;
-    int corsa = b->base.a - 2 * SCORRIMENTO_MARGINE;     /* dove il cursore si muove */
+    int corsa = b->base.a - 2 * SCORRIMENTO_CURSORE_MARGINE;     /* dove il cursore si muove */
     int l = s->totale > 0 ? (int)((long long)corsa * s->vista / s->totale) : corsa;
-    if (l < SCORRIMENTO_MINIMO) l = SCORRIMENTO_MINIMO;
+    if (l < SCORRIMENTO_CURSORE_LUNGHEZZA) l = SCORRIMENTO_CURSORE_LUNGHEZZA;
     if (l > corsa) l = corsa;
     int massimo = scorrimento_massimo(s);
     *lungo = l;
-    *y = b->base.y + SCORRIMENTO_MARGINE +
+    *y = b->base.y + SCORRIMENTO_CURSORE_MARGINE +
          (massimo ? (int)((long long)(corsa - l) * s->posizione / massimo) : 0);
 }
 
+/* Come si disegna, dal componente "Barra di scorrimento" del Figma. Il CURSORE e' una pillola
+ * di SCORRIMENTO_CURSORE_NUOVO (8) pixel, al centro della striscia di 14, nel colore
+ * SCORRIMENTO_CURSORE (a riposo), _SOPRA (puntatore sopra la barra) o _TRASCINATO_NUOVO
+ * (preso col mouse), con l'ombra "sollevato" ridotta a un velo (e' un pezzo che si sposta,
+ * quindi SOLLEVATO, ma deve restare leggerissima: e' sottile). Il BINARIO e' INCASSATO (riceve
+ * il cursore): una pillola di SCORRIMENTO_BINARIO (12) per tutta la lunghezza, fondo
+ * SUPERFICIE_INCASSATA con l'ombra "incassato", senza bordo. Il cursore sta dentro con
+ * SCORRIMENTO_CURSORE_MARGINE (2) per lato: 2 + 8 + 2 = 12, e' lo stesso posto di prima,
+ * quindi quando il binario compare il cursore non si muove. Compare (b->spessore, 0-255, la
+ * stessa animazione di prima) quando il puntatore e' sopra o si trascina; mentre si scorre
+ * con la rotella c'e' SOLO il cursore. */
 static inline void barra_scorrimento_disegna(struct widget *w, struct pennello *p) {
     struct barra_scorrimento *b = (struct barra_scorrimento *)w;
     if (!b->opacita || !scorrimento_massimo(&b->scorrimento)) return;
     pennello_opacita(p, b->opacita);
-    if (b->spessore) {                 /* la guida: tutta la striscia, compare allargandosi */
+    if (b->spessore) {                 /* il binario: tutta la striscia, compare sfumando */
         pennello_salva(p);
         pennello_opacita(p, b->spessore);
-        pennello_colore(p, VETRO_PREMUTO);
-        riempi_tondo(p, w->x, w->y, w->l, w->a, w->l / 2);
+        struct tondo binario = tondo(w->x + (w->l - SCORRIMENTO_BINARIO) / 2, w->y,
+                                     SCORRIMENTO_BINARIO, w->a, SCORRIMENTO_BINARIO / 2);
+        ombre_strati_fuori(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
+        pennello_colore(p, SUPERFICIE_INCASSATA);
+        riempi_forma(p, &binario);
+        ombre_strati_dentro(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
         pennello_ripristina(p);
     }
-    int spesso = SCORRIMENTO_SOTTILE + (SCORRIMENTO_SPESSO - SCORRIMENTO_SOTTILE) * b->spessore / 255;
     int y, lungo;
     barra_scorrimento_cursore(b, &y, &lungo);
-    pennello_colore(p, b->trascinata ? SCORRIMENTO_CURSORE_TRASCINATO : CONTENUTO_SECONDARIO);
-    riempi_tondo(p, w->x + (w->l - spesso) / 2, y, spesso, lungo, spesso / 2);
+    struct tondo cursore = tondo(w->x + (w->l - SCORRIMENTO_CURSORE_NUOVO) / 2, y,
+                                 SCORRIMENTO_CURSORE_NUOVO, lungo, SCORRIMENTO_CURSORE_NUOVO / 2);
+    pennello_salva(p);
+    pennello_opacita(p, 90);           /* l'ombra "sollevato" ridotta a un velo */
+    ombre_strati_fuori(p, &cursore, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
+    pennello_ripristina(p);
+    pennello_colore(p, b->trascinata ? SCORRIMENTO_CURSORE_TRASCINATO_NUOVO
+                                     : b->base.sopra ? SCORRIMENTO_CURSORE_SOPRA : SCORRIMENTO_CURSORE);
+    riempi_forma(p, &cursore);
 }
 
 /* Porta 'valore' verso 'obiettivo' (0 o 255) di quanto basta perche' tutta la strada
@@ -1476,14 +1636,14 @@ static inline int barra_scorrimento_rotella(struct barra_scorrimento *b, int sca
 static inline void barra_scorrimento_segui(struct barra_scorrimento *b, int y) {
     int inizio, lungo;
     barra_scorrimento_cursore(b, &inizio, &lungo);
-    int corsa = b->base.a - 2 * SCORRIMENTO_MARGINE - lungo;
+    int corsa = b->base.a - 2 * SCORRIMENTO_CURSORE_MARGINE - lungo;
     if (corsa <= 0) return;
-    int da_inizio = y - b->presa - (b->base.y + SCORRIMENTO_MARGINE);
+    int da_inizio = y - b->presa - (b->base.y + SCORRIMENTO_CURSORE_MARGINE);
     int posizione = (int)((long long)da_inizio * scorrimento_massimo(&b->scorrimento) / corsa);
     barra_scorrimento_usata(b, scorrimento_metti(&b->scorrimento, posizione));
 }
 
-/* Premuto sul cursore: lo si prende li'. Premuto sulla guida: il centro del cursore
+/* Premuto sul cursore: lo si prende li'. Premuto sul binario: il centro del cursore
  * salta li', e lo si tiene per il centro. Poi segue il puntatore finche' non si lascia. */
 static inline void barra_scorrimento_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
     struct barra_scorrimento *b = (struct barra_scorrimento *)w;
@@ -1526,9 +1686,9 @@ static inline void barra_scorrimento_prepara(struct barra_scorrimento *b) {
 /* La vista del contenuto e' il rettangolo (x, y, l, a): la barra va lungo il suo bordo
  * destro. Da chiamare quando il widget che scorre viene disposto. */
 static inline void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, int a) {
-    b->base.x = x + l - SCORRIMENTO_LARGHEZZA;
+    b->base.x = x + l - SCORRIMENTO_ZONA;
     b->base.y = y;
-    b->base.l = SCORRIMENTO_LARGHEZZA;
+    b->base.l = SCORRIMENTO_ZONA;
     b->base.a = a;
 }
 
@@ -1559,7 +1719,7 @@ static inline void toolkit_sotto(struct finestra_tk *f, struct widget *w) {
 
 /* La rotella: al widget sotto il puntatore, o al primo dei suoi genitori che la vuole. */
 static inline void toolkit_rotella(struct finestra_tk *f, int x, int y, int sx, int sy) {
-    if (y < BARRA_ALTEZZA) return;
+    if (y < TITOLO_ALTEZZA) return;
     for (struct widget *w = widget_in(&f->base, x, y); w; w = w->genitore)
         if (w->tipo->rotella) { w->tipo->rotella(w, sx, sy); return; }
 }
@@ -1599,7 +1759,7 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
         if (comando == 2 && sinistro) { f->chiudi_premuto = 1; f->da_ridisegnare = 1; return; }
         if (comando == 1 && sinistro) { f->riduci_premuto = 1; f->da_ridisegnare = 1; return; }
         /* la barra del titolo, e lo spazio vuoto della barra degli strumenti: "trascinami" */
-        if (y < BARRA_ALTEZZA || barra_strumenti_vuota(f, x, y)) {
+        if (y < TITOLO_ALTEZZA || barra_strumenti_vuota(f, x, y)) {
             if (sinistro) finestra_trascinami(&f->finestra);
             return;
         }
@@ -1641,7 +1801,7 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
     f->base.l = l;
     f->base.a = a;
     widget_disponi(&f->base);
-    if (finestra_apri(&f->finestra, l, a, f->titolo) < 0) return 1;
+    if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
     if (!toolkit_ridisegna(f)) return 1;
 
     struct notizia n;

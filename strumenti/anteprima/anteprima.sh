@@ -4,6 +4,8 @@
 #   scala:   ingrandimento intero (2 = pixel doppi), per vedere i dettagli. Default 1.
 #   uscita:  default strumenti/anteprima/out/<scena>.png
 # Variabile SFONDO=nero|bianco per un fondo piatto sotto il vetro.
+# Variabile TEMA=chiaro|scuro per il tema dei colori semantici (tema.h); senza, chiaro. Il
+# vecchio stile "a vetro" non cambia: lo leggono solo i token nuovi.
 set -e
 QUI=$(cd "$(dirname "$0")" && pwd)
 RADICE=$(cd "$QUI/../.." && pwd)

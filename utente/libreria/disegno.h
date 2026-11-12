@@ -255,26 +255,295 @@ static inline void contorna_tondo(struct pennello *p, int x, int y, int l, int a
     contorna_forma(p, &t, spessore);
 }
 
-/* Un'OMBRA morbida sotto la forma, spostata di (dx, dy) e sfocata di 'sfocatura' pixel:
- * la copertura sfuma dolcemente (non a scalino) per tutta la larghezza della
- * sfocatura. Si vede solo FUORI dalla forma: dentro c'e' la forma stessa. */
-static inline void ombra_forma(struct pennello *p, const struct tondo *t, int dx, int dy,
-                               int sfocatura) {
+/* LA SFUMATURA di un'ombra. 'd' e' la distanza con segno (in 256esimi di pixel, come
+ * 'distanza') dal bordo della forma che fa l'ombra; 's' e' la meta' della larghezza della
+ * sfumatura, in 256esimi di pixel (almeno 256). Restituisce 0-256: 256 tutto dentro la
+ * forma (a 's' o piu' dal bordo), 0 tutto fuori, e in mezzo una curva a S (smoothstep,
+ * 3v^2 - 2v^3) che inizia e finisce PIANO: una rampa dritta farebbe vedere due "spigoli"
+ * dove l'ombra comincia e dove finisce; con la curva a S l'occhio non trova il bordo,
+ * che e' quello che fa sembrare una sfocatura vera (una gaussiana, in pratica). Sul
+ * bordo esatto vale 128, cioe' meta'. */
+static inline int sfuma(int d, int s) {
+    int v = (s - d) * 128 / s;                       /* 0-256 lungo la sfumatura */
+    if (v <= 0) return 0;
+    if (v > 256) v = 256;
+    return v * v * (768 - 2 * v) >> 16;
+}
+
+/* Un'OMBRA morbida sotto la forma, spostata di (dx, dy), sfocata di 'sfocatura' pixel e
+ * DIFFUSA di 'diffusione' pixel (lo "spread" di Figma): positiva, l'ombra e' piu'
+ * grande della forma da ogni lato; negativa, piu' piccola (le ombre "sollevate" dei
+ * token usano -4 o -12: un'ombra piu' stretta della scheda, che si vede solo sotto e
+ * non ai lati, come una luce alta). Si vede solo FUORI dalla forma: dentro c'e' la forma
+ * stessa.
+ *
+ * COME. Si allarga (o si stringe) la forma di 'diffusione' sottraendo diffusione * 256
+ * dalla sua distanza con segno: gonfiare un rettangolo arrotondato di d pixel da un
+ * rettangolo arrotondato col raggio piu' grande di d, e la sua distanza dal bordo e'
+ * esattamente quella di prima meno d. Poi si sfuma con 'sfuma'. Niente buffer, niente
+ * sfocatura vera a due passate: ogni pixel dell'ombra si calcola da solo dalla
+ * distanza, quindi non costa memoria (un programma di mshell non ha un heap comodo).
+ * Il prezzo e' che l'ombra di una forma qualunque e' sempre "la forma, ammorbidita":
+ * per un rettangolo arrotondato e' quasi indistinguibile da una gaussiana vera.
+ *
+ * Con diffusione 0 e' la vecchia ombra_forma, pixel per pixel. */
+static inline void ombra_forma_diffusa(struct pennello *p, const struct tondo *t, int dx,
+                                       int dy, int sfocatura, int diffusione) {
     struct tondo o = *t;
     o.x += dx;
     o.y += dy;
     int s = sfocatura * 256;
     if (s < 256) s = 256;
-    for (int y = o.y - sfocatura; y < o.y + o.a + sfocatura; y++)
-        for (int x = o.x - sfocatura; x < o.x + o.l + sfocatura; x++) {
+    int fuori_dal_bordo = sfocatura + (diffusione > 0 ? diffusione : 0);
+    if (diffusione && sfocatura < 1) fuori_dal_bordo++;      /* la sfumatura di 1 px minimo */
+    int y0 = o.y - fuori_dal_bordo, y1 = o.y + o.a + fuori_dal_bordo;
+    int x0 = o.x - fuori_dal_bordo, x1 = o.x + o.l + fuori_dal_bordo;
+    /* non si calcola quello che il ritaglio butterebbe via */
+    if (y0 < p->s.ry) y0 = p->s.ry;
+    if (y1 > p->s.ry2) y1 = p->s.ry2;
+    if (x0 < p->s.rx) x0 = p->s.rx;
+    if (x1 > p->s.rx2) x1 = p->s.rx2;
+    for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++) {
             int fuori = 256 - coperto(distanza(t, x, y));
             if (!fuori) continue;
-            int v = (s - distanza(&o, x, y)) * 128 / s;      /* 0-256 lungo la sfumatura */
-            if (v <= 0) continue;
-            if (v > 256) v = 256;
-            int dolce = v * v * (768 - 2 * v) >> 16;         /* smoothstep: inizia e finisce piano */
-            copri(p, x, y, dolce * fuori >> 8);
+            int dolce = sfuma(distanza(&o, x, y) - diffusione * 256, s);
+            if (dolce) copri(p, x, y, dolce * fuori >> 8);
         }
+}
+
+/* L'ombra di sempre: nessuna diffusione. */
+static inline void ombra_forma(struct pennello *p, const struct tondo *t, int dx, int dy,
+                               int sfocatura) {
+    ombra_forma_diffusa(p, t, dx, dy, sfocatura, 0);
+}
+
+/* Un'OMBRA INTERNA ("Inner shadow" di Figma): dentro la forma, un'ombra che nasce dal
+ * bordo, nel colore del pennello. Si immagina un BUCO uguale alla forma ma spostato di
+ * (dx, dy) (e ristretto di 'diffusione' pixel: positiva, l'ombra entra di piu'): dove
+ * il buco non arriva, la forma e' in ombra. Con dy = 1 il buco e' un pixel piu' in
+ * basso, quindi lungo il bordo ALTO resta una striscia in ombra, e piu' sfocatura
+ * c'e', piu' la striscia sfuma verso l'interno: e' l'effetto "incassato".
+ *
+ * Ombra = 256 - sfuma(distanza dal buco): e' il contrario dell'ombra esterna (li' si
+ * colorava dove la sfumatura vale, qui dove NON vale), e si moltiplica per quanto e'
+ * coperto il pixel dalla forma vera: cosi' il bordo liscio (antialiasing) della forma
+ * non viene sporcato e il ritaglio del pennello vale come sempre. */
+static inline void ombra_interna_diffusa(struct pennello *p, const struct tondo *t, int dx,
+                                         int dy, int sfocatura, int diffusione) {
+    struct tondo buco = *t;
+    buco.x += dx;
+    buco.y += dy;
+    int s = sfocatura * 256;
+    if (s < 256) s = 256;
+    int y0 = t->y, y1 = t->y + t->a, x0 = t->x, x1 = t->x + t->l;
+    if (y0 < p->s.ry) y0 = p->s.ry;
+    if (y1 > p->s.ry2) y1 = p->s.ry2;
+    if (x0 < p->s.rx) x0 = p->s.rx;
+    if (x1 > p->s.rx2) x1 = p->s.rx2;
+    for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++) {
+            int dentro = coperto(distanza(t, x, y));
+            if (!dentro) continue;
+            int ombra = 256 - sfuma(distanza(&buco, x, y) + diffusione * 256, s);
+            if (ombra) copri(p, x, y, ombra * dentro >> 8);
+        }
+}
+
+static inline void ombra_interna(struct pennello *p, const struct tondo *t, int dx, int dy,
+                                 int sfocatura) {
+    ombra_interna_diffusa(p, t, dx, dy, sfocatura, 0);
+}
+
+/* --- le ombre a strati --- */
+
+/* Un'ombra vera di Figma e' fatta di piu' ombre sovrapposte (una vicina e netta, una
+ * larga e leggera), e ognuna e' ESTERNA ("Drop shadow") o INTERNA ("Inner shadow").
+ * Questa e' una riga della lista, uguale a una voce dei token (ombra/sollevato...):
+ * 'colore' e' 0xAARRGGBB con l'opacita' gia' dentro (0.06 -> alfa 15), 'tipo' e'
+ * OMBRA_ESTERNA o OMBRA_INTERNA, il resto e' in pixel. */
+#define OMBRA_ESTERNA 0
+#define OMBRA_INTERNA 1
+
+struct strato_ombra {
+    unsigned int colore;
+    int tipo;
+    int dx, dy, sfocatura, diffusione;
+};
+
+/* L'ORDINE. La lista si scrive come nei token (e come il pannello di Figma): la PRIMA
+ * riga e' quella che sta SOPRA a tutte. Per disegnare si fa al contrario, dall'ultima
+ * alla prima, cosi' la piu' grande e lontana (di solito l'ultima) va sotto e la piu'
+ * piccola e vicina sopra. In tutto l'ordine e':
+ *
+ *     1. ombre_strati_fuori(...)   le esterne, dall'ultima alla prima
+ *     2. il chiamante disegna il FONDO della forma (riempi_forma, vetro, ecc.)
+ *     3. ombre_strati_dentro(...)  le interne, dall'ultima alla prima
+ *     4. contorni, luce, testo
+ *
+ * Il fondo sta in mezzo perche' le ombre esterne devono stare DIETRO e le interne
+ * DAVANTI al fondo. (Le esterne non vengono disegnate sotto la forma, come in Figma
+ * per le forme con il fondo semitrasparente: vedi ombra_forma_diffusa.) */
+static inline void ombre_strati_fuori(struct pennello *p, const struct tondo *t,
+                                      const struct strato_ombra *strati, int n) {
+    pennello_salva(p);
+    for (int i = n - 1; i >= 0; i--) {
+        if (strati[i].tipo != OMBRA_ESTERNA) continue;
+        pennello_colore(p, strati[i].colore);
+        ombra_forma_diffusa(p, t, strati[i].dx, strati[i].dy, strati[i].sfocatura,
+                            strati[i].diffusione);
+    }
+    pennello_ripristina(p);
+}
+
+static inline void ombre_strati_dentro(struct pennello *p, const struct tondo *t,
+                                       const struct strato_ombra *strati, int n) {
+    pennello_salva(p);
+    for (int i = n - 1; i >= 0; i--) {
+        if (strati[i].tipo != OMBRA_INTERNA) continue;
+        pennello_colore(p, strati[i].colore);
+        ombra_interna_diffusa(p, t, strati[i].dx, strati[i].dy, strati[i].sfocatura,
+                              strati[i].diffusione);
+    }
+    pennello_ripristina(p);
+}
+
+/* Tutte e due di seguito, per quando il fondo c'e' gia' (o non serve): le esterne
+ * non toccano l'interno della forma, quindi non sporcano un fondo gia' disegnato, se non
+ * di un soffio sul pixel del bordo. */
+static inline void ombre_strati(struct pennello *p, const struct tondo *t,
+                                const struct strato_ombra *strati, int n) {
+    ombre_strati_fuori(p, t, strati, n);
+    ombre_strati_dentro(p, t, strati, n);
+}
+
+/* --- cerchi e pillole --- */
+
+/* Una PILLOLA: un rettangolo con gli angoli tondi quanto possono, cioe' di meta'
+ * altezza (i pulsanti e le barre di avanzamento). */
+static inline void riempi_pillola(struct pennello *p, int x, int y, int l, int a) {
+    riempi_tondo(p, x, y, l, a, (l < a ? l : a) / 2);
+}
+
+/* Un CERCHIO col centro in (cx, cy), che e' un angolo di pixel (non il centro di un
+ * pixel): il cerchio e' simmetrico, con 'raggio' pixel da ogni parte. */
+static inline void riempi_cerchio(struct pennello *p, int cx, int cy, int raggio) {
+    riempi_tondo(p, cx - raggio, cy - raggio, 2 * raggio, 2 * raggio, raggio);
+}
+
+/* --- archi e anelli --- */
+
+/* Il seno di un angolo intero in gradi, moltiplicato per 4096 (punto fisso 4.12).
+ * Basta la tabella del primo quarto (0-90 gradi): gli altri tre sono lo stesso
+ * disegno specchiato. 91 numeri, nessuna libreria matematica. */
+static const short tabella_seno[91] = {
+    0, 71, 143, 214, 286, 357, 428, 499, 570, 641, 711, 782, 852,
+    921, 991, 1060, 1129, 1198, 1266, 1334, 1401, 1468, 1534, 1600, 1666, 1731,
+    1796, 1860, 1923, 1986, 2048, 2110, 2171, 2231, 2290, 2349, 2408, 2465, 2522,
+    2578, 2633, 2687, 2741, 2793, 2845, 2896, 2946, 2996, 3044, 3091, 3138, 3183,
+    3228, 3271, 3314, 3355, 3396, 3435, 3474, 3511, 3547, 3582, 3617, 3650, 3681,
+    3712, 3742, 3770, 3798, 3824, 3849, 3873, 3896, 3917, 3937, 3956, 3974, 3991,
+    4006, 4021, 4034, 4046, 4056, 4065, 4074, 4080, 4086, 4090, 4094, 4095, 4096,
+};
+
+static inline int seno_gradi(int g) {
+    g %= 360;
+    if (g < 0) g += 360;
+    int quarto = g / 90, r = g % 90;
+    int v = (quarto & 1) ? tabella_seno[90 - r] : tabella_seno[r];
+    return quarto >= 2 ? -v : v;
+}
+
+/* Un ARCO (o un anello intero): la parte di corona circolare tra 'raggio_interno' e
+ * 'raggio_esterno' che va da 'angolo_inizio' a 'angolo_fine', in gradi INTERI, con 0 in
+ * ALTO e in senso ORARIO (90 = a destra, 180 = in basso, 270 = a sinistra). Se la fine
+ * e' minore dell'inizio l'arco gira oltre i 360 (da 350 a 10 sono 20 gradi); se la
+ * differenza e' 360 o piu' e' l'anello intero. Il centro (cx, cy) e' un angolo di
+ * pixel, come per riempi_cerchio. Spessore = esterno - interno.
+ *
+ * COME, senza coseni e senza arctan. Per ogni pixel si calcolano due distanze con
+ * segno (in 256esimi di pixel, come per le altre forme) e si prende la peggiore:
+ *   - dalla CORONA: la distanza del pixel dal centro (con 'radice'), confrontata con i
+ *     due raggi: serve il massimo tra "troppo lontano" e "troppo vicino";
+ *   - dal SETTORE: l'arco e' una fetta di torta, cioe' l'incrocio (se la fetta e' al
+ *     massimo mezzo giro) o l'unione (se e' piu' di mezzo giro) di due mezzi piani, uno
+ *     per ogni lato dritto della fetta. La distanza del pixel da una retta per il
+ *     centro con direzione u e' il prodotto vettoriale u x P (P = pixel meno centro),
+ *     perche' u e' lungo 1. Le direzioni u vengono dalla tabella del seno.
+ * Il bordo sfuma con 'coperto' e quindi non ha scalini, qualunque sia l'angolo.
+ *
+ * I TAPPI (le due estremita'): in 'riempi_arco' sono TONDI, come il "round cap" di
+ * Figma e dei cerchi di caricamento: a ogni estremita' c'e' una mezza pillola, cioe'
+ * un cerchio di diametro pari allo spessore centrato a meta' corona. Per questo
+ * l'arco sporge di mezzo spessore oltre gli angoli dati. Con 'riempi_arco_dritto' i
+ * tappi sono tagliati dritti, esattamente sugli angoli (per una barra circolare con
+ * l'inizio in un punto preciso). 'riempi_arco_fine' e' lo stesso con tutto in 256esimi
+ * di pixel (centro e raggi con la virgola, per i cerchi piccoli e le animazioni). */
+static inline void riempi_arco_fine(struct pennello *p, int cx, int cy, int re, int ri,
+                                    int inizio, int fine, int tappi_tondi) {
+    if (re <= ri || re <= 0) return;
+    if (ri < 0) ri = 0;
+    int giro = fine - inizio;
+    int intero = giro >= 360;
+    if (!intero) {
+        giro %= 360;
+        if (giro < 0) giro += 360;
+        if (giro == 0) return;
+    }
+    /* direzioni (seno, -coseno) delle due estremita', in 1/4096; y verso il basso */
+    int u0x = seno_gradi(inizio), u0y = -seno_gradi(inizio + 90);
+    int u1x = seno_gradi(fine), u1y = -seno_gradi(fine + 90);
+    int meta = (re - ri) / 2, medio = (re + ri) / 2;
+    int c0x = (int)(((long long)medio * u0x) >> 12), c0y = (int)(((long long)medio * u0y) >> 12);
+    int c1x = (int)(((long long)medio * u1x) >> 12), c1y = (int)(((long long)medio * u1y) >> 12);
+    int fuori = (re + 255) / 256 + 1;
+    int y0 = (cy >> 8) - fuori, y1 = (cy >> 8) + fuori + 1;
+    int x0 = (cx >> 8) - fuori, x1 = (cx >> 8) + fuori + 1;
+    if (y0 < p->s.ry) y0 = p->s.ry;
+    if (y1 > p->s.ry2) y1 = p->s.ry2;
+    if (x0 < p->s.rx) x0 = p->s.rx;
+    if (x1 > p->s.rx2) x1 = p->s.rx2;
+    for (int y = y0; y < y1; y++)
+        for (int x = x0; x < x1; x++) {
+            int px = x * 256 + 128 - cx, py = y * 256 + 128 - cy;
+            int dist = (int)radice((unsigned long long)((long long)px * px + (long long)py * py));
+            int d = dist - re;
+            if (ri - dist > d) d = ri - dist;                    /* fuori dalla corona */
+            if (!intero) {
+                int sa = (int)(((long long)u0x * py - (long long)u0y * px) >> 12);   /* >0: dopo l'inizio */
+                int sb = -(int)(((long long)u1x * py - (long long)u1y * px) >> 12);  /* >0: prima della fine */
+                int ds = giro <= 180 ? -(sa < sb ? sa : sb) : -(sa > sb ? sa : sb);
+                if (ds > d) d = ds;
+                if (tappi_tondi && d > -128) {
+                    int ax = px - c0x, ay = py - c0y, bx = px - c1x, by = py - c1y;
+                    if (ax < 0) ax = -ax;
+                    if (ay < 0) ay = -ay;
+                    if (bx < 0) bx = -bx;
+                    if (by < 0) by = -by;
+                    if (ax < meta + 256 && ay < meta + 256) {
+                        int dc = (int)radice((unsigned long long)ax * ax + (unsigned long long)ay * ay) - meta;
+                        if (dc < d) d = dc;
+                    }
+                    if (bx < meta + 256 && by < meta + 256) {
+                        int dc = (int)radice((unsigned long long)bx * bx + (unsigned long long)by * by) - meta;
+                        if (dc < d) d = dc;
+                    }
+                }
+            }
+            copri(p, x, y, coperto(d));
+        }
+}
+
+static inline void riempi_arco(struct pennello *p, int cx, int cy, int raggio_esterno,
+                               int raggio_interno, int angolo_inizio, int angolo_fine) {
+    riempi_arco_fine(p, cx * 256, cy * 256, raggio_esterno * 256, raggio_interno * 256,
+                     angolo_inizio, angolo_fine, 1);
+}
+
+static inline void riempi_arco_dritto(struct pennello *p, int cx, int cy, int raggio_esterno,
+                                      int raggio_interno, int angolo_inizio, int angolo_fine) {
+    riempi_arco_fine(p, cx * 256, cy * 256, raggio_esterno * 256, raggio_interno * 256,
+                     angolo_inizio, angolo_fine, 0);
 }
 
 /* Una riga di luce sul bordo alto, all'interno: quello che e' dentro la forma ma non
