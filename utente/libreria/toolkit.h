@@ -69,6 +69,7 @@
 
 #include "finestra.h"
 #include "stile.h"
+#include "elemento_file.h"   /* testo_a_capo, per il messaggio dell'avviso */
 
 /* --- il widget in generale --- */
 
@@ -754,6 +755,243 @@ static inline void ricerca_prepara(struct campo *c, const char *suggerimento,
     c->base.largo = 0;
 }
 
+/* --- lo stato vuoto: un'area senza contenuto, o in errore --- */
+
+/* LO STATO VUOTO, dal file Figma ("Stato vuoto"): al centro dello spazio che riceve, in
+ * colonna, un'icona (facoltativa) di ICONA_OGGETTO (48) in TESTO_SECONDARIO, il titolo
+ * (FONT_SEZIONE_NUOVO, TESTO_PRIMARIO) e la spiegazione (FONT_CORPO, TESTO_SECONDARIO, a
+ * capo da sola, al massimo STATO_VUOTO_RIGHE righe), tutto centrato; SPAZIO_8 tra un pezzo
+ * e l'altro, FINESTRA_PADDING (24) di margine. Per una cartella vuota (senza icona), una
+ * cartella che non si legge (ICONA_TRIANGLE_ALERT), un permesso negato (ICONA_LOCK).
+ * Prende tutto lo spazio che avanza (elastico e largo). */
+#define STATO_VUOTO_RIGHE 3
+
+struct stato_vuoto {
+    struct widget base;
+    int icona;                          /* ICONA_..., o NESSUNA_ICONA */
+    char titolo[MAX_TESTO_WIDGET];
+    char spiegazione[STATO_VUOTO_RIGHE * MAX_TESTO_WIDGET];
+};
+
+static inline int stato_vuoto_righe(struct stato_vuoto *s, int largo, char righe[][MAX_RIGA_NOME]) {
+    if (!s->spiegazione[0]) return 0;
+    return testo_a_capo(FONT_CORPO, s->spiegazione, largo, righe, STATO_VUOTO_RIGHE);
+}
+
+static inline void stato_vuoto_misura(struct widget *w, int *l, int *a) {
+    struct stato_vuoto *s = (struct stato_vuoto *)w;
+    char righe[STATO_VUOTO_RIGHE][MAX_RIGA_NOME];
+    int n = stato_vuoto_righe(s, AVVISO_LARGHEZZA, righe);
+    int t = larghezza_testo(FONT_SEZIONE_NUOVO, s->titolo);
+    *l = 2 * FINESTRA_PADDING + (t > AVVISO_LARGHEZZA ? t : AVVISO_LARGHEZZA);
+    *a = 2 * FINESTRA_PADDING + INTERLINEA_SEZIONE +
+         (s->icona != NESSUNA_ICONA ? ICONA_OGGETTO + SPAZIO_8 : 0) + (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0);
+}
+
+static inline void stato_vuoto_disegna(struct widget *w, struct pennello *p) {
+    struct stato_vuoto *s = (struct stato_vuoto *)w;
+    int largo = w->l - 2 * FINESTRA_PADDING;
+    char righe[STATO_VUOTO_RIGHE][MAX_RIGA_NOME];
+    int n = stato_vuoto_righe(s, largo, righe);
+    int alto = INTERLINEA_SEZIONE + (s->icona != NESSUNA_ICONA ? ICONA_OGGETTO + SPAZIO_8 : 0) +
+               (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0);
+    int y = w->y + (w->a - alto) / 2, cx = w->x + w->l / 2;
+    if (s->icona != NESSUNA_ICONA) {
+        pennello_colore(p, TESTO_SECONDARIO);
+        icona(p, s->icona, ICONA_OGGETTO, cx - ICONA_OGGETTO / 2, y);
+        y += ICONA_OGGETTO + SPAZIO_8;
+    }
+    pennello_colore(p, TESTO_PRIMARIO);
+    testo_centrato(p, FONT_SEZIONE_NUOVO, cx - larghezza_testo(FONT_SEZIONE_NUOVO, s->titolo) / 2, y,
+                   INTERLINEA_SEZIONE, s->titolo);
+    y += INTERLINEA_SEZIONE + SPAZIO_8;
+    pennello_colore(p, TESTO_SECONDARIO);
+    for (int i = 0; i < n; i++, y += INTERLINEA_CORPO)
+        testo_centrato(p, FONT_CORPO, cx - larghezza_testo(FONT_CORPO, righe[i]) / 2, y, INTERLINEA_CORPO, righe[i]);
+}
+
+static const struct tipo_widget tipo_stato_vuoto = { stato_vuoto_misura, 0, stato_vuoto_disegna, 0, 0, 0, 0, 0 };
+
+static inline void stato_vuoto_prepara(struct stato_vuoto *s, int icona_, const char *titolo,
+                                       const char *spiegazione) {
+    *s = (struct stato_vuoto){ .base = { .tipo = &tipo_stato_vuoto, .elastico = 1, .largo = 1 },
+                               .icona = icona_ };
+    copia_testo(s->titolo, titolo, MAX_TESTO_WIDGET);
+    copia_testo(s->spiegazione, spiegazione ? spiegazione : "", sizeof s->spiegazione);
+}
+
+/* Cambia icona e testi (per esempio, da "cartella vuota" a "impossibile leggere"). */
+static inline void stato_vuoto_cambia(struct stato_vuoto *s, int icona_, const char *titolo,
+                                      const char *spiegazione) {
+    s->icona = icona_;
+    copia_testo(s->titolo, titolo, MAX_TESTO_WIDGET);
+    copia_testo(s->spiegazione, spiegazione ? spiegazione : "", sizeof s->spiegazione);
+    widget_cambiato(&s->base);
+}
+
+/* --- l'avviso: un messaggio che interrompe e chiede conferma --- */
+
+/* L'AVVISO, dal file Figma ("Avviso" e "Velo della finestra"). Un riquadro di vetro largo
+ * AVVISO_LARGHEZZA, al centro della finestra che lo apre: un titolo, un messaggio (a capo
+ * da solo, al massimo AVVISO_RIGHE righe) e in fondo a destra due pulsanti, Annulla
+ * (Secondario) e la conferma (di solito Pericolo, per le cose che non si annullano).
+ * Margine FINESTRA_PADDING (24), SPAZIO_8 tra titolo e messaggio, SPAZIO_24 prima dei
+ * pulsanti; ombra "finestra".
+ *
+ * BLOCCANTE o no:
+ *   - bloccante: la finestra sotto si spegne (titolo come una finestra sullo sfondo) e
+ *     riceve il VELO (SUPERFICIE_VELO, con gli angoli della finestra); finche' non si
+ *     risponde non si puo' usare niente, nemmeno chiudere o ridurre la finestra;
+ *   - non bloccante: niente velo, la finestra resta attiva e usabile.
+ * Invio = conferma, Esc = annulla.
+ *
+ *     static struct avviso riavvia;
+ *     avviso_prepara(&riavvia, "Riavviare \"contatore\"?",
+ *                    "Il processo viene chiuso e aperto di nuovo.", "Riavvia", PERICOLO, 1,
+ *                    al_riavvia, 0);
+ *     finestra_tk_avviso(&finestra, &riavvia);     // una volta, prima di toolkit_esegui
+ *     ...
+ *     avviso_apri(&riavvia);                        // quando serve
+ *
+ * 'al_risposta' riceve 1 per la conferma, 0 per Annulla; l'avviso si chiude da solo. */
+#define AVVISO_RIGHE 4
+
+struct avviso;
+typedef void (*al_risposta_avviso)(struct avviso *a, int conferma, void *dati);
+
+/* L'avviso NON e' un figlio della finestra (non sta nel suo albero): la finestra lo tiene a
+ * parte (finestra_tk_avviso), lo disegna dopo tutto il resto e gli da' i clic per primo.
+ * Il suo 'genitore' e' comunque la finestra, cosi' widget_cambiato la trova. Il velo e
+ * l'ombra (che escono dal riquadro piu' dei 24 pixel che un widget puo' sbordare) li
+ * disegna la finestra (avviso_sotto); il riquadro, i testi e i pulsanti li disegna lui. */
+struct avviso {
+    struct widget base;                /* il riquadro */
+    char titolo[MAX_TESTO_WIDGET];
+    char messaggio[AVVISO_RIGHE * MAX_TESTO_WIDGET];
+    int bloccante;
+    int x, y, l, a;                    /* il riquadro, in coordinate della finestra */
+    struct pulsante annulla, conferma;
+    al_risposta_avviso al_risposta;
+    void *dati;
+};
+
+static inline int avviso_righe(struct avviso *v, char righe[][MAX_RIGA_NOME]) {
+    return testo_a_capo(FONT_CORPO, v->messaggio, AVVISO_LARGHEZZA - 2 * FINESTRA_PADDING,
+                        righe, AVVISO_RIGHE);
+}
+
+/* L'altezza del riquadro: margine, titolo, messaggio, spazio, pulsanti, margine. */
+static inline int avviso_altezza(struct avviso *v) {
+    char righe[AVVISO_RIGHE][MAX_RIGA_NOME];
+    int n = v->messaggio[0] ? avviso_righe(v, righe) : 0;
+    int pl, pa;
+    widget_misura(&v->conferma.base, &pl, &pa);
+    return 2 * FINESTRA_PADDING + INTERLINEA_SEZIONE + (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0) +
+           SPAZIO_24 + pa;
+}
+
+/* Dispone il riquadro al centro della finestra (larga fl, alta fa) e i due pulsanti in
+ * fondo a destra. */
+static inline void avviso_sistema(struct avviso *v, int fl, int fa) {
+    v->l = AVVISO_LARGHEZZA;
+    v->a = avviso_altezza(v);
+    v->x = (fl - v->l) / 2;
+    v->y = (fa - v->a) / 2;
+    v->base.x = v->x; v->base.y = v->y; v->base.l = v->l; v->base.a = v->a;
+    int cl, ca, al, aa;
+    widget_misura(&v->conferma.base, &cl, &ca);
+    widget_misura(&v->annulla.base, &al, &aa);
+    int y = v->y + v->a - FINESTRA_PADDING - ca;
+    v->conferma.base.x = v->x + v->l - FINESTRA_PADDING - cl;
+    v->conferma.base.y = y; v->conferma.base.l = cl; v->conferma.base.a = ca;
+    v->annulla.base.x = v->conferma.base.x - SPAZIO_8 - al;
+    v->annulla.base.y = y; v->annulla.base.l = al; v->annulla.base.a = aa;
+}
+
+/* Sotto il riquadro: il velo (se bloccante) su tutta la finestra (larga fl, alta fa), con i
+ * suoi angoli, e l'ombra del riquadro. Lo chiama la finestra, senza ritagli. */
+static inline void avviso_sotto(struct avviso *v, struct pennello *p, int fl, int fa) {
+    if (v->bloccante) {
+        struct tondo velo = tondo(0, 0, fl, fa, RAGGIO_FINESTRA_NUOVO);
+        pennello_colore(p, SUPERFICIE_VELO);
+        riempi_forma(p, &velo);
+    }
+    struct tondo r = tondo(v->x, v->y, v->l, v->a, RAGGIO_FINESTRA_NUOVO);
+    ombre_strati_fuori(p, &r, OMBRA_TAB(finestra), OMBRA_N(finestra));
+}
+
+static inline void avviso_disegna(struct widget *w, struct pennello *p) {
+    struct avviso *v = (struct avviso *)w;
+    struct tondo r = tondo(v->x, v->y, v->l, v->a, RAGGIO_FINESTRA_NUOVO);
+    pennello_salva(p);
+    /* Pieno, non vetro: in Figma l'avviso e' di vetro con la sfocatura dello sfondo, ma
+     * dentro una finestra nessuno sfoca quello che sta sotto (lo fa solo il compositore,
+     * sotto le finestre): il vetro lascerebbe leggere il testo di sotto. Come i menu di Files. */
+    pennello_colore(p, SUPERFICIE_ELEVATA);
+    riempi_forma(p, &r);
+    ombre_strati_dentro(p, &r, OMBRA_TAB(finestra), OMBRA_N(finestra));
+    int x = v->x + FINESTRA_PADDING, y = v->y + FINESTRA_PADDING;
+    pennello_colore(p, TESTO_PRIMARIO);
+    testo_centrato(p, FONT_SEZIONE_NUOVO, x, y, INTERLINEA_SEZIONE, v->titolo);
+    y += INTERLINEA_SEZIONE;
+    if (v->messaggio[0]) {
+        char righe[AVVISO_RIGHE][MAX_RIGA_NOME];
+        int n = avviso_righe(v, righe);
+        y += SPAZIO_8;
+        pennello_colore(p, TESTO_SECONDARIO);
+        for (int i = 0; i < n; i++, y += INTERLINEA_CORPO)
+            testo_centrato(p, FONT_CORPO, x, y, INTERLINEA_CORPO, righe[i]);
+    }
+    pennello_ripristina(p);
+}
+
+/* Il riquadro prende i clic che non vanno ai pulsanti: cosi' sotto non arriva niente. (Se
+ * l'avviso e' bloccante, i clic fuori dal riquadro li butta via la finestra.) */
+static inline void avviso_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
+    (void)w; (void)x; (void)y; (void)pulsanti;
+}
+
+static inline void avviso_chiudi(struct avviso *v);
+
+static inline void avviso_rispondi(struct avviso *v, int conferma) {
+    avviso_chiudi(v);
+    if (v->al_risposta) v->al_risposta(v, conferma, v->dati);
+}
+
+static inline void avviso_tasto(struct widget *w, unsigned int tasto) {
+    struct avviso *v = (struct avviso *)w;
+    if (tasto == '\n' || tasto == '\r') avviso_rispondi(v, 1);
+    else if (tasto == 27) avviso_rispondi(v, 0);
+}
+
+static const struct tipo_widget tipo_avviso = {
+    0, 0, avviso_disegna, avviso_puntatore, avviso_tasto, 0, 0, 0, 1
+};
+
+static inline void avviso_al_annulla(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, 0); }
+static inline void avviso_al_conferma(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, 1); }
+
+/* Prepara l'avviso (chiuso). 'tipo' e' il tipo del pulsante di conferma (PERICOLO,
+ * PRIMARIO...), 'bloccante' 1 o 0. Annulla si puo' rinominare con avviso_annulla. */
+static inline void avviso_prepara(struct avviso *v, const char *titolo, const char *messaggio,
+                                  const char *conferma, int tipo, int bloccante,
+                                  al_risposta_avviso al_risposta, void *dati) {
+    *v = (struct avviso){ .base = { .tipo = &tipo_avviso, .nascosto = 1 }, .bloccante = bloccante,
+                          .al_risposta = al_risposta, .dati = dati };
+    copia_testo(v->titolo, titolo, MAX_TESTO_WIDGET);
+    copia_testo(v->messaggio, messaggio ? messaggio : "", sizeof v->messaggio);
+    pulsante_prepara(&v->annulla, "Annulla", NESSUNA_ICONA, avviso_al_annulla, v);
+    pulsante_prepara(&v->conferma, conferma, NESSUNA_ICONA, avviso_al_conferma, v);
+    pulsante_stile(&v->conferma, tipo, MISURA_M);
+    widget_aggiungi(&v->base, &v->annulla.base);
+    widget_aggiungi(&v->base, &v->conferma.base);
+}
+
+/* Cambia il testo di Annulla (per esempio "Apri cartella" in un avviso non bloccante). */
+static inline void avviso_annulla(struct avviso *v, const char *testo) {
+    copia_testo(v->annulla.testo, testo, MAX_TESTO_WIDGET);
+}
+
 /* --- la finestra: la radice dell'albero, con la barra del titolo --- */
 
 struct finestra_tk;
@@ -786,7 +1024,32 @@ struct finestra_tk {
     int da_chiudere;
     unsigned int pulsanti_prima;
     struct chiamata_tk chiamate[MAX_CHIAMATE];   /* i "chiamami ogni tanto" */
+    struct avviso *avviso;             /* l'avviso della finestra (finestra_tk_avviso), o 0 */
+    int mini;                          /* 1: mini finestra (finestra_tk_mini) */
 };
+
+/* L'altezza della testata: TITOLO_ALTEZZA (40), o ALTEZZA_BARRA_MINI (28) nella mini finestra. */
+static inline int testata_altezza(const struct finestra_tk *f) {
+    return f->mini ? ALTEZZA_BARRA_MINI : TITOLO_ALTEZZA;
+}
+/* Il lato dei comandi (riduci, chiudi): S (32), o XS (24) nella mini finestra. */
+static inline int comando_lato(const struct finestra_tk *f) { return f->mini ? ALTEZZA_XS : ALTEZZA_S; }
+/* Lo spazio dei comandi a destra (e, uguale, quello vuoto a sinistra che centra il titolo):
+ * riduci e chiudi con i margini (76), o nella mini finestra il solo chiudi (4 + 24 = 28). */
+static inline int comandi_larghezza(const struct finestra_tk *f) {
+    return f->mini ? TITOLO_MARGINE + ALTEZZA_XS : TITOLO_COMANDI_LARGHEZZA;
+}
+/* Il margine intorno al contenuto: FINESTRA_PADDING (24), SPAZIO_16 nella mini finestra. */
+static inline int finestra_padding(const struct finestra_tk *f) { return f->mini ? SPAZIO_16 : FINESTRA_PADDING; }
+
+/* L'avviso e' aperto. Se bloccante, la finestra sotto non si usa. */
+static inline struct avviso *finestra_tk_avviso_aperto(const struct finestra_tk *f) {
+    return f->avviso && !f->avviso->base.nascosto ? f->avviso : 0;
+}
+static inline int finestra_tk_bloccata(const struct finestra_tk *f) {
+    struct avviso *v = finestra_tk_avviso_aperto(f);
+    return v && v->bloccante;
+}
 
 /* La finestra in cui sta un widget: la radice del suo albero. */
 static inline struct finestra_tk *widget_finestra(struct widget *w) {
@@ -823,20 +1086,24 @@ static inline void widget_cambiato(struct widget *w) {
  * l'applicazione mette nella finestra comincia sempre sotto di lei (finestra_tk_corpo).
  *
  * Dove stanno i due comandi nella testata: riduci e chiudi, a destra. */
-static inline int comando_x(const struct widget *w, int chiudi) {
-    return w->l - TITOLO_MARGINE - ALTEZZA_S - (chiudi ? 0 : ALTEZZA_S + TITOLO_MARGINE);
+static inline int comando_x(const struct finestra_tk *f, int chiudi) {
+    int lato = comando_lato(f);
+    return f->base.l - TITOLO_MARGINE - lato - (chiudi ? 0 : lato + TITOLO_MARGINE);
 }
-#define COMANDO_Y TITOLO_MARGINE
+/* centrati in altezza nella testata: 4 nella normale (4 + 32 + 4), 2 nella mini (2 + 24 + 2) */
+static inline int comando_y(const struct finestra_tk *f) { return (testata_altezza(f) - comando_lato(f)) / 2; }
 
-static inline int su_comando(const struct widget *w, int chiudi, int x, int y) {
-    int cx = comando_x(w, chiudi);
-    return x >= cx && x < cx + ALTEZZA_S && y >= COMANDO_Y && y < COMANDO_Y + ALTEZZA_S;
+/* Il puntatore e' sopra il comando? La mini finestra non si riduce: ha solo chiudi. */
+static inline int su_comando(const struct finestra_tk *f, int chiudi, int x, int y) {
+    if (f->mini && !chiudi) return 0;
+    int cx = comando_x(f, chiudi), cy = comando_y(f), lato = comando_lato(f);
+    return x >= cx && x < cx + lato && y >= cy && y < cy + lato;
 }
 
 /* Dove comincia il corpo della finestra: sotto la testata col suo divisore e, se c'e' (e non
  * e' nascosta), sotto la barra degli strumenti. */
 static inline int finestra_tk_corpo(const struct finestra_tk *f) {
-    return TITOLO_ALTEZZA + TITOLO_DIVISORE +
+    return testata_altezza(f) + TITOLO_DIVISORE +
            (f->strumenti && !f->strumenti->nascosto ? ALTEZZA_BARRA : 0);
 }
 
@@ -849,15 +1116,16 @@ static inline void finestra_tk_misura(struct widget *w, int *l, int *a) {
     int cl = 0, ca = 0;
     if (w->quanti_figli) widget_misura(w->figli[0], &cl, &ca);
     /* il titolo sta tra i due gruppi (lo spazio vuoto e i comandi), con un po' d'aria */
-    int barra = 2 * (TITOLO_COMANDI_LARGHEZZA + SPAZIO_8) + larghezza_testo(FONT_TITOLO_FINESTRA, f->titolo);
-    *l = 2 * FINESTRA_PADDING + cl;
+    int barra = 2 * (comandi_larghezza(f) + SPAZIO_8) +
+                larghezza_testo(f->mini ? FONT_ETICHETTA : FONT_TITOLO_FINESTRA, f->titolo);
+    *l = 2 * finestra_padding(f) + cl;
     if (*l < barra) *l = barra;
     if (f->strumenti && !f->strumenti->nascosto) {
         int sl, sa;
         widget_misura(f->strumenti, &sl, &sa);
         if (*l < sl) *l = sl;
     }
-    *a = finestra_tk_corpo(f) + 2 * FINESTRA_PADDING + ca;
+    *a = finestra_tk_corpo(f) + 2 * finestra_padding(f) + ca;
 }
 
 static inline void finestra_tk_disponi(struct widget *w) {
@@ -865,12 +1133,12 @@ static inline void finestra_tk_disponi(struct widget *w) {
     if (!w->quanti_figli) return;
     if (f->strumenti) {                     /* tutta la larghezza, subito sotto il divisore */
         f->strumenti->x = 0;
-        f->strumenti->y = TITOLO_ALTEZZA + TITOLO_DIVISORE;
+        f->strumenti->y = testata_altezza(f) + TITOLO_DIVISORE;
         f->strumenti->l = w->l;
         f->strumenti->a = ALTEZZA_BARRA;
     }
     int corpo = finestra_tk_corpo(f);
-    int margine = f->senza_margine ? 0 : FINESTRA_PADDING;
+    int margine = f->senza_margine ? 0 : finestra_padding(f);
     struct widget *c = w->figli[0];
     c->x = margine;
     c->y = corpo + margine;
@@ -883,7 +1151,7 @@ static inline void finestra_tk_disponi(struct widget *w) {
  * soli angoli in basso arrotondati. Quello che sta nel contenuto (la barra degli strumenti,
  * il widget dell'applicazione) lo disegnano i figli, dopo. */
 static inline void finestra_tk_contenuto_disegna(struct finestra_tk *f, struct pennello *p) {
-    int inizio = TITOLO_ALTEZZA + TITOLO_DIVISORE;
+    int inizio = testata_altezza(f) + TITOLO_DIVISORE;
     struct tondo contenuto = { 0, inizio, f->base.l, f->base.a - inizio,
                                { 0, 0, RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO } };
     pennello_colore(p, SUPERFICIE_VETRO);
@@ -898,38 +1166,42 @@ static inline void finestra_tk_contenuto_disegna(struct finestra_tk *f, struct p
  * coperture dei loro bordi dritti sono piene, quindi in mezzo non resta nessuna cucitura. */
 static inline void finestra_tk_titolo_disegna(struct finestra_tk *f, struct pennello *p) {
     struct widget *w = &f->base;
-    struct tondo testata = { 0, 0, w->l, TITOLO_ALTEZZA,
+    int alta = testata_altezza(f);
+    struct tondo testata = { 0, 0, w->l, alta,
                              { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
     pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &testata);
     pennello_colore(p, BORDO_SEPARATORE);
-    riempi_rettangolo(p, 0, TITOLO_ALTEZZA, w->l, TITOLO_DIVISORE);
+    riempi_rettangolo(p, 0, alta, w->l, TITOLO_DIVISORE);
 
     /* il titolo, al centro della finestra: tra lo spazio vuoto a sinistra (largo quanto i
-     * comandi) e i comandi non entra mai nei comandi, un titolo lungo si taglia */
+     * comandi) e i comandi non entra mai nei comandi, un titolo lungo si taglia. Nella mini
+     * finestra e' piu' piccolo (l'etichetta, 12). */
+    const struct font *font = f->mini ? FONT_ETICHETTA : FONT_TITOLO_FINESTRA;
     pennello_salva(p);
-    int margine = TITOLO_COMANDI_LARGHEZZA + SPAZIO_8;
-    pennello_ritaglia(p, margine, 0, w->l - 2 * margine, TITOLO_ALTEZZA);
-    pennello_colore(p, f->attiva ? TESTO_PRIMARIO : TESTO_SECONDARIO);
-    testo_centrato(p, FONT_TITOLO_FINESTRA, (w->l - larghezza_testo(FONT_TITOLO_FINESTRA, f->titolo)) / 2, 0,
-                   TITOLO_ALTEZZA, f->titolo);
+    int margine = comandi_larghezza(f) + SPAZIO_8;
+    pennello_ritaglia(p, margine, 0, w->l - 2 * margine, alta);
+    int attiva = f->attiva && !finestra_tk_bloccata(f);   /* sotto un avviso bloccante si spegne */
+    pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_SECONDARIO);
+    testo_centrato(p, font, (w->l - larghezza_testo(font, f->titolo)) / 2, 0, alta, f->titolo);
     pennello_ripristina(p);
 
-    /* i comandi: due pulsanti ghost S tondi. Senza fondo a riposo; sotto il puntatore
-     * CONTROLLO_SFONDO, premuto CONTROLLO_SFONDO_SOPRA (come ogni ghost del toolkit). */
+    /* i comandi: pulsanti ghost tondi (S, o XS nella mini finestra, che ha solo chiudi).
+     * Senza fondo a riposo; sotto il puntatore CONTROLLO_SFONDO, premuto
+     * CONTROLLO_SFONDO_SOPRA (come ogni ghost del toolkit). */
+    int lato = comando_lato(f), segno = f->mini ? ICONA_XS : ICONA_S, cy = comando_y(f);
     pennello_salva(p);
-    if (!f->attiva) pennello_opacita(p, OPACITA_COMANDI_INATTIVI);
-    for (int chiudi = 0; chiudi < 2; chiudi++) {
-        int cx = comando_x(w, chiudi);
+    if (!attiva) pennello_opacita(p, OPACITA_COMANDI_INATTIVI);
+    for (int chiudi = f->mini ? 1 : 0; chiudi < 2; chiudi++) {
+        int cx = comando_x(f, chiudi);
         int sopra = f->comando_sopra == 1 + chiudi;
         int premuto = sopra && (chiudi ? f->chiudi_premuto : f->riduci_premuto);
         if (sopra) {
             pennello_colore(p, premuto ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
-            riempi_cerchio(p, cx + ALTEZZA_S / 2, COMANDO_Y + ALTEZZA_S / 2, ALTEZZA_S / 2);
+            riempi_cerchio(p, cx + lato / 2, cy + lato / 2, lato / 2);
         }
         pennello_colore(p, TESTO_PRIMARIO);
-        icona(p, chiudi ? ICONA_X : ICONA_MINUS, ICONA_S, cx + (ALTEZZA_S - ICONA_S) / 2,
-              COMANDO_Y + (ALTEZZA_S - ICONA_S) / 2);
+        icona(p, chiudi ? ICONA_X : ICONA_MINUS, segno, cx + (lato - segno) / 2, cy + (lato - segno) / 2);
     }
     pennello_ripristina(p);
 }
@@ -985,6 +1257,19 @@ static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine =
 static inline void finestra_tk_titolo(struct finestra_tk *f, const char *titolo) {
     copia_testo(f->titolo, titolo, MAX_TITOLO);
     f->da_ridisegnare = 1;
+}
+
+/* LA MINI FINESTRA, per le cose secondarie (informazioni su un file, un avanzamento, uno
+ * strumento): testata da ALTEZZA_BARRA_MINI (28) con il titolo piccolo (FONT_ETICHETTA) e il
+ * solo pulsante di chiusura XS (24): non si riduce. Il contenuto ha SPAZIO_16 di margine.
+ * Prima di toolkit_esegui, dopo finestra_tk_prepara. */
+static inline void finestra_tk_mini(struct finestra_tk *f) { f->mini = 1; }
+
+/* Da' alla finestra il suo avviso (chiuso): si apre con avviso_apri. Prima di
+ * toolkit_esegui, dopo finestra_tk_prepara. Una finestra ha un solo avviso alla volta. */
+static inline void finestra_tk_avviso(struct finestra_tk *f, struct avviso *v) {
+    f->avviso = v;
+    v->base.genitore = &f->base;
 }
 
 /* Chiude la finestra, come il pulsante "chiudi": toolkit_esegui torna. */
@@ -1117,8 +1402,9 @@ static inline int barra_strumenti_vuota(struct finestra_tk *f, int x, int y) {
  * (GRUPPO_ELEMENTO). Se il gruppo e' a scelta, la voce accesa e' SOLLEVATA (SUPERFICIE_ELEVATA
  * con l'ombra "sollevato", testo e icona TESTO_PRIMARIO) e le altre sono senza fondo con
  * TESTO_SECONDARIO; sotto il puntatore, una voce spenta prende un fondo piatto leggero
- * (CONTROLLO_SFONDO). Nei gruppi non a scelta (indietro / avanti) le voci non si accendono
- * mai: sono ghost di 24 con il testo TESTO_PRIMARIO. */
+ * (CONTROLLO_SFONDO). Nei gruppi non a scelta (indietro / avanti: il "Gruppo di azioni" del
+ * disegno) le voci non si accendono mai: sono ghost di 24 con testo e icona TESTO_SECONDARIO,
+ * CONTROLLO_SFONDO sotto il puntatore e CONTROLLO_SFONDO_SOPRA premute. */
 struct pulsante_barra;
 typedef void (*al_clic_pulsante_barra)(struct pulsante_barra *b, void *dati);
 
@@ -1159,7 +1445,9 @@ static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) 
     int premuto = b->premuto && b->dentro;
     int sopra = w->sopra && !w->disabilitato;
     struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
-    unsigned int colore = a_scelta ? TESTO_SECONDARIO : TESTO_PRIMARIO;
+    /* nel gruppo: secondario (la voce scelta, e sotto il puntatore in un gruppo a scelta,
+     * primario); fuori da un gruppo: un ghost normale, primario */
+    unsigned int colore = gruppo ? TESTO_SECONDARIO : TESTO_PRIMARIO;
 
     if (a_scelta && b->acceso) {
         /* la voce scelta: SOLLEVATA dentro il binario. Le ombre non devono uscire dalla
@@ -1714,13 +2002,24 @@ static inline void barra_scorrimento_posto(struct barra_scorrimento *b, int x, i
 
 /* --- il ciclo degli eventi --- */
 
+/* Disegna tutta la finestra: l'albero e, sopra a tutto, l'avviso aperto (velo, ombra,
+ * riquadro). La usa anche l'anteprima (strumenti/anteprima). */
+static inline void toolkit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
+    widget_disegna(&f->base, p);
+    struct avviso *v = finestra_tk_avviso_aperto(f);
+    if (v) {
+        avviso_sotto(v, p, f->base.l, f->base.a);
+        widget_disegna(&v->base, p);
+    }
+}
+
 static inline int toolkit_ridisegna(struct finestra_tk *f) {
     unsigned int *pixel = finestra_tela(&f->finestra);
     if (!pixel) return 0;
     struct tela t = { pixel, f->base.l, f->base.a };
     struct pennello p;
     pennello_prepara(&p, &t);
-    widget_disegna(&f->base, &p);
+    toolkit_disegna_tutto(f, &p);
     f->da_ridisegnare = 0;
     return finestra_mostra(&f->finestra) >= 0;
 }
@@ -1737,9 +2036,20 @@ static inline void toolkit_sotto(struct finestra_tk *f, struct widget *w) {
     if (w && w->tipo->sopra_cambiato) w->tipo->sopra_cambiato(w);
 }
 
+/* Il widget sotto il puntatore, con l'avviso: prima i suoi pulsanti; se e' bloccante, fuori
+ * dal riquadro non c'e' niente. */
+static inline struct widget *toolkit_widget_sotto(struct finestra_tk *f, int x, int y) {
+    struct avviso *v = finestra_tk_avviso_aperto(f);
+    if (v) {
+        struct widget *w = widget_sotto(&v->base, x, y);
+        if (w || v->bloccante) return w;
+    }
+    return widget_sotto(&f->base, x, y);
+}
+
 /* La rotella: al widget sotto il puntatore, o al primo dei suoi genitori che la vuole. */
 static inline void toolkit_rotella(struct finestra_tk *f, int x, int y, int sx, int sy) {
-    if (y < TITOLO_ALTEZZA) return;
+    if (y < testata_altezza(f) || finestra_tk_bloccata(f)) return;
     for (struct widget *w = widget_in(&f->base, x, y); w; w = w->genitore)
         if (w->tipo->rotella) { w->tipo->rotella(w, sx, sy); return; }
 }
@@ -1772,25 +2082,26 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
 
     /* riduci e chiudi si accendono sotto il puntatore (non mentre si tiene premuto
      * altrove, su un widget) */
-    int comando = f->catturato ? 0 : su_comando(&f->base, 1, x, y) ? 2 : su_comando(&f->base, 0, x, y) ? 1 : 0;
+    int bloccata = finestra_tk_bloccata(f);   /* un avviso bloccante: niente comandi ne' trascinami */
+    int comando = f->catturato || bloccata ? 0 : su_comando(f, 1, x, y) ? 2 : su_comando(f, 0, x, y) ? 1 : 0;
     if (comando != f->comando_sopra) { f->comando_sopra = comando; f->da_ridisegnare = 1; }
 
     if (appena_premuto) {
         if (comando == 2 && sinistro) { f->chiudi_premuto = 1; f->da_ridisegnare = 1; return; }
         if (comando == 1 && sinistro) { f->riduci_premuto = 1; f->da_ridisegnare = 1; return; }
         /* la barra del titolo, e lo spazio vuoto della barra degli strumenti: "trascinami" */
-        if (y < TITOLO_ALTEZZA || barra_strumenti_vuota(f, x, y)) {
+        if (!bloccata && (y < testata_altezza(f) || barra_strumenti_vuota(f, x, y))) {
             if (sinistro) finestra_trascinami(&f->finestra);
             return;
         }
-        f->catturato = widget_sotto(&f->base, x, y);
+        f->catturato = toolkit_widget_sotto(f, x, y);
         toolkit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
     }
     if (f->chiudi_premuto) {
         if (!sinistro) {
             f->chiudi_premuto = 0;
             f->da_ridisegnare = 1;
-            if (su_comando(&f->base, 1, x, y)) f->da_chiudere = 1;
+            if (su_comando(f, 1, x, y)) f->da_chiudere = 1;
         }
         return;
     }
@@ -1798,7 +2109,7 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
         if (!sinistro) {
             f->riduci_premuto = 0;
             f->da_ridisegnare = 1;
-            if (su_comando(&f->base, 0, x, y)) finestra_riducimi(&f->finestra);
+            if (su_comando(f, 0, x, y)) finestra_riducimi(&f->finestra);
         }
         return;
     }
@@ -1808,8 +2119,32 @@ static inline void toolkit_puntatore(struct finestra_tk *f, int x, int y, unsign
         if (giu) return;
         f->catturato = 0;
     }
-    toolkit_sotto(f, widget_sotto(&f->base, x, y));
+    toolkit_sotto(f, toolkit_widget_sotto(f, x, y));
     if (!giu && f->sotto && f->sotto->tipo->movimento) f->sotto->tipo->movimento(f->sotto, x, y);
+}
+
+/* Apre l'avviso della finestra, al centro, e gli da' la tastiera (Invio, Esc). */
+static inline void avviso_apri(struct avviso *v) {
+    struct finestra_tk *f = widget_finestra(&v->base);
+    v->base.nascosto = 0;
+    v->annulla.premuto = v->conferma.premuto = 0;
+    avviso_sistema(v, f->base.l, f->base.a);
+    if (f->base.tipo == &tipo_finestra_tk) {
+        toolkit_sotto(f, 0);
+        toolkit_fuoco(f, &v->base);
+    }
+    widget_cambiato(&v->base);
+}
+
+static inline void avviso_chiudi(struct avviso *v) {
+    struct finestra_tk *f = widget_finestra(&v->base);
+    v->base.nascosto = 1;
+    if (f->base.tipo == &tipo_finestra_tk) {
+        if (f->con_fuoco == &v->base || f->con_fuoco == &v->annulla.base ||
+            f->con_fuoco == &v->conferma.base) toolkit_fuoco(f, 0);
+        if (f->sotto == &v->annulla.base || f->sotto == &v->conferma.base) toolkit_sotto(f, 0);
+    }
+    widget_cambiato(&v->base);
 }
 
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il
@@ -1821,6 +2156,7 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
     f->base.l = l;
     f->base.a = a;
     widget_disponi(&f->base);
+    if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);   /* aperto prima di avere una misura */
     if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
     if (!toolkit_ridisegna(f)) return 1;
 
@@ -1861,6 +2197,8 @@ static inline int toolkit_esegui(struct finestra_tk *f) {
             toolkit_sotto(f, 0);
         } else if (n.tipo == ROTELLA) {
             toolkit_rotella(f, n.x, n.y, n.scatti_x, n.scatti_y);
+        } else if (n.tipo == TASTO && finestra_tk_bloccata(f)) {
+            avviso_tasto(&f->avviso->base, n.tasto);   /* sotto un avviso bloccante: solo lui */
         } else if (n.tipo == TASTO && f->con_fuoco) {
             f->con_fuoco->tipo->tasto(f->con_fuoco, n.tasto);
         } else if (n.tipo == FUOCO) {

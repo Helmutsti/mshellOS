@@ -60,8 +60,10 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right',
          # Files: la barra laterale, i menu, gli stati della cartella
          'folder', 'folder-open', 'folder-plus', 'pencil', 'copy', 'info', 'trash-2',
-         'arrow-up-down', 'image', 'file', 'terminal', 'lock']
-LATI = [12, 14, 16, 18, 20, 24, 32]   # in ordine: icona() prende la piu' grande che ci sta
+         'arrow-up-down', 'image', 'file', 'terminal', 'lock',
+         # la userbar (le app fissate) e il riavvio di Attivita
+         'globe', 'mail', 'rotate-ccw']
+LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 def svg_in_png(file, l, a):
     return Image.open(io.BytesIO(subprocess.check_output(

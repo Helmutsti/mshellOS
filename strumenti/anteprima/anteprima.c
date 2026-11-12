@@ -131,7 +131,8 @@ int main(int argc, char **argv) {
     struct tela t = { pixel, l, a };
     struct pennello p;
     pennello_prepara(&p, &t);
-    widget_disegna(&f->base, &p);
+    if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);
+    toolkit_disegna_tutto(f, &p);
 
     int M = 16, L = l + 2 * M, A = a + 2 * M;       /* un po' di sfondo intorno */
     unsigned char *fondo = malloc((size_t)L * A * 3);
