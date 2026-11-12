@@ -158,8 +158,28 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
 - Tempi nella sandbox, prima → dopo (un cambio sotto il puntatore, app + compositore): icona di
   Files 7,2 + 3,6 ms → 0,4 + 0,4 ms; riga di Files 11,2 + 3,5 → 0,4 + 0,6; riga di Attività
   12,8 + 3,7 → 0,4 + 0,8; aprire un menu 12,5 + 3,5 → 1,6 + 0,8; Attività ferma: un ridisegno
-  intero al secondo → niente. Trascinare una finestra resta come prima (8,5 ms a passo, tutto
-  nel compositore: ombra e sfocatura nel posto nuovo).
+  intero al secondo → niente.
+- **Trascinare una finestra** (ramo `difetto-trascina`). Prima a ogni passo il compositore rifaceva
+  l'ombra a strati e il vetro smerigliato di tutta la finestra nel posto nuovo. Ora:
+  - **il vetro dello sfondo da solo** (sfondo e colore di quando non c'è) è calcolato una volta
+    per tutto lo schermo e rifatto solo quando lo sfondo cambia. Ogni pixel del vetro dipende
+    solo da quello che ha intorno (44 pixel): dove lì intorno c'è solo lo sfondo, il vetro della
+    finestra è quello, copiato. Si rifanno davvero solo i pezzi vicini ad altro: una cornice lungo
+    i bordi (lì c'è l'ombra della finestra stessa) e intorno alle finestre che stanno sotto. Se i
+    pezzi sono quasi tutta la finestra (sopra un'altra finestra) si rifà tutto, come prima;
+  - ogni zona da rifare comincia come una copia dello sfondo da solo, già composto;
+  - l'ombra: i colori per i 256 valori della tabella si preparano una volta, e sotto la finestra
+    (dove l'ombra non c'è) non si guarda;
+  - i conti della sfocatura sono più svelti (le somme dei colori insieme, la divisione già fatta,
+    l'ingrandimento in due tempi) e le immagini delle finestre si mescolano due byte alla volta
+    (`sopra_a_riga` e `sopra_a_vero` in `gkit_disegno.h`).
+  I movimenti del mouse arrivati durante una composizione erano già messi insieme (si compone una
+  volta con l'ultima posizione), e si rifà solo il posto di prima e quello di adesso.
+  Tempi nella sandbox, a passo: Files sulla scrivania 6,9 → 2,5 ms; Impostazioni in parte sopra
+  Files 4,8 → 2,1 ms. Il risultato è uguale pixel per pixel: 139 foto prese durante e dopo i
+  trascinamenti (tema chiaro e scuro) sono identiche byte per byte a quelle di prima, e durante la
+  prova ogni vetro rifatto è stato confrontato con quello del calcolo vecchio (525 vetri, nessuna
+  differenza).
 
 **Il puntatore e le finestre dietro.** Una finestra che non ha il fuoco non sente il puntatore
 che passa: riceve solo il clic (che la porta davanti e le dà il fuoco) e la rotella (che la fa

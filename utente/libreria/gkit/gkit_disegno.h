@@ -161,6 +161,32 @@ static inline unsigned int sopra_a(unsigned int sopra, unsigned int sotto) {
     return r;
 }
 
+/* Un premoltiplicato VERO: nessun colore supera la sua opacita' (come quelli di
+ * colore_coperto). */
+static inline int premoltiplicato_vero(unsigned int p) {
+    unsigned int alfa = p >> 24;
+    return ((p >> 16) & 0xFF) <= alfa && ((p >> 8) & 0xFF) <= alfa && (p & 0xFF) <= alfa;
+}
+
+/* sopra_a per un 'sopra' premoltiplicato vero, DUE BYTE ALLA VOLTA. sopra_a fa, per ogni
+ * byte, sopra + diviso_255(sotto * resto). Si possono mettere due byte di 'sotto' in un
+ * numero, a 16 bit di distanza (rosso e blu, poi alfa e verde): ognuno per 'resto' fa al
+ * massimo 255 * 255 + 128 = 65153, che sta nei suoi 16 bit, e anche il "+ (x >> 8)" di
+ * diviso_255 ci sta (65407): i due conti non si toccano e vengono uguali a quelli fatti uno
+ * per uno. Poi si somma 'sopra': se ogni suo byte non supera la sua opacita',
+ * byte + diviso_255(sotto * resto) <= opacita' + resto = 255, quindi non ci sono riporti da
+ * un byte all'altro e la somma e' uguale all'OR di sopra_a. Anche le scorciatoie di sopra_a
+ * vengono uguali: opacita' piena (resto 0) da' 'sopra', 'sotto' vuoto da' 'sopra', opacita'
+ * 0 (e allora 'sopra' e' 0) da' 'sotto'. */
+static inline unsigned int sopra_a_vero(unsigned int sopra, unsigned int sotto) {
+    unsigned int resto = 255 - (sopra >> 24);
+    unsigned int rb = (sotto & 0x00FF00FFu) * resto + 0x00800080u;
+    rb = ((rb + ((rb >> 8) & 0x00FF00FFu)) >> 8) & 0x00FF00FFu;
+    unsigned int ag = ((sotto >> 8) & 0x00FF00FFu) * resto + 0x00800080u;
+    ag = (ag + ((ag >> 8) & 0x00FF00FFu)) & 0xFF00FF00u;
+    return sopra + rb + ag;
+}
+
 /* Il colore del pennello, coperto per 'copertura', gia' premoltiplicato: il pixel da
  * mettere sopra. In 'a' la sua opacita' (0-255): se e' 0 non c'e' niente da mettere. */
 static inline unsigned int colore_coperto(const struct pennello *p, int copertura, unsigned int *a) {
@@ -194,7 +220,7 @@ static inline void copri(struct pennello *p, int x, int y, int copertura) {
  * colore_coperto(p, 256, ...)). E' la parte piu' grande di quasi ogni disegno: l'interno
  * di un rettangolo, di un vetro, di un pulsante. Due scorciatoie, con lo stesso
  * risultato di sopra_a: un colore opaco copre e basta, e il conto di sopra_a si fa su
- * due byte alla volta (vedi qui sotto). */
+ * due byte alla volta (sopra_a_vero, qui sopra). */
 static inline void stendi(unsigned int *d, int n, unsigned int premolt, unsigned int a) {
     if (!a || n <= 0) return;
     unsigned int alfa = premolt >> 24;
@@ -203,29 +229,24 @@ static inline void stendi(unsigned int *d, int n, unsigned int premolt, unsigned
         for (int i = 0; i < n; i++) d[i] = premolt;
         return;
     }
-    /* DUE BYTE ALLA VOLTA. sopra_a fa, per ogni byte, sopra + diviso_255(sotto * resto).
-     * Si possono mettere due byte di 'sotto' in un numero, a 16 bit di distanza (rosso e
-     * blu, poi alfa e verde): ognuno per 'resto' fa al massimo 255 * 255 + 128 = 65153, che
-     * sta nei suoi 16 bit, e anche il "+ (x >> 8)" di diviso_255 ci sta (65407): i due
-     * conti non si toccano e vengono uguali a quelli fatti uno per uno. Poi si somma
-     * 'sopra': se ogni suo byte non supera la sua opacita' (un colore premoltiplicato vero,
-     * come quelli di colore_coperto), byte + diviso_255(sotto * resto) <= opacita' + resto
-     * = 255, quindi non ci sono riporti da un byte all'altro e la somma e' uguale all'OR
-     * di sopra_a. Se no (un'opacita' del pennello fuori misura), si usa sopra_a. */
-    int vero = ((premolt >> 16) & 0xFF) <= alfa && ((premolt >> 8) & 0xFF) <= alfa &&
-               (premolt & 0xFF) <= alfa;
-    if (!vero) {
+    /* due byte alla volta, se il colore e' un premoltiplicato vero; se no (un'opacita' del
+     * pennello fuori misura), sopra_a */
+    if (!premoltiplicato_vero(premolt)) {
         for (int i = 0; i < n; i++) d[i] = sopra_a(premolt, d[i]);
         return;
     }
-    unsigned int resto = 255 - alfa;
+    for (int i = 0; i < n; i++) d[i] = sopra_a_vero(premolt, d[i]);
+}
+
+/* UNA RIGA DI PIXEL premoltiplicati 's' messa sopra 'd': per ogni pixel e' sopra_a, con le
+ * scorciatoie di stendi (opaco: copre e basta; trasparente: niente; il resto due byte alla
+ * volta, se il pixel e' un premoltiplicato vero). Lo usa il compositore per le immagini
+ * delle finestre. */
+static inline void sopra_a_riga(unsigned int *d, const unsigned int *s, int n) {
     for (int i = 0; i < n; i++) {
-        unsigned int sotto = d[i];
-        unsigned int rb = (sotto & 0x00FF00FFu) * resto + 0x00800080u;
-        rb = ((rb + ((rb >> 8) & 0x00FF00FFu)) >> 8) & 0x00FF00FFu;
-        unsigned int ag = ((sotto >> 8) & 0x00FF00FFu) * resto + 0x00800080u;
-        ag = (ag + ((ag >> 8) & 0x00FF00FFu)) & 0xFF00FF00u;
-        d[i] = premolt + rb + ag;
+        unsigned int p = s[i], alfa = p >> 24;
+        if (alfa == 255) d[i] = p;
+        else if (alfa) d[i] = premoltiplicato_vero(p) ? sopra_a_vero(p, d[i]) : sopra_a(p, d[i]);
     }
 }
 

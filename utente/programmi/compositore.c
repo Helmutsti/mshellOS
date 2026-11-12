@@ -98,11 +98,8 @@ static void immagine(int x, int y, int l, int a, const unsigned int *pixel, int 
     /* solo le righe e le colonne che cadono nella zona da rifare (che sta nello schermo) */
     int r0 = zy0 - y > salta ? zy0 - y : salta, r1 = zy1 - y < a ? zy1 - y : a;
     int k0 = zx0 - x > 0 ? zx0 - x : 0,         k1 = zx1 - x < l ? zx1 - x : l;
-    for (int r = r0; r < r1; r++) {
-        unsigned int *d = &disegno[(y + r) * larghezza + x];
-        const unsigned int *da = &pixel[r * l];
-        for (int k = k0; k < k1; k++) d[k] = sopra_a(da[k], d[k]);
-    }
+    for (int r = r0; r < r1 && k0 < k1; r++)
+        sopra_a_riga(&disegno[(y + r) * larghezza + x + k0], &pixel[r * l + k0], k1 - k0);
 }
 
 /* --- le finestre, una per applicazione collegata ---
@@ -201,6 +198,13 @@ static const struct strato_ombra *strati_ombra(const struct finestra_compositore
     return ombra_finestra(quanti);
 }
 
+/* IL BUCO di ogni riga della tabella: le colonne in mezzo dove vale 0 (sotto la finestra),
+ * che disegna_ombra salta. E IL RIENTRO: di quanto stare dentro dai bordi della finestra
+ * perche' sotto non ci sia piu' ombra in nessun punto (gli angoli arrotondati: fuori dalla
+ * curva, ma dentro il rettangolo, l'ombra c'e'). Serve al vetro (vedi pianifica); -1: non c'e'. */
+static unsigned short buchi[MAX_FINESTRE][MAX_ALTEZZA + OMBRA_MARGINE + OMBRA_MARGINE_GIU][2];
+static int rientro[MAX_FINESTRE];
+
 static void prepara_ombra(int i) {
     const struct finestra_compositore *f = &finestre[i];
     int n;
@@ -227,8 +231,36 @@ static void prepara_ombra(int i) {
             int v = (255 - passa) * fuori >> 8;
             ombre[i][y * OMBRA_L(f) + x] = (unsigned char)v;
         }
+    /* i buchi: dalla colonna di mezzo, finche' la tabella vale 0 */
+    int lt = OMBRA_L(f);
+    for (int y = 0; y < OMBRA_A(f); y++) {
+        const unsigned char *riga = &ombre[i][y * lt];
+        int b0 = lt / 2, b1 = lt / 2;
+        if (!riga[b0]) {
+            while (b0 > 0 && !riga[b0 - 1]) b0--;
+            while (b1 < lt && !riga[b1]) b1++;
+        }
+        buchi[i][y][0] = (unsigned short)b0;
+        buchi[i][y][1] = (unsigned short)b1;
+    }
+    /* il rientro: il primo d per cui il rettangolo della finestra stretto di d per parte sta
+     * tutto nei buchi */
+    rientro[i] = -1;
+    for (int d = 0; 2 * d < f->l && 2 * d < f->a && rientro[i] < 0; d++) {
+        int dentro_buco = 1;
+        for (int y = d; y < f->a - d && dentro_buco; y++) {
+            const unsigned short *b = buchi[i][y + OMBRA_MARGINE];
+            dentro_buco = b[0] <= OMBRA_MARGINE + d && b[1] >= OMBRA_MARGINE + f->l - d;
+        }
+        if (dentro_buco) rientro[i] = d;
+    }
 }
 
+/* L'ombra nella zona: per ogni pixel della tabella quello che farebbe copri con il colore
+ * dell'ombra e la copertura del pixel. Il colore da mettere sopra dipende solo dal valore
+ * della tabella: lo si prepara una volta per i 256 valori (con colore_coperto, come copri),
+ * e per ogni pixel lo si mescola e basta (due byte alla volta: e' un premoltiplicato vero).
+ * Il buco di ogni riga (sotto la finestra) si salta. */
 static void disegna_ombra(int i) {
     const struct finestra_compositore *f = &finestre[i];
     int n;
@@ -238,14 +270,25 @@ static void disegna_ombra(int i) {
         if (strati[k].tipo == OMBRA_ESTERNA) { rgb = strati[k].colore & 0xFFFFFF; break; }
     pennello_colore(&pennello, OPACO(rgb));
     int quota = f->ruolo == RUOLO_FINESTRA && i != fuoco ? OMBRA_SENZA_FUOCO : 256;
+    unsigned int colori[256];             /* 0: copri non mette niente */
+    for (int v = 0; v < 256; v++) {
+        int c = ((v + (v >> 7)) * quota) >> 8;
+        unsigned int a = 0, p = c > 0 ? colore_coperto(&pennello, c > 256 ? 256 : c, &a) : 0;
+        colori[v] = v && a ? p : 0;
+    }
     int ox = f->x - OMBRA_MARGINE, oy = f->y - OMBRA_MARGINE;   /* dove comincia l'ombra */
     int y0 = zy0 - oy > 0 ? zy0 - oy : 0, y1 = zy1 - oy < OMBRA_A(f) ? zy1 - oy : OMBRA_A(f);
     int x0 = zx0 - ox > 0 ? zx0 - ox : 0, x1 = zx1 - ox < OMBRA_L(f) ? zx1 - ox : OMBRA_L(f);
-    for (int y = y0; y < y1; y++)
-        for (int x = x0; x < x1; x++) {
-            int v = ombre[i][y * OMBRA_L(f) + x];
-            if (v) copri(&pennello, ox + x, oy + y, ((v + (v >> 7)) * quota) >> 8);
-        }
+    for (int y = y0; y < y1; y++) {
+        const unsigned char *riga = &ombre[i][y * OMBRA_L(f)];
+        unsigned int *d = &disegno[(oy + y) * larghezza + ox];
+        int b0 = buchi[i][y][0], b1 = buchi[i][y][1];
+        int fine = x1 < b0 ? x1 : b0;
+        for (int x = x0; x < fine; x++)
+            if (riga[x]) d[x] = sopra_a_vero(colori[riga[x]], d[x]);
+        for (int x = x0 > b1 ? x0 : b1; x < x1; x++)
+            if (riga[x]) d[x] = sopra_a_vero(colori[riga[x]], d[x]);
+    }
 }
 
 /* IL VETRO SMERIGLIATO. Sotto ogni finestra si sfoca quello che c'e' dietro: ogni pixel
@@ -269,7 +312,17 @@ static void disegna_ombra(int i) {
  * pesata dei quattro vicini di quella piccola) e la si tiene da parte, IL VETRO della finestra
  * ('vetri'): a ogni composizione lo si copia dentro la forma arrotondata, solo nelle zone da
  * rifare. Cosi' quando cambia solo un pezzo di una finestra (una riga sotto il puntatore) non
- * si rifanno i conti dell'ingrandimento, che erano piu' di meta' del lavoro. */
+ * si rifanno i conti dell'ingrandimento, che erano piu' di meta' del lavoro.
+ *
+ * LA FINESTRA CHE SI SPOSTA. Il vetro va rifatto a ogni passo, ma quasi tutto quello che c'e'
+ * dietro e' lo sfondo, che non cambia. Ogni pixel del vetro dipende solo dalla scena a meno
+ * di 'dipendenza' pixel da lui (i conti qui sotto sono tutti con numeri interi, e lontano dai
+ * bordi della copia piccola danno lo stesso numero dovunque stia la copia). Quindi dove li'
+ * intorno c'e' solo lo sfondo, il vetro e' quello dello SFONDO DA SOLO, uguale pixel per
+ * pixel: lo si calcola una volta per tutto lo schermo ('vetro_fondo', rifatto solo quando lo
+ * sfondo cambia) e lo si copia. Si rifanno davvero solo i PEZZI vicini a quello che non e'
+ * sfondo: l'ombra della finestra stessa (una cornice lungo i bordi) e le finestre che le
+ * stanno sotto (vedi pianifica). */
 #define SCALA          4    /* la copia rimpicciolita: un pixel ogni 4x4 */
 static int raggio_media;    /* sfocatura_finestra() / SCALA / 2 = 3: medie di 7 pixel
                              * rimpiccioliti (28 veri), tre volte. Lo si chiede a UIKit in main */
@@ -281,31 +334,49 @@ struct sfocata {
     int x, y, l, a;         /* dove sta, in pixel rimpiccioliti (x * SCALA = pixel veri) */
     unsigned int pixel[PICCOLA_L * PICCOLA_A];
 };
-static struct sfocata sfocate[MAX_FINESTRE];
-/* il vetro di ogni finestra: la sfocatura gia' ingrandita, l x a pixel (0x00RRGGBB) */
+static struct sfocata piccola;   /* la copia piccola su cui si lavora (una alla volta) */
+/* il vetro di ogni finestra: la sfocatura gia' ingrandita, l x a pixel (0x00RRGGBB); valgono
+ * solo i pixel che stanno sullo schermo */
 static unsigned int vetri[MAX_FINESTRE][MAX_LARGHEZZA * MAX_ALTEZZA];
-static unsigned int riga_media[PICCOLA_L > PICCOLA_A ? PICCOLA_L : PICCOLA_A];
+
+/* LE MEDIE. raggio_media non va oltre MAX_RAGGIO_MEDIA (main): medie piu' larghe di 33 pixel
+ * piccoli (132 veri) non servono a nessun vetro. La divisione della media e' gia' fatta per
+ * ogni somma possibile (una divisione per ogni pixel e colore costava piu' di tutto il resto). */
+#define MAX_RAGGIO_MEDIA 16
+static unsigned short diviso_media[(2 * MAX_RAGGIO_MEDIA + 1) * 255 + 1];
+
+/* I tre colori di un pixel in un numero a 64 bit, a 21 bit di distanza ("corsie"): la somma
+ * di una media (al massimo 33 * 255) sta nella sua corsia, e si fanno tutti e tre insieme. */
+#define CORSIA 0x1FFFFFull
+static unsigned long long corsie[2][(PICCOLA_L > PICCOLA_A ? PICCOLA_L : PICCOLA_A) + 2 * MAX_RAGGIO_MEDIA + 2];
 
 /* La media scorrevole su una fila di n pixel (passo 'salto' tra uno e l'altro), fatta
- * tre volte. Ai bordi si ripete il pixel del bordo. */
+ * tre volte. Ai bordi si ripete il pixel del bordo (la fila si allunga di raggio_media pixel
+ * uguali al bordo, da ogni parte). */
 static void media_fila(unsigned int *fila, int n, int salto) {
-    for (int volta = 0; volta < 3; volta++) {
-        for (int k = 0; k < 24; k += 8) {
-            int somma = 0;
-            for (int i = -raggio_media; i <= raggio_media; i++) {
-                int j = i < 0 ? 0 : i >= n ? n - 1 : i;
-                somma += (fila[j * salto] >> k) & 0xFF;
-            }
-            for (int i = 0; i < n; i++) {
-                riga_media[i] = (riga_media[i] & ~(0xFFu << k)) |
-                                (unsigned int)(somma / (2 * raggio_media + 1)) << k;
-                int esce = i - raggio_media, entra = i + raggio_media + 1;
-                somma -= (fila[(esce < 0 ? 0 : esce) * salto] >> k) & 0xFF;
-                somma += (fila[(entra >= n ? n - 1 : entra) * salto] >> k) & 0xFF;
-            }
-        }
-        for (int i = 0; i < n; i++) fila[i * salto] = riga_media[i];
+    int r = raggio_media;
+    unsigned long long *a = corsie[0] + r, *b = corsie[1] + r;
+    for (int i = 0; i < n; i++) {
+        unsigned int p = fila[i * salto];
+        a[i] = ((p >> 16) & 0xFF) | (unsigned long long)((p >> 8) & 0xFF) << 21 |
+               (unsigned long long)(p & 0xFF) << 42;
     }
+    for (int volta = 0; volta < 3; volta++) {
+        for (int k = 1; k <= r; k++) a[-k] = a[0];
+        for (int k = 1; k <= r + 1; k++) a[n - 1 + k] = a[n - 1];
+        unsigned long long somma = 0;
+        for (int k = -r; k <= r; k++) somma += a[k];
+        for (int i = 0; i < n; i++) {
+            b[i] = diviso_media[somma & CORSIA] |
+                   (unsigned long long)diviso_media[(somma >> 21) & CORSIA] << 21 |
+                   (unsigned long long)diviso_media[somma >> 42] << 42;
+            somma += a[i + r + 1] - a[i - r];   /* entra uno, esce uno */
+        }
+        unsigned long long *t = a; a = b; b = t;
+    }
+    for (int i = 0; i < n; i++)
+        fila[i * salto] = (unsigned int)(a[i] & 0xFF) << 16 | (unsigned int)((a[i] >> 21) & 0xFF) << 8 |
+                          (unsigned int)(a[i] >> 42);
 }
 
 /* Dove sta la copia piccola della finestra f, in pixel rimpiccioliti. */
@@ -316,69 +387,262 @@ static void posto_sfocata(const struct finestra_compositore *f, int *x, int *y, 
     *a = f->a / SCALA + 2 * BORDO_PICCOLO + 2;
 }
 
-/* QUELLO CHE GUARDA lo smerigliato della finestra f: i pixel della scena che
- * prepara_sfocatura legge (fuori dallo schermo legge il bordo, quindi si taglia). */
+/* QUELLO CHE GUARDA una copia piccola: i pixel della scena che sfoca legge (fuori dallo
+ * schermo legge il bordo, quindi si taglia). */
 static int dentro(int v, int min, int max) { return v < min ? min : v > max ? max : v; }
 
-static struct zona guardata(const struct finestra_compositore *f) {
-    int x, y, l, a;
-    posto_sfocata(f, &x, &y, &l, &a);
+static struct zona letta(int x, int y, int l, int a) {
     return (struct zona){ dentro(x * SCALA, 0, larghezza - 1), dentro(y * SCALA, 0, altezza - 1),
                           dentro((x + l) * SCALA - 1, 0, larghezza - 1) + 1,
                           dentro((y + a) * SCALA - 1, 0, altezza - 1) + 1 };
 }
 
-/* Sfoca quello che c'e' adesso nella scena dietro la finestra i (e un po' intorno). */
-static void prepara_sfocatura(int i, struct sfocata *s) {
-    const struct finestra_compositore *f = &finestre[i];
-    posto_sfocata(f, &s->x, &s->y, &s->l, &s->a);
-    /* 1. rimpicciolire: ogni pixel piccolo e' la media di 4x4 pixel della scena */
-    for (int v = 0; v < s->a; v++)
-        for (int u = 0; u < s->l; u++) {
-            unsigned int r = 0, g = 0, b = 0;
-            for (int dy = 0; dy < SCALA; dy++)
-                for (int dx = 0; dx < SCALA; dx++) {
-                    int x = (s->x + u) * SCALA + dx, y = (s->y + v) * SCALA + dy;
-                    x = x < 0 ? 0 : x >= larghezza ? larghezza - 1 : x;   /* fuori: il bordo */
-                    y = y < 0 ? 0 : y >= altezza ? altezza - 1 : y;
-                    unsigned int px = disegno[y * larghezza + x];
-                    r += (px >> 16) & 0xFF; g += (px >> 8) & 0xFF; b += px & 0xFF;
-                }
-            s->pixel[v * s->l + u] = (r / (SCALA * SCALA)) << 16 | (g / (SCALA * SCALA)) << 8 |
-                                     b / (SCALA * SCALA);
+/* quello che guarda lo smerigliato intero della finestra f */
+static struct zona guardata(const struct finestra_compositore *f) {
+    int x, y, l, a;
+    posto_sfocata(f, &x, &y, &l, &a);
+    return letta(x, y, l, a);
+}
+
+/* Sfoca la scena (il disegno, o lo sfondo da solo) nella copia piccola s, gia' messa al suo
+ * posto. 1. rimpicciolire: ogni pixel piccolo e' la media di 4x4 pixel della scena (fuori
+ * dallo schermo, il bordo): per ogni riga piccola prima le somme delle SCALA righe vere,
+ * colonna per colonna, poi a gruppi di SCALA colonne. Le somme del rosso e del blu stanno in
+ * un numero solo, a 16 bit di distanza (al massimo 16 * 255 ciascuna: non si toccano).
+ * 2. e 3. le medie: tutte le righe, poi tutte le colonne. */
+static unsigned int somme_rb[MAX_LARGHEZZA], somme_g[MAX_LARGHEZZA];
+
+static void sfoca(const unsigned int *scena, struct sfocata *s) {
+    int xa = s->x * SCALA, xb = (s->x + s->l) * SCALA;
+    int ca = xa > 0 ? xa : 0, cb = xb < larghezza ? xb : larghezza;   /* le colonne lette */
+    for (int v = 0; v < s->a; v++) {
+        const unsigned int *righe[SCALA];
+        for (int dy = 0; dy < SCALA; dy++)
+            righe[dy] = &scena[dentro((s->y + v) * SCALA + dy, 0, altezza - 1) * larghezza];
+        for (int x = ca; x < cb; x++) {
+            unsigned int rb = 0, g = 0;
+            for (int dy = 0; dy < SCALA; dy++) {
+                unsigned int px = righe[dy][x];
+                rb += px & 0x00FF00FFu;
+                g += (px >> 8) & 0xFF;
+            }
+            somme_rb[x] = rb;
+            somme_g[x] = g;
         }
-    /* 2. e 3. le medie: tutte le righe, poi tutte le colonne */
+        unsigned int *dst = &s->pixel[v * s->l];
+        for (int u = 0; u < s->l; u++) {
+            int x0 = (s->x + u) * SCALA;
+            unsigned int rb = 0, g = 0;
+            if (x0 >= 0 && x0 + SCALA <= larghezza) {
+                for (int dx = 0; dx < SCALA; dx++) { rb += somme_rb[x0 + dx]; g += somme_g[x0 + dx]; }
+            } else {
+                for (int dx = 0; dx < SCALA; dx++) {
+                    int x = dentro(x0 + dx, 0, larghezza - 1);
+                    rb += somme_rb[x];
+                    g += somme_g[x];
+                }
+            }
+            dst[u] = ((rb >> 16) / (SCALA * SCALA)) << 16 | (g / (SCALA * SCALA)) << 8 |
+                     (rb & 0xFFFF) / (SCALA * SCALA);
+        }
+    }
     for (int v = 0; v < s->a; v++) media_fila(&s->pixel[v * s->l], s->l, 1);
     for (int u = 0; u < s->l; u++) media_fila(&s->pixel[u], s->a, s->l);
 }
 
-/* Ingrandisce la sfocatura alla misura della finestra, nel suo vetro: tutti i suoi pixel, anche
- * quelli fuori dallo schermo (non si usano, ma cosi' il vetro e' sempre intero). */
-static void ingrandisci_sfocatura(int i, const struct sfocata *s) {
-    const struct finestra_compositore *f = &finestre[i];
-    unsigned int *vetro = vetri[i];
-    for (int r = 0; r < f->a; r++) {
-        int y = f->y + r;
+/* Ingrandisce la copia piccola s nel rettangolo g dello schermo (dentro lo schermo), in 'dst'
+ * (il pixel (x, y) va in dst[(y - oy) * passo + x - ox]). Ogni pixel e' la media pesata dei
+ * quattro vicini della copia piccola: prima in verticale, una volta per riga e per colonna
+ * piccola, poi in orizzontale (gli stessi conti, solo raccolti diversamente: la somma e' la
+ * stessa, intera). Il rosso e il blu insieme in un numero a 64 bit, a 32 bit di distanza. */
+static int colonna_u[MAX_LARGHEZZA], colonna_t[MAX_LARGHEZZA];
+static unsigned long long colonna_rb[PICCOLA_L];
+static unsigned int colonna_g[PICCOLA_L];
+
+static void ingrandisci(const struct sfocata *s, struct zona g, unsigned int *dst, int ox, int oy, int passo) {
+    if (g.x0 >= g.x1 || g.y0 >= g.y1) return;
+    int n = g.x1 - g.x0;
+    for (int k = 0; k < n; k++) {
         /* dove cade il pixel nella copia piccola, in 256esimi (centro su centro) */
+        int fx = ((g.x0 + k) * 256 + 128) / SCALA - 128 - s->x * 256;
+        int ux = fx >> 8, tx = fx & 255;
+        if (ux < 0) { ux = 0; tx = 0; }
+        if (ux >= s->l - 1) { ux = s->l - 2; tx = 255; }
+        colonna_u[k] = ux;
+        colonna_t[k] = tx;
+    }
+    int u0 = colonna_u[0], u1 = colonna_u[n - 1] + 1;
+    for (int y = g.y0; y < g.y1; y++) {
         int fy = (y * 256 + 128) / SCALA - 128 - s->y * 256;
         int vy = fy >> 8, ty = fy & 255;
         if (vy < 0) { vy = 0; ty = 0; }
         if (vy >= s->a - 1) { vy = s->a - 2; ty = 255; }
-        for (int k = 0; k < f->l; k++) {
-            int x = f->x + k;
-            int fx = (x * 256 + 128) / SCALA - 128 - s->x * 256;
-            int ux = fx >> 8, tx = fx & 255;
-            if (ux < 0) { ux = 0; tx = 0; }
-            if (ux >= s->l - 1) { ux = s->l - 2; tx = 255; }
-            const unsigned int *q = &s->pixel[vy * s->l + ux];
-            unsigned int a = q[0], b = q[1], cc = q[s->l], d = q[s->l + 1], px = 0;
-            for (int c = 0; c < 24; c += 8) {
-                int su = ((a >> c) & 0xFF) * (256 - tx) + ((b >> c) & 0xFF) * tx;
-                int giu = ((cc >> c) & 0xFF) * (256 - tx) + ((d >> c) & 0xFF) * tx;
-                px |= (unsigned int)((su * (256 - ty) + giu * ty) >> 16) << c;
-            }
-            vetro[r * f->l + k] = px;
+        const unsigned int *su = &s->pixel[vy * s->l], *giu = su + s->l;
+        for (int u = u0; u <= u1; u++) {
+            unsigned int a = su[u], c = giu[u];
+            unsigned long long r = ((a >> 16) & 0xFF) * (256 - ty) + ((c >> 16) & 0xFF) * ty;
+            unsigned long long b = (a & 0xFF) * (256 - ty) + (c & 0xFF) * ty;
+            colonna_rb[u] = r | b << 32;
+            colonna_g[u] = ((a >> 8) & 0xFF) * (256 - ty) + ((c >> 8) & 0xFF) * ty;
         }
+        unsigned int *d = &dst[(y - oy) * passo + g.x0 - ox];
+        for (int k = 0; k < n; k++) {
+            int u = colonna_u[k];
+            unsigned int t = (unsigned int)colonna_t[k];
+            unsigned long long rb = colonna_rb[u] * (256 - t) + colonna_rb[u + 1] * t;
+            unsigned int gg = colonna_g[u] * (256 - t) + colonna_g[u + 1] * t;
+            d[k] = (unsigned int)((rb >> 16) & 0xFF) << 16 | ((gg >> 16) & 0xFF) << 8 |
+                   (unsigned int)((rb >> 48) & 0xFF);
+        }
+    }
+}
+
+/* Quanto lontano guarda un pixel del vetro, in pixel veri: le colonne piccole che legge
+ * l'ingrandimento (la sua e quella dopo), le 3 medie di raggio_media intorno a ognuna, i
+ * SCALA pixel veri di ogni pixel piccolo. Con R = 3 * raggio_media, il pixel x guarda da
+ * x - 4R - 6 a x + 4R + 6 al massimo: SCALA * (R + 2) basta (main). */
+static int dipendenza;
+/* Si puo' fare il vetro a pezzi solo se le copie piccole delle finestre hanno intorno
+ * abbastanza bordo (le 3 medie non arrivano a toccarlo): se no si rifa' sempre tutto. */
+static int a_pezzi;
+
+/* LO SFONDO DA SOLO ('fondo': il colore di quando non c'e' e le superfici dello sfondo) e il
+ * suo vetro su tutto lo schermo. Si rifanno solo quando lo sfondo cambia (cosa_rifare mette
+ * 0 in 'fondo_pronto'); il vetro solo quando serve a qualcuno. Lo sfondo da solo serve anche
+ * a comporre: ogni zona comincia come una sua copia (vedi componi_zone). */
+static unsigned int fondo[MAX_LARGHEZZA * MAX_ALTEZZA];
+static unsigned int vetro_fondo[MAX_LARGHEZZA * MAX_ALTEZZA];
+static int fondo_pronto, vetro_fondo_pronto;
+
+static int lista[MAX_FINESTRE], in_lista;   /* quelle da disegnare, in ordine (fai_lista) */
+
+/* La copia piccola che serve per rifare il vetro nel rettangolo g (dentro lo schermo): le
+ * colonne e le righe piccole che legge l'ingrandimento, piu' 3 medie e 2 per parte (cosi' le
+ * medie non toccano il bordo della copia, e i numeri vengono quelli della copia intera). */
+static int piccola_di(int x) { return ((x * 256 + 128) / SCALA - 128) >> 8; }   /* x >= 0 */
+
+static void copia_per(struct zona g, struct sfocata *s) {
+    int m = 3 * raggio_media + 2;
+    int u0 = piccola_di(g.x0), u1 = piccola_di(g.x1 - 1) + 1;
+    int v0 = piccola_di(g.y0), v1 = piccola_di(g.y1 - 1) + 1;
+    s->x = u0 - m;
+    s->l = u1 - u0 + 1 + 2 * m;
+    s->y = v0 - m;
+    s->a = v1 - v0 + 1 + 2 * m;
+}
+
+static void prepara_fondo(void) {
+    for (int k = 0; k < larghezza * altezza; k++) fondo[k] = SENZA_SFONDO;
+    for (int k = 0; k < in_lista; k++) {
+        const struct finestra_compositore *f = &finestre[lista[k]];
+        if (f->ruolo != RUOLO_SFONDO) continue;
+        int x0 = f->x > 0 ? f->x : 0, x1 = f->x + f->l < larghezza ? f->x + f->l : larghezza;
+        int y0 = f->y > 0 ? f->y : 0, y1 = f->y + f->a < altezza ? f->y + f->a : altezza;
+        for (int y = y0; y < y1 && x0 < x1; y++)
+            sopra_a_riga(&fondo[y * larghezza + x0],
+                         &f->immagini[f->mostrata][(y - f->y) * f->l + x0 - f->x], x1 - x0);
+    }
+    fondo_pronto = 1;
+    vetro_fondo_pronto = 0;
+}
+
+static void prepara_vetro_fondo(void) {
+    struct zona schermo_intero = { 0, 0, larghezza, altezza };
+    copia_per(schermo_intero, &piccola);
+    sfoca(fondo, &piccola);
+    ingrandisci(&piccola, schermo_intero, vetro_fondo, 0, 0, larghezza);
+    vetro_fondo_pronto = 1;
+}
+
+/* IL PIANO per rifare il vetro di una finestra: tutto (la copia piccola intera, come sempre),
+ * o il vetro dello sfondo con sopra solo alcuni pezzi rifatti. */
+#define MAX_PEZZI 12
+struct piano {
+    int tutto, quanti;
+    struct zona pezzi[MAX_PEZZI];   /* in pixel dello schermo, dentro lo schermo */
+};
+static struct piano piani[MAX_FINESTRE];
+
+static int vuota(struct zona z) { return z.x0 >= z.x1 || z.y0 >= z.y1; }
+
+static struct zona taglia(struct zona p, struct zona q) {
+    return (struct zona){ p.x0 > q.x0 ? p.x0 : q.x0, p.y0 > q.y0 ? p.y0 : q.y0,
+                          p.x1 < q.x1 ? p.x1 : q.x1, p.y1 < q.y1 ? p.y1 : q.y1 };
+}
+
+static struct zona sullo_schermo(const struct finestra_compositore *f) {
+    return taglia((struct zona){ f->x, f->y, f->x + f->l, f->y + f->a },
+                  (struct zona){ 0, 0, larghezza, altezza });
+}
+
+static struct zona con_ombra(unsigned int ruolo, int x, int y, int l, int a);
+
+static void pezzo(struct piano *p, struct zona z) {
+    if (vuota(z)) return;
+    if (p->quanti == MAX_PEZZI) p->tutto = 1;
+    else p->pezzi[p->quanti++] = z;
+}
+
+/* Cosa rifare del vetro della finestra i, che sta al posto 'posto' della lista. Sotto di lei
+ * la scena e' lo sfondo da solo tranne: la sua ombra (fuori dal rettangolo stretto del
+ * rientro) e le finestre e i pannelli che le stanno sotto, con le loro ombre. Un pixel del
+ * vetro va rifatto se a meno di 'dipendenza' da lui c'e' una di queste cose: la cornice lungo
+ * i bordi della finestra, e intorno a ogni finestra sotto. Se i pezzi sono quasi tutta la
+ * finestra, conviene rifare tutto in un colpo. */
+static void pianifica(int i, int posto) {
+    const struct finestra_compositore *f = &finestre[i];
+    struct piano *p = &piani[i];
+    p->tutto = p->quanti = 0;
+    struct zona w = sullo_schermo(f);
+    if (vuota(w)) return;                       /* niente sullo schermo: niente da rifare */
+    int m = dipendenza, d = rientro[i];
+    struct zona pulita = { f->x + d + m, f->y + d + m, f->x + f->l - d - m, f->y + f->a - d - m };
+    if (!a_pezzi || d < 0 || vuota(pulita)) { p->tutto = 1; return; }
+    int ya = pulita.y0 > w.y0 ? pulita.y0 : w.y0, yb = pulita.y1 < w.y1 ? pulita.y1 : w.y1;
+    pezzo(p, (struct zona){ w.x0, w.y0, w.x1, pulita.y0 < w.y1 ? pulita.y0 : w.y1 });   /* sopra */
+    pezzo(p, (struct zona){ w.x0, pulita.y1 > w.y0 ? pulita.y1 : w.y0, w.x1, w.y1 });   /* sotto */
+    pezzo(p, (struct zona){ w.x0, ya, pulita.x0 < w.x1 ? pulita.x0 : w.x1, yb });       /* sinistra */
+    pezzo(p, (struct zona){ pulita.x1 > w.x0 ? pulita.x1 : w.x0, ya, w.x1, yb });       /* destra */
+    for (int k = 0; k < posto; k++) {
+        const struct finestra_compositore *g = &finestre[lista[k]];
+        if (g->ruolo == RUOLO_SFONDO) continue;
+        struct zona o = taglia(con_ombra(g->ruolo, g->x, g->y, g->l, g->a),
+                               (struct zona){ 0, 0, larghezza, altezza });
+        if (vuota(o)) continue;
+        pezzo(p, taglia((struct zona){ o.x0 - m, o.y0 - m, o.x1 + m, o.y1 + m }, w));
+    }
+    long somma = 0;
+    for (int k = 0; k < p->quanti; k++)
+        somma += (long)(p->pezzi[k].x1 - p->pezzi[k].x0) * (p->pezzi[k].y1 - p->pezzi[k].y0);
+    if (p->tutto || somma * 4 >= (long)(w.x1 - w.x0) * (w.y1 - w.y0) * 3) {
+        p->tutto = 1;
+        p->quanti = 0;
+    }
+}
+
+/* Rifa' il vetro della finestra i secondo il suo piano. La scena sotto di lei e' pronta in
+ * tutto quello che i pezzi (o la copia intera) guardano: cosa_rifare li ha messi nelle zone. */
+static void rifai_vetro(int i) {
+    const struct finestra_compositore *f = &finestre[i];
+    const struct piano *p = &piani[i];
+    struct zona w = sullo_schermo(f);
+    if (vuota(w)) return;
+    if (p->tutto) {
+        posto_sfocata(f, &piccola.x, &piccola.y, &piccola.l, &piccola.a);
+        sfoca(disegno, &piccola);
+        ingrandisci(&piccola, w, vetri[i], f->x, f->y, f->l);
+        return;
+    }
+    if (!vetro_fondo_pronto) prepara_vetro_fondo();
+    for (int y = w.y0; y < w.y1; y++) {
+        const unsigned int *da = &vetro_fondo[y * larghezza + w.x0];
+        unsigned int *a = &vetri[i][(y - f->y) * f->l + w.x0 - f->x];
+        for (int k = 0; k < w.x1 - w.x0; k++) a[k] = da[k];
+    }
+    for (int k = 0; k < p->quanti; k++) {
+        copia_per(p->pezzi[k], &piccola);
+        sfoca(disegno, &piccola);
+        ingrandisci(&piccola, p->pezzi[k], vetri[i], f->x, f->y, f->l);
     }
 }
 
@@ -436,27 +700,17 @@ static int nella_zona_si_vede(const struct finestra_compositore *f) {
     return si_toccano(con_ombra(f->ruolo, f->x, f->y, f->l, f->a), z);
 }
 
-/* UNA FINESTRA, in tutte le zone da rifare. In due tempi, come in una composizione
- * intera: prima l'ombra in tutte le zone, poi (se va rifatta) la sfocatura, che guarda
- * la scena fatta fin qui (ombra compresa), poi vetro, immagine e barra in tutte le zone.
- * La sfocatura 's' e' quella da usare (quella tenuta da parte, di solito). */
-static void disegna_finestra(int i, int ricalcola, struct sfocata *s) {
+/* UNA FINESTRA (o un pannello: lo sfondo no, e' gia' in 'fondo'), in tutte le zone da
+ * rifare. In due tempi, come in una composizione intera: prima l'ombra in tutte le zone, poi
+ * (se va rifatta) la sfocatura, che guarda la scena fatta fin qui (ombra compresa), poi vetro,
+ * immagine e barra in tutte le zone. */
+static void disegna_finestra(int i, int ricalcola) {
     const struct finestra_compositore *f = &finestre[i];
-    if (f->ruolo == RUOLO_SFONDO) {           /* sotto tutto: niente ombra, niente vetro */
-        for (int k = 0; k < quante_zone; k++) {
-            nella_zona(k);
-            if (nella_zona_si_vede(f)) immagine(f->x, f->y, f->l, f->a, f->immagini[f->mostrata], 0);
-        }
-        return;
-    }
     for (int k = 0; k < quante_zone; k++) {
         nella_zona(k);
         if (nella_zona_si_vede(f)) disegna_ombra(i);
     }
-    if (ricalcola) {
-        prepara_sfocatura(i, s);
-        ingrandisci_sfocatura(i, s);
-    }
+    if (ricalcola) rifai_vetro(i);
     for (int k = 0; k < quante_zone; k++) {
         nella_zona(k);
         if (!nella_zona_si_vede(f)) continue;
@@ -873,9 +1127,8 @@ static struct zona_schermo dentro_lo_schermo(int x, int y) {
 /* --- la scena, poi sullo schermo --- */
 
 /* L'ELENCO DI QUELLE DA DISEGNARE, nell'ordine in cui si disegnano: gli strati dal
- * basso (sfondo, finestre, pannelli), e dentro ogni strato dal fondo al primo piano. */
-static int lista[MAX_FINESTRE], in_lista;
-
+ * basso (sfondo, finestre, pannelli), e dentro ogni strato dal fondo al primo piano
+ * ('lista', 'in_lista': dichiarate sopra, con il vetro). */
 static void fai_lista(void) {
     in_lista = 0;
     for (int s = 0; s < QUANTI_STRATI; s++)
@@ -990,6 +1243,8 @@ static void cosa_rifare(void) {
         prima_volta = 0;
         zona_aggiungi((struct zona){ 0, 0, larghezza, altezza });
         for (int i = 0; i < MAX_FINESTRE; i++) da_sfocare[i] = adesso[i].vista;
+        for (int i = 0; i < MAX_FINESTRE; i++) piani[i] = (struct piano){ .tutto = 1 };
+        fondo_pronto = 0;
         for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
         for (int i = 0; i < MAX_FINESTRE; i++) finestre[i].quante_cambiate = 0;
         return;
@@ -1002,6 +1257,9 @@ static void cosa_rifare(void) {
         stessa[i] = p->vista && q->vista && p->id == q->id && p->x == q->x && p->y == q->y &&
                     p->l == q->l && p->a == q->a && p->ruolo == q->ruolo;
         if (!p->vista && !q->vista) continue;
+        if ((p->vista && p->ruolo == RUOLO_SFONDO) || (q->vista && q->ruolo == RUOLO_SFONDO))
+            if (!stessa[i] || p->generazione != q->generazione || p->posto != q->posto)
+                fondo_pronto = 0;               /* lo sfondo e' cambiato: anche il suo vetro */
         if (!stessa[i]) {
             if (p->vista) danno(i, impronta_con_ombra(p));
             if (q->vista) { danno(i, impronta_con_ombra(q)); da_sfocare[i] = 1; }
@@ -1037,11 +1295,20 @@ static void cosa_rifare(void) {
         }
         if (da_sfocare[i]) danno(i, impronta_dentro(q));
     }
+    for (int k = 0; k < in_lista; k++)       /* come rifarli: tutti o a pezzi */
+        if (da_sfocare[lista[k]] && adesso[lista[k]].ruolo != RUOLO_SFONDO) pianifica(lista[k], k);
 
     /* 3. le zone */
     for (int i = 0; i < MAX_FINESTRE; i++) {
         for (int d = 0; d < quanti_danni[i]; d++) zona_aggiungi(danni[i][d]);
-        if (da_sfocare[i] && adesso[i].ruolo != RUOLO_SFONDO) zona_aggiungi(guardata(&finestre[i]));
+        if (da_sfocare[i] && adesso[i].ruolo != RUOLO_SFONDO) {
+            if (piani[i].tutto) zona_aggiungi(guardata(&finestre[i]));
+            for (int k = 0; k < piani[i].quanti; k++) {   /* quello che guarda ogni pezzo */
+                struct sfocata *s = &piccola;
+                copia_per(piani[i].pezzi[k], s);
+                zona_aggiungi(letta(s->x, s->y, s->l, s->a));
+            }
+        }
         for (int j = i + 1; j < MAX_FINESTRE; j++) {
             if (!stessa[i] || !stessa[j]) continue;
             int prima = impronte_prima[i].posto < impronte_prima[j].posto;
@@ -1056,14 +1323,18 @@ static void cosa_rifare(void) {
     for (int i = 0; i < MAX_FINESTRE; i++) finestre[i].quante_cambiate = 0;   /* usate */
 }
 
-/* La composizione delle zone: si puliscono, poi ci si disegnano le finestre, una alla
- * volta dal fondo, in tutte le zone (disegna_finestra): quando tocca a una finestra di
- * rifare lo smerigliato, la scena sotto di lei e' gia' pronta in tutto quello che guarda. */
+/* La composizione delle zone: si comincia dallo sfondo da solo (il colore di quando non c'e'
+ * e le superfici dello sfondo, gia' composti in 'fondo': le si copia), poi ci si disegnano le
+ * altre finestre, una alla volta dal fondo, in tutte le zone (disegna_finestra): quando tocca
+ * a una finestra di rifare lo smerigliato, la scena sotto di lei e' gia' pronta in tutto
+ * quello che guarda. */
 static void componi_zone(void) {
+    if (!fondo_pronto) prepara_fondo();
     for (int k = 0; k < quante_zone; k++)
         for (int y = zone[k].y0; y < zone[k].y1; y++)
-            for (int x = zone[k].x0; x < zone[k].x1; x++) disegno[y * larghezza + x] = SENZA_SFONDO;
-    for (int k = 0; k < in_lista; k++) disegna_finestra(lista[k], da_sfocare[lista[k]], &sfocate[lista[k]]);
+            for (int x = zone[k].x0; x < zone[k].x1; x++) disegno[y * larghezza + x] = fondo[y * larghezza + x];
+    for (int k = 0; k < in_lista; k++)
+        if (finestre[lista[k]].ruolo != RUOLO_SFONDO) disegna_finestra(lista[k], da_sfocare[lista[k]]);
 }
 
 static void componi(void) {
@@ -1219,6 +1490,11 @@ static int servi(int ms) {
 
 int main(void) {
     raggio_media = sfocatura_finestra() / SCALA / 2;
+    if (raggio_media > MAX_RAGGIO_MEDIA) raggio_media = MAX_RAGGIO_MEDIA;
+    for (int s = 0; s < (int)(sizeof diviso_media / sizeof diviso_media[0]); s++)
+        diviso_media[s] = (unsigned short)(s / (2 * raggio_media + 1));
+    dipendenza = SCALA * (3 * raggio_media + 2);
+    a_pezzi = 3 * raggio_media + 2 <= BORDO_PICCOLO;
     if (!(memoria = mappa_schermo(D_SCHERMO, &schermo))) {
         scrivi_testo("compositore: non ho lo schermo (mi deve far partire init)\n");
         return 0;
