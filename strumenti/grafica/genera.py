@@ -1,10 +1,11 @@
 """Prepara la grafica dei programmi: font, icone, immagini e sfondo, come tabelle C.
 
 Gira sul computer che compila, dentro il container alpine (vedi genera.sh), e scrive
-utente/libreria/grafica_dati.h. I programmi di mkernel non sanno leggere un file TrueType
+utente/libreria/grafica_dati.h. I programmi di mshell non sanno leggere un file TrueType
 o un SVG: qui li si trasforma una volta per tutte in pixel.
 
-  - I FONT: Inter (licenza SIL OFL) in ogni misura e peso che usa l'interfaccia. Ogni
+  - I FONT: Inter e IBM Plex Sans (licenza SIL OFL) in ogni misura e peso che usa
+    l'interfaccia (Inter e' in via di sostituzione con Plex). Ogni
     lettera diventa una piccola tabella di "alfa": quanto e' coperto ogni pixel (0-255).
     I bordi sono gia' lisci (antialiasing): li calcola FreeType, qui.
   - LE ICONE: Lucide (licenza ISC), dagli SVG del file Figma "mshell - interfaccia". Anche
@@ -22,6 +23,7 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 FIGMA = os.path.join(QUI, 'figma')
 FONT = sys.argv[1]                  # la cartella con Inter-Regular.ttf, -Medium, -SemiBold
 USCITA = sys.argv[2]
+FONT_PLEX = os.path.join(QUI, 'font', 'IBMPlexSans')   # IBM Plex Sans: TTF e OFL.txt nel repo
 
 # I font dell'interfaccia (dal file Figma): nome C, file, misura in pixel
 FONT_USATI = [
@@ -40,6 +42,14 @@ FONT_USATI = [
     ('inter_semigrassetto_12', 'Inter-SemiBold.ttf', 12),
     ('inter_semigrassetto_14', 'Inter-SemiBold.ttf', 14),
 ]
+
+# IBM Plex Sans (stesse regole di nome: plex_<misura>, plex_medio_<misura>, plex_semigrassetto_<misura>)
+for _misura in (12, 13, 14, 15, 16):
+    FONT_USATI.append(('plex_%d' % _misura, 'IBMPlexSans-Regular.ttf', _misura))
+for _misura in (12, 13, 14, 15, 16, 24):
+    FONT_USATI.append(('plex_medio_%d' % _misura, 'IBMPlexSans-Medium.ttf', _misura))
+for _misura in (12, 13, 14, 15, 24):
+    FONT_USATI.append(('plex_semigrassetto_%d' % _misura, 'IBMPlexSans-SemiBold.ttf', _misura))
 
 # code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
 CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á',
@@ -87,8 +97,8 @@ def premoltiplicato(img):
 c = []
 c.append('''/* GENERATO da strumenti/grafica/genera.py: non modificare a mano.
  *
- * Font Inter, di Rasmus Andersson (https://rsms.me/inter), licenza SIL Open Font
- * License 1.1. Icone Lucide (https://lucide.dev), licenza ISC: Copyright (c) for portions
+ * Font Inter, di Rasmus Andersson (https://rsms.me/inter), e IBM Plex Sans, di IBM
+ * (https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide (https://lucide.dev), licenza ISC: Copyright (c) for portions
  * of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT); all other
  * copyright (c) for Lucide are held by Lucide Contributors 2022.
  * Icone, immagini e sfondo vengono dal file Figma "mshell - interfaccia". */
@@ -113,7 +123,8 @@ struct font {
 ''')
 
 for nome, file, misura in FONT_USATI:
-    f = ImageFont.truetype(os.path.join(FONT, file), misura)
+    cartella = FONT_PLEX if file.startswith('IBMPlex') else FONT
+    f = ImageFont.truetype(os.path.join(cartella, file), misura)
     ascesa, discesa = f.getmetrics()
     glifi, alfa, indice = [], [], [0] * 256
     for codice, ch in CARATTERI:
