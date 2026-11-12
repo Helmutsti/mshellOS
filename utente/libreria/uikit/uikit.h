@@ -1145,7 +1145,6 @@ struct finestra_tk {
     char titolo[MAX_TITOLO];
     int l_fissa, a_fissa;              /* 0: la misura la decide il contenuto */
     int senza_margine;                 /* 1: il contenuto arriva fino ai bordi (finestra_tk_bordo) */
-    int senza_divisore;                /* 1: nessuna linea tra titolo e corpo (finestra_tk_senza_divisore) */
     struct finestra finestra;          /* il collegamento con il compositore */
     int attiva;                        /* ha il fuoco: e' in primo piano */
     int da_ridisegnare;                /* c'e' qualcosa da ridisegnare: le zone qui sotto */
@@ -1265,9 +1264,9 @@ static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, i
  *     TITOLO_MARGINE (4) dal bordo e l'uno dall'altro: 4 + 32 + 4 = 40, cioe' proprio
  *     l'altezza della testata. Lo spazio vuoto a sinistra e' largo quanto il gruppo dei
  *     comandi (TITOLO_COMANDI_LARGHEZZA), cosi' il titolo resta centrato nella finestra.
- *     Sotto la testata c'e' un divisore di 1 pixel (BORDO_SEPARATORE) da bordo a bordo,
- *     senza margini ai lati; se sotto c'e' la barra degli strumenti il divisore e' di vetro
- *     (non si vede): testata e barra sono una superficie sola;
+ *     Sotto la testata c'e' una riga di 1 pixel (il divisore) dello stesso vetro: non si
+ *     vede mai (deciso dalla persona: nessuna linea sotto il titolo, con o senza barra
+ *     degli strumenti). La riga resta solo perche' le misure non cambino;
  *   - il CONTENUTO: tutto quello che sta sotto il divisore, con i soli angoli in BASSO
  *     arrotondati. Comincia con la barra degli strumenti, se c'e', poi il contenuto
  *     dell'applicazione, con FINESTRA_PADDING (24) intorno (a meno di finestra_tk_bordo).
@@ -1361,13 +1360,10 @@ static inline void finestra_tk_titolo_disegna(struct finestra_tk *f, struct penn
                              { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
     pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &testata);
-    /* Il divisore. Con la barra degli strumenti sotto, testata e barra sono UNA superficie
-     * di vetro (deciso dalla persona: la linea li' non ci va, anche se il componente "Titolo
-     * finestra" del disegno la ha): la riga del divisore resta (le misure non cambiano) ma e'
-     * dello stesso vetro. Senza barra, il divisore BORDO_SEPARATORE stacca la testata dal
-     * contenuto, come nel disegno. */
-    int con_barra = f->strumenti && !f->strumenti->nascosto;
-    pennello_colore(p, con_barra || f->senza_divisore ? SUPERFICIE_VETRO : BORDO_SEPARATORE);
+    /* Il divisore: la riga resta (le misure non cambiano) ma e' dello stesso vetro, quindi
+     * non si vede. Deciso dalla persona: sotto il titolo nessuna linea, mai, con o senza la
+     * barra degli strumenti. */
+    pennello_colore(p, SUPERFICIE_VETRO);
     riempi_rettangolo(p, 0, alta, w->l, TITOLO_DIVISORE);
 
     /* il titolo, al centro della finestra: tra lo spazio vuoto a sinistra (largo quanto i
@@ -1448,10 +1444,6 @@ static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strum
  * uikit_esegui. */
 static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine = 1; }
 
-/* Toglie la linea chiara tra la barra del titolo e il corpo (il divisore): la riga resta,
- * dello stesso vetro del titolo, quindi le misure non cambiano. Per le finestre il cui
- * disegno non ha la linea (il Terminale). Prima di uikit_esegui. */
-static inline void finestra_tk_senza_divisore(struct finestra_tk *f) { f->senza_divisore = 1; }
 
 /* Cambia il titolo della finestra (per esempio, la cartella in cui si e'). Lo disegna la
  * finestra stessa, nella sua barra: basta ridisegnarla. */

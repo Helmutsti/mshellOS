@@ -8,7 +8,7 @@ Finestra Chiaro 218:6, Scuro 218:209; dettagli 222:64 / 222:138; icona 224:106.
 
 ## Finestra (760 x 589)
 - Titolo finestra (libreria), Attiva, testo "Terminale – super amministratore", comandi riduci e chiudi.
-- Niente barra degli strumenti, niente linee o bordi colorati, nessuna linea tra titolo e corpo (nel codice: finestra_tk_senza_divisore; nella foto scura del disegno una linea si intravede, ma la regola scritta e la foto chiara dicono nessuna).
+- Niente barra degli strumenti, niente linee o bordi colorati, nessuna linea tra titolo e corpo (regola di tutte le finestre: sotto il titolo non si vede mai una linea).
 - Corpo: colore della barra del titolo (superficie/vetro), angoli in basso raggio/finestra.
 - Pannello contenuto (libreria): superficie/elevata, raggio/pannello, margine spazio/8 su tutti i lati, padding 0.
 - Testo: padding 16 su tutti i lati (somma dal bordo del pannello: x 16, y 16; dal bordo della finestra: 24 e 24).

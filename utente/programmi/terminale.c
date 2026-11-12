@@ -290,7 +290,6 @@ int main(void) {
     /* il trattino lungo del titolo, nei font, e' il codice 0x96 */
     finestra_tk_prepara(&finestra, "Terminale \x96 super amministratore", &pannello.base);
     finestra_tk_bordo(&finestra);
-    finestra_tk_senza_divisore(&finestra);   /* nel disegno non c'e' la linea sotto il titolo */
     /* la misura giusta per la griglia, col pannello e il suo margine sotto la barra del titolo */
     int l, a;
     schermo_misura(&schermo.base, &l, &a);
