@@ -1,2 +1,4 @@
 # Gli script per sistemi Unix (Mac, container Docker) devono avere fine riga LF
 *.sh text eol=lf
+# Le risorse del sistema (font, icone, sfondi) sono file binari: mai toccarne le fini riga
+risorse/** binary

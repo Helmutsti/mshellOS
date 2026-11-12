@@ -31,16 +31,19 @@
  *
  * IL TESTO, LE ICONE E LE IMMAGINI si ricevono da chi disegna: un font, un'icona o
  * un'immagine sono tabelle gia' calcolate (struct font, struct icona, struct immagine, qui
- * sotto), e qui si colorano e si mettono sulla tela. Quelli del sistema (i font IBM Plex e
- * Inter, le icone Lucide, le icone dei file) sono di UIKit: uikit/materiali.h.
+ * sotto), e qui si colorano e si mettono sulla tela. GKit sa leggerli da un file su disco
+ * (font_da_file, icona_da_file, immagine_da_file, qui sotto), ma non sa quali siano quelli
+ * del sistema (i font IBM Plex e Inter, le icone Lucide, gli oggetti): sono di UIKit,
+ * uikit/materiali.h.
  *
  * Coordinate in pixel, (0, 0) in alto a sinistra, y verso il basso. */
 #ifndef GKIT_DISEGNO_H
 #define GKIT_DISEGNO_H
 
 /* --- i materiali che si ricevono: font, icone, immagini ---
- * I tipi soltanto: i dati veri li prepara strumenti/grafica/genera.py (quelli del sistema
- * stanno in uikit/materiali_dati.h). */
+ * Tabelle gia' calcolate: le prepara strumenti/grafica/genera.py (le lettere e le icone gia'
+ * disegnate, misura per misura) e stanno in file su disco (qui sotto, "I MATERIALI DA UN
+ * FILE"). */
 
 /* Una lettera: dove sta la sua tabella di alfa, dove va rispetto al punto di scrittura
  * (x a destra, y in su dalla linea di base) e di quanto si avanza dopo. */
@@ -78,6 +81,31 @@ struct immagine {
  * sul Mac non c'e'.) */
 int immagine_carica(const char *percorso, struct immagine *im);
 void immagine_libera(struct immagine *im);
+
+/* I MATERIALI DA UN FILE (gkit/materiali_file.c): un font, un'icona o un'immagine gia'
+ * calcolati, nei formati di strumenti/grafica/formato.py (.font, .icon, .image). Il file si
+ * mette in memoria in sola lettura (mmap) e le tabelle puntano dentro: i programmi che usano
+ * lo stesso file ne condividono la memoria. Resta in memoria finche' il programma vive (non
+ * si libera). Il file si controlla tutto prima di usarlo; se manca o e' rovinato lo si
+ * scrive sullo standard error ("gkit: non riesco a usare <file>: <perche'>"), si torna -1 e
+ * si da' qualcosa che si disegna senza pericolo:
+ *   font_da_file       un font di riserva: ogni lettera e' un rettangolo vuoto (si vede che
+ *                      il testo c'e' e che il font manca), alto 16;
+ *   icona_da_file      riempie 'misure' (al massimo 'massimo') e torna quante sono; se non
+ *                      va, misure[0] e' un'icona vuota (lato 0: con quante = 1 non disegna niente);
+ *   immagine_da_file   un'immagine vuota (0 x 0: non disegna niente). */
+int font_da_file(const char *percorso, struct font *f);
+int icona_da_file(const char *percorso, struct icona *misure, int massimo);
+int immagine_da_file(const char *percorso, struct immagine *im);
+
+/* LA CARTELLA DELLE RISORSE del sistema: /system/resources (fonts/, icons/, wallpapers/),
+ * o quella della variabile d'ambiente MSHELL_RISORSE se c'e' (per gli attrezzi che girano
+ * fuori da mshell: l'anteprima la fa puntare a risorse/ del repository). percorso_risorsa
+ * scrive in 'dove' "<cartella>/<nome>"; -1 se non ci sta in 'spazio' (e allora e' tagliato). */
+#define RISORSE_CARTELLA "/system/resources"
+#define PERCORSO_RISORSA_MAX 256
+const char *risorse_cartella(void);
+int percorso_risorsa(char *dove, int spazio, const char *nome);
 
 #define OPACO(rgb) (0xFF000000u | (unsigned int)(rgb))
 /* Un colore con opacita' da 0 a 255: VELATO(0xFFFFFF, 36) e' il bianco al 14%. */

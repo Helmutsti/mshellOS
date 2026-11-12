@@ -180,9 +180,15 @@
 #define FONT_CORPO_MEDIO        (&plex_medio_14)
 #define FONT_PICCOLO_NUOVO      (&plex_12)
 #define FONT_ETICHETTA          (&plex_medio_12)
-#define FONT_PULSANTE_S         (&plex_medio_13)
-#define FONT_PULSANTE_M         (&plex_medio_14)
-#define FONT_PULSANTE_L         (&plex_medio_16)
+/* i font dei pulsanti anche per numero, per le tabelle fisse (misure_pulsante, in uikit.h):
+ * un materiale si carica la prima volta che serve (materiali.h), quindi in una tabella
+ * fissa ci va il suo numero, non il suo indirizzo */
+#define FONT_PULSANTE_S_NUMERO  MATERIALE_plex_medio_13
+#define FONT_PULSANTE_M_NUMERO  MATERIALE_plex_medio_14
+#define FONT_PULSANTE_L_NUMERO  MATERIALE_plex_medio_16
+#define FONT_PULSANTE_S         font_del_sistema(FONT_PULSANTE_S_NUMERO)
+#define FONT_PULSANTE_M         font_del_sistema(FONT_PULSANTE_M_NUMERO)
+#define FONT_PULSANTE_L         font_del_sistema(FONT_PULSANTE_L_NUMERO)
 /* l'interlinea (altezza della riga) di ogni stile, e la spaziatura delle lettere in pixel
  * (negativa = piu' stretto; l'etichetta e' spaziata di 2) */
 #define INTERLINEA_TITOLO       32

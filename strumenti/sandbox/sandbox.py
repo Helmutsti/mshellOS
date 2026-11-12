@@ -62,7 +62,7 @@ import qemu                                      # noqa: E402
 from qemu import ErroreProva, PUNTO_VUOTO, pixel_diversi  # noqa: E402
 
 LARGHEZZA, ALTEZZA = 1280, 800
-IMMAGINE = "mshell-sandbox"
+IMMAGINE = __import__("os").environ.get("SANDBOX_IMMAGINE", "mshell-sandbox")
 ATTREZZI = "mshell-sandbox-attrezzi"
 OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", "mshell-sandbox-oggetti")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
@@ -148,13 +148,13 @@ def compila():
 
 
 def da_ricompilare():
-    """Vero se un sorgente (utente/, file/, strumenti/sandbox/) e' piu' nuovo del sistema
+    """Vero se un sorgente (utente/, file/, risorse/, strumenti/sandbox/) e' piu' nuovo del sistema
     compilato, o se l'immagine non c'e'."""
     tar = COSTRUITO / "radice.tar"
     if not tar.exists() or not c_e_immagine(IMMAGINE):
         return True
     fatto = tar.stat().st_mtime
-    for cartella in (REPO / "utente", REPO / "file", QUI):
+    for cartella in (REPO / "utente", REPO / "file", REPO / "risorse", QUI):
         for radice, _, file in os.walk(cartella):
             for f in file:
                 if os.path.getmtime(os.path.join(radice, f)) > fatto:

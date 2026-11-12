@@ -13,12 +13,11 @@
 #include <stdlib.h>
 #include <time.h>
 
-/* Solo GKit: la finestra (gkit.h) e gli strumenti di disegno (gkit_disegno.h). Della barra
- * si prendono dai materiali del sistema soltanto i dati del font e dell'icona X
- * (materiali_dati.h): niente stile, temi o componenti di UIKit. */
+/* Solo GKit: la finestra (gkit.h) e gli strumenti di disegno (gkit_disegno.h). Per la barra
+ * si leggono dalle risorse del sistema, con GKit, soltanto il font e l'icona X (i file in
+ * /system/resources): niente stile, temi, materiali o componenti di UIKit. */
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
-#include "uikit/materiali_dati.h"
 #include "doomkeys.h"
 #include "doomgeneric.h"
 
@@ -29,6 +28,25 @@
 
 static struct finestra fin;
 static int fuoco = 1;
+
+/* la barra: il font del titolo e l'icona X, dalle risorse del sistema */
+#define FILE_FONT_TITOLO "fonts/inter-semibold-13.font"
+#define FILE_ICONA_CHIUDI "icons/lucide/x.icon"
+#define ICONA_MISURE_MAX 8
+static struct font font_titolo;
+static struct icona icona_chiudi[ICONA_MISURE_MAX];
+static int icona_chiudi_misure;
+
+/* Se un file manca, GKit lo scrive nel registro e da' un font di riserva o un'icona vuota:
+ * Doom parte lo stesso. */
+static void carica_barra(void) {
+    char percorso[PERCORSO_RISORSA_MAX];
+    percorso_risorsa(percorso, sizeof percorso, FILE_FONT_TITOLO);
+    font_da_file(percorso, &font_titolo);
+    percorso_risorsa(percorso, sizeof percorso, FILE_ICONA_CHIUDI);
+    int n = icona_da_file(percorso, icona_chiudi, ICONA_MISURE_MAX);
+    icona_chiudi_misure = n > 0 ? n : 1;
+}
 static unsigned int pulsanti_prima;
 
 /* --- i tasti: codice di Linux (KEY_...) -> tasto di Doom --- */
@@ -106,6 +124,7 @@ void DG_Init(void) {
         exit(1);
     }
     finestra_tasti_fisici(&fin);
+    carica_barra();
 }
 
 void DG_DrawFrame(void) {
@@ -119,8 +138,8 @@ void DG_DrawFrame(void) {
     pennello_colore(&p, OPACO(fuoco ? 0x8E1B14 : 0x4A4A4A));
     riempi_rettangolo(&p, 0, 0, LARG, BARRA);
     pennello_colore(&p, OPACO(0xFFFFFF));
-    testo(&p, &inter_semigrassetto_13, 14, (BARRA - inter_semigrassetto_13.altezza) / 2, TITOLO_FINESTRA);
-    disegna_icona(&p, icone[ICONA_X], ICONA_MISURE, 14, LARG - BARRA + 7, 7);
+    testo(&p, &font_titolo, 14, (BARRA - font_titolo.altezza) / 2, TITOLO_FINESTRA);
+    disegna_icona(&p, icona_chiudi, icona_chiudi_misure, 14, LARG - BARRA + 7, 7);
 
     /* il gioco, ingrandito: ogni riga di arrivo prende la sua riga di partenza; se e' la
      * stessa della precedente si copia la riga gia' pronta */

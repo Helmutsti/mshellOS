@@ -11,11 +11,11 @@
  * OGNI VOLTA SI RIDISEGNA TUTTO. Le tele sono due e si alternano: quella che si riceve
  * contiene il disegno di DUE volte fa, non dell'ultima. Per questo l'applicazione tiene
  * il suo stato (i quadretti, il colore, il fuoco) e ridisegna tutto da capo. */
-/* Solo GKit (la finestra e gli strumenti di disegno), piu' i dati del font del sistema per
- * il titolo (materiali_dati.h): niente stile, temi o componenti di UIKit. */
+/* Solo GKit (la finestra e gli strumenti di disegno), piu' il font del titolo letto con GKit
+ * dalle risorse del sistema (/system/resources/fonts): niente stile, temi, materiali o
+ * componenti di UIKit. */
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
-#include "uikit/materiali_dati.h"
 
 #define LARGHEZZA 320
 #define ALTEZZA   220
@@ -27,6 +27,7 @@
 static const unsigned int sfondi[] = { 0xF4E8C8, 0xC8E8F4, 0xD8F4C8, 0xF4C8D8 };
 static int sfondo, fuoco;
 static int qx[MAX_QUADRETTI], qy[MAX_QUADRETTI], quadretti;
+static struct font font_titolo;   /* se il file manca: il font di riserva di GKit */
 
 /* Il suo aspetto lo decide lei, e non e' quello del sistema: carta opaca, barra
  * colorata, titolo a sinistra. (Gli angoli arrotondati come quelli del sistema, perche'
@@ -44,7 +45,7 @@ static void disegna(unsigned int *pixel) {
     pennello_colore(&p, OPACO(fuoco ? 0x3A6EA5 : 0x707880));
     riempi_forma(&p, &barra);
     pennello_colore(&p, OPACO(0xFFFFFF));
-    testo(&p, &inter_semigrassetto_13, 14, (BARRA - inter_semigrassetto_13.altezza) / 2, TITOLO);
+    testo(&p, &font_titolo, 14, (BARRA - font_titolo.altezza) / 2, TITOLO);
 
     /* il contenuto: ritagliato, cosi' i quadretti vicino al bordo non lo coprono */
     pennello_ritaglia(&p, 0, BARRA, LARGHEZZA, ALTEZZA - BARRA);
@@ -60,6 +61,10 @@ static int ridisegna(struct finestra *f) {
 }
 
 int main(void) {
+    char percorso[PERCORSO_RISORSA_MAX];
+    percorso_risorsa(percorso, sizeof percorso, "fonts/inter-semibold-13.font");
+    font_da_file(percorso, &font_titolo);
+
     struct finestra f;
     if (finestra_apri(&f, LARGHEZZA, ALTEZZA, TITOLO) < 0) {
         scrivi_testo("esempio: non riesco ad aprire la finestra\n");

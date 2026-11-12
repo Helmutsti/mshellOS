@@ -10,7 +10,7 @@
  *
  * Gli stati: normale (niente fondo), sotto il puntatore (ELEMENTO_SOPRA, appena velato),
  * scelto (ELEMENTO_SCELTO, vetro chiaro). L'icona e' un'immagine a colori dei materiali del
- * sistema (icone_file, materiali.h): i file sono "contenuto", non icone dell'interfaccia. */
+ * sistema (gli oggetti, oggetti.h): i file sono "contenuto", non icone dell'interfaccia. */
 #ifndef ELEMENTO_FILE_H
 #define ELEMENTO_FILE_H
 
