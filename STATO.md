@@ -473,8 +473,8 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   Home della scrivania, oggi tolta) usa ancora i nomi e le icone vecchie.
 - Prove: `test/scrivania.py` ha le posizioni della userbar e del vassoio (ramo `scrivania-figma`);
   nella sandbox passano applicazioni, finestre, mouse e tastiera. `scorrimento.py` (la barra di
-  scorrimento non compare) e `store.py` (dopo "Svuota dati") falliscono nella sandbox anche
-  prima della userbar, uguali; `files.py` e `immagini.py` falliscono sulle foto di riferimento,
+  scorrimento non compare) falliva nella sandbox anche prima della userbar, uguale; `store.py`
+  (dopo "Svuota dati") falliva per una corsa dello Store, ora risolta (sotto); `files.py` e `immagini.py` falliscono sulle foto di riferimento,
   che con la scrivania nuova vanno rifatte dopo averle guardate. `attivita.py` e `store.py` sono
   aggiornati al disegno nuovo; il riferimento `memoria_totale_*.png` di Attività è da rifare (ora il
   totale si scrive in GB, "1,9 GB", come nel disegno), dopo averlo guardato.
@@ -565,6 +565,12 @@ i componenti di UIKit.
 - `test/pacchetti/prova.sh`: 78 controlli (con togliere, svuotare, gli id con "/" e "..", i
   collegamenti che puntano fuori, un'app accesa).
 - `test/prove/store.py`: in QEMU, tutto il giro dello Store con contatore.app.
+- "Apri <nome>" chiude prima la finestra dello Store e solo dopo chiede al launcher di aprire
+  l'app (`store.c`, in `richiesta()`): il compositore dà il posto a cascata dal primo posto
+  libero, e con la richiesta fatta a finestra ancora aperta l'app nuova (veloce nella sandbox)
+  compariva prima che quella dello Store fosse tolta e finiva nel posto sbagliato; le prove
+  seguenti sbagliavano i clic ("Chiudi Contatore prima…" su "Svuota dati"). `store.py` ora
+  passa nella sandbox, ripetuto.
 
 **Non c'è ancora**
 - La scrivania legge le app solo all'avvio: un'app appena installata (o tolta) compare (o

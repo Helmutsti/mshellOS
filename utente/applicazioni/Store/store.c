@@ -494,11 +494,14 @@ static void premi_installa(struct pulsante *b, void *dati) {
     ridisponi();
 }
 
-/* "Apri <nome>": il launcher fa partire l'app, e lo Store ha finito. */
+/* "Apri <nome>": prima si chiude la finestra dello Store, poi si chiede al launcher di far
+ * partire l'app (in richiesta(), a giro finito). Se la richiesta partisse con la finestra
+ * ancora aperta, l'app nuova comparirebbe prima che il compositore tolga quella dello Store e
+ * finirebbe nel posto a cascata sbagliato (il suo e' ancora occupato). */
+static int apri_dopo;
 static void premi_apri(struct pulsante *b, void *dati) {
     (void)b; (void)dati;
-    registro("apro ", app.id);
-    apri_applicazione(app.id);
+    apri_dopo = 1;
     finestra_tk_chiudi(&finestra);
 }
 
@@ -548,7 +551,13 @@ static int richiesta(const char *percorso) {
         if (errori) finestra_tk_dimensione(&finestra, 560, 345);
         else finestra_tk_dimensione(&finestra, 600, 600);   /* nel disegno 900: non ci sta nello schermo, scorre */
     }
-    return uikit_esegui(&finestra);
+    int esito = uikit_esegui(&finestra);
+    if (apri_dopo) {
+        finestra_chiudi(&finestra.finestra);   /* il compositore la toglie e libera il suo posto */
+        registro("apro ", app.id);
+        apri_applicazione(app.id);
+    }
+    return esito;
 }
 
 /* ================= L'ELENCO DELLE APP INSTALLATE (senza argomento) ================= */
