@@ -130,8 +130,9 @@ e la persona ne viene informata.
 
 ## 9. Elenco minimo di servizi, permessi, deviazioni e ruoli
 
-Prima proposta, scritta il 12 novembre 2026 su incarico della persona. È volutamente piccola: si
-allarga quando arriva un'app che ha davvero bisogno di qualcosa in più.
+Scritta il 12 novembre 2026 su incarico della persona e **confermata** lo stesso giorno, compresi i
+permessi di sistema riservati per ora alle app del sistema. È volutamente piccola: si allarga
+quando arriva un'app che ha davvero bisogno di qualcosa in più.
 
 **Principio:** quello che fa ogni app normale non chiede permessi. Si chiede il permesso solo per
 quello che tocca le cose della persona o il sistema intero.
@@ -159,9 +160,9 @@ quello che tocca le cose della persona o il sistema intero.
 
 ### Permessi di sistema: poteri sul sistema intero
 
-Toccano tutte le app o tutto il computer. Proposta: oggi li ricevono solo le app del sistema
+Toccano tutte le app o tutto il computer. Oggi li ricevono solo le app del sistema
 (in `/system/apps`); quando ci saranno le firme, anche le app firmate da uno sviluppatore
-autorizzato. È la proposta delle "chiavi a due livelli", ancora da confermare (vedi sotto).
+autorizzato ("chiavi a due livelli").
 
 | Permesso | Cosa permette | Chi lo usa oggi |
 |---|---|---|
@@ -193,8 +194,9 @@ offre **tutte** le funzioni obbligatorie.
 | **testo** | `testo.apri` (riceve un file di testo e lo apre per modificarlo) · `testo.nuovo` (apre un testo vuoto) | — |
 | **terminale** | `terminale.apri` (apre un terminale in una cartella data) | — |
 
-Il ruolo **firewall** resta fuori finché non si decide il lavoro in sottofondo: un firewall deve
-restare sempre acceso e controllare la rete di tutto il sistema.
+Ruoli come **firewall**, che devono lavorare per tutto il computer, passano dai moduli aggiuntivi
+(sezione 10): il ruolo è coperto da un'app che ha un modulo sul punto di aggancio giusto, più la sua
+finestra come pannello di controllo. Non sono nell'elenco finché non esiste quel punto di aggancio.
 
 ### Le app di oggi con questo elenco
 
@@ -206,25 +208,71 @@ restare sempre acceso e controllare la rete di tutto il sistema.
 | Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |
 | Contatore, Esempio | — | — | — |
 
-## 10. Sul tavolo
+## 10. Moduli aggiuntivi (integrazione speciale con il sistema)
+
+Deciso il 12 novembre 2026. La persona installa **solo app**. Alcune app però hanno bisogno di
+un'integrazione speciale con il sistema, per esempio un firewall che deve partire con il computer e
+controllare la rete di tutti. Per queste un'app può portarsi dietro un **modulo aggiuntivo**
+(come le estensioni di sistema del Mac o il servizio VPN di Android).
+
+### Lavoro in sottofondo: due casi diversi
+
+- **Per una persona** (la posta che controlla le mail, la musica che continua a suonare): è la
+  deviazione `sottofondo` dell'elenco. Gira nel mondo isolato di quella persona, finché la persona è
+  dentro. Si dichiara, e la persona viene informata.
+- **Per tutto il computer** (firewall, VPN, backup di tutto il disco): solo con un modulo aggiuntivo.
+
+### Come funziona
+
+1. **Il sistema decide i punti di aggancio**: un elenco fisso. Ogni punto dice cosa riceve il modulo,
+   cosa può fare e cosa non può fare. Un modulo si aggancia solo a uno di questi punti.
+2. **Il modulo sta dentro il pacchetto `.app`**, accanto all'app, e il manifesto lo dichiara. Per la
+   persona resta un solo file e una sola icona.
+3. **Il modulo gira da solo, separato dall'app.** Lo avvia il supervisore dei servizi all'accensione,
+   con una sua identità, senza finestra e con i soli poteri del suo punto di aggancio.
+4. **L'app è il pannello di controllo del modulo.** I due si parlano solo attraverso il sistema.
+5. **Installare un modulo richiede un'approvazione a parte**, con un avviso chiaro (per esempio
+   "questa app vuole controllare la rete di tutto il computer"). Per ora solo le app del sistema;
+   più avanti anche quelle firmate da uno sviluppatore autorizzato (chiavi a due livelli).
+6. **Togli l'app e se ne va anche il modulo.**
+
+### Condizioni di sicurezza
+
+Il sistema si fida di codice esterno, ma in modo limitato e controllato:
+
+1. **Il modulo fa solo quello che il suo punto di aggancio permette**: isolato, senza accesso ai file,
+   allo schermo o alle altre app, con limiti di memoria e processore e un filtro delle chiamate al kernel.
+2. **Il modulo propone, il sistema decide.** Per esempio, il modulo del firewall dà un elenco di
+   regole; il sistema controlla che siano valide e le applica lui. Il modulo non tocca mai la rete.
+3. **Il danno massimo è limitato** a quello che il punto di aggancio permette (per il firewall:
+   bloccare troppo o lasciar passare troppo, non rubare dati).
+4. **Via d'uscita sicura**: se il modulo si blocca o non risponde, il sistema torna a un comportamento
+   di base; la persona può spegnerlo dalle Impostazioni.
+5. **Si sa chi lo ha fatto**: firma, registro con le scadenze, possibilità di revocare uno sviluppatore.
+6. **La persona approva** con un avviso a parte rispetto ai permessi normali.
+
+Rimandato: un modulo che vede ogni singola connessione e decide caso per caso. È più potente ma
+vede informazioni private (con chi parla ogni app); si valuterà solo dopo le firme.
+
+### Punti di aggancio
+
+**Nessuno per ora.** Si aggiungono uno alla volta, solo quando arriva un'app che ne ha davvero
+bisogno. Il primo candidato è il "filtro della rete", per il firewall.
+
+## 11. Sul tavolo
 
 Da decidere, più o meno in quest'ordine:
 
-1. **Confermare l'elenco minimo** qui sopra, in particolare i permessi di sistema solo per le app
-   del sistema.
-2. **Il lavoro in sottofondo**: se un'app lo può dichiarare liberamente, solo per i ruoli che lo
-   prevedono, o solo se firmata da uno sviluppatore autorizzato (chiavi a due livelli). Riguarda
-   ruoli come "firewall", che non possono essere app che si aprono e si chiudono con la finestra.
-3. **I tipi di file che un'app sa aprire**, dichiarati nel manifesto.
-4. **La firma**: un registro delle firme degli sviluppatori con le loro scadenze, la verifica del
+1. **I tipi di file che un'app sa aprire**, dichiarati nel manifesto.
+2. **La firma**: un registro delle firme degli sviluppatori con le loro scadenze, la verifica del
    pacchetto, e il controllo che un aggiornamento venga dallo stesso autore.
-5. **L'identificativo definitivo** delle app (per esempio un indirizzo al contrario come
+3. **L'identificativo definitivo** delle app (per esempio un indirizzo al contrario come
    `it.mep.files`).
-6. **Le app la cui versione esce dal supporto**: avviso prima di aggiornare il sistema, oppure app
+4. **Le app la cui versione esce dal supporto**: avviso prima di aggiornare il sistema, oppure app
    che resta installata ma non si apre e spiega perché.
-7. **Com'è scritto il manifesto** (oggi righe "chiave = valore") e **che tipo di archivio** è il file `.app`.
-8. **Il nome `.app`**: su macOS è già usato per le app (che lì sono cartelle). Un nostro pacchetto
+5. **Che tipo di archivio** è il file `.app` (il manifesto invece è deciso: TOML, vedi `manifest-guida.toml`).
+6. **Il nome `.app`**: su macOS è già usato per le app (che lì sono cartelle). Un nostro pacchetto
    copiato su Mac apparirebbe come un'app rotta.
-9. **La libreria per disegnare gli SVG** (per esempio nanosvg, piccola, o resvg, completa).
-10. **Cosa vede un eseguibile normale avviato dalla scrivania**: oggi ha tutti i poteri della
+7. **La libreria per disegnare gli SVG** (per esempio nanosvg, piccola, o resvg, completa).
+8. **Cosa vede un eseguibile normale avviato dalla scrivania**: oggi ha tutti i poteri della
     persona. macOS, per esempio, avvisa al primo avvio dei file scaricati.
