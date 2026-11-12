@@ -305,7 +305,8 @@ static const struct strato_ombra ombra_puntatore_scuro[] = {
 #define SCELTA_PUNTO             8   /* il punto al centro della scelta accesa */
 #define BORDO_FOCUS_SPESSORE   384   /* 1,5 px in 256esimi: il bordo di un campo con il fuoco */
 #define RICERCA_LARGHEZZA_NUOVA 180
-#define AVVISO_LARGHEZZA       400   /* il riquadro dell'avviso (Figma: "Avviso") */
+#define AVVISO_LARGHEZZA       400   /* il riquadro dell'avviso (Figma: "Avviso", Scelte=Due) */
+#define AVVISO_LARGHEZZA_TRE   480   /* con tre pulsanti (Scelte=Tre) */
 
 /* =====================================================================================
  * VECCHIO STILE (da eliminare a fine migrazione)

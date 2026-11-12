@@ -853,11 +853,17 @@ static inline void stato_vuoto_cambia(struct stato_vuoto *s, int icona_, const c
  *     ...
  *     avviso_apri(&riavvia);                        // quando serve
  *
- * 'al_risposta' riceve 1 per la conferma, 0 per Annulla; l'avviso si chiude da solo. */
+ * 'al_risposta' riceve la scelta: AVVISO_CONFERMA (1), AVVISO_ANNULLA (0) o, se c'e' il terzo
+ * pulsante, AVVISO_ALTERNATIVA (2); l'avviso si chiude da solo.
+ *
+ * TRE SCELTE ("Scelte=Tre" in Figma): avviso_alternativa(&v, "Togli solo l'app", SECONDARIO)
+ * aggiunge un terzo pulsante tra Annulla e la conferma; il riquadro diventa largo
+ * AVVISO_LARGHEZZA_TRE (480). Per esempio Annulla / "Togli solo l'app" / "Togli app e dati". */
 #define AVVISO_RIGHE 4
+enum { AVVISO_ANNULLA, AVVISO_CONFERMA, AVVISO_ALTERNATIVA };
 
 struct avviso;
-typedef void (*al_risposta_avviso)(struct avviso *a, int conferma, void *dati);
+typedef void (*al_risposta_avviso)(struct avviso *a, int scelta, void *dati);
 
 /* L'avviso NON e' un figlio della finestra (non sta nel suo albero): la finestra lo tiene a
  * parte (finestra_tk_avviso), lo disegna dopo tutto il resto e gli da' i clic per primo.
@@ -871,12 +877,18 @@ struct avviso {
     int bloccante;
     int x, y, l, a;                    /* il riquadro, in coordinate della finestra */
     struct pulsante annulla, conferma;
+    struct pulsante alternativa;       /* il terzo pulsante (avviso_alternativa), se 'tre' */
+    int tre;
     al_risposta_avviso al_risposta;
     void *dati;
 };
 
+static inline int avviso_larghezza(const struct avviso *v) {
+    return v->tre ? AVVISO_LARGHEZZA_TRE : AVVISO_LARGHEZZA;
+}
+
 static inline int avviso_righe(struct avviso *v, char righe[][MAX_RIGA_NOME]) {
-    return testo_a_capo(FONT_CORPO, v->messaggio, AVVISO_LARGHEZZA - 2 * FINESTRA_PADDING,
+    return testo_a_capo(FONT_CORPO, v->messaggio, avviso_larghezza(v) - 2 * FINESTRA_PADDING,
                         righe, AVVISO_RIGHE);
 }
 
@@ -893,19 +905,25 @@ static inline int avviso_altezza(struct avviso *v) {
 /* Dispone il riquadro al centro della finestra (larga fl, alta fa) e i due pulsanti in
  * fondo a destra. */
 static inline void avviso_sistema(struct avviso *v, int fl, int fa) {
-    v->l = AVVISO_LARGHEZZA;
+    v->l = avviso_larghezza(v);
     v->a = avviso_altezza(v);
     v->x = (fl - v->l) / 2;
     v->y = (fa - v->a) / 2;
     v->base.x = v->x; v->base.y = v->y; v->base.l = v->l; v->base.a = v->a;
-    int cl, ca, al, aa;
-    widget_misura(&v->conferma.base, &cl, &ca);
-    widget_misura(&v->annulla.base, &al, &aa);
+    /* da destra: la conferma, poi (se c'e') l'alternativa, poi Annulla, a SPAZIO_8 */
+    struct pulsante *fila[3] = { &v->conferma, v->tre ? &v->alternativa : 0, &v->annulla };
+    int ca, x = v->x + v->l - FINESTRA_PADDING;
+    int dummy;
+    widget_misura(&v->conferma.base, &dummy, &ca);
     int y = v->y + v->a - FINESTRA_PADDING - ca;
-    v->conferma.base.x = v->x + v->l - FINESTRA_PADDING - cl;
-    v->conferma.base.y = y; v->conferma.base.l = cl; v->conferma.base.a = ca;
-    v->annulla.base.x = v->conferma.base.x - SPAZIO_8 - al;
-    v->annulla.base.y = y; v->annulla.base.l = al; v->annulla.base.a = aa;
+    for (int i = 0; i < 3; i++) {
+        if (!fila[i]) continue;
+        int bl, ba;
+        widget_misura(&fila[i]->base, &bl, &ba);
+        x -= bl;
+        fila[i]->base.x = x; fila[i]->base.y = y; fila[i]->base.l = bl; fila[i]->base.a = ba;
+        x -= SPAZIO_8;
+    }
 }
 
 /* Sotto il riquadro: il velo (se bloccante) su tutta la finestra (larga fl, alta fa), con i
@@ -953,23 +971,24 @@ static inline void avviso_puntatore(struct widget *w, int x, int y, unsigned int
 
 static inline void avviso_chiudi(struct avviso *v);
 
-static inline void avviso_rispondi(struct avviso *v, int conferma) {
+static inline void avviso_rispondi(struct avviso *v, int scelta) {
     avviso_chiudi(v);
-    if (v->al_risposta) v->al_risposta(v, conferma, v->dati);
+    if (v->al_risposta) v->al_risposta(v, scelta, v->dati);
 }
 
 static inline void avviso_tasto(struct widget *w, unsigned int tasto) {
     struct avviso *v = (struct avviso *)w;
-    if (tasto == '\n' || tasto == '\r') avviso_rispondi(v, 1);
-    else if (tasto == 27) avviso_rispondi(v, 0);
+    if (tasto == '\n' || tasto == '\r') avviso_rispondi(v, AVVISO_CONFERMA);
+    else if (tasto == 27) avviso_rispondi(v, AVVISO_ANNULLA);
 }
 
 static const struct tipo_widget tipo_avviso = {
     0, 0, avviso_disegna, avviso_puntatore, avviso_tasto, 0, 0, 0, 1
 };
 
-static inline void avviso_al_annulla(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, 0); }
-static inline void avviso_al_conferma(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, 1); }
+static inline void avviso_al_annulla(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, AVVISO_ANNULLA); }
+static inline void avviso_al_conferma(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, AVVISO_CONFERMA); }
+static inline void avviso_al_alternativa(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, AVVISO_ALTERNATIVA); }
 
 /* Prepara l'avviso (chiuso). 'tipo' e' il tipo del pulsante di conferma (PERICOLO,
  * PRIMARIO...), 'bloccante' 1 o 0. Annulla si puo' rinominare con avviso_annulla. */
@@ -990,6 +1009,19 @@ static inline void avviso_prepara(struct avviso *v, const char *titolo, const ch
 /* Cambia il testo di Annulla (per esempio "Apri cartella" in un avviso non bloccante). */
 static inline void avviso_annulla(struct avviso *v, const char *testo) {
     copia_testo(v->annulla.testo, testo, MAX_TESTO_WIDGET);
+}
+
+/* Aggiunge il terzo pulsante, tra Annulla e la conferma (di solito SECONDARIO): la risposta
+ * sara' AVVISO_ALTERNATIVA. Prima di avviso_apri. */
+static inline void avviso_alternativa(struct avviso *v, const char *testo, int tipo) {
+    if (!v->tre) {
+        pulsante_prepara(&v->alternativa, testo, NESSUNA_ICONA, avviso_al_alternativa, v);
+        widget_aggiungi(&v->base, &v->alternativa.base);
+        v->tre = 1;
+    } else {
+        copia_testo(v->alternativa.testo, testo, MAX_TESTO_WIDGET);
+    }
+    pulsante_stile(&v->alternativa, tipo, MISURA_M);
 }
 
 /* --- la finestra: la radice dell'albero, con la barra del titolo --- */

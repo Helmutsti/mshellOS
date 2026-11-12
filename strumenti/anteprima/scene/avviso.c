@@ -40,7 +40,13 @@ int main(void) {
     widget_aggiungi(&colonna.base, &riga.base);
     finestra_tk_prepara(&finestra, bloccante ? "Attivita" : "Files", &colonna.base);
     finestra_tk_dimensione(&finestra, 600, 420);
-    if (bloccante)
+    const char *tre = getenv("TRE");
+    if (tre && tre[0] == '1') {         /* TRE=1: l'avviso con tre scelte dello Store */
+        avviso_prepara(&avviso, "Togliere \"Contatore\"?",
+                       "Puoi togliere solo l'app e tenere i suoi dati, o togliere tutto.",
+                       "Togli app e dati", PERICOLO, 1, 0, 0);
+        avviso_alternativa(&avviso, "Togli solo l'app", SECONDARIO);
+    } else if (bloccante)
         avviso_prepara(&avviso, "Riavviare \"contatore\"?",
                        "Il processo viene chiuso e aperto di nuovo. I dati non salvati andranno persi.",
                        "Riavvia", PERICOLO, 1, 0, 0);
