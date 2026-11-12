@@ -36,6 +36,7 @@
     X(plex_semigrassetto_14, "fonts/ibm-plex-sans-semibold-14.font") \
     X(plex_semigrassetto_15, "fonts/ibm-plex-sans-semibold-15.font") \
     X(plex_semigrassetto_24, "fonts/ibm-plex-sans-semibold-24.font") \
+    X(plexmono_14, "fonts/ibm-plex-mono-regular-14.font") \
 
 /* Le icone Lucide, ognuna in tutte le sue misure: X(nome, file). Per numero: ICONA_... */
 #define MATERIALI_ICONE(X) \
@@ -211,6 +212,7 @@
 #define plex_semigrassetto_14 (*font_del_sistema(MATERIALE_plex_semigrassetto_14))
 #define plex_semigrassetto_15 (*font_del_sistema(MATERIALE_plex_semigrassetto_15))
 #define plex_semigrassetto_24 (*font_del_sistema(MATERIALE_plex_semigrassetto_24))
+#define plexmono_14 (*font_del_sistema(MATERIALE_plexmono_14))
 #define scelta_accesa (*immagine_del_sistema(MATERIALE_scelta_accesa))
 #define scelta_accesa_sopra (*immagine_del_sistema(MATERIALE_scelta_accesa_sopra))
 #define file_cartella_grande (*immagine_del_sistema(MATERIALE_file_cartella_grande))

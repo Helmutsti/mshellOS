@@ -28,6 +28,8 @@ for _misura in (12, 13, 14, 15, 16, 24):
     FONT_USATI.append(('plex_medio_%d' % _misura, 'IBMPlexSans-Medium.ttf', _misura))
 for _misura in (12, 13, 14, 15, 24):
     FONT_USATI.append(('plex_semigrassetto_%d' % _misura, 'IBMPlexSans-SemiBold.ttf', _misura))
+# IBM Plex Mono, a larghezza fissa: il testo del terminale (una misura sola)
+FONT_USATI.append(('plexmono_14', 'IBMPlexMono-Regular.ttf', 14))
 
 ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layout-grid', 'settings', 'square', 'activity',
          'arrow-left', 'arrow-right', 'list', 'search', 'house', 'chevron-right',
@@ -56,7 +58,7 @@ OGGETTI_PICCOLI = ['file', 'cartella', 'txt', 'pdf', 'png', 'zip', 'bin', 'home'
 
 # --- i nomi dei file (in inglese, come le cartelle del sistema) ---
 
-_FAMIGLIE = {'inter': 'inter', 'plex': 'ibm-plex-sans'}
+_FAMIGLIE = {'inter': 'inter', 'plex': 'ibm-plex-sans', 'plexmono': 'ibm-plex-mono'}
 _PESI = {'': 'regular', 'medio': 'medium', 'semigrassetto': 'semibold'}
 _TIPI = {'cartella': 'folder', 'home': 'home', 'file': 'file', 'immagine': 'image', 'testo': 'text',
          'programma': 'program', 'etichetta': 'label', 'scrivania': 'desktop',

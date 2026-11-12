@@ -1,6 +1,9 @@
-/* shell: una shell stupida, SOLO PER LE PROVE. Non e' la shell del sistema: c'e' soltanto
- * nel disco di sviluppo (SVILUPPO=1, vedi build.sh), e init la fa partire sulla seriale
- * (la console del kernel) e la fa ripartire quando finisce. Gira come sistema (uid 0).
+/* shell: una shell stupida, SOLO PER LE PROVE (provvisoria, STATO.md). Gira in due posti:
+ *   - sulla SERIALE (la console del kernel): init la fa partire come sistema (uid 0) e la fa
+ *     ripartire quando finisce;
+ *   - nel TERMINALE (utente/programmi/terminale.c, l'icona "Shell" della scrivania), come la
+ *     persona (uid 1000): il terminale le presta il suo terminale finto (pty) come 0, 1 e 2.
+ * Quale dei due lo dice il descrittore 0: se e' un terminale si usa lui, se no la seriale.
  *
  * Sa fare solo muoversi tra le cartelle e guardarle:
  *     pwd           la cartella in cui siamo
@@ -12,11 +15,15 @@
  * LA RIGA la legge e la corregge il kernel: la seriale e' un terminale in modo normale,
  * che fa da se' l'eco di quello che si scrive e il tasto di cancellazione (backspace); a
  * noi arriva la riga intera, quando si preme Invio. Ctrl-D, a riga vuota, e' come exit.
+ * Lo stesso nel terminale della finestra (un pty, che il kernel tratta allo stesso modo).
  * La cartella in cui siamo la tiene la shell (non il kernel): i percorsi si rendono
  * assoluti qui, e poi si danno alle funzioni della libreria, che vogliono solo percorsi
- * assoluti. "/home" e' la casa di chi chiede: per noi (uid 0) /data/users/0/home. */
+ * assoluti. "/home" e' la casa di chi chiede: sulla seriale (uid 0) /data/users/0/home,
+ * nel terminale (uid 1000) /data/users/1000/home. */
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "libreria.h"
@@ -215,10 +222,16 @@ static void comando_help(void) {
          "  cd [cartella]        si sposta (da solo: la radice; cd .. sale)\n"
          "  ls [-l] [percorso]   cosa c'e' dentro (-l: tipo, permessi, proprietario, misura, data)\n"
          "  help                 questo elenco\n"
-         "  exit                 finisce (init fa ripartire la shell)\n");
+         "  exit                 finisce (sulla seriale init la rifa' partire)\n");
 }
 
 /* --- la riga --- */
+
+/* Ctrl-C nel terminale: il kernel manda SIGINT a chi lo usa, cioe' a noi. Non deve farci
+ * finire: interrompe solo la lettura della riga (read torna con EINTR) e si ricomincia
+ * con un prompt nuovo, come fanno le shell vere. */
+static void al_ctrl_c(int segnale) { (void)segnale; }
+
 
 static int uguali(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
@@ -274,19 +287,32 @@ static void silenzia_kernel(void) {
 }
 
 int main(void) {
-    tty = open(TERMINALE, O_RDWR | O_NOCTTY | O_CLOEXEC);
-    if (tty < 0) {
-        scrivi_testo("shell: non riesco ad aprire " TERMINALE "\n");
-        dormi(5000);                           /* init ci fa ripartire: non a raffica */
-        return 1;
+    if (isatty(0)) {
+        /* il terminale della finestra: diventa il NOSTRO terminale (una sessione nuova, di
+         * cui lui e' il terminale di controllo), cosi' Ctrl-C arriva a noi come SIGINT */
+        tty = 0;
+        setsid();
+        ioctl(0, TIOCSCTTY, 0);
+        struct sigaction sa = { .sa_handler = al_ctrl_c };   /* senza SA_RESTART: read si ferma */
+        sigaction(SIGINT, &sa, 0);
+    } else {
+        tty = open(TERMINALE, O_RDWR | O_NOCTTY | O_CLOEXEC);
+        if (tty < 0) {
+            scrivi_testo("shell: non riesco ad aprire " TERMINALE "\n");
+            dormi(5000);                       /* init ci fa ripartire: non a raffica */
+            return 1;
+        }
+        silenzia_kernel();
+        dici("\n");                            /* dopo i messaggi dell'avvio */
     }
-    silenzia_kernel();
-    dici("\nmshell: shell di sviluppo (scrivi help)\n");
+    dici("mshell: shell di sviluppo (scrivi help)\n");
+    /* il prompt: '#' per il sistema, '$' per una persona, come nelle shell Unix */
+    const char *prompt = getuid() == 0 ? " # " : " $ ";
     static char riga[MAX_RIGA];
     for (;;) {
-        dici(cartella); dici(" # ");
+        dici(cartella); dici(prompt);
         int n = (int)read(tty, riga, MAX_RIGA - 1);
-        if (n < 0 && errno == EINTR) continue;
+        if (n < 0 && errno == EINTR) { dici("\n"); continue; }   /* Ctrl-C */
         if (n <= 0) { dici("\n"); break; }      /* Ctrl-D */
         if (riga[n - 1] == '\n') n--;
         riga[n] = 0;

@@ -10,5 +10,6 @@ cd /tmp/inter
 # Inter 4.1, dal sito ufficiale (rsms/inter): servono i tre pesi statici in TTF
 curl -sfL -o inter.zip https://github.com/rsms/inter/releases/download/v4.1/Inter-4.1.zip
 unzip -oq inter.zip 'extras/ttf/Inter-Regular.ttf' 'extras/ttf/Inter-Medium.ttf' 'extras/ttf/Inter-SemiBold.ttf'
-# IBM Plex Sans sta gia' nel repo: strumenti/grafica/font/IBMPlexSans (con OFL.txt)
+# IBM Plex Sans e Plex Mono stanno gia' nel repo: strumenti/grafica/font/IBMPlexSans e
+# IBMPlexMono (con OFL.txt)
 python3 /w/strumenti/grafica/genera.py /tmp/inter/extras/ttf /w

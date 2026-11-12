@@ -304,7 +304,7 @@ for f in utente/programmi/*.c; do
     lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o"
     case "$nome" in
         init) posto=/system/init ;;
-        shell) posto=/system/bin/shell ;;
+        shell|terminale) posto=/system/bin/$nome ;;   # la shell di prova e il suo terminale
         *)    posto=/system/services/$nome; SERVIZI="$SERVIZI $nome" ;;
     esac
     metti_file "$B/oggetti/$nome" "$posto" 755

@@ -1170,6 +1170,11 @@ struct finestra_tk {
      * di questa finestra serve anche lei. 0 se non c'e'. */
     struct finestra_tk *altra;
     int aperta;                        /* 1 mentre la finestra c'e' sullo schermo */
+    /* UN DESCRITTORE IN PIU' da guardare nel ciclo degli eventi (finestra_tk_guarda): quando
+     * e' pronto (c'e' da leggere, o l'altro capo ha chiuso) si chiama al_pronto. 0: nessuno */
+    int guardato;
+    void (*al_pronto)(struct finestra_tk *f, void *dati);
+    void *dati_pronto;
 };
 
 /* L'altezza della testata: TITOLO_ALTEZZA (40), o ALTEZZA_BARRA_MINI (28) nella mini finestra. */
@@ -1489,6 +1494,17 @@ static inline void finestra_tk_ogni(struct finestra_tk *f, unsigned int ms,
         return;
     }
     *posto = (struct chiamata_tk){ funzione, dati, ms, tempo() + ms };
+}
+
+/* Guarda anche il descrittore 'd' (una pipe, un terminale, un socket dell'app): quando c'e'
+ * da leggere, o l'altro capo ha chiuso, il ciclo degli eventi chiama 'funzione', che legge
+ * (senza bloccarsi) e segna cosa ridisegnare; come g_io_add_watch in GTK. Uno solo per
+ * finestra; 'funzione' 0 smette. */
+static inline void finestra_tk_guarda(struct finestra_tk *f, int d,
+                                      void (*funzione)(struct finestra_tk *f, void *dati), void *dati) {
+    f->guardato = d;
+    f->al_pronto = funzione;
+    f->dati_pronto = dati;
 }
 
 /* La chiamata che scade per prima, o 0 se non ce ne sono. */
@@ -2601,16 +2617,24 @@ static inline int uikit_esegui(struct finestra_tk *f) {
                     resta = prima ? (int)(prima->scadenza - tempo()) : -1;
                     if (prima && resta < 0) resta = 0;
                 }
-                struct da_guardare g[2] = { { .descrittore = f->finestra.collegamento },
-                                            { .descrittore = f->altra ? f->altra->finestra.collegamento : -1 } };
-                int pronti = aspetta(g, f->altra ? 2 : 1, resta);
+                /* la finestra, l'altra (se c'e') e il descrittore guardato (se c'e') */
+                struct da_guardare g[3] = { { .descrittore = f->finestra.collegamento } };
+                int quanti = 1, altra = 0, guardato = 0;
+                if (f->altra) { altra = quanti; g[quanti++].descrittore = f->altra->finestra.collegamento; }
+                if (f->al_pronto) { guardato = quanti; g[quanti++].descrittore = f->guardato; }
+                int pronti = aspetta(g, quanti, resta);
                 if (pronti == 0) break;           /* niente (o e' scaduta una chiamata) */
                 if (pronti < 0) {                 /* interrotta: si riprova */
                     if (servite) break;
                     servite--;
                     continue;
                 }
-                da = g[0].pronto || !f->altra ? f : f->altra;
+                if (guardato && g[guardato].pronto) {
+                    f->al_pronto(f, f->dati_pronto);
+                    if (f->da_chiudere) break;
+                    if (!g[0].pronto && !(altra && g[altra].pronto)) continue;
+                }
+                da = g[0].pronto || !altra ? f : f->altra;
                 if (!finestra_ricevi(&da->finestra, &n)) {
                     if (da == f) return 1;
                     if (sospesa.da == da) sospesa.da = 0;

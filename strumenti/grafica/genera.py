@@ -13,7 +13,8 @@ icona, struct immagine) e il codice che li legge e li disegna sono di GKit
 file TrueType o un SVG: qui li si trasforma una volta per tutte in pixel.
 
   - I FONT: Inter e IBM Plex Sans (licenza SIL OFL) in ogni misura e peso che usa
-    l'interfaccia (Inter e' in via di sostituzione con Plex). Ogni
+    l'interfaccia (Inter e' in via di sostituzione con Plex), e IBM Plex Mono (stessa
+    licenza, a larghezza fissa) per il terminale. Ogni
     lettera diventa una piccola tabella di "alfa": quanto e' coperto ogni pixel (0-255).
     I bordi sono gia' lisci (antialiasing): li calcola FreeType, qui.
   - LE ICONE: Lucide (licenza ISC), dagli SVG del file Figma "mshell - interfaccia". Anche
@@ -25,8 +26,8 @@ file TrueType o un SVG: qui li si trasforma una volta per tutte in pixel.
 I caratteri sono quelli della code page 437 (come i tasti e la console): l'ASCII piu'
 le lettere accentate italiane.
 
-Licenze: font Inter, di Rasmus Andersson (https://rsms.me/inter), e IBM Plex Sans, di IBM
-(https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide
+Licenze: font Inter, di Rasmus Andersson (https://rsms.me/inter), e IBM Plex Sans e IBM Plex Mono,
+di IBM (https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide
 (https://lucide.dev), licenza ISC: Copyright (c) for portions of Lucide are held by Cole
 Bemis 2013-2022 as part of Feather (MIT); all other copyright (c) for Lucide are held by
 Lucide Contributors 2022. Icone, immagini e sfondo vengono dal file Figma "mshell -
@@ -44,6 +45,7 @@ FONT = sys.argv[1]                  # la cartella con Inter-Regular.ttf, -Medium
 REPO = sys.argv[2]                  # il repository: si scrivono risorse/ e l'elenco di UIKit
 RISORSE = os.path.join(REPO, 'risorse')
 FONT_PLEX = os.path.join(QUI, 'font', 'IBMPlexSans')   # IBM Plex Sans: TTF e OFL.txt nel repo
+FONT_PLEX_MONO = os.path.join(QUI, 'font', 'IBMPlexMono')   # IBM Plex Mono (il terminale): TTF e OFL.txt
 
 # code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
 CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á',
@@ -80,7 +82,7 @@ def scrivi_immagine(nome, img):
 
 
 for nome, file, misura in FONT_USATI:
-    cartella = FONT_PLEX if file.startswith('IBMPlex') else FONT
+    cartella = FONT_PLEX_MONO if file.startswith('IBMPlexMono') else FONT_PLEX if file.startswith('IBMPlex') else FONT
     f = ImageFont.truetype(os.path.join(cartella, file), misura)
     ascesa, discesa = f.getmetrics()
     glifi, alfa, indice = [], [], [0] * 256

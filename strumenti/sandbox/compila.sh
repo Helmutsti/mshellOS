@@ -65,6 +65,8 @@ done
 metti_file $O/bin/init /system/init 755
 SERVIZI="compositore eventi launcher scrivania"
 for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755; done
+# i comandi: la shell di prova e il terminale della scrivania, come build.sh
+for nome in shell terminale; do metti_file "$O/bin/$nome" "/system/bin/$nome" 755; done
 
 # le applicazioni, come build.sh: il pacchetto (manifesto, code, resources); quelle di
 # DA_INSTALLARE solo come .app sulla Scrivania, le altre scompattate in /system/apps.

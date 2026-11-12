@@ -9,6 +9,8 @@
  *     come APPLICAZIONE (uid 1000), con l'argomento della richiesta se c'e'. E' per questo
  *     che il launcher e' del sistema (uid 0): solo il sistema puo' far partire un
  *     programma con un altro uid;
+ *   - APRI_PROGRAMMA: un programma normale di /system/bin (non un'app: oggi il terminale),
+ *     come la persona (uid 1000);
  *   - APRI_FILE: un pacchetto .app non si apre mai da solo: si fa partire lo Store su di
  *     lui, se e' installato; se no si risponde che le app vanno installate prima;
  *   - RIMUOVI_PACCHETTO, SVUOTA_DATI: togliere un'app della persona, svuotare i dati di
@@ -72,6 +74,24 @@ static void apri_un_file(struct richiesta_launcher *r, struct risposta_launcher 
         return;
     }
     risposta->numero = avvia_come_con(store.programma, UID_APPLICAZIONI, r->argomento);
+    risposta->esito = risposta->numero >= 0 ? LAUNCHER_FATTO : LAUNCHER_ERRORE;
+}
+
+/* Un programma normale di /system/bin (non un'app), come la persona. Il percorso deve stare
+ * proprio li': niente ".." per uscirne. */
+static void apri_un_programma(struct richiesta_launcher *r, struct risposta_launcher *risposta) {
+    const char *p = r->argomento, *cartella = CARTELLA_PROGRAMMI;
+    int k = 0;
+    while (cartella[k] && p[k] == cartella[k]) k++;
+    int dentro = !cartella[k] && p[k];
+    for (const char *s = p + k; dentro && *s; s++)
+        if (*s == '/') dentro = 0;           /* solo i file di /system/bin, non piu' giu' */
+    if (!dentro || descrizione_uguali(p + k, "..") || descrizione_uguali(p + k, ".")) {
+        risposta->esito = LAUNCHER_NON_PERMESSO;
+        messaggio(risposta, "Si possono aprire solo i programmi del sistema.");
+        return;
+    }
+    risposta->numero = avvia_come(p, UID_APPLICAZIONI);
     risposta->esito = risposta->numero >= 0 ? LAUNCHER_FATTO : LAUNCHER_ERRORE;
 }
 
@@ -153,6 +173,7 @@ static void rispondi(int d) {
         switch (r.tipo) {
         case APRI_APPLICAZIONE: apri_app(&r, &risposta); break;
         case APRI_FILE: apri_un_file(&r, &risposta); break;
+        case APRI_PROGRAMMA: apri_un_programma(&r, &risposta); break;
         case RIMUOVI_PACCHETTO: case SVUOTA_DATI: togli_o_svuota(d, &r, &risposta); break;
         case DESCRIVI_PACCHETTO: case INSTALLA_PACCHETTO: case AGGIORNA_PACCHETTO: case ELENCO_APP:
             pacchetti(d, &r, file, &risposta);

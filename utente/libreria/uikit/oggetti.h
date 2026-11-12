@@ -100,6 +100,16 @@ static inline void oggetto(struct pennello *p, int quale, int misura, int x, int
     }
 }
 
+/* L'elemento di un file (elemento_file.h) con un oggetto come icona: l'oggetto grande (48)
+ * centrato nel posto dell'icona (56). Lo usa la scrivania per le sue icone. */
+static inline void elemento_disegna_oggetto(struct pennello *p, int x, int y, int alto, int quale,
+                                            const char *nome, int stato) {
+    elemento_fondo(p, x, y, alto, stato);
+    oggetto(p, quale, OGGETTO_GRANDE, x + (ELEMENTO_LARGHEZZA - OGGETTO_LATO_GRANDE) / 2,
+            y + ELEMENTO_MARGINE + (ELEMENTO_ICONA - OGGETTO_LATO_GRANDE) / 2);
+    elemento_nome(p, x, y, nome);
+}
+
 /* --- quale oggetto: dal nome di un file, dal percorso di una cartella --- */
 
 static inline char oggetto_minuscola(char c) { return c >= 'A' && c <= 'Z' ? (char)(c + 'a' - 'A') : c; }

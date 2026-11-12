@@ -1,6 +1,7 @@
 /* L'ELEMENTO DI UN FILE nella vista a icone: l'icona grande e sotto il nome, come nel
  * disegno Figma ("Elemento file"). Lo usano Files (le cartelle e i file di una cartella)
- * e la scrivania (la cartella Home in alto a sinistra): stesso disegno, stesse misure.
+ * e la scrivania (le sue icone in alto a sinistra: oggi la sola "Shell", provvisoria):
+ * stesso disegno, stesse misure.
  *
  *     +--------------+   largo ELEMENTO_LARGHEZZA (84), angoli di 10
  *     |   [icona]    |   l'icona (56) in alto, a 8 dal bordo
@@ -100,12 +101,8 @@ static inline void elemento_icona(struct pennello *p, int x, int y, const struct
 /* Dove comincia il nome (la sua prima riga). */
 static inline int elemento_nome_y(int y) { return y + ELEMENTO_MARGINE + ELEMENTO_ICONA + ELEMENTO_SPAZIO; }
 
-/* Tutto l'elemento: fondo, icona e nome. 'alto' e' l'altezza del suo posto (in una riga
- * di elementi, quella del piu' alto): il fondo la prende tutta. */
-static inline void elemento_disegna(struct pennello *p, int x, int y, int alto,
-                                    const struct immagine *icona, const char *nome, int stato) {
-    elemento_fondo(p, x, y, alto, stato);
-    elemento_icona(p, x, y, icona);
+/* Il nome sotto l'icona, centrato, su una o due righe. */
+static inline void elemento_nome(struct pennello *p, int x, int y, const char *nome) {
     char righe[ELEMENTO_RIGHE_NOME][MAX_RIGA_NOME];
     int n = testo_a_capo(FONT_NOME_FILE, nome, ELEMENTO_LARGHEZZA - 2 * ELEMENTO_MARGINE, righe,
                          ELEMENTO_RIGHE_NOME);
@@ -113,6 +110,16 @@ static inline void elemento_disegna(struct pennello *p, int x, int y, int alto,
     for (int i = 0; i < n; i++)
         testo(p, FONT_NOME_FILE, x + (ELEMENTO_LARGHEZZA - larghezza_testo(FONT_NOME_FILE, righe[i])) / 2,
               elemento_nome_y(y) + i * FONT_NOME_FILE->altezza, righe[i]);
+}
+
+/* Tutto l'elemento: fondo, icona e nome. 'alto' e' l'altezza del suo posto (in una riga
+ * di elementi, quella del piu' alto): il fondo la prende tutta. Con un oggetto (oggetti.h)
+ * al posto dell'immagine: elemento_disegna_oggetto, in oggetti.h. */
+static inline void elemento_disegna(struct pennello *p, int x, int y, int alto,
+                                    const struct immagine *icona, const char *nome, int stato) {
+    elemento_fondo(p, x, y, alto, stato);
+    elemento_icona(p, x, y, icona);
+    elemento_nome(p, x, y, nome);
 }
 
 #endif

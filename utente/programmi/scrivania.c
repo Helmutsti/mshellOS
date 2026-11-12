@@ -3,7 +3,8 @@
  * E' un programma del sistema (uid 0), sorvegliato da init come il compositore. Per il
  * compositore e' un'applicazione come le altre, ma siccome e' del sistema puo' chiedere
  * delle SUPERFICI SPECIALI (vedi gkit.h):
- *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre;
+ *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre, con le ICONE della
+ *     scrivania in alto a sinistra (oggi solo "Shell", provvisoria: vedi piu' sotto);
  *   - la USERBAR, un PANNELLO (una barra) sul bordo sinistro, centrato in altezza, sopra
  *     tutte le finestre: il pulsante App e le applicazioni del sistema, con un segno a
  *     sinistra di quelle aperte;
@@ -368,14 +369,92 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
     }
 }
 
-/* Il puntatore sullo sfondo: premere li' chiude il vassoio (come un clic fuori da un
- * menu). 1 se si e' chiuso, e la userbar va ridisegnata. */
-static int notizia_sfondo(const struct notizia *n) {
-    static unsigned int pulsanti_prima;
-    if (n->tipo != PUNTATORE) return 0;
-    int appena = (n->pulsanti & ~pulsanti_prima) != 0;
-    pulsanti_prima = n->pulsanti;
-    if (!appena || !vassoio_aperto) return 0;
+/* --- le icone sullo sfondo --- */
+
+/* LE ICONE DELLA SCRIVANIA, in colonna in alto a sinistra, a destra della userbar: l'elemento
+ * di un file di Files (elemento_file.h, con l'oggetto del suo tipo: oggetti.h). Sotto il
+ * puntatore si vela appena, premere la sceglie (vetro chiaro), premere altrove sullo sfondo
+ * la lascia; il DOPPIO CLIC la apre.
+ * Oggi c'e' solo "Shell", PROVVISORIA (STATO.md): apre il terminale con la shell di prova,
+ * un programma normale che il launcher fa partire come la persona (APRI_PROGRAMMA). Le icone
+ * sono un elenco perche' un giorno saranno quelle della cartella Scrivania della persona. */
+struct icona_scrivania {
+    const char *nome;
+    int oggetto;                    /* OGGETTO_... */
+    const char *programma;          /* cosa si apre con il doppio clic (in /system/bin) */
+};
+
+static const struct icona_scrivania icone[] = {
+    { "Shell", OGGETTO_BIN, "/system/bin/terminale" },
+};
+#define QUANTE_ICONE ((int)(sizeof icone / sizeof icone[0]))
+
+#define ICONE_X (USERBAR_DAL_BORDO + USERBAR_LARGHEZZA + SPAZIO_16)   /* dopo la userbar */
+#define ICONE_Y SPAZIO_16
+
+static int icona_y[QUANTE_ICONE], icona_alta[QUANTE_ICONE];
+static int icona_sopra = -1, icona_scelta = -1;   /* -1: nessuna */
+static unsigned int *sfondo_pulito;  /* lo sfondo senza le icone: lo si ricopia a ogni disegno */
+
+static void sistema_icone(void) {
+    int y = ICONE_Y;
+    for (int i = 0; i < QUANTE_ICONE; i++) {
+        icona_y[i] = y;
+        icona_alta[i] = elemento_altezza(icone[i].nome);
+        y += icona_alta[i] + ELEMENTO_TRA;
+    }
+}
+
+static int icona_sotto(int x, int y) {
+    for (int i = 0; i < QUANTE_ICONE; i++)
+        if (x >= ICONE_X && x < ICONE_X + ELEMENTO_LARGHEZZA && y >= icona_y[i] && y < icona_y[i] + icona_alta[i])
+            return i;
+    return -1;
+}
+
+/* Lo sfondo con sopra le icone, nel loro stato. Si ricopia tutto lo sfondo (cosi' tutte e
+ * due le immagini della finestra sono giuste), ma al compositore si dice solo la colonna
+ * delle icone, l'unica parte che cambia ('tutto' la prima volta). */
+static int disegna_sfondo(int tutto) {
+    unsigned int *pixel = finestra_tela(&sfondo);
+    if (!pixel) return 0;
+    for (int i = 0; i < schermo_l * schermo_a; i++) pixel[i] = sfondo_pulito[i];
+    struct tela t = { pixel, schermo_l, schermo_a };
+    struct pennello p;
+    pennello_prepara(&p, &t);
+    for (int i = 0; i < QUANTE_ICONE; i++) {
+        int stato = i == icona_scelta ? ELEMENTO_STATO_SCELTO : i == icona_sopra ? ELEMENTO_STATO_SOPRA
+                                                                                   : ELEMENTO_NORMALE;
+        elemento_disegna_oggetto(&p, ICONE_X, icona_y[i], icona_alta[i], icone[i].oggetto, icone[i].nome, stato);
+    }
+    struct zona_finestra colonna = { ICONE_X, ICONE_Y, ELEMENTO_LARGHEZZA,
+                                     icona_y[QUANTE_ICONE - 1] + icona_alta[QUANTE_ICONE - 1] - ICONE_Y };
+    return finestra_mostra_zone(&sfondo, &colonna, tutto ? 0 : 1) >= 0;
+}
+
+/* Il puntatore sullo sfondo: illumina, sceglie e apre le icone; premere li' chiude anche il
+ * vassoio (come un clic fuori da un menu). Restituisce 1 se il vassoio si e' chiuso (la
+ * userbar va ridisegnata); *icone_cambiate a 1 se le icone vanno ridisegnate. */
+static int notizia_sfondo(const struct notizia *n, int *icone_cambiate) {
+    static unsigned int pulsanti_prima, clic_prima;
+    if (n->tipo != PUNTATORE && n->tipo != USCITO) return 0;
+    int sopra_prima = icona_sopra, scelta_prima = icona_scelta;
+    icona_sopra = n->tipo == PUNTATORE ? icona_sotto(n->x, n->y) : -1;
+    int premuto = n->tipo == PUNTATORE && (n->pulsanti & ~pulsanti_prima) != 0;   /* un pulsante qualsiasi */
+    int appena = premuto && (n->pulsanti & ~pulsanti_prima & PULSANTE_SINISTRO);
+    pulsanti_prima = n->tipo == PUNTATORE ? n->pulsanti : 0;
+    if (appena) {
+        unsigned int adesso = tempo();
+        if (icona_sopra >= 0 && icona_sopra == icona_scelta && (int)(adesso - clic_prima) < DOPPIO_CLIC) {
+            apri_programma(icone[icona_sopra].programma);
+            clic_prima = 0;
+        } else {
+            clic_prima = adesso;
+        }
+        icona_scelta = icona_sopra;
+    }
+    if (icona_sopra != sopra_prima || icona_scelta != scelta_prima) *icone_cambiate = 1;
+    if (!premuto || !vassoio_aperto) return 0;
     chiudi_vassoio();
     return 1;
 }
@@ -389,12 +468,13 @@ int main(void) {
     }
     leggi_applicazioni();
 
-    if (finestra_apri_come(&sfondo, schermo_l, schermo_a, "sfondo", RUOLO_SFONDO, 0, 0, 0) < 0)
+    sistema_icone();
+    sfondo_pulito = malloc((unsigned long)schermo_l * schermo_a * 4);
+    if (!sfondo_pulito) return 1;
+    prepara_sfondo(sfondo_pulito, schermo_l, schermo_a);
+    if (finestra_apri_come(&sfondo, schermo_l, schermo_a, "sfondo", RUOLO_SFONDO, 0, 0, 0) < 0 ||
+        !disegna_sfondo(1))
         return 1;
-    unsigned int *pixel = finestra_tela(&sfondo);
-    if (!pixel) return 1;
-    prepara_sfondo(pixel, schermo_l, schermo_a);
-    if (finestra_mostra(&sfondo) < 0) return 1;
 
     userbar_posto(schermo_a, quante_fissate, &barra_x, &barra_y);
     if (finestra_apri_pannello(&barra, USERBAR_LARGHEZZA, userbar_altezza(quante_fissate), "userbar",
@@ -412,7 +492,17 @@ int main(void) {
         int ridisegna = 0, fuoco_cambiato = 0;
         if (g[0].pronto) {
             if (!finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
-            ridisegna |= notizia_sfondo(&n);
+            int icone_cambiate = 0;
+            ridisegna |= notizia_sfondo(&n, &icone_cambiate);
+            if (icone_cambiate) {
+                if (!disegna_sfondo(0)) return 1;
+                /* le notizie arrivate mentre si aspettava un'immagine libera */
+                int ancora = 0;
+                for (int i = 0; i < sfondo.quante; i++)
+                    ridisegna |= notizia_sfondo(&sfondo.messe_da_parte[i], &ancora);
+                sfondo.quante = 0;
+                if (ancora && !disegna_sfondo(0)) return 1;
+            }
         }
         if (g[1].pronto) {
             if (!finestra_ricevi(&barra, &n)) return 1;
@@ -443,6 +533,6 @@ int main(void) {
             if (fuoco_cambiato && vassoio_aperto) { chiudi_vassoio(); ancora = 1; }
             if (ancora && !disegna_barra()) return 1;
         }
-        sfondo.quante = 0;   /* lo sfondo non si ridisegna: non mette niente da parte */
+        sfondo.quante = 0;   /* (gia' servite sopra, dopo il disegno delle icone) */
     }
 }

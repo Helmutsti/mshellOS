@@ -58,6 +58,12 @@
  *                       svuota la cartella dei dati di ogni persona (la cartella resta).
  *                       L'app resta installata. pacchetto_svuota_dati in pacchetto.h.
  *
+ *   APRI_PROGRAMMA      argomento = il percorso di un PROGRAMMA normale, non un'app (per
+ *                       ora solo quelli di /system/bin: APPLICAZIONI.md, sezione 2). Il
+ *                       launcher lo fa partire come la persona (uid 1000), senza argomenti.
+ *                       Oggi lo usa la scrivania per il terminale (l'icona "Shell"). Un
+ *                       percorso fuori da /system/bin: LAUNCHER_NON_PERMESSO.
+ *
  *   Se l'app e' accesa, RIMUOVI_PACCHETTO e SVUOTA_DATI rispondono LAUNCHER_IN_USO ("Chiudi
  *   <nome> prima di ..."): il launcher non la ferma.
  *
@@ -85,6 +91,10 @@
 #define APRI_FILE          6
 #define RIMUOVI_PACCHETTO  7
 #define SVUOTA_DATI        8
+#define APRI_PROGRAMMA     9
+
+/* dove stanno i programmi che APRI_PROGRAMMA fa partire */
+#define CARTELLA_PROGRAMMI "/system/bin/"
 
 /* le opzioni di RIMUOVI_PACCHETTO */
 #define LAUNCHER_TIENI_DATI 1
@@ -161,6 +171,15 @@ static inline int apri_applicazione_con(const char *id, const char *argomento) {
 
 /* Chiede al launcher di aprire un'applicazione: il numero del compito, o -1. */
 static inline int apri_applicazione(const char *id) { return apri_applicazione_con(id, 0); }
+
+/* Chiede al launcher di far partire il programma 'percorso' (in /system/bin) come la
+ * persona. Il numero del compito, o -1. */
+static inline int apri_programma(const char *percorso) {
+    struct richiesta_launcher r = { .tipo = APRI_PROGRAMMA };
+    struct risposta_launcher risposta;
+    launcher_copia(r.argomento, percorso, MAX_PERCORSO);
+    return launcher_chiedi(&r, -1, &risposta, 0, 0) < 0 ? -1 : risposta.numero;
+}
 
 /* Chiede al launcher di aprire un file (per ora: un pacchetto .app, con lo Store).
  * LAUNCHER_FATTO, o un altro esito con il perche' in risposta->messaggio. */

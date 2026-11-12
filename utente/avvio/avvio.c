@@ -13,7 +13,8 @@
  *   /dev/console     dove il kernel apre le prime uscite (0, 1, 2) di /init
  *
  * Il kernel fa partire /init come processo numero 1. Lui:
- *   1. monta /dev (devtmpfs: i dispositivi li crea il kernel), /proc e /sys;
+ *   1. monta /dev (devtmpfs: i dispositivi li crea il kernel), /dev/pts (i terminali
+ *      finti), /proc e /sys;
  *   2. carica i moduli (finit_module): da qui il kernel vede il disco, lo schermo, l'USB;
  *   3. cerca le PARTIZIONI del disco per NOME. Il disco ha una tabella delle partizioni
  *      GPT (build.sh), e ogni partizione ha un nome scritto nella tabella (il
@@ -148,6 +149,10 @@ int main(void) {
     mount("devtmpfs", "/dev", "devtmpfs", MS_NOSUID, "mode=0755");
     mount("proc", "/proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, 0);
     mount("sysfs", "/sys", "sysfs", MS_NOSUID | MS_NODEV | MS_NOEXEC, 0);
+    /* i terminali finti (pty: /dev/ptmx e /dev/pts/N), per il terminale della scrivania. Il
+     * terminale di una persona e' suo (620: lui legge e scrive) */
+    mkdir("/dev/pts", 0755);
+    mount("devpts", "/dev/pts", "devpts", MS_NOSUID | MS_NOEXEC, "mode=620,ptmxmode=666");
     if (fcntl(1, F_GETFD) < 0) {        /* senza /dev/console nell'archivio */
         int c = open("/dev/console", O_RDWR);
         if (c >= 0) { dup2(c, 0); dup2(c, 1); dup2(c, 2); if (c > 2) close(c); }
