@@ -1072,10 +1072,11 @@ static inline void avviso_rispondi(struct avviso *v, int scelta) {
     if (v->al_risposta) v->al_risposta(v, scelta, v->dati);
 }
 
+/* Invio arriva come carattere; Esc no (non e' un carattere): lo da' all'avviso
+ * uikit_tasto_fisico, come tasto fisico. */
 static inline void avviso_tasto(struct widget *w, unsigned int tasto) {
     struct avviso *v = (struct avviso *)w;
     if (tasto == '\n' || tasto == '\r') avviso_rispondi(v, AVVISO_CONFERMA);
-    else if (tasto == 27) avviso_rispondi(v, AVVISO_ANNULLA);
 }
 
 static const struct tipo_widget tipo_avviso = {
@@ -2420,8 +2421,18 @@ static inline void finestra_tk_smetti_tasti(struct finestra_tk *f, ascolta_tasti
         }
 }
 
-/* Un tasto fisico premuto o lasciato: i modificatori si contano; un tasto premuto va agli
- * ascoltatori, dall'ultimo al primo, finche' uno lo usa. */
+/* L'avviso aperto che sente la tastiera: quello bloccante, o quello che ha il fuoco (lui o
+ * uno dei suoi pulsanti). 0 se nessuno. */
+static inline struct avviso *uikit_avviso_tastiera(const struct finestra_tk *f) {
+    struct avviso *v = finestra_tk_avviso_aperto(f);
+    if (!v || v->bloccante) return v;
+    for (struct widget *w = f->con_fuoco; w; w = w->genitore)
+        if (w == &v->base) return v;
+    return 0;
+}
+
+/* Un tasto fisico premuto o lasciato: i modificatori si contano; Esc su un avviso fa come
+ * Annulla; un tasto premuto va agli ascoltatori, dall'ultimo al primo, finche' uno lo usa. */
 static inline void uikit_tasto_fisico(struct finestra_tk *f, unsigned int codice, int premuto) {
     unsigned int mod = codice == TASTO_CTRL || codice == TASTO_CTRL_DX ? MOD_CTRL
                      : codice == TASTO_MAIUSC || codice == TASTO_MAIUSC_DX ? MOD_MAIUSC
@@ -2430,7 +2441,10 @@ static inline void uikit_tasto_fisico(struct finestra_tk *f, unsigned int codice
         if (premuto) f->modificatori |= mod; else f->modificatori &= ~mod;
         return;
     }
-    if (!premuto || finestra_tk_bloccata(f)) return;
+    if (!premuto) return;
+    struct avviso *v = codice == TASTO_ESC && !f->modificatori ? uikit_avviso_tastiera(f) : 0;
+    if (v) { avviso_rispondi(v, AVVISO_ANNULLA); return; }
+    if (finestra_tk_bloccata(f)) return;
     for (int i = MAX_ASCOLTATORI - 1; i >= 0; i--) {
         struct ascoltatore_tk a = f->ascoltatori[i];
         if (a.funzione && a.funzione(f, codice, f->modificatori, a.dati)) return;
