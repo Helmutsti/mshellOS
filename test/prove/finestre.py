@@ -92,3 +92,6 @@ def esegui(p):
     s.aspetta_zona(m, p.scrivania, impostazioni, cosa="Impostazioni sparire (chiusa)")
     m.aspetta_che(lambda f: s.segno_sotto(f, "Impostazioni") == 0, 5.0,
                   cosa="Impostazioni chiusa nella userbar (senza segno)")
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

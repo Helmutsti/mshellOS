@@ -18,6 +18,8 @@ e si chiama la funzione 'esegui' della prova, che muove il mouse, preme tasti, f
 lo schermo e controlla. Ogni prova parte da zero: se una si rompe, non trascina le altre.
 
 IL DISCO. Ogni prova parte dal disco normale (disco.img), lo stesso di run.sh. Una prova
+che scrive DISCO = "disco_app.img" parte dal disco con le app di prova Esempio e Contatore
+(utente/prove/applicazioni, che nel disco normale non ci sono). Una prova
 che scrive DISCO = "disco_prove.img" parte invece dal disco delle prove: lo stesso, con
 in piu' i programmi di utente/prove/ in /data/tests, che init fa partire (per esempio
 qualche "riempitivo", un processo che dorme e basta: vedi build.sh). Le altre prove non

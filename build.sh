@@ -312,16 +312,19 @@ done
 #      stesso file);
 #   3. le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
 #      contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
-#      Le app di DA_INSTALLARE invece no: il loro pacchetto va sulla Scrivania della persona,
-#      per provare l'installazione (si apre con Files: il launcher fa partire lo Store, che
-#      chiede se installarla).
+#      Le app di utente/prove/applicazioni/ (Esempio, Contatore) NON sono del sistema: si
+#      compilano e si impacchettano come le altre, ma vanno solo nei dischi delle prove
+#      (passo 6), mai in disco.img. In quei dischi quelle di DA_INSTALLARE hanno il pacchetto
+#      sulla Scrivania della persona, per provare l'installazione (si apre con Files: il
+#      launcher fa partire lo Store, che chiede se installarla); le altre sono scompattate
+#      in /system/apps.
 # L'id dell'app (nel manifesto) deve essere il nome della cartella dei sorgenti in minuscolo.
 DA_INSTALLARE="contatore"
 PACCHETTI="$B/pacchetti"
-SCRIVANIA_PACCHETTI=""
 mkdir -p "$PACCHETTI"
 PACCHETTI_ASSOLUTO=$(cd "$PACCHETTI" && pwd)
-for cartella in utente/applicazioni/*/; do
+PROVE_APPS=""
+for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
     nome=$(basename "$cartella" | tr A-Z a-z)
     mkdir -p "$B/oggetti/applicazioni/$nome"
     oggetti=""
@@ -354,9 +357,10 @@ for cartella in utente/applicazioni/*/; do
     (cd "$pacchetto" && find manifest.toml code resources | sort | zip -X -q -D "$PACCHETTI_ASSOLUTO/$nome.app" -@)
     printf '  %-40s %7s byte  pacchetto\n' "$PACCHETTI/$nome.app" "$(wc -c < "$PACCHETTI/$nome.app")"
 
-    case " $DA_INSTALLARE " in
-    *" $nome "*)
-        SCRIVANIA_PACCHETTI="$SCRIVANIA_PACCHETTI $nome"
+    case "$cartella" in
+    utente/prove/*)
+        # le app di prova: solo nei dischi delle prove (passo 6), mai in disco.img
+        PROVE_APPS="$PROVE_APPS $nome"
         ;;
     *)
         (cd "$pacchetto" && find . -type f | sort) | while read -r f; do
@@ -369,6 +373,7 @@ for cartella in utente/applicazioni/*/; do
         ;;
     esac
 done
+echo "  app di prova (solo nei dischi delle prove):$PROVE_APPS"
 
 # --- la partizione data: /data, in lettura e scrittura ---
 
@@ -413,14 +418,6 @@ for r in file/* file/.[!.]*; do
         find "$CASA_VERA/$(basename "$r")" -type f -exec chmod 644 {} +
         printf '  %-40s da file/\n' "$CASA/home/$(basename "$r")"
     fi
-done
-# I pacchetti delle app da installare (DA_INSTALLARE, sopra) sulla Scrivania della persona,
-# suoi (644): per provare l'installazione come la farebbe lei.
-for nome in $SCRIVANIA_PACCHETTI; do
-    cp "$PACCHETTI/$nome.app" "$CASA_VERA/Scrivania/$nome.app"
-    chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Scrivania/$nome.app"
-    chmod 644 "$CASA_VERA/Scrivania/$nome.app"
-    printf '  %-40s da installare\n' "$CASA/home/Scrivania/$nome.app"
 done
 # Le date dei file della casa sono fisse (l'ultima sera prima dell'orologio delle prove,
 # 1/1/2026: Files le scrive "ieri, 18:02"), non quelle della compilazione: cosi' quello
@@ -564,12 +561,44 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco.img pronto: GPT con avvio ($MISURA_AVVIO MB, FAT32), system ($MISURA_SISTEMA MB, ext4) e data ($MISURA_DATI MB, ext4)"
 
-# IL DISCO DELLE PROVE: una copia di disco.img in cui la partizione data ha in piu' la
+# IL DISCO DELLE PROVE: una copia di disco_app.img in cui la partizione data ha in piu' la
 # cartella /data/tests, con i programmi delle prove (init fa partire tutto quello che c'e'
 # li'). Le altre due partizioni sono le stesse; data si riscrive da capo, dallo stesso
 # albero piu' la cartella. Lo usano solo le prove che lo chiedono (DISCO in test/prove/);
 # acceso a mano (run.sh), il sistema usa sempre disco.img.
-cp "$B/disco.img" "$B/disco_prove.img"
+# IL DISCO DELLE APP DI PROVA (disco_app.img): come disco.img, ma con in piu' le app di
+# prova (utente/prove/applicazioni): quelle di DA_INSTALLARE come .app
+# sulla Scrivania della persona (suoi, 644: per provare l'installazione come la farebbe
+# lei), le altre scompattate in /system/apps. Cambia anche system, quindi si riscrive.
+# E' il disco delle prove che usano Esempio e Contatore (DISCO in test/prove/), senza i
+# programmi di /data/tests; i due dischi qui sotto partono da lui.
+for nome in $PROVE_APPS; do
+    pacchetto="$B/oggetti/pacchetti/$nome"
+    case " $DA_INSTALLARE " in
+    *" $nome "*)
+        cp "$PACCHETTI/$nome.app" "$CASA_VERA/Scrivania/$nome.app"
+        chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Scrivania/$nome.app"
+        chmod 644 "$CASA_VERA/Scrivania/$nome.app"
+        printf '  %-40s da installare (solo prove)\n' "$CASA/home/Scrivania/$nome.app"
+        ;;
+    *)
+        (cd "$pacchetto" && find . -type f | sort) | while read -r f; do
+            f=${f#./}
+            permessi=644
+            [ "$f" = code ] && permessi=755
+            metti_file "$pacchetto/$f" "/system/apps/$nome/$f" $permessi >/dev/null
+        done
+        metti_cartella "$CASA/appsdata/$nome" $UTENTE_UID 700 >/dev/null
+        ;;
+    esac
+done
+# date fisse della casa, come sopra
+find "$CASA_VERA" -exec touch -d "2025-12-31 18:02:00" {} +
+cp "$B/disco.img" "$B/disco_app.img"
+mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$ALBERO_SISTEMA" "$B/disco_app.img" $((MISURA_SISTEMA * MB / 4096))
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" "$B/disco_app.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_app.img pronto: come disco.img, con in piu' le app di prova:$PROVE_APPS"
+cp "$B/disco_app.img" "$B/disco_prove.img"
 metti_cartella /data/tests 0 755 >/dev/null
 for i in $(seq $RIEMPITIVI); do
     metti_file "$B/oggetti/prove/riempitivo" "/data/tests/riempitivo-$i" 755 >/dev/null
@@ -581,7 +610,7 @@ echo "$B/disco_prove.img pronto: con $RIEMPITIVI riempitivi in /data/tests"
 # programma pacchetti (utente/prove/pacchetti.c), che chiede al launcher di descrivere e
 # installare contatore.app. Sta in un disco suo perche' installa davvero (in /data/apps):
 # le altre prove non devono vederlo. Lo usa test/prove/pacchetti.py.
-cp "$B/disco.img" "$B/disco_pacchetti.img"
+cp "$B/disco_app.img" "$B/disco_pacchetti.img"
 rm -f "$(vero /data/tests)"/riempitivo-*
 metti_file "$B/oggetti/prove/pacchetti" "/data/tests/pacchetti" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \

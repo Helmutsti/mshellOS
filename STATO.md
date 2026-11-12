@@ -138,7 +138,8 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
 | `utente/libreria/uikit/` | UIKit, l'interfaccia: `uikit.h` (finestra, componenti, ciclo degli eventi: include tutto quello che serve a un'app), stile e temi (`stile.h` riprende le variabili del file Figma), materiali del sistema (`materiali.h`, font e icone), userbar, quello che serve al compositore (`uikit_compositore.h`) |
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
-| `utente/applicazioni/` | Attivita, Contatore, Doom, Esempio, Files, Impostazioni (una cartella ciascuna, con `manifest.toml` e `resources/`) |
+| `utente/applicazioni/` | Attivita, Doom, Files, Impostazioni, Store (una cartella ciascuna, con `manifest.toml` e `resources/`) |
+| `utente/prove/applicazioni/` | Esempio e Contatore: app solo per le prove, non del sistema (vanno solo in `disco_app.img`, `disco_prove.img` e `disco_pacchetti.img`, e nella sandbox) |
 | `utente/libreria/esterni/` | librerie di altri: miniz (zip), tomlc99 (TOML) e stb_image (PNG), con le loro licenze |
 | `utente/prove/` | programmi solo per le prove (vanno solo nel disco delle prove) |
 | `file/` | quello che finisce nella casa della persona (`/data/users/1000/home`) |
@@ -168,7 +169,7 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
   di `system` e `data`; la riga scelta è in vetro chiaro.
 - **La scrivania come nella pagina "Scrivania" di Figma** (ramo `scrivania-figma`): al posto
   della vecchia isola in alto c'è la **userbar**, una pillola di vetro sul bordo sinistro,
-  centrata in altezza: il pulsante App e sotto le app del sistema (Attività, Doom, Esempio,
+  centrata in altezza: il pulsante App e sotto le app del sistema (Attività, Doom,
   Files, Impostazioni, Store). Il pulsante App apre il **vassoio delle app** a destra: tutte le
   app installate in una griglia da 3 (anche quelle della persona, per esempio Contatore). Un clic
   su un'app la apre o, se è aperta, la riporta davanti; un clic nel vassoio lo chiude, e si
@@ -464,9 +465,12 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
 - `build.sh` fa un pacchetto per ogni app: `build/<cpu>/pacchetti/<id>.app` (uno zip con
   manifesto, programma e `resources/`). Le app del sistema stanno anche scompattate in
   `/system/apps/<id>`, con lo stesso contenuto.
-- **Contatore non è più un'app del sistema.** Il suo pacchetto `contatore.app` sta sulla
-  Scrivania della persona (`/data/users/1000/home/Scrivania/`), per provare l'installazione.
-  Nella userbar quindi non c'è; dopo l'installazione è nel vassoio delle app.
+- **Esempio e Contatore non sono app del sistema**: i sorgenti stanno in
+  `utente/prove/applicazioni/` e `disco.img` (quello di `run.sh`) non li ha. Li ha solo
+  `disco_app.img` (e i dischi delle prove che ne partono): Esempio in `/system/apps`, il
+  pacchetto `contatore.app` sulla Scrivania della persona (`/data/users/1000/home/Scrivania/`),
+  per provare l'installazione. Le prove che li usano scrivono `DISCO = "disco_app.img"`.
+  Anche la sandbox li ha (è un ambiente di prova).
 - Librerie di altri, in `utente/libreria/esterni/`: miniz 3.0.2 (zip) e tomlc99 (TOML), con
   licenza MIT, e stb_image 2.30 (PNG, pubblico dominio o MIT).
 - Una libreria nuova per i pacchetti (`pacchetto.c`): legge un `.app` senza scompattarlo, lo

@@ -335,3 +335,6 @@ def esegui(p):
     m.premi("esc")                                                      # Esc: niente e' scelto
     torna(casa, "la scelta tolta con Esc")
     p.controlla(not s.zona_uguale(tasti, copia, corpo), "le scorciatoie non hanno fatto niente")
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

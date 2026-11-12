@@ -73,3 +73,6 @@ def esegui(p):
     x, y = s.angolo(0)
     giro(p, base, x + 160, y + 120, 70, 4, "finestra")
     time.sleep(0.2)
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

@@ -118,3 +118,6 @@ def esegui(p):
     m.aspetta_che(lambda f: s.segno_sotto(f, "Esempio") == 0, 5.0,
                   cosa="Esempio chiusa nella userbar")
     m.foto("terminata")
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

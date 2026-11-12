@@ -61,3 +61,6 @@ def esegui(p):
     time.sleep(0.6)
     p.controlla(sfondo() == fermo, "lasciato il tasto, lo sfondo continua a cambiare")
     p.nota(f"{cambi} cambi di colore in 8 foto col tasto giu'")
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

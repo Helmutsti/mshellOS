@@ -25,7 +25,7 @@ ESTERNI  := $(O)/esterni/miniz.o $(O)/esterni/toml.o $(O)/esterni/stb_image.o
 LIBRERIA_SANDBOX := $(filter-out $(O)/utente/libreria/gkit/schermo.o,$(LIBRERIA)) $(O)/strumenti/sandbox/schermo_sandbox.o
 
 PROGRAMMI := init compositore launcher scrivania
-APP_CARTELLE := $(sort $(wildcard utente/applicazioni/*/))
+APP_CARTELLE := $(sort $(wildcard utente/applicazioni/*/ utente/prove/applicazioni/*/))
 minuscolo = $(shell echo '$(1)' | tr A-Z a-z)
 
 FATTI := $(addprefix $(O)/bin/,$(PROGRAMMI) eventi avvio prove/riempitivo prove/pacchetti)

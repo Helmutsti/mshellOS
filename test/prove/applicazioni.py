@@ -65,3 +65,6 @@ def esegui(p):
     m.clic(1200, 760)
     m.muovi(*PUNTO_VUOTO)
     s.aspetta_zona(m, chiuso, VASSOIO_SINISTRA, uguale=True, cosa="il vassoio chiuso dallo sfondo")
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

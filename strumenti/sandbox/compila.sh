@@ -63,13 +63,15 @@ SERVIZI="compositore eventi launcher scrivania"
 for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755; done
 
 # le applicazioni, come build.sh: il pacchetto (manifesto, code, resources); quelle di
-# DA_INSTALLARE solo come .app sulla Scrivania, le altre scompattate in /system/apps
+# DA_INSTALLARE solo come .app sulla Scrivania, le altre scompattate in /system/apps.
+# Ci sono anche Esempio e Contatore (utente/prove/applicazioni): la sandbox e' un ambiente
+# di prova, come disco_prove.img.
 DA_INSTALLARE="contatore"
 APPS=""
 SCRIVANIA_PACCHETTI=""
 P=/tmp/pacchetti
 rm -rf "$P"
-for cartella in utente/applicazioni/*/; do
+for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
     nome=$(basename "$cartella" | tr A-Z a-z)
     pacchetto="$P/$nome"
     mkdir -p "$pacchetto/resources"

@@ -88,3 +88,6 @@ def esegui(p):
     passo(lambda: m.clic(*TOGLI), None, "conferma_togli")
     passo(lambda: m.clic(*CONFERMA_TOGLI), "store: elenco: 6 app, 0 tue", "tolta")
     p.controlla("launcher: tolta contatore" in m.testo_seriale(), "il launcher non dice 'tolta contatore'")
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

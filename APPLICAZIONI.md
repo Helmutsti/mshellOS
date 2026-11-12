@@ -215,7 +215,7 @@ finestra come pannello di controllo. Non sono nell'elenco finché non esiste que
 | Impostazioni | `impostazioni.sistema` (di sistema) | — | — |
 | Store | `app.gestire` (di sistema) | — | — |
 | Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |
-| Contatore, Esempio | — | — | — |
+| Contatore, Esempio (solo per le prove: `utente/prove/applicazioni/`) | — | — | — |
 
 ## 10. Moduli aggiuntivi (integrazione speciale con il sistema)
 

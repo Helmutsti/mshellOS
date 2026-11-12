@@ -41,3 +41,6 @@ def esegui(p):
 
     s.apri(m, "Impostazioni")
     p.riferimento("impostazioni", m.aspetta_schermo_fermo())
+
+
+DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale
