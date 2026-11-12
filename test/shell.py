@@ -2,12 +2,10 @@
 # requires-python = ">=3.10"
 # dependencies = ["pillow"]
 # ///
-"""Prova della shell di sviluppo (solo PC): accende il disco di sviluppo in QEMU, con la
+"""Prova della shell di prova (solo PC): accende il disco in QEMU, con la
 seriale su una presa TCP, scrive dei comandi come una persona e controlla le risposte.
 
-    SVILUPPO=1 USCITA=build/sviluppo  (build.sh, vedi in cima)
-    uv run test/shell.py                      # usa build/sviluppo/disco.img
-    uv run test/shell.py --build build/sviluppo
+    uv run test/shell.py                      # usa build/x86_64/disco.img
 
 Spegne solo il QEMU che ha acceso lei."""
 import argparse
@@ -44,12 +42,12 @@ def leggi_fino_a(presa, testo, attesa):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--build", default="build/sviluppo")
+    ap.add_argument("--build", default="build/x86_64")
     ap.add_argument("--porta", type=int, default=4480)
     a = ap.parse_args()
     disco = Path(a.build) / "disco.img"
     if not disco.exists():
-        raise SystemExit(f"manca {disco}: compila con SVILUPPO=1 (vedi build.sh)")
+        raise SystemExit(f"manca {disco}: compila prima (build.sh)")
     lavoro = Path(tempfile.mkdtemp(prefix="shell_"))
     shutil.copyfile(disco, lavoro / "disco.img")
     programma = qemu.trova_qemu("qemu-system-x86_64")

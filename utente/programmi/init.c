@@ -41,10 +41,8 @@ static struct servizio servizi[] = {
     { "/system/services/compositore", risorse_compositore, 3, -1 },
     { "/system/services/launcher", risorse_launcher, 1, -1 },
     { "/system/services/scrivania", 0, 0, -1 },
-#ifdef SVILUPPO
-    /* solo nel disco di sviluppo (SVILUPPO=1, build.sh): la shell di prova sulla seriale */
+    /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere */
     { "/system/bin/shell", 0, 0, -1 },
-#endif
 };
 #define QUANTI_SERVIZI ((int)(sizeof servizi / sizeof servizi[0]))
 
