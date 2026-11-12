@@ -1,0 +1,7 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Oggetto">
+<path id="retro" d="M5 8C5 7.20435 5.31607 6.44129 5.87868 5.87868C6.44129 5.31607 7.20435 5 8 5H18.5L22.5 9H40C40.7957 9 41.5587 9.31607 42.1213 9.87868C42.6839 10.4413 43 11.2044 43 12V40C43 40.7957 42.6839 41.5587 42.1213 42.1213C41.5587 42.6839 40.7957 43 40 43H8C7.20435 43 6.44129 42.6839 5.87868 42.1213C5.31607 41.5587 5 40.7957 5 40V8Z" fill="#E3E3E5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#77777B"/>
+<path id="fronte" d="M5 20C5 19.2044 5.31607 18.4413 5.87868 17.8787C6.44129 17.3161 7.20435 17 8 17H40C40.7957 17 41.5587 17.3161 42.1213 17.8787C42.6839 18.4413 43 19.2044 43 20V40C43 40.7956 42.6839 41.5587 42.1213 42.1213C41.5587 42.6839 40.7957 43 40 43H8C7.20435 43 6.44129 42.6839 5.87868 42.1213C5.31607 41.5587 5 40.7956 5 40V20Z" fill="#F2F2F3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#77777B"/>
+<path id="simbolo" d="M24 24V32M27.5 28.5L24 32L20.5 28.5M19 35.5H29" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke="#77777B"/>
+</g>
+</svg>

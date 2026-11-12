@@ -173,45 +173,48 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
 
 ## 6. Files e cartella Home
 
-L'applicazione Files (per sfogliare i file) e la cartella Home sulla scrivania si stavano
-finendo mentre veniva scritto questo documento.
-
-**Fatto** (codice in `utente/applicazioni/Files/`, icona blu "cartella" nell'isola):
+**Fatto** (codice in `utente/applicazioni/Files/`, ramo `files-figma`): Files è come nel disegno
+di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
 
 - **Cartella Home sulla scrivania** in alto a sinistra: un doppio clic apre Files sulla tua home.
-- **Barra laterale**: Scorciatoie (Home, Scrivania, Apps) e Filtri (Immagini, Testi, Programmi;
-  un secondo clic toglie il filtro).
-- **Barra degli strumenti**: indietro/avanti con la cronologia, percorso cliccabile, vista a
-  icone o a elenco, ricerca per nome. Fuori dalla home il percorso parte da "Disco".
-- **Viste**: a icone (nomi su due righe con "…") e a elenco (colonne, ordinamento, barra di
-  scorrimento). Riga o elemento scelto in vetro chiaro.
-- **Stati**: cartella vuota, errore, permesso negato.
-- **Menu del tasto destro**: sul file (Apri, Rinomina, Duplica, Informazioni, Elimina) e
-  sullo spazio vuoto (Nuova cartella, Ordina per ›, Mostra come icone/elenco), aperti dove
-  si clicca.
-- **Azioni sui file**: rinomina nel posto, nuova cartella, duplica (solo file), informazioni,
-  elimina (file e cartelle vuote). Se un'azione non riesce compare un piccolo avviso in basso.
-- **Icone di file e cartelle** prese dal disegno in Figma (56 e 18 px, senza contorni).
-- Il launcher ora può aprire un'app su un percorso: aprire una cartella avvia Files lì.
-- File d'esempio nella cartella `file/` del progetto (finiscono nella home).
-- Prova automatica nuova `files` con 10 immagini di riferimento.
-
-**Prove sul PC**: 9 su 9 a 8 GB. A 2 GB il primo giro è fallito una volta sulla prova
-`avvio` (la riga della tastiera USB è arrivata dopo 30 secondi: un problema di tempi
-dell'avvio, non di Files); il giro ripetuto è passato 9 su 9. Da tenere d'occhio.
+- **Finestra**: titolo, barra degli strumenti da 48 (padding 8), sotto la barra laterale (larga
+  200, sul vetro, con la linea a destra) e il pannello chiaro (8 di margine ai lati e sotto). La
+  finestra resta 800 x 480 (il disegno è 960 x 600): così sta nella scala delle finestre delle
+  prove.
+- **Barra degli strumenti**: i controlli cominciano dove finisce la barra laterale: indietro e
+  avanti (frecce chevron), icone o elenco, il percorso "Home / Documenti" (fuori dalla casa parte
+  da "Disco"), la ricerca larga 200.
+- **Barra laterale**: Scorciatoie (Home, Scrivania), Filtri (Immagini, Testi, Programmi; un
+  secondo clic toglie il filtro), il titolo "Tags" (senza voci, come nel disegno). Apps non
+  c'è più (non è nel disegno).
+- **Viste**: la griglia di icone e la tabella (Nome, Tipo, Dimensione; un clic
+  sull'intestazione ordina, la freccia dice il verso). La colonna Modificato non c'è più (non è
+  nel disegno); l'ordine per data resta nel menu "Ordina per".
+- **Icone dei file**: gli oggetti del disegno (48 e 24 px, colori del tema), con la variante
+  più specifica: cartelle Home, Scrivania, Documenti, Immagini, Download, applicazioni; file
+  TXT, PDF, PNG, ZIP, BIN.
+- **Stati**: cartella vuota (senza icona, come nel disegno), errore, permesso negato.
+- **Menu del tasto destro**: sul file (Apri, Rinomina, Duplica, Informazioni, Elimina, voci S
+  senza simboli, come nel disegno) e sullo spazio vuoto (Nuova cartella, Ordina per ›, Mostra
+  come icone/elenco, fatto allo stesso modo). Esc lo chiude.
+- **Informazioni**: in una mini finestra a parte (Tipo, Dimensione, Posizione); Esc o la X la
+  chiudono.
+- **Scorciatoie**: Invio (apre, conferma il nome), F2, Ctrl+D, Ctrl+I, Canc, Ctrl+Maiusc+N,
+  Esc (chiude il menu, annulla il nome nuovo, toglie la scelta).
+- **Azioni sui file**: rinomina nel posto, nuova cartella, duplica (solo file), elimina (file e
+  cartelle vuote). Se un'azione non riesce compare un piccolo avviso in basso.
+- **Icona dell'app** dal disegno (SVG 96 e PNG 32 e 18, chiara e scura) nel `manifest.toml`.
+- Prova `files` aggiornata (anche le scorciatoie, la mini finestra, la cartella vuota). Le foto
+  di riferimento `test/riferimenti/*/files_*.png` sono quelle di prima: vanno rifatte dopo
+  averle guardate. Lo stato "permesso negato" non si prova più: senza Apps, dalla casa non si
+  arriva alle cartelle del sistema.
 
 **Non c'è ancora**:
 - aprire i file che non sono cartelle (non esiste ancora un visore: "Apri" è grigio);
 - eliminare cartelle piene e duplicare cartelle;
-- **le scorciatoie da tastiera** (Ctrl+D, F2, Canc, Esc...): il servizio `eventi` oggi non
-  manda alle app Ctrl, i tasti funzione, Canc ed Esc. Funziona solo Invio. I menu le mostrano
-  già, come nel disegno;
 - la libreria accetta percorsi di al massimo 63 lettere (la prova "errore" usa proprio una
-  cartella con un percorso più lungo): va alzato a 4096 come su Linux.
-
-**Da rivedere a occhio**: nel menu del tasto destro aperto sopra l'elemento scelto, la
-sfocatura sotto il menu lascia una macchia chiara vicino ad "Apri" (si vede in
-`test/riferimenti/x86_64/files_menu_file.png`).
+  cartella con un percorso più lungo): va alzato a 4096 come su Linux;
+- l'icona Home della scrivania (`elemento_file.h`) usa ancora le icone di file di prima.
 
 ## 6b. Doom, tasti fisici e anteprima
 
@@ -228,9 +231,9 @@ una barra (trascinamento e X). Si apre dalla scrivania (icona rossa con il trian
 **Tasti fisici** (premuto/rilasciato): `eventi` manda `EVENTO_TASTO_FISICO` (codice Linux
 KEY_*, senza ripetizione automatica) al compositore, che lo recapita solo alla finestra
 attiva che l'ha chiesto con `finestra_tasti_fisici()` (messaggio `VOGLIO_TASTI_FISICI`,
-notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. UIKit non usa
-ancora i tasti fisici: le scorciatoie di Files (Ctrl, F2, Canc, Esc) si possono costruire su
-questo, ma la domanda 5 della sezione 8 resta aperta.
+notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. UIKit chiede i tasti
+fisici per ogni sua finestra e li passa agli "ascoltatori" delle scorciatoie (`uikit/tasti.h`,
+`finestra_tk_ascolta_tasti`); mentre Ctrl o Alt sono giù i caratteri non arrivano ai campi.
 
 **Anteprima su Mac**: `strumenti/anteprima/anteprima.sh <scena> [scala]` disegna in un PNG
 (`strumenti/anteprima/out/`) in circa un secondo. Scene: `campo`, `pulsanti`, `impostazioni`,
@@ -276,8 +279,8 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 3. **Servizi come file singoli** in `/system/services` (non una cartella per servizio). Va bene?
 4. **La sottocartella "Scrivania"** della casa tiene il nome italiano, mentre le cartelle di
    sistema sono in inglese. Va bene?
-5. **Scorciatoie da tastiera in Files**: estendere il servizio `eventi` (e il protocollo)
-   perché arrivino alle app Ctrl, F2, Canc ed Esc?
+5. ~~**Scorciatoie da tastiera in Files**~~: fatte con i tasti fisici che `eventi` già manda
+   (vedi la sezione 6b), senza cambiare il servizio.
 6. **L'avviso in basso in Files** quando un'azione non riesce (es. eliminare una cartella
    piena) non è nel disegno. Va bene, o va disegnato in Figma?
 7. **Doppio clic su Home**: oggi apre ogni volta una nuova finestra di Files. Meglio portare
@@ -366,14 +369,20 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
 
 **Da fare**
 - Files e Attività sono sul disegno nuovo (fatto), ma restano da confermare le scelte dove Figma non
-  dice niente. Files: barra laterale senza fondo (solo una riga a destra), margine 16 della griglia,
-  campo di rinomina (32 px nell'elenco, 24 sul tile), avviso a pillola coi colori del suggerimento,
-  pannello informazioni come il menu, stato vuoto, icone nei menu. Attività: grigi dei pezzi della
+  dice niente. Files: campo di rinomina (32 px nell'elenco, 24 sul tile), avviso a pillola coi
+  colori del suggerimento, menu dello spazio vuoto fatto come quello del file, tile "sopra" col
+  riquadro CONTROLLO_SFONDO, 4 px tra menu e sottomenu. Attività: grigi dei pezzi della
   barra del disco (in scuro "Altro" si vede poco), "Altro" nel grigio più chiaro, pallino del libero
   incassato, colonna Numero 76 px, Nome in testo primario, messaggio d'errore senza rosso, spazi 12.
-- Mancano nella libreria: menu, tabella, griglia, barra a pezzi e legenda come widget (oggi Files e
-  Attività li disegnano a mano), frecce su/giù, testo con spaziatura delle lettere.
-  `elemento_file.h` (icona Home della scrivania) usa ancora i nomi vecchi.
+- In UIKit, ognuno nel suo file (ramo `files-figma`): menu con voce, intestazione, separatore e
+  sottomenu (`menu.h`), tabella con intestazioni di colonna e freccia dell'ordine e righe
+  (`tabella.h`), griglia di icone con i tile (`griglia.h`), barra laterale e sue voci
+  (`barra_laterale.h`), oggetti di file e cartelle (`oggetti.h`), pannello chiaro del contenuto
+  (`pannello.h`), informazioni nella mini finestra (`informazioni.h`, con l'"altra finestra"
+  dell'app in `uikit.h`), scorciatoie (`tasti.h`); il percorso ha la "/" del disegno.
+- Mancano ancora nella libreria: barra a pezzi e legenda come widget (Attività), testo con
+  spaziatura delle lettere. `elemento_file.h` (icona Home della scrivania) usa ancora i nomi
+  e le icone vecchie.
 - Prove da aggiornare: in `test/scrivania.py` le posizioni delle icone dell'isola sono di prima di
   Doom (circa 20 px più a destra del vero), quindi falliscono tutte le prove che aprono un'app;
   `test/prove/files.py`, `attivita.py` e `scorrimento.py` hanno le misure vecchie (righe ora ogni

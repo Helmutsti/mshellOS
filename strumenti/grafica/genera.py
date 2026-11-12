@@ -64,7 +64,10 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          'folder', 'folder-open', 'folder-plus', 'pencil', 'copy', 'info', 'trash-2',
          'arrow-up-down', 'image', 'file', 'terminal', 'lock',
          # la userbar (le app fissate) e il riavvio di Attivita
-         'globe', 'mail', 'rotate-ccw']
+         'globe', 'mail', 'rotate-ccw',
+         # Files nel disegno nuovo: indietro, le frecce dell'ordinamento, i simboli della
+         # barra laterale (Scrivania, Testi, Programmi)
+         'chevron-left', 'chevron-up', 'chevron-down', 'monitor', 'file-text', 'app-window']
 LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: disegna_icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 def svg_in_png(file, l, a):
@@ -190,6 +193,33 @@ for tipo in TIPI_FILE:
 c.append('};')
 for i, tipo in enumerate(TIPI_FILE):
     c.append('#define FILE_%s %d' % (tipo.upper(), i))
+c.append('')
+
+# GLI OGGETTI (il componente "Oggetto" del file Figma): le icone di file e cartelle del disegno
+# nuovo, in due misure ottiche (grande 48, piccola 24). Sono a tre colori del tema
+# (oggetto/riempimento-forte, oggetto/riempimento, oggetto/tratto), quindi cambiano tra Chiaro
+# e Scuro: non si salvano i colori ma QUANTO di ognuno c'e' in ogni pixel. Si colora l'SVG con
+# un colore puro per ruolo (rosso = riempimento forte, verde = riempimento, blu = tratto):
+# rsvg-convert mescola i colori in modo lineare, quindi nel pixel (premoltiplicato) r, g e b
+# sono proprio i pesi dei tre colori, e a la copertura. UIKit (uikit/oggetti.h) li ricolora
+# con il tema in uso. I file con l'etichetta (TXT, PNG...) nella misura grande sono il foglio
+# "etichetta" e la scritta, che la disegna UIKit.
+OGGETTI_GRANDI = ['file', 'cartella', 'etichetta', 'home', 'scrivania', 'documenti', 'immagini',
+                  'download', 'applicazioni']
+OGGETTI_PICCOLI = ['file', 'cartella', 'txt', 'pdf', 'png', 'zip', 'bin', 'home', 'scrivania',
+                   'documenti', 'immagini', 'download', 'applicazioni']
+RUOLI = {'#E3E3E5': '#FF0000', '#F2F2F3': '#00FF00', '#77777B': '#0000FF'}
+c.append('/* Gli oggetti (file e cartelle), a pesi: r riempimento forte, g riempimento, b tratto. */')
+for dimensione, elenco, lato in (('grande', OGGETTI_GRANDI, 48), ('piccola', OGGETTI_PICCOLI, 24)):
+    for tipo in elenco:
+        svg = open(os.path.join(FIGMA, 'oggetto-%s-%s.svg' % (tipo, dimensione)), encoding='utf-8').read()
+        for colore, puro in RUOLI.items():
+            svg = svg.replace(colore, puro)
+        img = Image.open(io.BytesIO(subprocess.check_output(
+            ['rsvg-convert', '-w', str(lato), '-h', str(lato)], input=svg.encode()))).convert('RGBA')
+        nome = 'oggetto_%s_%s' % (tipo, dimensione)
+        c.append('static const unsigned int %s_pixel[] = {\n%s\n};' % (nome, tabella_parole(premoltiplicato(img))))
+        c.append('static const struct immagine %s = { %d, %d, %s_pixel };' % (nome, lato, lato, nome))
 c.append('')
 
 sfondo = svg_in_png(os.path.join(FIGMA, 'sfondo.svg'), 320, 200).convert('RGB')

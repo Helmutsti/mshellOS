@@ -1,8 +1,12 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-<!-- Icona provvisoria di Files (tema scuro): un quadrato arrotondato con il glifo "folder"
-     di Lucide (https://lucide.dev, licenza ISC). Quella vera arrivera' da Figma. -->
-<rect width="64" height="64" rx="14" fill="#1E3A8A"/>
-<g transform="translate(16 16) scale(1.3333)">
-<path d="M20 20C20.5304 20 21.0391 19.7893 21.4142 19.4142C21.7893 19.0391 22 18.5304 22 18V8C22 7.46957 21.7893 6.96086 21.4142 6.58579C21.0391 6.21071 20.5304 6 20 6H12.1C11.7655 6.00328 11.4355 5.92261 11.1403 5.76538C10.8451 5.60815 10.594 5.37938 10.41 5.1L9.6 3.9C9.41789 3.62347 9.16997 3.39648 8.8785 3.2394C8.58702 3.08231 8.26111 3.00005 7.93 3H4C3.46957 3 2.96086 3.21071 2.58579 3.58579C2.21071 3.96086 2 4.46957 2 5V18C2 18.5304 2.21071 19.0391 2.58579 19.4142C2.96086 19.7893 3.46957 20 4 20H20Z" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-</g>
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Icona dell'app Files (tema scura), dal file Figma "mshell - interfaccia", pagina "App - Files". -->
+<rect width="96" height="96" rx="22" fill="#0A84FF"/>
+<rect width="96" height="96" rx="22" fill="url(#luce)"/>
+<path d="M65.3335 65.3333C66.4828 65.3333 67.585 64.8768 68.3976 64.0641C69.2103 63.2515 69.6668 62.1493 69.6668 61V39.3333C69.6668 38.1841 69.2103 37.0819 68.3976 36.2692C67.585 35.4565 66.4828 35 65.3335 35H48.2168C47.4921 35.0071 46.7772 34.8323 46.1375 34.4917C45.4978 34.151 44.9537 33.6553 44.5552 33.05L42.8002 30.45C42.4056 29.8509 41.8684 29.359 41.2369 29.0187C40.6054 28.6783 39.8992 28.5001 39.1818 28.5H30.6668C29.5176 28.5 28.4154 28.9565 27.6027 29.7692C26.79 30.5819 26.3335 31.6841 26.3335 32.8333V61C26.3335 62.1493 26.79 63.2515 27.6027 64.0641C28.4154 64.8768 29.5176 65.3333 30.6668 65.3333H65.3335Z" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+<defs>
+<linearGradient id="luce" x1="48" y1="0" x2="48" y2="96" gradientUnits="userSpaceOnUse">
+<stop stop-color="white" stop-opacity="0.22"/>
+<stop offset="1" stop-color="white" stop-opacity="0"/>
+</linearGradient>
+</defs>
 </svg>
