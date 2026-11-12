@@ -1,7 +1,7 @@
 /* Store: le app installate, e l'installazione dei pacchetti .app (APPLICAZIONI.md, sezione 11).
  *
  * Due modi, a seconda di come parte:
- *   - SENZA ARGOMENTO (dall'isola): l'ELENCO delle app installate (ELENCO_APP), in due sezioni,
+ *   - SENZA ARGOMENTO (dalla userbar): l'ELENCO delle app installate (ELENCO_APP), in due sezioni,
  *     "Le tue app" e "App del sistema". Un clic su una riga apre il DETTAGLIO dell'app al posto
  *     dell'elenco (nella barra degli strumenti, "App installate" per tornare): nome, autore,
  *     versione, descrizione, i permessi, "Cosa fa di diverso", i ruoli, e le azioni "Svuota dati"

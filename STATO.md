@@ -139,7 +139,7 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
 | `utente/applicazioni/` | Attivita, Contatore, Doom, Esempio, Files, Impostazioni (una cartella ciascuna, con `manifest.toml` e `resources/`) |
-| `utente/libreria/esterni/` | librerie di altri: miniz (zip) e tomlc99 (TOML), con le loro licenze |
+| `utente/libreria/esterni/` | librerie di altri: miniz (zip), tomlc99 (TOML) e stb_image (PNG), con le loro licenze |
 | `utente/prove/` | programmi solo per le prove (vanno solo nel disco delle prove) |
 | `file/` | quello che finisce nella casa della persona (`/data/users/1000/home`) |
 | `strumenti/grafica/` | genera font e icone (anche dagli SVG esportati da Figma) |
@@ -166,17 +166,37 @@ uv run strumenti/sandbox/sandbox.py compila                     # ricompila solo
 - Font e icone nuovi.
 - Attività come nel disegno: pagine Processi, Memoria e Disco, con totale e spazio libero
   di `system` e `data`; la riga scelta è in vetro chiaro.
+- **La scrivania come nella pagina "Scrivania" di Figma** (ramo `scrivania-figma`): al posto
+  della vecchia isola in alto c'è la **userbar**, una pillola di vetro sul bordo sinistro,
+  centrata in altezza: il pulsante App e sotto le app del sistema (Attività, Doom, Esempio,
+  Files, Impostazioni, Store). Il pulsante App apre il **vassoio delle app** a destra: tutte le
+  app installate in una griglia da 3 (anche quelle della persona, per esempio Contatore). Un clic
+  su un'app la apre o, se è aperta, la riporta davanti; un clic nel vassoio lo chiude, e si
+  chiude anche premendo sullo sfondo o quando un'altra finestra prende il fuoco.
+  Le **icone sono quelle vere** delle app: la PNG piccola del pacchetto (18, la più vicina ai
+  16 della userbar e ai 20 del vassoio), del tema in uso, se no dell'altro tema; letta con
+  stb_image (`esterni/stb`, pubblico dominio o MIT) da `immagine_carica` di GKit. Esempio,
+  Impostazioni e Contatore hanno solo l'SVG: per loro il simbolo "pacchetto".
+  La **cartella Home sulla scrivania non c'è più** (Files si apre dalla userbar).
+  **L'ora e la data non ci sono più**: il disegno non le mostra (vedi "Da confermare").
+  Scelte nostre dove il disegno non dice niente (da confermare): il segno delle app aperte è una
+  lineetta scura larga 2 nel margine a sinistra del pulsante (alta 4 se aperta, 14 se in primo
+  piano); nel vassoio le app sono in ordine (prima quelle del sistema, poi le altre, per nome);
+  mentre il vassoio è aperto il pulsante App resta premuto. Il compositore dà a ogni pannello
+  l'ombra del suo tipo (la userbar "barra", il vassoio "sovrapposto", `PANNELLO_BARRA` e
+  `PANNELLO_SOPRA` in `gkit.h`); le finestre si aprono a scala da x 140 (le prime da x 60 se la
+  scrivania ripartisse): mai sotto la userbar (x 8..48). Non c'è una "finestra ingrandita".
 
 **Le prove**
 - Disco di prova con programmi "riempitivi" (in `/data/tests`) per allungare l'elenco dei processi.
 - Foto di riferimento rifatte per il puntatore e per Impostazioni.
 
-## 6. Files e cartella Home
+## 6. Files
 
 **Fatto** (codice in `utente/applicazioni/Files/`, ramo `files-figma`): Files è come nel disegno
 di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
 
-- **Cartella Home sulla scrivania** in alto a sinistra: un doppio clic apre Files sulla tua home.
+- La cartella Home sulla scrivania **non c'è più** (tolta con la userbar: "non serve più").
 - **Finestra**: titolo, barra degli strumenti da 48 (padding 8), sotto la barra laterale (larga
   200, sul vetro, con la linea a destra) e il pannello chiaro (8 di margine ai lati e sotto). La
   finestra resta 800 x 480 (il disegno è 960 x 600): così sta nella scala delle finestre delle
@@ -217,7 +237,6 @@ di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
   launcher hanno posto per un percorso intero (`MAX_MESSAGGIO` 5120); il percorso del
   *programma* di un'app resta corto (`MAX_PERCORSO_PROGRAMMA` 64) perché viaggia nelle notizie
   del compositore;
-- l'icona Home della scrivania (`elemento_file.h`) usa ancora le icone di file di prima.
 
 ## 6b. Doom, tasti fisici e anteprima
 
@@ -269,7 +288,9 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 - Disegno di Files approvato: icone dei file senza contorno in stile Mac (56 px grandi,
   18 px piccole), vista a icone e a elenco, menu del tasto destro, stati (vuota, errore,
   permesso negato).
-- La cartella Home sta sulla scrivania, in alto a sinistra.
+- Sulla scrivania non c'è la cartella Home (prima c'era, in alto a sinistra).
+- La scrivania è quella della pagina "Scrivania" di Figma: userbar a sinistra e vassoio delle
+  app (la pagina "Userbar – idea Isole" è superata).
 - La voce "Elimina" dei menu è bianca.
 
 ## 8. Da confermare (domande che aspettano la persona)
@@ -286,8 +307,12 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
    (vedi la sezione 6b), senza cambiare il servizio.
 6. **L'avviso in basso in Files** quando un'azione non riesce (es. eliminare una cartella
    piena) non è nel disegno. Va bene, o va disegnato in Figma?
-7. **Doppio clic su Home**: oggi apre ogni volta una nuova finestra di Files. Meglio portare
-   davanti quella già aperta?
+7. ~~**Doppio clic su Home**~~: la cartella Home sulla scrivania non c'è più.
+8. **Dove vanno l'ora, la data e le notifiche.** Stavano nella vecchia isola; il disegno della
+   scrivania (userbar a sinistra) non le mostra, e per ora non si vedono da nessuna parte.
+9. **Le scelte della userbar che il disegno non dice** (sezione 5): il segno delle app aperte,
+   l'ordine nel vassoio, il pulsante App premuto mentre il vassoio è aperto, quali app sono
+   fissate (oggi quelle del sistema).
 
 ## 9. Da fare (in ordine di importanza)
 
@@ -299,7 +324,8 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 4. **Il servizio eventi**: cosa succede se si blocca o si chiude (oggi non è gestito).
 5. **Libreria condivisa** in `/system/lib`.
 6. **Terminale** (vedi le decisioni) e la scelta di shell e comandi.
-7. **Visore di immagini JPG/PNG** (si era pensato alla libreria stb_image).
+7. **Visore di immagini JPG/PNG**: stb_image c'è già (solo PNG, per le icone delle app); per il
+   visore basta togliere `STBI_ONLY_PNG` in `esterni/stb/stb_image.c`.
 8. **Pulsante a griglia nel launcher** (rimandato).
 9. **Isolamento delle app** con namespaces, cgroups e seccomp di Linux (dal progetto di prima).
 10. **Internet** (più avanti).
@@ -392,17 +418,19 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   Store hanno le loro icone vere (SVG e PNG 32/18). Le scelte dove Figma non dice niente sono da
   confermare. Il pannello incassato di Files (`pannello.h`) resta l'eccezione approvata per Files;
   le altre app usano la pagina (`pagina.h`), con 24 dal bordo dell'area al primo testo, in x e in y.
-- Mancano ancora nella libreria: testo con spaziatura delle lettere. `elemento_file.h` (icona Home
-  della scrivania) usa ancora i nomi e le icone vecchie.
-- Prove da aggiornare: in `test/scrivania.py` le posizioni delle icone dell'isola sono di prima di
-  Doom (circa 20 px più a destra del vero), quindi falliscono tutte le prove che aprono un'app;
-  `test/prove/files.py` e `scorrimento.py` hanno le misure vecchie. `attivita.py` e `store.py` sono
+- Mancano ancora nella libreria: testo con spaziatura delle lettere. `elemento_file.h` (era l'icona
+  Home della scrivania, oggi tolta) usa ancora i nomi e le icone vecchie.
+- Prove: `test/scrivania.py` ha le posizioni della userbar e del vassoio (ramo `scrivania-figma`);
+  nella sandbox passano applicazioni, finestre, mouse e tastiera. `scorrimento.py` (la barra di
+  scorrimento non compare) e `store.py` (dopo "Svuota dati") falliscono nella sandbox anche
+  prima della userbar, uguali; `files.py` e `immagini.py` falliscono sulle foto di riferimento,
+  che con la scrivania nuova vanno rifatte dopo averle guardate. `attivita.py` e `store.py` sono
   aggiornati al disegno nuovo; il riferimento `memoria_totale_*.png` di Attività è da rifare (ora il
   totale si scrive in GB, "1,9 GB", come nel disegno), dopo averlo guardato.
 - Widget nuovi: interruttore, menu contestuale e a tendina, suggerimento, schede, tabella, griglia
   come widget, puntatore con le sue forme (idle, link, caricamento, paragrafo, disabilitato).
-- Userbar "Isole minima" (solo il pulsante App, che apre un vassoio di app verso il basso) al posto
-  dell'isola di `scrivania.c`; dove vanno ora ora e notifiche è ancora da decidere.
+- ~~Userbar al posto dell'isola di `scrivania.c`~~: fatta, con il disegno della pagina "Scrivania"
+  (sezione 5); dove vanno ora e notifiche è ancora da decidere.
 - Impostazioni: la scelta del tema deve scrivere il file e chiamarsi Chiaro/Scuro. I servizi già
   avviati non si accorgono del cambio finché non ripartono.
 - Token del disabilitato di campi, caselle e scelte: oggi è quasi uguale al normale (da rivedere in Figma).
@@ -429,9 +457,9 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
   `/system/apps/<id>`, con lo stesso contenuto.
 - **Contatore non è più un'app del sistema.** Il suo pacchetto `contatore.app` sta sulla
   Scrivania della persona (`/data/users/1000/home/Scrivania/`), per provare l'installazione.
-  Nell'isola quindi non c'è più.
-- Due librerie di altri, in `utente/libreria/esterni/`: miniz 3.0.2 (zip) e tomlc99 (TOML),
-  tutte e due con licenza MIT.
+  Nella userbar quindi non c'è; dopo l'installazione è nel vassoio delle app.
+- Librerie di altri, in `utente/libreria/esterni/`: miniz 3.0.2 (zip) e tomlc99 (TOML), con
+  licenza MIT, e stb_image 2.30 (PNG, pubblico dominio o MIT).
 - Una libreria nuova per i pacchetti (`pacchetto.c`): legge un `.app` senza scompattarlo, lo
   controlla (errori che fermano l'installazione e avvisi, ognuno con una frase per la persona),
   lo installa in `/data/apps/<id>` (anche come aggiornamento, tutto in un colpo, senza toccare i
@@ -453,7 +481,7 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
 **Lo Store (le funzioni di base, fatte)** — `utente/applicazioni/Store/`, un'app del sistema
 con il permesso `app.gestire`. L'aspetto è quello della pagina "App – Store" di Figma, fatto con
 i componenti di UIKit.
-- Aperto dall'isola: l'elenco delle app installate, in due sezioni ("Le tue app", "App del
+- Aperto dalla userbar: l'elenco delle app installate, in due sezioni ("Le tue app", "App del
   sistema" con la sua spiegazione); ogni riga con icona, nome, autore e versione e la freccia.
   Senza app della persona: "Non hai ancora installato app". Un clic su una riga apre il dettaglio
   al posto dell'elenco ("App installate" nella barra degli strumenti per tornare): icona, nome,
@@ -473,12 +501,11 @@ i componenti di UIKit.
   o generico) e "Chiudi". Pacchetto illeggibile: "Impossibile leggere il pacchetto". Dopo
   l'installazione: "<nome> è installata", con "Chiudi" e "Apri <nome>".
 - I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
-  Store li traduce (`Store/testo437.h`; nella libreria una funzione così non c'era).
+  Store li traduce (`testo437.h`, ora nella libreria perché serve anche alla scrivania).
 - Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
   e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
   persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati
   di una persona si cancellano con un processo che ha la sua identità, non come sistema.
-- Nell'isola lo Store ha per ora l'icona Lucide "save" (la scrivania ha la sua tabella di icone).
 
 **Prove**
 - `test/pacchetti/prova.sh`: 78 controlli (con togliere, svuotare, gli id con "/" e "..", i
@@ -488,9 +515,11 @@ i componenti di UIKit.
 **Non c'è ancora**
 - La scrivania legge le app solo all'avvio: un'app appena installata (o tolta) compare (o
   sparisce) quando riparte.
-- La scrivania mostra ancora le sue icone di prima (una tabella provvisoria in `scrivania.c`):
-  disegnare gli SVG è un passo successivo. Anche lo Store mostra un segnaposto (quadrato con il
-  simbolo "package") al posto dell'icona dell'app.
+- La scrivania mostra le PNG vere delle app; le app con il solo SVG hanno il simbolo
+  "pacchetto" (disegnare gli SVG è un passo successivo). Lo Store mostra ancora un segnaposto
+  (quadrato con il simbolo "package"): la riga dell'elenco (32) e il dettaglio (64) sono
+  componenti diversi (`riga_app.h`, `icona_app.h`) e per un pacchetto da installare l'icona sta
+  dentro lo zip; potrebbero usare `immagine_carica` anche loro, ma è un lavoro a parte.
 - Nello Store: "Installa da file…", la ricerca automatica degli aggiornamenti (aspettano la
   decisione della persona).
 - I permessi chiesti al primo avvio, l'isolamento, le firme.

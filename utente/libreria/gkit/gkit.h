@@ -47,9 +47,13 @@
  * kernel con chi). Oltre alle finestre normali ci sono superfici che stanno in uno strato
  * fisso, e che sceglie la scrivania (come layer-shell di Wayland):
  *
- *     PANNELLO   sopra tutte le finestre (l'isola)
+ *     PANNELLO   sopra tutte le finestre (la userbar della scrivania, il vassoio delle app)
  *     finestre   le applicazioni, nel mezzo: si spostano e si portano davanti
  *     SFONDO     sotto tutto
+ *
+ * Un pannello e' di due tipi, che il compositore distingue solo per l'ombra intorno:
+ * PANNELLO_BARRA (una barra che sta sempre li', come la userbar) e PANNELLO_SOPRA (si apre
+ * sopra il resto e poi si richiude, come un menu o il vassoio delle app).
  *
  * Una superficie speciale sta dove dice lei (x, y), non si trascina e non prende il fuoco
  * della tastiera. A un PANNELLO il compositore racconta anche quali finestre ci sono:
@@ -93,6 +97,8 @@
 #define RUOLO_FINESTRA  0   /* una finestra normale */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
 #define RUOLO_PANNELLO  2   /* sopra tutte le finestre (solo il sistema) */
+#define PANNELLO_BARRA  0   /* (solo un PANNELLO) una barra, sempre li' */
+#define PANNELLO_SOPRA  1   /* (solo un PANNELLO) si apre sopra il resto, come un menu */
 #define RAGGIO_PREDEFINITO 12
 
 struct voglio_finestra {
@@ -103,6 +109,7 @@ struct voglio_finestra {
     int x, y;                          /* dove sta: solo per i ruoli speciali */
     unsigned int raggio;               /* gli angoli arrotondati: li usa il compositore per
                                         * l'ombra e il vetro smerigliato sotto */
+    unsigned int pannello;             /* PANNELLO_...: solo per un PANNELLO */
 };
 
 struct chiedi_schermo {
@@ -249,11 +256,11 @@ static inline int finestra_schermo(int *larghezza, int *altezza) {
     return 0;
 }
 
-/* Come finestra_apri, ma con un ruolo speciale (RUOLO_SFONDO, RUOLO_PANNELLO: solo per i
- * programmi del sistema), il posto sullo schermo e il raggio degli angoli. */
-static inline int finestra_apri_come(struct finestra *f, int larghezza, int altezza,
-                                     const char *titolo, unsigned int ruolo, int x, int y,
-                                     unsigned int raggio) {
+/* Si collega al compositore e chiede una superficie: il lavoro di finestra_apri_come e di
+ * finestra_apri_pannello, qui sotto. */
+static inline int finestra_apri_superficie(struct finestra *f, int larghezza, int altezza,
+                                           const char *titolo, unsigned int ruolo,
+                                           unsigned int pannello, int x, int y, unsigned int raggio) {
     f->collegamento = collega_compositore();
     if (f->collegamento < 0) return -1;
 
@@ -270,9 +277,37 @@ static inline int finestra_apri_come(struct finestra *f, int larghezza, int alte
     f->quante = 0;
 
     struct voglio_finestra m = { .tipo = VOGLIO_FINESTRA, .larghezza = larghezza, .altezza = altezza,
-                                 .ruolo = ruolo, .x = x, .y = y, .raggio = raggio };
+                                 .ruolo = ruolo, .x = x, .y = y, .raggio = raggio,
+                                 .pannello = pannello };
     for (int i = 0; i < MAX_TITOLO - 1 && titolo[i]; i++) m.titolo[i] = titolo[i];
     return manda_foglio(f->collegamento, &m, sizeof m, f->foglio) < 0 ? -1 : 0;
+}
+
+/* Come finestra_apri, ma con un ruolo speciale (RUOLO_SFONDO, RUOLO_PANNELLO: solo per i
+ * programmi del sistema), il posto sullo schermo e il raggio degli angoli. Un PANNELLO
+ * aperto cosi' e' una barra (PANNELLO_BARRA). */
+static inline int finestra_apri_come(struct finestra *f, int larghezza, int altezza,
+                                     const char *titolo, unsigned int ruolo, int x, int y,
+                                     unsigned int raggio) {
+    return finestra_apri_superficie(f, larghezza, altezza, titolo, ruolo, PANNELLO_BARRA, x, y, raggio);
+}
+
+/* Un PANNELLO del tipo 'pannello' (PANNELLO_BARRA o PANNELLO_SOPRA). */
+static inline int finestra_apri_pannello(struct finestra *f, int larghezza, int altezza,
+                                         const char *titolo, unsigned int pannello, int x, int y,
+                                         unsigned int raggio) {
+    return finestra_apri_superficie(f, larghezza, altezza, titolo, RUOLO_PANNELLO, pannello, x, y,
+                                    raggio);
+}
+
+/* Chiude la finestra: il compositore la toglie dallo schermo (se ne accorge dal collegamento
+ * chiuso) e la sua memoria si restituisce. Per riaverla si riapre. */
+static inline void finestra_chiudi(struct finestra *f) {
+    if (f->collegamento >= 0) chiudi(f->collegamento);
+    if (f->immagini[0]) togli(f->immagini[0]);
+    if (f->foglio >= 0) chiudi(f->foglio);
+    f->collegamento = f->foglio = -1;
+    f->immagini[0] = f->immagini[1] = 0;
 }
 
 /* Si collega al compositore (se non e' ancora pronto riprova per qualche secondo), crea

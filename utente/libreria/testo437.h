@@ -5,8 +5,8 @@
  * i caratteri della code page 437 (gkit_disegno.h, glifo_di). Qui si traduce: le lettere
  * accentate che la 437 ha diventano le sue, le virgolette e i trattini "tipografici"
  * diventano quelli semplici, il resto diventa "?". Le virgolette basse (U+00AB, U+00BB) la 437 le ha,
- * ma i font del sistema no: diventano ". Nella libreria non c'e' ancora una
- * funzione cosi': quando servira' anche ad altri, si potra' spostare li'. */
+ * ma i font del sistema no: diventano ". Era dello Store; ora sta nella libreria perche' la
+ * usa anche la scrivania (i nomi delle app nel vassoio). */
 #ifndef TESTO437_H
 #define TESTO437_H
 

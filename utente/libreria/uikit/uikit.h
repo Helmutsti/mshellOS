@@ -75,7 +75,7 @@
  *
  * I WIDGET LI DICHIARA L'APPLICAZIONE, come variabili sue. Una finestra per
  * applicazione, che non cambia misura. Il pulsante "riduci" la nasconde: torna con un
- * clic sulla sua icona nell'isola della scrivania. */
+ * clic sulla sua icona nella userbar della scrivania. */
 #ifndef UIKIT_H
 #define UIKIT_H
 

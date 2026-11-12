@@ -105,7 +105,7 @@ int main(void) {
     avvia_prove();
 
     /* Le applicazioni non le fa partire init: le apre il launcher, quando la scrivania
-     * glielo chiede (un clic sull'isola). */
+     * glielo chiede (un clic sulla userbar). */
 
     /* LA SORVEGLIANZA: si aspetta che uno dei servizi finisca, e lo si fa ripartire. Se
      * non si e' riusciti ad avviarlo, si riprova ogni 5 secondi. */

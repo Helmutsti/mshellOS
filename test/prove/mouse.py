@@ -15,7 +15,7 @@ import math
 import time
 
 import scrivania as s
-from qemu import OROLOGIO, riquadro_diverso
+from qemu import riquadro_diverso
 
 NOME = "mouse"
 ORDINE = 30
@@ -27,7 +27,7 @@ RITARDO = 70                        # pixel di distanza accettati durante il gir
 
 def trova_puntatore(base, foto):
     """L'angolo in alto a sinistra del puntatore (la punta della freccia), o None."""
-    r = riquadro_diverso(base, foto, [OROLOGIO, ANGOLO], soglia=24)
+    r = riquadro_diverso(base, foto, ANGOLO, soglia=24)
     return (r[0], r[1]) if r else None
 
 

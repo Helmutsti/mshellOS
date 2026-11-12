@@ -77,4 +77,13 @@ const struct strato_ombra *ombra_finestra(int *quanti) {
     return OMBRA_TAB(finestra);
 }
 
+const struct strato_ombra *ombra_pannello(int sopra, int *quanti) {
+    if (sopra) {
+        *quanti = OMBRA_N(sovrapposto);
+        return OMBRA_TAB(sovrapposto);
+    }
+    *quanti = OMBRA_N(barra);
+    return OMBRA_TAB(barra);
+}
+
 int sfocatura_finestra(void) { return OMBRA_FINESTRA_SFOCATURA_SFONDO; }

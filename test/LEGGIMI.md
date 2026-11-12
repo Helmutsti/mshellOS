@@ -11,15 +11,15 @@ viene copiato prima di ogni prova: `build/` non si tocca.
 | prova          | cosa controlla |
 |----------------|----------------|
 | `avvio`        | la seriale dell'avvio: Linux partito (da UEFI sul PC), la RAM, i moduli caricati, le partizioni montate (system come `/` in sola lettura, data in `/data`), tastiera e tavoletta USB prese dal servizio eventi; la scrivania compare |
-| `applicazioni` | ogni applicazione si apre dall'isola (finestra al suo posto, puntino sotto l'icona); il pulsante del menu non rompe niente |
+| `applicazioni` | ogni applicazione si apre dalla userbar (finestra al suo posto, segno a sinistra dell'icona); il pulsante App apre il vassoio, un clic nel vassoio o sullo sfondo lo chiude |
 | `mouse`        | il puntatore gira in tondo per 8 s (e 4 s sopra una finestra): segue, non si blocca, arriva preciso |
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
-| `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dall'isola, chiudere |
+| `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dalla userbar, chiudere |
 | `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Esempio |
 | `scorrimento`  | con 4 applicazioni aperte e 6 processi "riempitivi" (vedi sotto) la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
-| `files`        | Files: la casa a icone e a elenco, entrare in una cartella e tornare indietro, aprire `contatore.app` (si apre lo Store), gli stati (vuota, errore, permesso negato), i menu del tasto destro, nuova cartella / rinomina / elimina, l'avviso, le informazioni, un filtro, Invio; il doppio clic sulla Home della scrivania apre Files |
+| `files`        | Files: la casa a icone e a elenco, entrare in una cartella e tornare indietro, aprire `contatore.app` (si apre lo Store), gli stati (vuota, errore, permesso negato), i menu del tasto destro, nuova cartella / rinomina / elimina, l'avviso, le informazioni, un filtro, Invio |
 | `pacchetti`    | con il disco `disco_pacchetti.img`: il programma `utente/prove/pacchetti.c` chiede al launcher l'elenco delle app, di aprire un file che non è un pacchetto (no), di descrivere `contatore.app`, installarlo (anche due volte: la seconda no), svuotarne i dati, aprirlo e toglierlo mentre è acceso (no); togliere un'app del sistema o un id con `../` non si può; la finestra di Contatore compare. La libreria dei pacchetti da sola si prova senza QEMU con `test/pacchetti/prova.sh` (in Docker) |
-| `store`        | lo Store come lo userebbe una persona: doppio clic su `contatore.app` in Files, la richiesta di installazione, Installa, Apri; riaperto, il pacchetto risulta già installato; dall'isola l'elenco delle app, il dettaglio di Contatore, Svuota dati e Togli app (con le loro conferme) |
+| `store`        | lo Store come lo userebbe una persona: doppio clic su `contatore.app` in Files, la richiesta di installazione, Installa, Apri; riaperto, il pacchetto risulta già installato; dalla userbar l'elenco delle app, il dettaglio di Contatore, Svuota dati e Togli app (con le loro conferme) |
 | `immagini`     | alcune scene fisse confrontate pixel per pixel con le foto di riferimento (l'ora è coperta) |
 
 Dopo ogni prova si controlla anche che nella seriale non ci siano `Kernel panic`, `PANICO`,
@@ -85,8 +85,8 @@ delle differenze, in rosso. `test/risultati/` non va nel repo.
 Se QEMU è già aperto (con `run.sh`), le prove funzionano lo stesso: usano una copia del
 disco e porte loro. Se le porte sono occupate, se ne scelgono altre con `--porte`.
 
-L'orologio del PC virtuale è fisso (`-rtc base=2026-01-01T10:00:00,clock=vm`): l'isola
-segna sempre "gio 1 gen 10:00" o poco più, prova dopo prova. Sul PC l'accensione dura un po'
+L'orologio del PC virtuale è fisso (`-rtc base=2026-01-01T10:00:00,clock=vm`): le date e
+le ore che le app mostrano sono sempre le stesse, o poco più, prova dopo prova. Sul PC l'accensione dura un po'
 di più: prima parte il firmware UEFI, poi Linux.
 
 ## Aggiungere una prova
@@ -103,14 +103,14 @@ DESCRIZIONE = "una riga per --elenco"
 
 def esegui(p):
     m = p.m                  # la macchina, gia' accesa, con la scrivania pronta
-    s.apri(m, "Esempio")     # clic sull'isola, aspetta che si apra
+    s.apri(m, "Esempio")     # clic sulla userbar, aspetta che si apra
     foto = m.foto("aperta")  # la foto resta in risultati/ se la prova fallisce
     p.controlla(..., "cosa non va")
 ```
 
 Gli strumenti stanno in `test/qemu.py` (accendere, foto, `clic`, `trascina`, `rotella`, `cerchio`,
 `premi`, `tasto_giu`/`tasto_su`, `hmp`, `aspetta_che`, `aspetta_schermo_fermo`) e in
-`test/scrivania.py` (dove sono l'isola e le finestre: se cambia il disegno, si cambia lì).
+`test/scrivania.py` (dove sono la userbar, il vassoio e le finestre: se cambia il disegno, si cambia lì).
 Meglio **aspettare una condizione** (`aspetta_che`) che dormire un tempo fisso.
 
 ## Le foto di riferimento

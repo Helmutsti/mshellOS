@@ -21,7 +21,7 @@ occhio una volta.
 TERMINARE. Nella scheda "Processi" si sceglie la riga di Esempio (il primo processo
 dopo quelli del sistema: init, eventi, compositore, launcher, scrivania) e si preme
 "Termina processo" (compare a destra nella barra degli strumenti quando c'e' una riga scelta): la finestra di Esempio
-deve sparire, e nell'isola Esempio non deve piu' risultare aperta.
+deve sparire, e nella userbar Esempio non deve piu' risultare aperta.
 """
 
 import time
@@ -116,5 +116,5 @@ def esegui(p):
     striscia = (cx, cy, cx + s.MISURE["Esempio"][0], cy + 16)
     s.aspetta_zona(m, p.scrivania, striscia, attesa=5.0, cosa="la finestra di Esempio sparire")
     m.aspetta_che(lambda f: s.segno_sotto(f, "Esempio") == 0, 5.0,
-                  cosa="Esempio chiusa nell'isola")
+                  cosa="Esempio chiusa nella userbar")
     m.foto("terminata")

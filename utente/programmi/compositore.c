@@ -6,8 +6,8 @@
  * (gkit.h): ognuna disegna da sola la sua finestra in un foglio di memoria
  * condivisa, e dice "mostra". Il compositore:
  *   - COMPONE, a strati: lo sfondo (una superficie della scrivania), le finestre dal
- *     fondo al primo piano, ognuna con la sua ombra morbida intorno, l'isola (un'altra
- *     superficie della scrivania), poi, solo sullo schermo, il puntatore. Le finestre sono di VETRO SMERIGLIATO:
+ *     fondo al primo piano, ognuna con la sua ombra morbida intorno, i pannelli (la
+ *     userbar e il vassoio delle app, superfici della scrivania), poi, solo sullo schermo, il puntatore. Le finestre sono di VETRO SMERIGLIATO:
  *     sotto ognuna il compositore sfoca quello che c'e' dietro, e ci mescola sopra
  *     l'immagine dell'applicazione (i suoi pixel hanno un'opacita'). Dentro le finestre
  *     non disegna niente, neanche la barra del titolo: ogni applicazione si disegna da
@@ -131,6 +131,7 @@ struct finestra_compositore {
 
     unsigned int ruolo;         /* RUOLO_FINESTRA, o una superficie speciale della scrivania */
     int raggio;                 /* gli angoli: per l'ombra e il vetro smerigliato */
+    unsigned int pannello;      /* un PANNELLO: PANNELLO_BARRA o PANNELLO_SOPRA (l'ombra) */
     unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
     char programma[MAX_PERCORSO_PROGRAMMA];   /* di quale programma e': lo dice il kernel */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
@@ -188,19 +189,11 @@ static unsigned char ombre[MAX_FINESTRE][(MAX_LARGHEZZA + 2 * OMBRA_MARGINE) *
  * ritocco nostro; per toglierlo basta mettere 256. In 256esimi. */
 #define OMBRA_SENZA_FUOCO  150
 
-/* Il pannello (l'isola) ha un'ombra piu' corta di quella delle finestre: nel disegno,
- * spostata di 10 e sfocata di 15, al 28%. Il pannello e' della scrivania, che non e'
- * ancora migrata al nuovo stile: la sua ombra resta quella di prima, ma come una tabella
- * di un solo strato (cosi' si calcola con lo stesso codice delle finestre). */
-#define PANNELLO_OMBRA_GIU      10
-#define PANNELLO_OMBRA_SFOCATA  15
-static const struct strato_ombra ombra_pannello[] = {
-    { VELATO(0x050A24, 71), OMBRA_ESTERNA, 0, PANNELLO_OMBRA_GIU, PANNELLO_OMBRA_SFOCATA, 0 },
-};
-
-/* La tabella degli strati di una finestra, secondo il suo ruolo e il tema in uso. */
+/* La tabella degli strati di una finestra, secondo il suo ruolo e il tema in uso. Un
+ * pannello ha l'ombra del suo tipo (la userbar quella di una barra, il vassoio delle app
+ * quella di un menu): le da' UIKit, come quella delle finestre. */
 static const struct strato_ombra *strati_ombra(const struct finestra_compositore *f, int *quanti) {
-    if (f->ruolo == RUOLO_PANNELLO) { *quanti = OMBRA_STRATI(ombra_pannello); return ombra_pannello; }
+    if (f->ruolo == RUOLO_PANNELLO) return ombra_pannello(f->pannello == PANNELLO_SOPRA, quanti);
     return ombra_finestra(quanti);
 }
 
@@ -592,6 +585,7 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     programma_di(f->collegamento, f->programma);
     f->id = prossimo_id++;
     f->ruolo = m->ruolo;
+    f->pannello = m->pannello;
     f->raggio = m->raggio > (unsigned int)(l < a ? l : a) / 2 ? (l < a ? l : a) / 2 : (int)m->raggio;
     if (f->ruolo == RUOLO_FINESTRA) {
         f->x = 60 + i * 40;   /* a cascata */
