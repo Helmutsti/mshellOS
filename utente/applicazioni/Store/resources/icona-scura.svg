@@ -1,8 +1,9 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-<!-- Icona provvisoria dello Store (tema scuro): un quadrato arrotondato con il glifo "package"
-     di Lucide (https://lucide.dev, licenza ISC). Quella vera arrivera' da Figma. -->
-<rect width="64" height="64" rx="14" fill="#4C1D95"/>
-<g transform="translate(16 16) scale(1.3333)" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Icona di Store, tema scuro, dal disegno Figma (96 x 96). Simbolo Lucide (https://lucide.dev, licenza ISC). -->
+<defs><linearGradient id="luce" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient></defs>
+<rect width="96" height="96" rx="22" fill="#FF2D55"/>
+<rect width="96" height="96" rx="22" fill="url(#luce)"/>
+<g transform="translate(22.0 22.0) scale(2.166667)" stroke="#FFFFFF" stroke-width="2.0769" stroke-linecap="round" stroke-linejoin="round">
 <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/>
 <path d="M12 22V12"/>
 <path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/>

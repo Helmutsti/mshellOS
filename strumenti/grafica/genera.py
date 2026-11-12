@@ -64,7 +64,10 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          'folder', 'folder-open', 'folder-plus', 'pencil', 'copy', 'info', 'trash-2',
          'arrow-up-down', 'image', 'file', 'terminal', 'lock',
          # la userbar (le app fissate) e il riavvio di Attivita
-         'globe', 'mail', 'rotate-ccw']
+         'globe', 'mail', 'rotate-ccw',
+         # lo Store: i permessi, le deviazioni, i ruoli, i messaggi, i pulsanti (pagina "App - Store")
+         'package', 'bell', 'download', 'external-link', 'eye-off', 'layers', 'power', 'scan',
+         'badge-check', 'circle-x', 'circle-check', 'chevron-left', 'volume-2']
 LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: disegna_icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 def svg_in_png(file, l, a):

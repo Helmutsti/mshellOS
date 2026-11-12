@@ -1,8 +1,9 @@
-<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-<!-- Icona provvisoria di Attività (tema scuro): un quadrato arrotondato con il glifo "activity"
-     di Lucide (https://lucide.dev, licenza ISC). Quella vera arrivera' da Figma. -->
-<rect width="64" height="64" rx="14" fill="#14532D"/>
-<g transform="translate(16 16) scale(1.3333)">
-<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" stroke="#E5E7EB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Icona di Attivita', tema scuro, dal disegno Figma (96 x 96). Simbolo Lucide (https://lucide.dev, licenza ISC). -->
+<defs><linearGradient id="luce" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/></linearGradient></defs>
+<rect width="96" height="96" rx="22" fill="#30D158"/>
+<rect width="96" height="96" rx="22" fill="url(#luce)"/>
+<g transform="translate(22.0 22.0) scale(2.166667)" stroke="#FFFFFF" stroke-width="2.0769" stroke-linecap="round" stroke-linejoin="round">
+<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>
 </g>
 </svg>

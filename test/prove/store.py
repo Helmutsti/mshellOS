@@ -4,7 +4,7 @@ Come farebbe una persona, sul disco normale (contatore.app sta sulla Scrivania d
 persona, build.sh):
   - Files dall'isola (primo posto, angolo in (140, 130)); nella barra laterale la Scrivania,
     e il doppio clic su contatore.app (il primo elemento): il launcher fa partire lo Store
-    con il file, e lo Store (secondo posto, angolo in (180, 170), 560 x 480) mostra la
+    con il file, e lo Store (secondo posto, angolo in (180, 170), 600 x 600) mostra la
     richiesta di installazione ("store: richiesta di installazione: contatore");
   - "Installa": il launcher la installa, lo Store dice "Contatore e' installata";
   - "Apri": parte Contatore (al posto dello Store, che si chiude); la si chiude;
@@ -32,15 +32,15 @@ SCRIVANIA_FILES = (FILES[0] + 72, FILES[1] + 177)      # la Scrivania nella barr
 PACCHETTO = (FILES[0] + 263, FILES[1] + 133)           # contatore.app, il primo elemento
 
 # La richiesta di installazione: lo Store nel secondo posto, i pulsanti in basso a destra
-INSTALLA = (675, 606)           # "Installa" (con "Annulla" a sinistra)
-APRI, CHIUDI = (687, 606), (613, 606)
+INSTALLA = (699, 726)           # "Installa" (con "Annulla" a sinistra), in fondo a destra
+APRI, CHIUDI = (690, 726), (578, 726)   # "Apri Contatore" e, a sinistra, "Chiudi"
 CHIUDI_CONTATORE = (393, 190)   # la X di Contatore, aperta nel secondo posto
 
-# L'elenco: lo Store (760 x 500) nel secondo posto
-RIGA_CONTATORE = (266, 291)     # la prima riga di "Le tue app"
-SVUOTA, TOGLI = (738, 626), (857, 626)
-CONFERMA_SVUOTA = (684, 456)    # nell'avviso di UIKit: il pulsante "Svuota dati" (Annulla a sinistra)
-CONFERMA_TOGLI = (711, 466)     # nell'avviso a tre scelte: "Togli app e dati", il piu' a destra
+# L'elenco: lo Store (760 x 600) nel secondo posto; il dettaglio con la barra degli strumenti
+RIGA_CONTATORE = (266, 289)     # la prima riga di "Le tue app"
+SVUOTA, TOGLI = (760, 315), (869, 315)   # nell'intestazione dell'app, a destra
+CONFERMA_SVUOTA = (684, 526)    # nell'avviso di UIKit: il pulsante "Svuota dati" (Annulla a sinistra)
+CONFERMA_TOGLI = (705, 516)     # nell'avviso a tre scelte: "Togli app e dati", il piu' a destra
 
 
 def doppio_clic(m, x, y):

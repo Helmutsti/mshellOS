@@ -368,16 +368,27 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
 - Files e Attività sono sul disegno nuovo (fatto), ma restano da confermare le scelte dove Figma non
   dice niente. Files: barra laterale senza fondo (solo una riga a destra), margine 16 della griglia,
   campo di rinomina (32 px nell'elenco, 24 sul tile), avviso a pillola coi colori del suggerimento,
-  pannello informazioni come il menu, stato vuoto, icone nei menu. Attività: grigi dei pezzi della
-  barra del disco (in scuro "Altro" si vede poco), "Altro" nel grigio più chiaro, pallino del libero
-  incassato, colonna Numero 76 px, Nome in testo primario, messaggio d'errore senza rosso, spazi 12.
-- Mancano nella libreria: menu, tabella, griglia, barra a pezzi e legenda come widget (oggi Files e
-  Attività li disegnano a mano), frecce su/giù, testo con spaziatura delle lettere.
+  pannello informazioni come il menu, stato vuoto, icone nei menu.
+- **Attività e Store sul disegno Figma** (ramo `attivita-store-figma`), fatti con componenti nuovi
+  di UIKit, ognuno nel suo file in `uikit/`: `schede.h` (schede con l'indicatore di 2 px),
+  `grafico.h` (barra di utilizzo e legenda), `pagina.h` (l'area dei contenuti chiara, con il suo
+  margine, che può scorrere), `paragrafo.h` (testo che va a capo, con l'interlinea del disegno),
+  `messaggio.h` (messaggio in linea: avviso, errore, informazione), `etichetta_stato.h`
+  (Concesso/Non concesso/Nuovo), `riga_permesso.h`, `riga_app.h`, `icona_app.h` (segnaposto
+  dell'icona di un'app). Icone Lucide nuove per lo Store in `strumenti/grafica` (package, bell,
+  download, external-link, ...). Attività e Store hanno le loro icone vere (SVG e PNG 32/18).
+  Scelte dove Figma non dice niente: vedi il resoconto del lavoro; da confermare.
+  Aspettano i componenti del lavoro su Files: la tabella dei processi di Attività (intestazione con
+  la freccia dell'ordinamento, riga "Processo"), oggi ancora disegnata nell'app e segnata
+  `DA PASSARE A UIKIT`; l'ordinamento per colonna non c'è ancora.
+- Mancano nella libreria: menu, tabella, griglia come widget (oggi Files li disegna a mano),
+  frecce su/giù, testo con spaziatura delle lettere.
   `elemento_file.h` (icona Home della scrivania) usa ancora i nomi vecchi.
 - Prove da aggiornare: in `test/scrivania.py` le posizioni delle icone dell'isola sono di prima di
   Doom (circa 20 px più a destra del vero), quindi falliscono tutte le prove che aprono un'app;
-  `test/prove/files.py`, `attivita.py` e `scorrimento.py` hanno le misure vecchie (righe ora ogni
-  44 px; `attivita.py` legge la memoria tenendo solo i pixel chiari, che col tema chiaro non va).
+  `test/prove/files.py` e `scorrimento.py` hanno le misure vecchie. `attivita.py` e `store.py` sono
+  aggiornati al disegno nuovo; il riferimento `memoria_totale_*.png` di Attività è da rifare (ora il
+  totale si scrive in GB, "1,9 GB", come nel disegno), dopo averlo guardato.
 - Widget nuovi: interruttore, menu contestuale e a tendina, suggerimento, schede, tabella, griglia
   come widget, puntatore con le sue forme (idle, link, caricamento, paragrafo, disabilitato).
 - Userbar "Isole minima" (solo il pulsante App, che apre un vassoio di app verso il basso) al posto
@@ -430,29 +441,34 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
   riferimento di `immagini` (e alcune di `files`) vanno rifatte dopo averle guardate.
 
 **Lo Store (le funzioni di base, fatte)** — `utente/applicazioni/Store/`, un'app del sistema
-con il permesso `app.gestire`. L'aspetto è provvisorio (i widget di UIKit di oggi): quello
-vero arriverà dal disegno in Figma.
-- Aperto dall'isola: l'elenco delle app installate, in due gruppi ("Le tue app", "App del
-  sistema"), con nome, autore e versione. Scegliendone una, a destra il dettaglio: descrizione,
-  i permessi che chiede (se la persona li ha concessi non è ancora scritto da nessuna parte),
-  "Cosa fa di diverso" (le deviazioni) e i ruoli.
-- Nel dettaglio "Svuota dati" (per ogni app) e "Togli app" (solo per quelle installate dalla
-  persona), ognuno con la sua domanda di conferma: "Togli app e dati", "Togli solo l'app" (i
-  dati restano per quando la si reinstalla), "Annulla". Le domande stanno al posto del
-  dettaglio, perché UIKit non ha ancora le finestre di conferma.
-- Aprendo un `.app` (doppio clic in Files): la richiesta di installazione con nome, autore,
-  versione, descrizione, i permessi che chiederà al primo avvio, le deviazioni, i ruoli, gli
-  avvisi e gli errori. "Installa" / "Annulla" per un'app nuova, "Aggiorna" / "Annulla" per una
-  versione più nuova, solo "Chiudi" se ci sono errori o se il file è rovinato. Dopo: "<nome> è
-  installata" con "Apri" e "Chiudi". Se è già installata con la stessa versione lo dice, con
-  "Apri" e "Chiudi".
+con il permesso `app.gestire`. L'aspetto è quello della pagina "App – Store" di Figma, fatto con
+i componenti di UIKit.
+- Aperto dall'isola: l'elenco delle app installate, in due sezioni ("Le tue app", "App del
+  sistema" con la sua spiegazione); ogni riga con icona, nome, autore e versione e la freccia.
+  Senza app della persona: "Non hai ancora installato app". Un clic su una riga apre il dettaglio
+  al posto dell'elenco ("App installate" nella barra degli strumenti per tornare): icona, nome,
+  autore e versione, descrizione, "Svuota dati" e "Togli app", i permessi con l'etichetta
+  "Concesso" (se la persona li ha concessi non è ancora scritto da nessuna parte: si mostra lo
+  stato di partenza del disegno) e "Gestisci in Impostazioni" (apre Impostazioni, che non hanno
+  ancora la pagina dei permessi), "Cosa fa di diverso" e i ruoli.
+- "Svuota dati" e "Togli app" chiedono conferma con l'avviso di UIKit (tre scelte per togliere).
+  Dopo, un messaggio in linea: "Dati svuotati" nel dettaglio, ""<nome>" è stata tolta" in cima
+  all'elenco (con o senza i dati), o l'errore del launcher (per esempio l'app è aperta).
+- Aprendo un `.app` (doppio clic in Files): la richiesta di installazione (titolo della finestra
+  "Installa \"<nome>\""), con gli avvisi (l'icona mancante per un tema con le parole del disegno,
+  gli altri con la frase del launcher), i permessi che chiederà, "Cosa fa di diverso", i ruoli,
+  "Annulla" e "Installa". Per una versione più nuova: "Aggiorna", con "Cosa cambia" (versione,
+  permessi nuovi con l'etichetta "Nuovo", differenze nuove). Se non si può installare: un
+  messaggio d'errore per motivo (processore, sistema troppo vecchio, nome di un'app del sistema,
+  o generico) e "Chiudi". Pacchetto illeggibile: "Impossibile leggere il pacchetto". Dopo
+  l'installazione: "<nome> è installata", con "Chiudi" e "Apri <nome>".
 - I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
   Store li traduce (`Store/testo437.h`; nella libreria una funzione così non c'era).
 - Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
   e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
   persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati
   di una persona si cancellano con un processo che ha la sua identità, non come sistema.
-- Nell'isola lo Store ha per ora l'icona Lucide "save" (fra le icone di oggi non c'è "package").
+- Nell'isola lo Store ha per ora l'icona Lucide "save" (la scrivania ha la sua tabella di icone).
 
 **Prove**
 - `test/pacchetti/prova.sh`: 78 controlli (con togliere, svuotare, gli id con "/" e "..", i
@@ -463,8 +479,8 @@ vero arriverà dal disegno in Figma.
 - La scrivania legge le app solo all'avvio: un'app appena installata (o tolta) compare (o
   sparisce) quando riparte.
 - La scrivania mostra ancora le sue icone di prima (una tabella provvisoria in `scrivania.c`):
-  disegnare gli SVG è un passo successivo. Anche lo Store mostra un quadrato al posto
-  dell'icona dell'app.
+  disegnare gli SVG è un passo successivo. Anche lo Store mostra un segnaposto (quadrato con il
+  simbolo "package") al posto dell'icona dell'app.
 - Nello Store: "Installa da file…", la ricerca automatica degli aggiornamenti (aspettano la
   decisione della persona).
 - I permessi chiesti al primo avvio, l'isolamento, le firme.

@@ -2255,4 +2255,14 @@ static inline int uikit_esegui(struct finestra_tk *f) {
     }
 }
 
+#include "paragrafo.h"
+#include "pagina.h"
+#include "schede.h"
+#include "grafico.h"
+#include "etichetta_stato.h"
+#include "messaggio.h"
+#include "icona_app.h"
+#include "riga_permesso.h"
+#include "riga_app.h"
+
 #endif

@@ -20,7 +20,7 @@ occhio una volta.
 
 TERMINARE. Nella scheda "Processi" si sceglie la riga di Esempio (il primo processo
 dopo quelli del sistema: init, eventi, compositore, launcher, scrivania) e si preme
-"Termina processo" (la X a destra nella barra degli strumenti): la finestra di Esempio
+"Termina processo" (compare a destra nella barra degli strumenti quando c'e' una riga scelta): la finestra di Esempio
 deve sparire, e nell'isola Esempio non deve piu' risultare aperta.
 """
 
@@ -90,7 +90,7 @@ def esegui(p):
     x, y = s.angolo(1)
 
     # --- la memoria ---
-    m.clic(x + 128, y + 61)                    # la scheda "Memoria", nel selettore sotto il titolo
+    m.clic(x + 383, y + 60)                    # la scheda "Memoria" (tre schede larghe uguali nella barra)
     m.muovi(*PUNTO_VUOTO)
     riga = (x + 20, y + 105, x + 620, y + 128)
     # la riga compare quando Attivita ha ridisegnato: si aspetta che ci sia testo
@@ -105,11 +105,11 @@ def esegui(p):
         raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
                           "memoria_totale_ottenuta.png e la foto 'memoria'") from None
     # --- terminare Esempio ---
-    m.clic(x + 53, y + 61)                     # la scheda "Processi"
+    m.clic(x + 134, y + 60)                    # la scheda "Processi"
     time.sleep(0.5)
-    m.clic(x + 150, y + 162 + 44 * RIGA_ESEMPIO)    # le righe sono alte 44, la prima ha il centro a 162
+    m.clic(x + 150, y + 154 + 44 * RIGA_ESEMPIO)    # le righe sono a 44 l'una dall'altra, la prima ha il centro a 154
     time.sleep(0.3)
-    m.clic(x + 611, y + 61)                    # "Termina processo": la X a destra delle schede
+    m.clic(x + 680, y + 60)                    # "Termina processo", in fondo a destra nella barra (compare con la riga scelta)
     m.muovi(*PUNTO_VUOTO)
     cx, cy = s.angolo(0)
     # la barra di Esempio, sopra Attivita (e lontano dalla sua ombra)
