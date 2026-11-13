@@ -1,6 +1,8 @@
 /* CoreKit, del sistema: il protocollo del launcher. Aprire le applicazioni, aprire un file,
  * e (per lo Store) descrivere, installare e aggiornare i pacchetti .app. Lo usano i
- * programmi e le app del sistema; non e' per le app normali (vedi corekit.h).
+ * programmi e le app del sistema; non e' per le app normali (vedi corekit.h): un'app che
+ * vuole solo aprire un'altra app o un file usa apertura.h, che e' pubblico e fa le
+ * richieste APRI_APPLICAZIONE e APRI_FILE qui sotto.
  *
  * Il launcher e' il servizio del sistema che fa partire le applicazioni (come
  * LaunchServices sul Mac, o systemd per GNOME). Non ha finestre: chi vuole qualcosa (la
@@ -85,6 +87,7 @@
 #define LAUNCHER_H
 
 #include "../corekit.h"
+#include "../apertura.h"
 #include "pacchetto.h"
 
 #define NOME_LAUNCHER "launcher"
@@ -110,12 +113,12 @@
 /* le opzioni di RIMUOVI_PACCHETTO */
 #define LAUNCHER_TIENI_DATI 1
 
-/* gli esiti della risposta */
-#define LAUNCHER_FATTO                 0
-#define LAUNCHER_ERRORE               -1   /* richiesta sbagliata, o non si e' riusciti */
-#define LAUNCHER_NON_INSTALLATA       -2   /* l'app chiesta non e' installata */
-#define LAUNCHER_SERVE_STORE          -3   /* un .app: va installato, e lo Store non c'e' */
-#define LAUNCHER_NON_SUPPORTATO       -4   /* un file che il sistema non sa ancora aprire */
+/* gli esiti della risposta: i primi sono anche quelli di apertura.h, con gli stessi numeri */
+#define LAUNCHER_FATTO                APERTURA_FATTO
+#define LAUNCHER_ERRORE               APERTURA_ERRORE          /* richiesta sbagliata, o non si e' riusciti */
+#define LAUNCHER_NON_INSTALLATA       APERTURA_NON_INSTALLATA  /* l'app chiesta non e' installata */
+#define LAUNCHER_SERVE_STORE          APERTURA_SERVE_STORE     /* un .app: va installato, e lo Store non c'e' */
+#define LAUNCHER_NON_SUPPORTATO       APERTURA_NON_SUPPORTATO  /* un file che il sistema non sa ancora aprire */
 #define LAUNCHER_PACCHETTO_NON_VALIDO -5   /* il resoconto (nel foglio) dice perche' */
 #define LAUNCHER_NON_PERMESSO         -6   /* chi chiede non puo' installare */
 #define LAUNCHER_IN_USO               -7   /* l'app e' accesa: va chiusa prima */
@@ -170,18 +173,8 @@ static inline int launcher_chiedi(const struct richiesta_launcher *r, int allega
     return risposta->esito;
 }
 
-/* Chiede al launcher di aprire un'applicazione, con un argomento per lei (0 o "":
- * nessuno). Il numero del compito, o -1. */
-static inline int apri_applicazione_con(const char *id, const char *argomento) {
-    struct richiesta_launcher r = { .tipo = APRI_APPLICAZIONE };
-    struct risposta_launcher risposta;
-    launcher_copia(r.applicazione, id, MAX_NOME_FILE);
-    launcher_copia(r.argomento, argomento, MAX_PERCORSO);
-    return launcher_chiedi(&r, -1, &risposta, 0, 0) < 0 ? -1 : risposta.numero;
-}
-
-/* Chiede al launcher di aprire un'applicazione: il numero del compito, o -1. */
-static inline int apri_applicazione(const char *id) { return apri_applicazione_con(id, 0); }
+/* Aprire un'applicazione o un file (APRI_APPLICAZIONE, APRI_FILE): apri_applicazione,
+ * apri_applicazione_con e apri_file, in apertura.h (incluso qui sopra). */
 
 /* Chiede al launcher di far partire il programma 'percorso' (in /system/bin) come la
  * persona. Il numero del compito, o -1. */
@@ -199,14 +192,6 @@ static inline int apri_shell(int schiavo) {
     struct richiesta_launcher r = { .tipo = APRI_SHELL };
     struct risposta_launcher risposta;
     return launcher_chiedi(&r, schiavo, &risposta, 0, 0) < 0 ? -1 : risposta.numero;
-}
-
-/* Chiede al launcher di aprire un file (per ora: un pacchetto .app, con lo Store).
- * LAUNCHER_FATTO, o un altro esito con il perche' in risposta->messaggio. */
-static inline int apri_file(const char *percorso, struct risposta_launcher *risposta) {
-    struct richiesta_launcher r = { .tipo = APRI_FILE };
-    launcher_copia(r.argomento, percorso, MAX_PERCORSO);
-    return launcher_chiedi(&r, -1, risposta, 0, 0);
 }
 
 /* Descrive (DESCRIVI_PACCHETTO), installa (INSTALLA_PACCHETTO) o aggiorna

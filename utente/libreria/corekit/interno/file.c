@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include "../corekit.h"
+#include "../sistema/privilegi.h"
 #include "interno.h"
 
 /* --- le cartelle aperte --- */
@@ -389,15 +390,25 @@ int rinomina(const char *da, const char *a) {
     return rename(vero_da, vero_a) < 0 ? errore_file(errno) : 0;
 }
 
-/* Il proprietario si cambia (chown) solo se e' diverso: lo puo' fare solo il sistema, e
- * a chi chiede solo i permessi dei suoi file non serve. I permessi (chmod) li puo'
- * cambiare il proprietario. Lo controlla il kernel. */
-int cambia_permessi(const char *percorso, unsigned int proprietario, unsigned int permessi) {
+/* I permessi (chmod) li puo' cambiare il proprietario. Lo controlla il kernel. */
+int cambia_permessi(const char *percorso, unsigned int permessi) {
+    char vero[MAX_VERO];
+    int e = percorso_vero(percorso, vero);
+    if (e < 0) return e;
+    return chmod(vero, permessi & 07777) < 0 ? errore_file(errno) : 0;
+}
+
+/* Il proprietario (chown) si cambia solo se e' diverso: lo puo' fare solo il sistema, e
+ * a chi lo lascia com'e' non serve esserlo. Lo controlla il kernel. Dichiarata in
+ * sistema/privilegi.h, non in corekit.h: un'app normale non la usa. Attenzione: Linux,
+ * dando un programma a un altro, gli toglie i bit setuid e setgid; chi vuole anche quelli
+ * chiama cambia_permessi DOPO. */
+int cambia_proprietario(const char *percorso, unsigned int proprietario) {
     char vero[MAX_VERO];
     int e = percorso_vero(percorso, vero);
     if (e < 0) return e;
     struct stat s;
     if (stat(vero, &s) < 0) return errore_file(errno);
     if (s.st_uid != proprietario && chown(vero, proprietario, (gid_t)-1) < 0) return errore_file(errno);
-    return chmod(vero, permessi & 07777) < 0 ? errore_file(errno) : 0;
+    return 0;
 }

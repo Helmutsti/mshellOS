@@ -26,6 +26,7 @@
  * Ogni passo lo scrive nella seriale ("messaggi: ... -> esito"). Alla fine "messaggi:
  * tutto bene", oppure "messaggi: fallita". */
 #include "corekit/messaggi.h"
+#include "corekit/sistema/servizi.h"   /* fa anche il servizio: chi_chiede, ha_permesso */
 #include <sys/wait.h>
 #include <unistd.h>
 

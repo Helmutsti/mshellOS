@@ -105,7 +105,7 @@ struct info_file {
 /* GLI UTENTI E I PERMESSI, quelli di Unix, che controlla il kernel. Ogni programma ha un
  * uid: 0 e' il SISTEMA (puo' tutto), 1000 le APPLICAZIONI. Un programma nuovo prende
  * l'uid di chi lo fa partire; solo il sistema puo' farne partire uno con un uid diverso
- * (avvia_come), e nessuno puo' salire a 0.
+ * (avvia_come, in sistema/privilegi.h), e nessuno puo' salire a 0.
  * Ogni file ha un proprietario e i permessi: tre cifre ottali, ognuna la somma di
  * PERMESSO_LEGGERE, _SCRIVERE, _ESEGUIRE; la prima per il proprietario, l'ultima per
  * tutti gli altri (quella di mezzo, il gruppo, per ora non si usa). Per creare,

@@ -120,20 +120,8 @@ int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta);
  * richiesta che si sa lenta. */
 int chiedi_entro(int d, struct messaggio *richiesta, struct messaggio *risposta, int ms);
 
-/* --- il servizio: chi c'e' dall'altra parte --- */
-
-/* Chi c'e' all'altro capo di un collegamento: lo dice il kernel, non si puo' fingere. */
-struct chi_chiede {
-    int uid;                                  /* 0: il sistema; 1000...: una persona */
-    char programma[MAX_PERCORSO_PROGRAMMA];   /* es. /system/apps/files/code; "" se non si sa */
-};
-
-/* Riempie *c per il collegamento 'd'. 0, o -1 se il kernel non lo sa (non e' un socket). */
-int chi_chiede(int d, struct chi_chiede *c);
-
-/* Chi chiede (riempito da chi_chiede) ha il permesso 'nome' (es. "network.configure")?
- * 1 si', 0 no. PROVVISORIO: oggi risponde sempre si' e scrive la domanda nel registro;
- * cosa fara' quando sara' vera e' spiegato accanto al codice, in messaggi.c. */
-int ha_permesso(const struct chi_chiede *c, const char *nome);
+/* --- il servizio ---
+ * Il lato di chi risponde (chi c'e' dall'altra parte, chi_chiede, e se ha il permesso,
+ * ha_permesso) lo usano solo i servizi del sistema: e' in sistema/servizi.h. */
 
 #endif

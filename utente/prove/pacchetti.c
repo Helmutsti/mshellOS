@@ -53,7 +53,7 @@ int main(void) {
     /* aprire contatore.app farebbe partire lo Store (lo prova test/prove/store.py): qui si
      * prova solo un file che non e' un pacchetto */
     struct risposta_launcher risposta;
-    passo("apri il file leggimi.txt", apri_file(NON_PACCHETTO, &risposta), LAUNCHER_NON_SUPPORTATO);
+    passo("apri il file leggimi.txt", apri_file(NON_PACCHETTO, 0, 0), LAUNCHER_NON_SUPPORTATO);
     passo("apri l'app contatore (non installata)", apri_applicazione("contatore") >= 0, 0);
 
     passo("descrivi un file che non e' un pacchetto", launcher_pacchetto(DESCRIVI_PACCHETTO, NON_PACCHETTO, &r),

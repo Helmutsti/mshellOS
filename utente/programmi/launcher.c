@@ -28,6 +28,7 @@
  * per il tempo di scompattarla. */
 #include "corekit/corekit.h"
 #include "corekit/sistema/launcher.h"
+#include "corekit/sistema/privilegi.h"   /* avvia_come...: le app partono come la persona */
 #include "corekit/sistema/descrizione.h"
 #include "corekit/sistema/pacchetto.h"
 

@@ -43,8 +43,8 @@
 #include "gkit/gkit.h"
 #include "uikit/userbar.h"
 #include "corekit/sistema/descrizione.h"
-#include "corekit/sistema/launcher.h"
-#include "corekit/sistema/testo437.h"
+#include "corekit/apertura.h"
+#include "gkit/testo437.h"
 
 /* --- le applicazioni installate --- */
 

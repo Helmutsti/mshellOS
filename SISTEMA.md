@@ -75,12 +75,12 @@ Cosa deve dire:
 
 Il primo a usarlo sarà il servizio network. Compositore e launcher si allineeranno più avanti.
 
-**Dove sta il codice:** in CoreKit, `utente/libreria/corekit/messaggi.h` (pubblico) e `corekit/interno/messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
+**Dove sta il codice:** in CoreKit, `utente/libreria/corekit/messaggi.h` (pubblico: chi chiede), `corekit/sistema/servizi.h` (del sistema: il lato del servizio) e `corekit/interno/messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
 - costruire: `messaggio_inizia`, `messaggio_aggiungi`, `messaggio_aggiungi_numero`, `messaggio_risposta` (la busta della risposta: stesso `id`, `result`);
 - leggere: `messaggio_valore`, `messaggio_prossimo` (per le chiavi ripetute), `messaggio_numero`, `messaggio_vale`;
 - mandare e ricevere, con un descrittore allegato facoltativo: `messaggio_manda`, `messaggio_ricevi`;
 - chi chiede: `chiedi` (mette l'`id` e aspetta la risposta con lo stesso `id`);
-- il servizio: `chi_chiede` (uid e programma dall'altra parte) e `ha_permesso` (sotto).
+- il servizio, in `sistema/servizi.h`: `chi_chiede` (uid e programma dall'altra parte) e `ha_permesso` (sotto).
 
 **Tempo massimo.** `chiedi` aspetta al massimo 5 secondi, uguale per tutti; per una richiesta
 lenta c'è `chiedi_entro`, con un tempo dato da chi chiede. Se scade, la risposta ha

@@ -80,12 +80,15 @@ a chi scrive un'app):
 
 | livello | cartella | cosa c'è | chi lo usa |
 |---|---|---|---|
-| **pubblico** | `corekit/` | `corekit.h` (l'header principale: file, processi, porte, fogli, tempo), `chiamate.h` (i tipi e le costanti che usa, lo include `corekit.h`), `messaggi.h` (lo standard `chiave=valore`, SISTEMA.md sezione 3) | ogni programma, app e comando |
-| **del sistema** | `corekit/sistema/` | `launcher.h` (il protocollo del launcher), `pacchetto.h` (i pacchetti `.app`), `descrizione.h` (il manifesto di un'app), `testo437.h` (da UTF-8 ai caratteri dei font del sistema) | solo i programmi del sistema e le app del sistema: come i "framework privati" del Mac, sono header ma possono cambiare senza avviso |
-| **interno** | `corekit/interno/` | il codice (`corekit.c`, `file.c`, `comunicazione.c`, `messaggi.c`, `descrizione.c`, `pacchetto.c`) e `interno.h`, che si dicono tra loro | solo CoreKit |
+| **pubblico** | `corekit/` | `corekit.h` (l'header principale: file, processi, porte, fogli, tempo), `chiamate.h` (i tipi e le costanti che usa, lo include `corekit.h`), `messaggi.h` (lo standard `chiave=valore`, SISTEMA.md sezione 3: la busta e `chiedi`, il lato di chi chiede), `apertura.h` (chiedere al launcher di aprire un'altra app o un file) | ogni programma, app e comando |
+| **del sistema** | `corekit/sistema/` | `launcher.h` (il protocollo del launcher: anche installare e togliere le app, aprire la shell come sistema), `pacchetto.h` (i pacchetti `.app`), `descrizione.h` (il manifesto di un'app), `privilegi.h` (quello che riesce solo al sistema: `avvia_come...`, `cambia_proprietario`), `servizi.h` (il lato del servizio nei messaggi: `chi_chiede`, `ha_permesso`) | solo i programmi del sistema e le app del sistema: come i "framework privati" del Mac, sono header ma possono cambiare senza avviso |
+| **interno** | `corekit/interno/` | il codice (`corekit.c`, `file.c`, `comunicazione.c`, `messaggi.c`, `apertura.c`, `descrizione.c`, `pacchetto.c`) e `interno.h`, che si dicono tra loro | solo CoreKit |
 
 Un programma scrive `#include "corekit/corekit.h"` (e `"corekit/messaggi.h"`,
-`"corekit/sistema/launcher.h"`... se gli servono). Gli header pubblici hanno solo dichiarazioni,
+`"corekit/apertura.h"`... se gli servono). Oggi Files, Attività e la scrivania usano solo
+`apertura.h`; lo Store (installare, aggiornare, togliere le app) e il Terminale (aprire la shell
+come sistema) usano `sistema/launcher.h`. `testo437.h` (da UTF-8 ai caratteri dei font del
+sistema) riguarda i font: sta in GKit, `gkit/testo437.h`. Gli header pubblici hanno solo dichiarazioni,
 tipi, costanti e i commenti per chi li usa; l'unico codice dentro sono due funzioni di una riga
 (`lunghezza`, `scrivi_testo`).
 

@@ -26,7 +26,7 @@
  * (test/prove/store.py). */
 #include "uikit/uikit.h"
 #include "corekit/sistema/launcher.h"
-#include "corekit/sistema/testo437.h"
+#include "gkit/testo437.h"
 
 #define QUANTI(v) ((int)(sizeof(v) / sizeof((v)[0])))
 

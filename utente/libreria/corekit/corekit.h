@@ -17,14 +17,19 @@
  *   corekit/            PUBBLICO: quello che un'applicazione o un comando puo' usare.
  *                       corekit.h (questo), chiamate.h (i tipi, le costanti e le regole
  *                       che corekit.h usa: lo include lui), messaggi.h (lo standard
- *                       chiave=valore dei messaggi tra i servizi e i loro clienti).
+ *                       chiave=valore dei messaggi tra i servizi e i loro clienti: la busta
+ *                       e chiedi, il lato di chi chiede), apertura.h (chiedere al launcher
+ *                       di aprire un'altra app o un file).
  *   corekit/sistema/    DEL SISTEMA: i protocolli e gli strumenti che usano solo i programmi
  *                       del sistema e le app del sistema (come i "framework privati" del
- *                       Mac): launcher.h (il protocollo del launcher), pacchetto.h (i
- *                       pacchetti .app), descrizione.h (il manifesto di un'app), testo437.h
- *                       (da UTF-8 ai caratteri dei font del sistema). Sono header come gli
- *                       altri, ma un'app normale non li deve includere: possono cambiare
- *                       senza avviso.
+ *                       Mac): launcher.h (il protocollo del launcher: installare e togliere
+ *                       le app, aprire la shell...), pacchetto.h (i pacchetti .app),
+ *                       descrizione.h (il manifesto di un'app), privilegi.h (quello che
+ *                       riesce solo al sistema: far partire un programma con un altro uid,
+ *                       cambiare il proprietario di un file), servizi.h (il lato del
+ *                       servizio nei messaggi: chi chiede e se ha il permesso). Sono header
+ *                       come gli altri, ma un'app normale non li deve includere: possono
+ *                       cambiare senza avviso.
  *   corekit/interno/    INTERNO: il codice (i .c) e interno.h, che i .c si dicono tra loro.
  *                       Nessun programma li include.
  *
@@ -63,21 +68,13 @@ void esci(void) __attribute__((noreturn));
 /* Fa partire il programma 'percorso' del disco, con lo stesso uid. Il suo numero, o -1. */
 int avvia(const char *percorso);
 
-/* Come avvia, ma il programma nuovo ha quell'uid. Solo per il sistema. */
-int avvia_come(const char *percorso, unsigned int uid);
-
-/* Come avvia_come, con un ARGOMENTO per il programma nuovo (un testo, per esempio la
- * cartella da aprire): lui lo trova in main, come secondo argomento,
- *     int main(int quanti, char **argomenti)   ->   argomenti[1] (se quanti > 1)
- * Un argomento vuoto (o 0) e' come nessun argomento. */
-int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento);
+/* Far partire un programma con un ALTRO uid (avvia_come...) lo puo' solo il sistema: quelle
+ * funzioni sono in sistema/privilegi.h. Un'app che vuole aprire un'altra app o un file lo
+ * chiede al launcher, con apertura.h. */
 
 /* Fa partire un programma che trova gia' aperti i descrittori dell'elenco, ai posti
  * 0, 1, 2... Il suo numero, o -1. */
 int avvia_con(const char *percorso, const int *descrittori, int quanti);
-
-/* Come avvia_con, e il programma nuovo ha anche quell'uid. Solo per il sistema. */
-int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti);
 
 /* Un descrittore del programma 'numero': aspetta lo vede pronto quando e' finito, e ricevi
  * su di lui aspetta che finisca. Il descrittore, o -1 se il numero non e' valido o il
@@ -210,9 +207,11 @@ int copia_cartella(const char *da, const char *a);
 /* Rinomina o sposta. Un file gia' presente in 'a' si sostituisce. 0, o un ERRORE_... */
 int rinomina(const char *da, const char *a);
 
-/* Cambia proprietario e permessi (il proprietario lo cambia solo il sistema: per gli altri
- * deve restare lo stesso). 0, o un ERRORE_... (ERRORE_PERMESSO se non si puo'). */
-int cambia_permessi(const char *percorso, unsigned int proprietario, unsigned int permessi);
+/* Cambia i permessi di un file o di una cartella (le tre cifre ottali di chiamate.h, per
+ * esempio 0644). Li puo' cambiare solo il proprietario (o il sistema). 0, o un ERRORE_...
+ * (ERRORE_PERMESSO se non si puo'). Il proprietario lo cambia solo il sistema:
+ * cambia_proprietario, in sistema/privilegi.h. */
+int cambia_permessi(const char *percorso, unsigned int permessi);
 
 /* Quanto e' grande, e quanto e' libera, la partizione in cui sta 'percorso', in *d. 0, o
  * un ERRORE_... */

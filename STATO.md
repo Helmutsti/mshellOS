@@ -419,7 +419,7 @@ chieda al launcher (`APRI_SHELL`, `utente/programmi/launcher.c`): decisione prov
 persona, "poi lo proteggiamo" (chi può chiederla, e con quale permesso).
 
 **I permessi delle porte rispondono sempre sì (provvisorio): da accendere.** La funzione dei
-permessi dei servizi (`ha_permesso`, `utente/libreria/messaggi.c`) oggi non controlla niente e
+permessi dei servizi (`ha_permesso`, `corekit/sistema/servizi.h` e `corekit/interno/messaggi.c`) oggi non controlla niente e
 scrive ogni domanda nel registro con "provvisorio"; va resa vera (sistema / app con i permessi
 concessi / comando della persona).
 
@@ -652,7 +652,7 @@ i componenti di UIKit.
   o generico) e "Chiudi". Pacchetto illeggibile: "Impossibile leggere il pacchetto". Dopo
   l'installazione: "<nome> è installata", con "Chiudi" e "Apri <nome>".
 - I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
-  Store li traduce (`testo437.h`, ora nella libreria perché serve anche alla scrivania).
+  Store li traduce (`gkit/testo437.h`, ora nella libreria perché serve anche alla scrivania).
 - Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
   e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
   persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati

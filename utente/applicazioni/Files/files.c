@@ -47,10 +47,10 @@
  * in un avviso che sparisce alla prossima azione.
  *
  * LA CARTELLA DI PARTENZA e' quella che il launcher passa come argomento (vedi
- * launcher.h: aprire una cartella, anche dalla scrivania, vuol dire far partire Files su
+ * apertura.h: aprire una cartella, anche dalla scrivania, vuol dire far partire Files su
  * di lei); senza, la casa (/home). */
 #include "uikit/uikit.h"
-#include "corekit/sistema/launcher.h"     /* aprire un pacchetto .app: lo chiede al launcher */
+#include "corekit/apertura.h"            /* aprire un pacchetto .app: lo chiede al launcher */
 
 #define MAX_ELEMENTI 256
 #define MAX_LUNGO    MAX_PERCORSO   /* un percorso in Files */
@@ -674,7 +674,7 @@ static int e_pacchetto(int e) {
 static int si_apre(int e) { return e >= 0 && (elementi[e].tipo == TIPO_CARTELLA || e_pacchetto(e)); }
 
 /* Apre un elemento: una cartella ci si entra; un pacchetto .app lo si chiede al launcher,
- * che fa partire lo Store (o dice che le app vanno installate prima: launcher.h). */
+ * che fa partire lo Store (o dice che le app vanno installate prima: apertura.h). */
 static void apri_elemento(int e) {
     if (!si_apre(e)) return;
     char p[MAX_LUNGO];
@@ -684,9 +684,8 @@ static void apri_elemento(int e) {
         return;
     }
     if (elementi[e].tipo == TIPO_CARTELLA) { vai(p, 1); return; }
-    struct risposta_launcher risposta;
-    int esito = apri_file(p, &risposta);
-    if (esito == LAUNCHER_SERVE_STORE) avvisa("Le app vanno installate prima di aprirle");
+    int esito = apri_file(p, 0, 0);
+    if (esito == APERTURA_SERVE_STORE) avvisa("Le app vanno installate prima di aprirle");
     else if (esito < 0) avvisa("Non si riesce ad aprire il pacchetto");
 }
 

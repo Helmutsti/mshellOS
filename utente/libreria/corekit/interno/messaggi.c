@@ -89,6 +89,7 @@
 #include <string.h>
 
 #include "../messaggi.h"
+#include "../sistema/servizi.h"
 
 /* --- costruire --- */
 

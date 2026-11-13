@@ -33,6 +33,7 @@
 #include <unistd.h>
 
 #include "../corekit.h"
+#include "../sistema/privilegi.h"
 #include "interno.h"
 
 /* --- il registro --- */

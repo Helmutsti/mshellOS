@@ -26,7 +26,7 @@
  * testo alto 16 al centro dell'intestazione alta 32) = 16. Memoria e Disco: il pannello ha 16
  * di padding, i figli niente: 16 e 16. */
 #include "uikit/uikit.h"
-#include "corekit/sistema/launcher.h"     /* Riavvia: riaprire l'app */
+#include "corekit/apertura.h"            /* Riavvia: riaprire l'app */
 
 #define MAX_PROCESSI 64
 
