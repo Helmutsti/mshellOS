@@ -361,7 +361,6 @@ struct etichetta {
     struct widget base;
     char testo[MAX_TESTO_WIDGET];
     const struct font *font;           /* FONT_TESTO, FONT_TITOLO... */
-    unsigned int colore;
 };
 
 static inline void etichetta_misura(struct widget *w, int *l, int *a) {
@@ -372,15 +371,14 @@ static inline void etichetta_misura(struct widget *w, int *l, int *a) {
 
 static inline void etichetta_disegna(struct widget *w, struct pennello *p) {
     struct etichetta *e = (struct etichetta *)w;
-    pennello_colore(p, e->colore);
+    pennello_colore(p, TESTO_PRIMARIO);   /* chiesto qui, non copiato: segue il tema */
     testo_centrato(p, e->font, w->x, w->y, w->a, e->testo);
 }
 
 static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0, 0, 0 };
 
 static inline void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font) {
-    *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font,
-                             .colore = TESTO_PRIMARIO };
+    *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font };
     copia_testo(e->testo, testo, MAX_TESTO_WIDGET);
 }
 
@@ -683,6 +681,73 @@ static inline void scelta_prepara(struct casella *c, const char *testo, void *gr
     casella_prepara(c, testo, accesa ? ACCESO : SPENTO, al_cambio, dati);
     c->tonda = 1;
     c->gruppo = gruppo;
+}
+
+/* --- l'interruttore --- */
+
+/* L'INTERRUTTORE, dal file Figma ("Interruttore", Componenti base): acceso o spento, con effetto
+ * immediato. Un binario INCASSATO (INTERRUTTORE_LARGO x INTERRUTTORE_ALTO, tondo, ombra incassato)
+ * con fondo SUPERFICIE_INCASSATA da spento e AZIONE_SFONDO da acceso, e il pomello SOLLEVATO
+ * (tondo di INTERRUTTORE_POMELLO, ombra sollevato) a INTERRUTTORE_MARGINE dal bordo: a sinistra
+ * da spento (SUPERFICIE_ELEVATA), a destra da acceso (AZIONE_TESTO, come quello che sta sopra
+ * un'azione). Disabilitato e' piatto: binario CONTROLLO_SFONDO_DISABILITATO, pomello
+ * TESTO_DISABILITATO, niente ombre. Non ha testo: l'etichetta e' un widget accanto. */
+struct interruttore;
+typedef void (*al_cambio_interruttore)(struct interruttore *i, void *dati);
+
+struct interruttore {
+    struct widget base;
+    int acceso;
+    al_cambio_interruttore al_cambio;
+    void *dati;
+    int premuto;
+};
+
+static inline void interruttore_misura(struct widget *w, int *l, int *a) {
+    (void)w;
+    *l = INTERRUTTORE_LARGO;
+    *a = INTERRUTTORE_ALTO;
+}
+
+static inline void interruttore_disegna(struct widget *w, struct pennello *p) {
+    struct interruttore *i = (struct interruttore *)w;
+    int spento = w->disabilitato;
+    int x = w->x, y = w->y + (w->a - INTERRUTTORE_ALTO) / 2;
+    struct tondo binario = tondo(x, y, INTERRUTTORE_LARGO, INTERRUTTORE_ALTO, INTERRUTTORE_ALTO / 2);
+    if (!spento) ombre_strati_fuori(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
+    pennello_colore(p, spento ? CONTROLLO_SFONDO_DISABILITATO : i->acceso ? AZIONE_SFONDO : SUPERFICIE_INCASSATA);
+    riempi_forma(p, &binario);
+    if (!spento) ombre_strati_dentro(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
+
+    int px = i->acceso ? x + INTERRUTTORE_LARGO - INTERRUTTORE_MARGINE - INTERRUTTORE_POMELLO
+                       : x + INTERRUTTORE_MARGINE;
+    struct tondo pomello = tondo(px, y + INTERRUTTORE_MARGINE, INTERRUTTORE_POMELLO, INTERRUTTORE_POMELLO,
+                                 INTERRUTTORE_POMELLO / 2);
+    if (!spento) ombre_strati_fuori(p, &pomello, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
+    pennello_colore(p, spento ? TESTO_DISABILITATO : i->acceso ? AZIONE_TESTO : SUPERFICIE_ELEVATA);
+    riempi_forma(p, &pomello);
+    if (!spento) ombre_strati_dentro(p, &pomello, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
+}
+
+static inline void interruttore_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
+    struct interruttore *i = (struct interruttore *)w;
+    if (pulsanti & PULSANTE_SINISTRO) { i->premuto = 1; return; }
+    if (!i->premuto) return;
+    i->premuto = 0;
+    if (!widget_contiene(w, x, y)) return;   /* lasciato fuori: ci ha ripensato */
+    i->acceso = !i->acceso;
+    widget_cambiato(w);
+    if (i->al_cambio) i->al_cambio(i, i->dati);
+}
+
+static const struct tipo_widget tipo_interruttore = {
+    interruttore_misura, 0, interruttore_disegna, interruttore_puntatore, 0, 0, 0, 0, 1
+};
+
+static inline void interruttore_prepara(struct interruttore *i, int acceso, al_cambio_interruttore al_cambio,
+                                        void *dati) {
+    *i = (struct interruttore){ .base = { .tipo = &tipo_interruttore }, .acceso = acceso,
+                                .al_cambio = al_cambio, .dati = dati };
 }
 
 /* --- il campo di testo --- */
@@ -1647,11 +1712,17 @@ struct pulsante_barra {
 
 static const struct tipo_widget tipo_pillola;   /* piu' sotto */
 
-/* La pillola (il gruppo, descritto sotto): qui serve solo sapere se e' a scelta. */
+/* La pillola (il gruppo, descritto sotto): qui serve sapere se e' a scelta e la sua misura. */
 struct pillola {
     struct widget base;
     int a_scelta;
+    int dimensione;                    /* MISURA_S (32, la barra degli strumenti) o MISURA_M (40) */
 };
+
+/* La pillola e' M (alta 40)? */
+static inline int pillola_m(const struct widget *gruppo) {
+    return gruppo && ((const struct pillola *)gruppo)->dimensione == MISURA_M;
+}
 
 /* Il gruppo (la pillola) in cui sta il pulsante, o 0 se sta da solo nella barra. */
 static inline struct widget *pulsante_barra_gruppo(const struct widget *w) {
@@ -1660,9 +1731,12 @@ static inline struct widget *pulsante_barra_gruppo(const struct widget *w) {
 
 static inline void pulsante_barra_misura(struct widget *w, int *l, int *a) {
     struct pulsante_barra *b = (struct pulsante_barra *)w;
-    *a = pulsante_barra_gruppo(w) ? GRUPPO_ELEMENTO : ALTEZZA_S;
+    struct widget *gruppo = pulsante_barra_gruppo(w);
+    int m = pillola_m(gruppo);
+    *a = !gruppo ? ALTEZZA_S : m ? GRUPPO_ELEMENTO_M : GRUPPO_ELEMENTO;
     *l = *a;                                                  /* solo icona: tondo */
-    if (b->testo[0]) *l = 2 * PADDING_S + larghezza_testo(FONT_PULSANTE_S, b->testo);
+    if (b->testo[0]) *l = m ? 2 * PADDING_M + larghezza_testo(FONT_PULSANTE_M, b->testo)
+                            : 2 * PADDING_S + larghezza_testo(FONT_PULSANTE_S, b->testo);
 }
 
 static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) {
@@ -1696,11 +1770,13 @@ static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) 
         if (a_scelta) modo = COLORE_ICONA_PRIMARIO;
     }
     pennello_colore(p, COLORE_ICONA(modo));
+    int m = pillola_m(gruppo), lato = m ? ICONA_M : ICONA_S;
     if (b->testo[0]) {
-        testo_centrato(p, FONT_PULSANTE_S, w->x + PADDING_S, w->y, w->a, b->testo);
+        testo_centrato(p, m ? FONT_PULSANTE_M : FONT_PULSANTE_S, w->x + (m ? PADDING_M : PADDING_S), w->y,
+                       w->a, b->testo);
         return;
     }
-    icona(p, b->icona, ICONA_S, w->x + (w->l - ICONA_S) / 2, w->y + (w->a - ICONA_S) / 2);
+    icona(p, b->icona, lato, w->x + (w->l - lato) / 2, w->y + (w->a - lato) / 2);
 }
 
 /* LA PILLOLA: un gruppo di pulsanti, il "gruppo di pulsanti" del disegno. E' un binario
@@ -1714,7 +1790,7 @@ static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) 
  *     le scelte singole; la voce accesa e' il pezzo mobile, SOLLEVATO dentro il binario. Il
  *     clic si fa sentire anche sul pulsante gia' acceso. */
 static inline void pillola_misura(struct widget *w, int *l, int *a) {
-    int visti = 0, largo = 0;
+    int visti = 0, largo = 0, m = pillola_m(w);
     for (int i = 0; i < w->quanti_figli; i++) {
         if (w->figli[i]->nascosto) continue;
         int fl, fa;
@@ -1722,11 +1798,12 @@ static inline void pillola_misura(struct widget *w, int *l, int *a) {
         largo += fl;
         visti++;
     }
-    *l = 2 * GRUPPO_PADDING + largo + (visti ? visti - 1 : 0) * PILLOLA_SPAZIO;
-    *a = ALTEZZA_S;
+    *l = 2 * GRUPPO_PADDING + largo + (visti ? visti - 1 : 0) * (m ? GRUPPO_SPAZIO_M : PILLOLA_SPAZIO);
+    *a = m ? ALTEZZA_M : ALTEZZA_S;
 }
 
 static inline void pillola_disponi(struct widget *w) {
+    int m = pillola_m(w);
     int x = w->x + GRUPPO_PADDING;
     for (int i = 0; i < w->quanti_figli; i++) {
         struct widget *f = w->figli[i];
@@ -1736,8 +1813,8 @@ static inline void pillola_disponi(struct widget *w) {
         f->x = x;
         f->y = w->y + GRUPPO_PADDING;
         f->l = fl;
-        f->a = GRUPPO_ELEMENTO;
-        x += fl + PILLOLA_SPAZIO;
+        f->a = m ? GRUPPO_ELEMENTO_M : GRUPPO_ELEMENTO;
+        x += fl + (m ? GRUPPO_SPAZIO_M : PILLOLA_SPAZIO);
     }
 }
 
@@ -1790,9 +1867,18 @@ static inline void pulsante_barra_testo(struct pulsante_barra *b, const char *te
     copia_testo(b->testo, testo, MAX_TESTO_WIDGET);
 }
 
-/* 'a_scelta': 1 se ne resta acceso uno solo (poi pulsante_barra_accendi per il primo). */
+/* 'a_scelta': 1 se ne resta acceso uno solo (poi pulsante_barra_accendi per il primo).
+ * Nasce S (32, quella della barra degli strumenti); pillola_dimensione la fa M. */
 static inline void pillola_prepara(struct pillola *p, int a_scelta) {
-    *p = (struct pillola){ .base = { .tipo = &tipo_pillola }, .a_scelta = a_scelta };
+    *p = (struct pillola){ .base = { .tipo = &tipo_pillola }, .a_scelta = a_scelta, .dimensione = MISURA_S };
+}
+
+/* La misura del gruppo (Figma "Gruppo", Dimensione): MISURA_S, alto ALTEZZA_S (32), voci di 24
+ * con il testo del pulsante S; o MISURA_M, alto ALTEZZA_M (40), voci di 32 con PADDING_M ai lati
+ * e il testo del pulsante M, attaccate (la scelta del tema in Impostazioni). Prima di aprire la
+ * finestra. */
+static inline void pillola_dimensione(struct pillola *p, int dimensione) {
+    p->dimensione = dimensione == MISURA_M ? MISURA_M : MISURA_S;
 }
 
 static inline void pillola_aggiungi(struct pillola *p, struct pulsante_barra *b) {
@@ -2560,7 +2646,23 @@ static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n
         f->attiva = n->fuoco;
         if (!n->fuoco) f->modificatori = 0;    /* i tasti lasciati altrove non li sentiremo */
         uikit_cambiata_testata(f);             /* il fuoco cambia solo il titolo e i comandi */
+    } else if (n->tipo == TEMA_CAMBIATO) {
+        /* il tema e' cambiato (gkit.h, IL TEMA): lo si rilegge e si ridisegna tutto. I colori
+         * i widget li chiedono quando disegnano (tema.h), quindi basta questo */
+        tema_leggi();
+        uikit_cambiata_tutta(f);
     }
+}
+
+/* CAMBIA IL TEMA DI TUTTO IL SISTEMA ("chiaro" o "scuro"): lo scrive nelle preferenze
+ * (tema_salva) e chiede al compositore di dirlo a tutte le finestre e ai pannelli aperti
+ * (CAMBIA_TEMA, gkit.h): ognuno rilegge il tema e si ridisegna, anche questa finestra (con
+ * TEMA_CAMBIATO, come le altre). Funziona solo per chi ha il permesso "impostazioni.sistema"
+ * (Impostazioni): per gli altri il file cambia, ma il compositore non dice niente a nessuno.
+ * 0, o -1. */
+static inline int uikit_cambia_tema(struct finestra_tk *f, const char *nome) {
+    if (tema_salva(nome) < 0) return -1;
+    return finestra_cambia_tema(&f->finestra) < 0 ? -1 : 0;
 }
 
 /* Consegna una notizia, ma i movimenti del puntatore li tiene da parte (in 'sospesa'): se

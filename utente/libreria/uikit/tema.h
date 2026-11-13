@@ -23,8 +23,10 @@
  *
  * LA SCELTA DEL TEMA e' a tempo di esecuzione: 'tema_corrente' punta a uno dei due, e le
  * macro di stile.h (SUPERFICIE_ELEVATA, TESTO_PRIMARIO...) leggono sempre da lui. Parte sul
- * chiaro; tema_leggi() (tema.c) lo cambia in base al file delle preferenze, una volta
- * all'avvio del programma.
+ * chiaro; tema_leggi() (tema.c) lo cambia in base al file delle preferenze, all'avvio del
+ * programma e ogni volta che il compositore dice che e' cambiato (TEMA_CAMBIATO).
+ * Per questo un colore NON si copia in una variabile che dura (un campo di un widget):
+ * si chiede alle macro quando si disegna, cosi' segue il tema anche quando cambia.
  *
  * 'tema_corrente' e' un simbolo DEBOLE definito qui nell'header: ogni file .c che lo include
  * ne porta una copia, e il linker le unisce in una sola. Cosi' l'header resta "header-only"
@@ -286,7 +288,13 @@ static inline void tema_scegli(const char *nome) {
 }
 
 /* Sceglie il tema leggendo /data/users/1000/preferences/tema (tema.c). La chiama da sola,
- * prima di main, ogni programma che lega la libreria. */
+ * prima di main, ogni programma che lega la libreria; e la richiama quando il compositore
+ * dice che il tema e' cambiato (TEMA_CAMBIATO, gkit.h: UIKit lo fa da sola). */
 void tema_leggi(void);
+
+/* Scrive il tema ("chiaro" o "scuro") nelle preferenze. Non cambia quello in uso: per farlo
+ * cambiare a tutto il sistema c'e' uikit_cambia_tema (uikit.h). 0, o -1 (un nome che non si
+ * conosce, o il file non si scrive). */
+int tema_salva(const char *nome);
 
 #endif

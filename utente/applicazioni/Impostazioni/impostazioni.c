@@ -1,95 +1,138 @@
-/* impostazioni: la finestra "Impostazioni" del file Figma "mshell - interfaccia",
- * fatta con i widget di UIKit. Serve a vedere i componenti insieme: titoli, campo
- * di testo, caselle di spunta, scelte singole, pulsanti, e la barra degli strumenti
- * (indietro e avanti, il percorso, griglia o lista, la ricerca).
+/* impostazioni: la finestra "Impostazioni" del file Figma "mshell - interfaccia" (pagina
+ * "App - Impostazioni", finestra 228:53; disegni/Impostazioni/descrizione.md), fatta con i
+ * componenti di UIKit.
  *
- * Le impostazioni non si salvano ancora da nessuna parte: "Annulla" e "Salva" chiudono
- * la finestra. La barra degli strumenti e' solo da vedere: "avanti" e' spento, e un clic
- * su un nome del percorso torna a quella cartella. */
+ * LA FINESTRA e' a aree, come Files (finestra_tk_aree: il corpo ha 8 di padding e 8 tra le
+ * aree): a sinistra la barra laterale con le sei sezioni, a destra il pannello chiaro del
+ * contenuto (padding 16, 16 tra le righe). Niente barra degli strumenti.
+ *
+ * LE SEZIONI. Solo "Aspetto" ha un contenuto:
+ *   - "Tema": il gruppo M Chiaro / Scuro. All'apertura e' acceso il tema in uso; sceglierne
+ *     un altro lo scrive nelle preferenze e lo fa cambiare a tutto il sistema
+ *     (uikit_cambia_tema: il compositore lo dice a tutte le finestre e ai pannelli, anche a
+ *     questa, che si ridisegna come le altre);
+ *   - "Sfondo della scrivania": l'anteprima dello sfondo e il pulsante "Cambia" (per ora non
+ *     fa niente).
+ * Le altre sezioni si possono scegliere e mostrano il pannello vuoto.
+ *
+ * LE ICONE delle sezioni sono quelle Lucide del disegno: palette, globe, keyboard, shield,
+ * wifi e info. */
 #include "uikit/uikit.h"
 
-static struct finestra_tk finestra;
-static struct contenitore colonna, temi, azioni;
-static struct etichetta account, tema;
-static struct campo utente;
-static struct casella accedi, notifiche, scuro, chiaro;
-static struct spazio spinta, a_destra;
-static struct pulsante annulla, salva;
-static int gruppo_tema;   /* il suo indirizzo fa da nome del gruppo delle scelte del tema */
+/* --- l'anteprima dello sfondo ---
+ * Nel disegno e' un rettangolo di 120 x 75 con gli angoli RAGGIO_CONTROLLO_NUOVO. Mostra lo
+ * sfondo vero della scrivania (il materiale sfondo_piccolo, lo stesso che usa la scrivania),
+ * rimpicciolito per riempire l'anteprima senza deformarlo. Lo sfondo e' uguale nei due temi,
+ * quindi anche l'anteprima: la si calcola una volta, la prima volta che si disegna. */
+#define ANTEPRIMA_L 120
+#define ANTEPRIMA_A 75
 
-static struct barra_strumenti strumenti;
-static struct pillola frecce, viste;
-static struct pulsante_barra indietro, avanti, griglia, lista;
-static struct percorso dove;
-static struct campo cerca;
-static const char *const cartelle[] = { "home", "Apps" };
+static unsigned int anteprima_pixel[ANTEPRIMA_L * ANTEPRIMA_A];
+static struct immagine anteprima_sfondo;   /* 0 x 0 finche' non e' calcolata */
 
-static void chiudi_finestra(struct pulsante *p, void *dati) {
-    (void)p; (void)dati;
-    finestra_tk_chiudi(&finestra);
+static void anteprima_misura(struct widget *w, int *l, int *a) {
+    (void)w;
+    *l = ANTEPRIMA_L;
+    *a = ANTEPRIMA_A;
 }
 
-/* Un clic su un nome del percorso: si torna a quella cartella. */
-static void vai_a(struct percorso *p, int indice, void *dati) {
+static void anteprima_disegna(struct widget *w, struct pennello *p) {
+    if (!anteprima_sfondo.l)
+        anteprima_sfondo = immagine_rimpicciolita(&sfondo_piccolo, anteprima_pixel, ANTEPRIMA_L, ANTEPRIMA_A);
+    disegna_immagine_arrotondata(p, &anteprima_sfondo, w->x, w->y, RAGGIO_CONTROLLO_NUOVO);
+}
+
+static const struct tipo_widget tipo_anteprima = { anteprima_misura, 0, anteprima_disegna, 0, 0, 0, 0, 0, 0 };
+
+/* --- la finestra --- */
+
+static struct finestra_tk finestra;
+static struct contenitore corpo;
+static struct barra_laterale_tk laterale;
+static struct pannello_tk pannello;
+static struct contenitore aspetto, riga_tema, riga_sfondo;
+static struct etichetta tema, sfondo;
+static struct spazio spinta_tema, spinta_sfondo;
+static struct pillola temi;
+static struct pulsante_barra chiaro, scuro;
+static struct widget anteprima;
+static struct pulsante cambia;
+
+static int voce_aspetto, scelta;   /* la sezione scelta (numero di voce della barra laterale) */
+
+static int laterale_selezionata(struct barra_laterale_tk *b, int voce, void *dati) {
+    (void)b; (void)dati;
+    return voce == scelta;
+}
+
+static void laterale_clic(struct barra_laterale_tk *b, int voce, void *dati) {
+    (void)b; (void)dati;
+    if (voce == scelta) return;
+    scelta = voce;
+    aspetto.base.nascosto = voce != voce_aspetto;
+    widget_cambiato(&laterale.base);
+    widget_cambiato(&pannello.base);
+}
+
+/* Un clic su Chiaro o Scuro: se non e' gia' il tema in uso, lo si cambia a tutto il sistema. */
+static void scegli_tema(struct pulsante_barra *b, void *dati) {
     (void)dati;
-    percorso_metti(p, cartelle, indice + 1);
+    int vuole_scuro = b == &scuro;
+    if (vuole_scuro == TEMA_SCURO_IN_USO) return;
+    uikit_cambia_tema(&finestra, vuole_scuro ? "scuro" : "chiaro");
 }
 
 int main(void) {
-    colonna_prepara(&colonna, SPAZIO_TRA);
-    etichetta_prepara(&account, "Account", FONT_TITOLO);
-    campo_prepara(&utente, "mario.rossi", "Nome utente", ICONA_USER, 0, 0);
-    casella_prepara(&accedi, "Accedi automaticamente", ACCESO, 0, 0);
-    casella_prepara(&notifiche, "Mostra le notifiche a schermo bloccato", SPENTO, 0, 0);
-    etichetta_prepara(&tema, "Tema", FONT_TITOLO);
-    riga_prepara(&temi, 20);
-    scelta_prepara(&scuro, "Vetro scuro", &gruppo_tema, 1, 0, 0);
-    scelta_prepara(&chiaro, "Vetro chiaro", &gruppo_tema, 0, 0, 0);
-    spazio_prepara(&spinta);                 /* spinge i pulsanti in fondo */
-    riga_prepara(&azioni, 8);
-    spazio_prepara(&a_destra);               /* ... e a destra */
-    pulsante_prepara(&annulla, "Annulla", NESSUNA_ICONA, chiudi_finestra, 0);
-    pulsante_prepara(&salva, "Salva", ICONA_SAVE, chiudi_finestra, 0);
-    pulsante_stile(&salva, BLU, MEDIO);
+    /* la barra laterale: le sei sezioni, senza intestazioni */
+    barra_laterale_prepara(&laterale, laterale_selezionata, laterale_clic, 0);
+    voce_aspetto = barra_laterale_voce(&laterale, "Aspetto", ICONA_PALETTE);
+    barra_laterale_voce(&laterale, "Lingua e ora", ICONA_GLOBE);
+    barra_laterale_voce(&laterale, "Tastiera e mouse", ICONA_KEYBOARD);
+    barra_laterale_voce(&laterale, "App e sicurezza", ICONA_SHIELD);
+    barra_laterale_voce(&laterale, "Rete", ICONA_WIFI);
+    barra_laterale_voce(&laterale, "Informazioni", ICONA_INFO);
+    scelta = voce_aspetto;
 
-    /* la barra degli strumenti */
-    barra_strumenti_prepara(&strumenti);
-    pillola_prepara(&frecce, 0);             /* pulsanti semplici */
-    pulsante_barra_prepara(&indietro, ICONA_ARROW_LEFT, 0, 0);
-    pulsante_barra_prepara(&avanti, ICONA_ARROW_RIGHT, 0, 0);
-    avanti.base.disabilitato = 1;            /* non c'e' dove andare */
-    pillola_aggiungi(&frecce, &indietro);
-    pillola_aggiungi(&frecce, &avanti);
-    percorso_prepara(&dove, vai_a, 0);
-    percorso_metti(&dove, cartelle, 2);
-    pillola_prepara(&viste, 1);              /* a scelta: griglia o lista */
-    pulsante_barra_prepara(&griglia, ICONA_LAYOUT_GRID, 0, 0);
-    pulsante_barra_prepara(&lista, ICONA_LIST, 0, 0);
-    pillola_aggiungi(&viste, &griglia);
-    pillola_aggiungi(&viste, &lista);
-    pulsante_barra_accendi(&lista, 1);
-    ricerca_prepara(&cerca, "Cerca", 0, 0);
-    barra_strumenti_aggiungi(&strumenti, &frecce.base);
-    barra_strumenti_aggiungi(&strumenti, &dove.base);
-    barra_strumenti_aggiungi(&strumenti, &viste.base);
-    barra_strumenti_aggiungi(&strumenti, &cerca.base);
+    /* Aspetto, riga "Tema": l'etichetta a sinistra, il gruppo M a destra */
+    riga_prepara(&riga_tema, SPAZIO_16);
+    etichetta_prepara(&tema, "Tema", FONT_CORPO_MEDIO);
+    spazio_prepara(&spinta_tema);
+    pillola_prepara(&temi, 1);
+    pillola_dimensione(&temi, MISURA_M);
+    pulsante_barra_testo(&chiaro, "Chiaro", scegli_tema, 0);
+    pulsante_barra_testo(&scuro, "Scuro", scegli_tema, 0);
+    pillola_aggiungi(&temi, &chiaro);
+    pillola_aggiungi(&temi, &scuro);
+    pulsante_barra_accendi(TEMA_SCURO_IN_USO ? &scuro : &chiaro, 1);   /* quello in uso */
+    widget_aggiungi(&riga_tema.base, &tema.base);
+    widget_aggiungi(&riga_tema.base, &spinta_tema.base);
+    widget_aggiungi(&riga_tema.base, &temi.base);
 
-    widget_aggiungi(&temi.base, &scuro.base);
-    widget_aggiungi(&temi.base, &chiaro.base);
-    widget_aggiungi(&azioni.base, &a_destra.base);
-    widget_aggiungi(&azioni.base, &annulla.base);
-    widget_aggiungi(&azioni.base, &salva.base);
-    widget_aggiungi(&colonna.base, &account.base);
-    widget_aggiungi(&colonna.base, &utente.base);
-    widget_aggiungi(&colonna.base, &accedi.base);
-    widget_aggiungi(&colonna.base, &notifiche.base);
-    widget_aggiungi(&colonna.base, &tema.base);
-    widget_aggiungi(&colonna.base, &temi.base);
-    widget_aggiungi(&colonna.base, &spinta.base);
-    widget_aggiungi(&colonna.base, &azioni.base);
+    /* riga "Sfondo della scrivania": l'etichetta, l'anteprima e "Cambia" (16 tra i due) */
+    riga_prepara(&riga_sfondo, SPAZIO_16);
+    etichetta_prepara(&sfondo, "Sfondo della scrivania", FONT_CORPO_MEDIO);
+    spazio_prepara(&spinta_sfondo);
+    anteprima = (struct widget){ .tipo = &tipo_anteprima };
+    pulsante_prepara(&cambia, "Cambia", NESSUNA_ICONA, 0, 0);   /* Secondario M; per ora non fa niente */
+    widget_aggiungi(&riga_sfondo.base, &sfondo.base);
+    widget_aggiungi(&riga_sfondo.base, &spinta_sfondo.base);
+    widget_aggiungi(&riga_sfondo.base, &anteprima);
+    widget_aggiungi(&riga_sfondo.base, &cambia.base);
 
-    finestra_tk_prepara(&finestra, "Impostazioni", &colonna.base);
-    finestra_tk_barra(&finestra, &strumenti.base);
-    finestra_tk_dimensione(&finestra, 460, 380 + STRUMENTI_ALTEZZA);   /* il disegno, piu' la barra */
+    colonna_prepara(&aspetto, SPAZIO_16);
+    widget_aggiungi(&aspetto.base, &riga_tema.base);
+    widget_aggiungi(&aspetto.base, &riga_sfondo.base);
+
+    /* il pannello: padding 16, le righe senza padding loro */
+    pannello_prepara(&pannello, SPAZIO_16);
+    widget_aggiungi(&pannello.base, &aspetto.base);
+
+    riga_prepara(&corpo, CORPO_GAP);
+    widget_aggiungi(&corpo.base, &laterale.base);
+    widget_aggiungi(&corpo.base, &pannello.base);
+
+    finestra_tk_prepara(&finestra, "Impostazioni", &corpo.base);
+    finestra_tk_aree(&finestra);
+    finestra_tk_dimensione(&finestra, 800, 520);   /* il disegno */
     return uikit_esegui(&finestra);
 }

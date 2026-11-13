@@ -841,7 +841,7 @@ int pacchetto_svuota_dati(const char *id, char *messaggio, int massimo) {
     return esito;
 }
 
-int pacchetto_puo_gestire(const char *programma) {
+int pacchetto_ha_permesso(const char *programma, const char *permesso) {
     const char *sistema = cartelle_applicazioni[CARTELLA_APP_SISTEMA];
     size_t l = strlen(sistema);
     if (strncmp(programma, sistema, l) || programma[l] != '/') return 0;
@@ -857,7 +857,9 @@ int pacchetto_puo_gestire(const char *programma) {
     int puo = 0;
     if (m && percorso_in(cartella, sizeof cartella, sistema, id) == 0 && manifesto_dell_app(cartella, m) == 0)
         for (int i = 0; i < m->quanti_permessi; i++)
-            if (!strcmp(m->permessi[i], "app.gestire")) puo = 1;
+            if (!strcmp(m->permessi[i], permesso)) puo = 1;
     free(m);
     return puo;
 }
+
+int pacchetto_puo_gestire(const char *programma) { return pacchetto_ha_permesso(programma, "app.gestire"); }

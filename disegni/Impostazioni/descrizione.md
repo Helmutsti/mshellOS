@@ -25,7 +25,7 @@ Il vecchio disegno (frame "Impostazioni" 139:1708) resta sulla pagina, non tocca
 - Area principale: padding 0, il pannello la riempie (592 x 464).
 - Pannello: Semantici/superficie/elevata, angoli Misure/raggio/pannello, padding Misure/spazio/16 su tutti i lati, gap Misure/spazio/16, ritaglio spento (non scorre).
 - Riga "Tema": padding 0, etichetta a sinistra (testo/corpo-medio, Semantici/testo/primario "Tema"), a destra il componente "Gruppo" (Dimensione=M, Contenuto=Testo) con due elementi "Chiaro" (Selezionato=Sì) e "Scuro" (Selezionato=No); il terzo elemento del componente e nascosto.
-- Riga "Sfondo della scrivania": padding 0, etichetta a sinistra; a destra, con gap Misure/spazio/16, anteprima 120 x 75 (rettangolo, raggio Misure/raggio/controllo, fondo Semantici/superficie/scena con due luci radiali come lo sfondo della Scrivania) e "Pulsante" Tipo=Secondario, Dimensione=M, Stato=Normale, testo "Cambia", senza icona.
+- Riga "Sfondo della scrivania": padding 0, etichetta a sinistra; a destra, con gap Misure/spazio/16, anteprima 120 x 75 (rettangolo, raggio Misure/raggio/controllo, colori FISSI, non variabili del tema: lo sfondo della scrivania è lo stesso nei due temi, quindi l'anteprima è identica in chiaro e in scuro. Imita lo sfondo vero della sandbox: fondo #3060B6 e quattro luci radiali che sfumano a trasparente: viola #5A3CC0 95% in alto a sinistra (centro 27%/30%), azzurro #3A80C8 90% a destra (80%/60%), lilla #8C64B8 90% in basso al centro (48%/88%), blu notte #1E2868 85% nell'angolo in alto a sinistra) e "Pulsante" Tipo=Secondario, Dimensione=M, Stato=Normale, testo "Cambia", senza icona.
 - Testo IBM Plex Sans, stili testo/corpo-medio (14/20) per le etichette, testo/corpo (14/20) nelle voci.
 
 ## Somme della spaziatura (punto 5)

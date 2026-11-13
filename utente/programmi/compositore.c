@@ -58,6 +58,7 @@
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
 #include "uikit/uikit_compositore.h"
+#include "pacchetto.h"   /* chi puo' cambiare il tema (CAMBIA_TEMA) */
 
 /* Le risorse che init gli passa gia' aperte (vedi sopra). */
 #define D_SCHERMO 0
@@ -156,6 +157,9 @@ static int presa_x, presa_y;
 static int px, py;          /* dov'e' il puntatore: il mouse dice solo di quanto si muove */
 static unsigned int prossimo_ping = 1;
 static unsigned int prossimo_id = 1;
+/* Il prossimo fotogramma si ricompone tutto, sfocature comprese: la prima volta, e quando
+ * cambia il tema (le ombre e il vetro di tutte le finestre). */
+static int tutto_da_rifare = 1;
 
 /* L'OMBRA di una finestra: a STRATI, come nel disegno (il token "ombra/finestra", Chiaro o
  * Scuro, che UIKit da' con ombra_finestra). Sono tre ombre esterne sovrapposte, una vicina e netta e
@@ -988,6 +992,23 @@ static void porta_davanti(int pannello, unsigned int numero) {
     }
 }
 
+/* CAMBIA_TEMA (gkit.h, IL TEMA): solo dal sistema o da un'app del sistema con il permesso
+ * "impostazioni.sistema" (lo dice il kernel: il programma all'altro capo). Il tema nuovo e' gia'
+ * nelle preferenze: lo si rilegge, si rifanno le ombre di tutte le finestre (dipendono dal
+ * tema) e tutto il fotogramma, e lo si dice a tutte le finestre e ai pannelli, che si
+ * ridisegnano. Da chi non puo', non succede niente. */
+static void cambia_tema(int i) {
+    struct finestra_compositore *f = &finestre[i];
+    if (chi(f->collegamento) != UID_SISTEMA && !pacchetto_ha_permesso(f->programma, "impostazioni.sistema"))
+        return;
+    compositore_rileggi_tema();
+    for (int k = 0; k < MAX_FINESTRE; k++)
+        if (finestre[k].usata && finestre[k].immagini[0] && finestre[k].ruolo != RUOLO_SFONDO) prepara_ombra(k);
+    tutto_da_rifare = 1;
+    for (int k = 0; k < MAX_FINESTRE; k++)
+        if (finestre[k].usata && finestre[k].immagini[0]) avvisa(k, (struct notizia){ .tipo = TEMA_CAMBIATO });
+}
+
 /* Un messaggio da un'applicazione. */
 static void da_applicazione(int i) {
     union {
@@ -996,6 +1017,7 @@ static void da_applicazione(int i) {
         struct riducimi r;
         struct voglio_tasti_fisici k;
         struct porta_davanti d;
+        struct cambia_tema e;
         struct voglio_finestra v;
         struct mostra m;
         struct trascinami t;
@@ -1012,6 +1034,7 @@ static void da_applicazione(int i) {
     if (m.tipo == VOGLIO_TASTI_FISICI && n == sizeof m.k) { finestre[i].tasti_fisici = 1; return; }
     if (m.tipo == RIDUCIMI && n == sizeof m.r) { riducimi(i); return; }
     if (m.tipo == PORTA_DAVANTI && n == sizeof m.d) { porta_davanti(i, m.d.numero); return; }
+    if (m.tipo == CAMBIA_TEMA && n == sizeof m.e && finestre[i].immagini[0]) { cambia_tema(i); return; }
     if (m.tipo == CHIEDI_SCHERMO && n == sizeof m.c) {
         avvisa(i, (struct notizia){ .tipo = SCHERMO, .x = larghezza, .y = altezza });
         return;
@@ -1146,7 +1169,7 @@ struct impronta {
     unsigned int ruolo, generazione, id;
 };
 static struct impronta impronte_prima[MAX_FINESTRE];
-static int px_prima, py_prima, prima_volta = 1;
+static int px_prima, py_prima;
 
 /* Le zone da rifare: si aggiunge un rettangolo alla volta. Le zone non devono mai
  * toccarsi (in una parte comune a due zone si disegnerebbe due volte, e le cose
@@ -1239,8 +1262,8 @@ static void cosa_rifare(void) {
     quante_zone = 0;
     for (int i = 0; i < MAX_FINESTRE; i++) quanti_danni[i] = da_sfocare[i] = 0;
 
-    if (prima_volta) {                  /* tutto, sfocature comprese */
-        prima_volta = 0;
+    if (tutto_da_rifare) {              /* tutto, sfocature comprese */
+        tutto_da_rifare = 0;
         zona_aggiungi((struct zona){ 0, 0, larghezza, altezza });
         for (int i = 0; i < MAX_FINESTRE; i++) da_sfocare[i] = adesso[i].vista;
         for (int i = 0; i < MAX_FINESTRE; i++) piani[i] = (struct piano){ .tutto = 1 };

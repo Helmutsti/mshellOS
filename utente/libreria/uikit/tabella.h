@@ -13,6 +13,15 @@
  *     CONTROLLO_SFONDO_SOPRA). Le celle in "corpo", con "..." se non ci stanno; la prima colonna
  *     puo' avere l'oggetto piccolo (24, oggetti.h) e SPAZIO_8 prima del nome.
  *
+ * LE RIGHE AD ALBERO (la tabella dei processi di Attivita): una colonna (colonna_albero) mostra
+ * un albero. Ogni riga ha un livello e un ramo (RAMO_NESSUNO, RAMO_APERTO, RAMO_CHIUSO). Nella
+ * cella: il rientro, livello x TABELLA_RIENTRO (24: la freccia 16 + SPAZIO_8, cosi' la freccia
+ * del figlio comincia sotto il nome del padre), poi il posto della freccia (16 x 16: chevron giu'
+ * aperto, chevron destra chiuso, vuoto se la riga non ha figli), poi SPAZIO_8 e il testo. Il
+ * rientro e' un valore della riga, non un padding. Un clic sulla freccia arriva ad 'al_ramo'
+ * (non sceglie la riga): l'applicazione apre o chiude il ramo e rifa' le righe, aiutata da
+ * tabella_tk_albero, che mette in fila i nodi di un albero saltando i rami chiusi.
+ *
  * Tra una colonna e l'altra SPAZIO_24, nell'intestazione e nelle righe (stesso padding: le
  * colonne si allineano). Una colonna ha la sua larghezza, o 0: si divide lo spazio che avanza.
  * La tabella non ha padding suo verso il contenitore: il primo testo e' a 8 dal bordo (il padding
@@ -37,9 +46,13 @@
 #define TABELLA_TRA_COLONNE SPAZIO_24
 #define TABELLA_FRECCIA     ICONA_S
 #define TABELLA_OGGETTO_GAP SPAZIO_8
+#define TABELLA_RIENTRO     SPAZIO_24     /* per livello dell'albero: la freccia 16 + SPAZIO_8 */
+#define TABELLA_RAMO        ICONA_S       /* il posto della freccia del ramo, 16 x 16 */
+#define TABELLA_RAMO_GAP    SPAZIO_8      /* tra la freccia e il testo */
 
 enum { ORDINE_NESSUNO, ORDINE_CRESCENTE, ORDINE_DECRESCENTE };
 enum { CLIC_SEMPLICE, CLIC_DOPPIO, CLIC_DESTRO };
+enum { RAMO_NESSUNO, RAMO_APERTO, RAMO_CHIUSO };
 
 struct colonna_tk {
     const char *etichetta;
@@ -49,10 +62,13 @@ struct colonna_tk {
     int ordinabile;                    /* un clic sull'intestazione ordina */
 };
 
-/* Quello che c'e' in una riga: un testo per colonna, e l'oggetto della prima (o -1). */
+/* Quello che c'e' in una riga: un testo per colonna, l'oggetto della prima (o -1) e, se la
+ * tabella ha una colonna ad albero, il livello e il ramo (RAMO_...) della riga. */
 struct riga_tk {
     char testi[MAX_COLONNE_TABELLA][MAX_CELLA];
     int oggetto;
+    int livello;
+    int ramo;
 };
 
 struct tabella_tk;
@@ -60,6 +76,7 @@ typedef void (*dati_riga_tabella)(struct tabella_tk *t, int riga, struct riga_tk
 typedef void (*al_clic_tabella)(struct tabella_tk *t, int riga, int come, int x, int y, void *dati);
 typedef void (*al_ordine_tabella)(struct tabella_tk *t, void *dati);
 typedef void (*al_tasto_tabella)(struct tabella_tk *t, unsigned int tasto, void *dati);
+typedef void (*al_ramo_tabella)(struct tabella_tk *t, int riga, void *dati);
 
 struct tabella_tk {
     struct widget base;
@@ -72,10 +89,12 @@ struct tabella_tk {
     int ordinata, verso;               /* la colonna per cui si ordina (o -1) e ORDINE_... */
     int rinomina;                      /* la riga il cui nome e' un campo, o -1 */
     const char *testo_rinomina;
+    int colonna_albero;                /* la colonna con l'albero, o -1 */
     dati_riga_tabella riga;
     al_clic_tabella al_clic;
     al_ordine_tabella al_ordine;
     al_tasto_tabella al_tasto;
+    al_ramo_tabella al_ramo;           /* un clic sulla freccia di un ramo */
     void *dati;
     unsigned int clic_prima, pulsanti_prima;
     int clic_su;
@@ -180,6 +199,16 @@ static inline void tabella_tk_disegna(struct widget *w, struct pennello *p) {
                 x += OGGETTO_LATO_PICCOLO + TABELLA_OGGETTO_GAP;
                 l -= OGGETTO_LATO_PICCOLO + TABELLA_OGGETTO_GAP;
             }
+            if (c == t->colonna_albero) {
+                x += r.livello * TABELLA_RIENTRO;
+                if (r.ramo != RAMO_NESSUNO) {
+                    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_PRIMARIO));
+                    icona(p, r.ramo == RAMO_APERTO ? ICONA_CHEVRON_DOWN : ICONA_CHEVRON_RIGHT, TABELLA_RAMO,
+                          x, y + (TABELLA_ALTEZZA_RIGA - TABELLA_RAMO) / 2);
+                }
+                x += TABELLA_RAMO + TABELLA_RAMO_GAP;
+                l -= r.livello * TABELLA_RIENTRO + TABELLA_RAMO + TABELLA_RAMO_GAP;
+            }
             if (c == 0 && k == t->rinomina && t->testo_rinomina) {
                 campo_rinomina_disegna(p, x - RINOMINA_DENTRO, y + (TABELLA_ALTEZZA_RIGA - ALTEZZA_S) / 2,
                                        l + 2 * RINOMINA_DENTRO, ALTEZZA_S, RAGGIO_CAMPO_S, t->testo_rinomina, 0);
@@ -206,7 +235,20 @@ static inline void tabella_tk_clic_testata(struct tabella_tk *t, int x) {
     }
 }
 
-/* Il clic si sente quando si preme (come nel Finder): sinistro (semplice o doppio) o destro. */
+/* Vero se (x, y) cade sulla freccia della riga k (che ha un ramo). */
+static inline int tabella_tk_su_ramo(struct tabella_tk *t, int k, int x) {
+    if (k < 0 || t->colonna_albero < 0 || !t->riga) return 0;
+    struct riga_tk r = { .oggetto = -1 };
+    t->riga(t, k, &r, t->dati);
+    if (r.ramo == RAMO_NESSUNO) return 0;
+    int cx[MAX_COLONNE_TABELLA], cl[MAX_COLONNE_TABELLA];
+    tabella_tk_colonne(t, cx, cl);
+    int fx = cx[t->colonna_albero] + r.livello * TABELLA_RIENTRO;
+    return x >= fx && x < fx + TABELLA_RAMO;
+}
+
+/* Il clic si sente quando si preme (come nel Finder): sinistro (semplice o doppio) o destro.
+ * Il sinistro sulla freccia di un ramo lo apre o lo chiude (al_ramo), e basta. */
 static inline void tabella_tk_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
     struct tabella_tk *t = (struct tabella_tk *)w;
     unsigned int giu = pulsanti & (PULSANTE_SINISTRO | PULSANTE_DESTRO);
@@ -218,6 +260,11 @@ static inline void tabella_tk_puntatore(struct widget *w, int x, int y, unsigned
         return;
     }
     int k = tabella_tk_riga_in(t, x, y);
+    if ((pulsanti & PULSANTE_SINISTRO) && t->al_ramo && tabella_tk_su_ramo(t, k, x)) {
+        t->clic_su = -1;
+        t->al_ramo(t, k, t->dati);
+        return;
+    }
     unsigned int adesso = tempo();
     int come = pulsanti & PULSANTE_DESTRO ? CLIC_DESTRO
              : k >= 0 && k == t->clic_su && (int)(adesso - t->clic_prima) < DOPPIO_CLIC ? CLIC_DOPPIO : CLIC_SEMPLICE;
@@ -268,7 +315,7 @@ static inline void tabella_tk_prepara(struct tabella_tk *t, const struct colonna
                                    dati_riga_tabella riga, al_clic_tabella al_clic, void *dati) {
     *t = (struct tabella_tk){ .base = { .tipo = &tipo_tabella_tk, .elastico = 1, .largo = 1 }, .colonne = colonne,
                               .quante_colonne = quante > MAX_COLONNE_TABELLA ? MAX_COLONNE_TABELLA : quante,
-                              .scelta = -1, .sopra = -1, .ordinata = -1, .rinomina = -1, .riga = riga,
+                              .scelta = -1, .sopra = -1, .ordinata = -1, .rinomina = -1, .colonna_albero = -1, .riga = riga,
                               .al_clic = al_clic, .dati = dati, .clic_su = -1 };
     barra_scorrimento_prepara(&t->barra);
     widget_aggiungi(&t->base, &t->barra.base);
@@ -296,6 +343,33 @@ static inline void tabella_tk_rinomina(struct tabella_tk *t, int riga, const cha
     t->rinomina = riga;
     t->testo_rinomina = testo;
     widget_cambiato(&t->base);
+}
+
+/* L'ALBERO IN FILA. 'n' nodi; genitore[i] e' l'indice del padre (o -1: sta al primo livello);
+ * i figli di uno stesso padre vengono nell'ordine dei loro indici. chiuso[i] (o chiuso nullo:
+ * tutti aperti) dice se il ramo di i e' chiuso. Scrive, riga per riga, l'indice del nodo
+ * (nodi), il livello e il ramo (RAMO_...); i discendenti di un ramo chiuso non ci sono.
+ * Ritorna quante righe ha scritto (al massimo n). */
+static inline int tabella_tk_albero_da(int n, const int *genitore, const unsigned char *chiuso, int padre,
+                                       int livello, int *nodi, int *livelli, int *rami, int fatte) {
+    if (livello > n) return fatte;                       /* un giro nei padri: non si scende */
+    for (int i = 0; i < n && fatte < n; i++) {
+        if (genitore[i] != padre) continue;
+        int figli = 0;
+        for (int j = 0; j < n && !figli; j++) figli = genitore[j] == i;
+        int aperto = !(chiuso && chiuso[i]);
+        nodi[fatte] = i;
+        livelli[fatte] = livello;
+        rami[fatte] = !figli ? RAMO_NESSUNO : aperto ? RAMO_APERTO : RAMO_CHIUSO;
+        fatte++;
+        if (figli && aperto) fatte = tabella_tk_albero_da(n, genitore, chiuso, i, livello + 1, nodi, livelli, rami, fatte);
+    }
+    return fatte;
+}
+
+static inline int tabella_tk_albero(int n, const int *genitore, const unsigned char *chiuso,
+                                    int *nodi, int *livelli, int *rami) {
+    return tabella_tk_albero_da(n, genitore, chiuso, -1, 0, nodi, livelli, rami, 0);
 }
 
 #endif

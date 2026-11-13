@@ -91,6 +91,10 @@
     X(monitor, "icons/lucide/monitor.icon") \
     X(file_text, "icons/lucide/file-text.icon") \
     X(app_window, "icons/lucide/app-window.icon") \
+    X(palette, "icons/lucide/palette.icon") \
+    X(keyboard, "icons/lucide/keyboard.icon") \
+    X(shield, "icons/lucide/shield.icon") \
+    X(wifi, "icons/lucide/wifi.icon") \
 
 #define ICONA_MISURE 8   /* quante misure al massimo: 12, 14, 16, 18, 20, 24, 32, 48 */
 #define ICONA_SAVE 0
@@ -143,6 +147,10 @@
 #define ICONA_MONITOR 47
 #define ICONA_FILE_TEXT 48
 #define ICONA_APP_WINDOW 49
+#define ICONA_PALETTE 50
+#define ICONA_KEYBOARD 51
+#define ICONA_SHIELD 52
+#define ICONA_WIFI 53
 
 /* Le immagini a colori: X(nome, file). */
 #define MATERIALI_IMMAGINI(X) \

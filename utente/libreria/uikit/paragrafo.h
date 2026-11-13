@@ -8,7 +8,11 @@
  * righe che gli servono nella larghezza che ha gia' (w->l: la decide la pagina, vedi pagina.h,
  * prima di misurarlo). Con 'largo' a 0 invece e' largo quanto il suo testo, su una riga sola.
  *
- *     paragrafo_prepara(&nome, "Note", FONT_TITOLO_NUOVO, INTERLINEA_TITOLO, TESTO_PRIMARIO);
+ *     paragrafo_prepara(&nome, "Note", FONT_TITOLO_NUOVO, INTERLINEA_TITOLO, COLORE_ICONA_PRIMARIO);
+ *
+ * IL COLORE non e' un valore ma un modo della raccolta "Colore icona" (tema.h: COLORE_ICONA_PRIMARIO,
+ * _SECONDARIO...), come il testo dei pulsanti della barra: il valore lo si chiede quando si
+ * disegna, cosi' il paragrafo segue il tema anche quando cambia (TEMA_CAMBIATO).
  *
  * Il testo e' gia' nella code page 437 del font (come per l'etichetta). */
 #ifndef UIKIT_PARAGRAFO_H
@@ -64,7 +68,7 @@ struct paragrafo {
     char testo[PARAGRAFO_TESTO];
     const struct font *font;
     int interlinea;                        /* l'altezza di una riga (INTERLINEA_...) */
-    unsigned int colore;
+    int colore;                            /* COLORE_ICONA_... (tema.h): il modo, non il valore */
     int allineamento;                      /* PARAGRAFO_SINISTRA, _CENTRO, _DESTRA */
 };
 
@@ -87,7 +91,7 @@ static inline void paragrafo_disegna(struct widget *w, struct pennello *p) {
     struct paragrafo *g = (struct paragrafo *)w;
     char righe[PARAGRAFO_RIGHE][PARAGRAFO_RIGA];
     int n = paragrafo_righe(g, w->largo ? w->l : 0, righe);
-    pennello_colore(p, g->colore);
+    pennello_colore(p, COLORE_ICONA(g->colore));
     int y0 = w->y + (w->a > n * g->interlinea ? (w->a - n * g->interlinea) / 2 : 0);   /* in una riga piu' alta: al centro */
     for (int i = 0; i < n; i++) {
         int x = w->x, lr = larghezza_testo(g->font, righe[i]);
@@ -100,7 +104,7 @@ static inline void paragrafo_disegna(struct widget *w, struct pennello *p) {
 static const struct tipo_widget tipo_paragrafo = { paragrafo_misura, 0, paragrafo_disegna, 0, 0, 0, 0, 0, 0 };
 
 static inline void paragrafo_prepara(struct paragrafo *g, const char *testo, const struct font *font,
-                                     int interlinea, unsigned int colore) {
+                                     int interlinea, int colore) {
     *g = (struct paragrafo){ .base = { .tipo = &tipo_paragrafo, .largo = 1 }, .font = font,
                              .interlinea = interlinea, .colore = colore };
     copia_testo(g->testo, testo ? testo : "", PARAGRAFO_TESTO);

@@ -162,6 +162,10 @@
 #define STRUMENTI_MARGINE_LATI  SPAZIO_8    /* a sinistra e a destra */
 #define STRUMENTI_MARGINE_SOPRA SPAZIO_8    /* sopra e sotto: (48 - 32) / 2 */
 #define GRUPPO_ELEMENTO         24   /* l'altezza di una voce dentro il gruppo: ALTEZZA_S - 2 * GRUPPO_PADDING */
+/* il gruppo M (Figma "Gruppo", Dimensione=M: la scelta del tema in Impostazioni): alto ALTEZZA_M
+ * (40), voci alte 32 con PADDING_M ai lati e il testo del pulsante M, attaccate (gap 0) */
+#define GRUPPO_ELEMENTO_M       (ALTEZZA_M - 2 * GRUPPO_PADDING)   /* 32 */
+#define GRUPPO_SPAZIO_M          0
 #define SCORRIMENTO_CURSORE_MARGINE 2   /* tra il binario e il cursore, per lato */
 
 /* --- i font del nuovo design ---
@@ -321,6 +325,10 @@ static const struct strato_ombra ombra_puntatore_scuro[] = {
 #define CASELLA_LATO            18   /* il quadratino della casella e il tondo della scelta */
 #define CASELLA_GAP              8   /* tra il quadratino e il suo testo */
 #define SCELTA_PUNTO             8   /* il punto al centro della scelta accesa */
+#define INTERRUTTORE_LARGO      40   /* l'interruttore (Figma "Interruttore"): il binario */
+#define INTERRUTTORE_ALTO       24
+#define INTERRUTTORE_POMELLO    20   /* il tondo che si sposta */
+#define INTERRUTTORE_MARGINE     2   /* tra il binario e il pomello */
 #define BORDO_FOCUS_SPESSORE   384   /* 1,5 px in 256esimi: il bordo di un campo con il fuoco */
 #define RICERCA_LARGHEZZA_NUOVA 180
 #define AVVISO_LARGHEZZA       400   /* il riquadro dell'avviso (Figma: "Avviso", Scelte=Due) */

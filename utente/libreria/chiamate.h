@@ -155,6 +155,7 @@ struct voce_cartella {
 
 struct info_processo {
     int numero;
+    int padre;                     /* il numero di chi l'ha lanciato (0: nessuno) */
     unsigned int uid;
     unsigned int stato;            /* STATO_... */
     unsigned int memoria;          /* byte: le pagine che sono sue (non quelle condivise) */

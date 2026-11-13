@@ -142,14 +142,14 @@ static void sezione_prepara(struct sezione *s, const char *titolo, const char *s
     colonna_prepara(&s->colonna, SPAZIO_8);
     riga_prepara(&s->testa, SPAZIO_8);
     colonna_prepara(&s->righe, SPAZIO_16);
-    paragrafo_prepara(&s->titolo, titolo, FONT_TITOLO_FINESTRA, INTERLINEA_CORPO, TESTO_PRIMARIO);
+    paragrafo_prepara(&s->titolo, titolo, FONT_TITOLO_FINESTRA, INTERLINEA_CORPO, COLORE_ICONA_PRIMARIO);
     in_437_qui(s->titolo.testo, PARAGRAFO_TESTO);
     s->titolo.base.elastico = 1;
     widget_aggiungi(&s->testa.base, &s->titolo.base);
     if (pulsante) widget_aggiungi(&s->testa.base, pulsante);
     widget_aggiungi(&s->colonna.base, &s->testa.base);
     if (spiegazione) {
-        paragrafo_prepara(&s->spiegazione, spiegazione, FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, TESTO_SECONDARIO);
+        paragrafo_prepara(&s->spiegazione, spiegazione, FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, COLORE_ICONA_SECONDARIO);
         in_437_qui(s->spiegazione.testo, PARAGRAFO_TESTO);
         widget_aggiungi(&s->colonna.base, &s->spiegazione.base);
     }
@@ -221,11 +221,11 @@ static void intestazione_app(const struct manifesto *m, const char *sotto, int c
     colonna_prepara(&testi_app, SPAZIO_4);
     testi_app.base.elastico = 1;
     icona_app_prepara(&icona_grande, 64);
-    paragrafo_prepara(&p_nome, nome_di(m), FONT_TITOLO_NUOVO, INTERLINEA_TITOLO, TESTO_PRIMARIO);
+    paragrafo_prepara(&p_nome, nome_di(m), FONT_TITOLO_NUOVO, INTERLINEA_TITOLO, COLORE_ICONA_PRIMARIO);
     in_437_qui(p_nome.testo, PARAGRAFO_TESTO);
-    paragrafo_prepara(&p_autore, sotto, FONT_CORPO, INTERLINEA_CORPO, TESTO_SECONDARIO);
+    paragrafo_prepara(&p_autore, sotto, FONT_CORPO, INTERLINEA_CORPO, COLORE_ICONA_SECONDARIO);
     in_437_qui(p_autore.testo, PARAGRAFO_TESTO);
-    paragrafo_prepara(&p_descrizione, m->descrizione, FONT_CORPO, INTERLINEA_CORPO, TESTO_PRIMARIO);
+    paragrafo_prepara(&p_descrizione, m->descrizione, FONT_CORPO, INTERLINEA_CORPO, COLORE_ICONA_PRIMARIO);
     in_437_qui(p_descrizione.testo, PARAGRAFO_TESTO);
     widget_aggiungi(&testi_app.base, &p_nome.base);
     widget_aggiungi(&testi_app.base, &p_autore.base);
@@ -591,10 +591,10 @@ static void sezione_elenco_prepara(struct sezione_elenco *s, const char *titolo,
     colonna_prepara(&s->righe, SPAZIO_4);
     pagina_prepara(&s->testa, SPAZIO_8, SPAZIO_8, SPAZIO_0, SPAZIO_0);
     s->testa.base.elastico = 0;
-    paragrafo_prepara(&s->titolo, titolo, FONT_TITOLO_FINESTRA, INTERLINEA_CORPO, TESTO_PRIMARIO);
+    paragrafo_prepara(&s->titolo, titolo, FONT_TITOLO_FINESTRA, INTERLINEA_CORPO, COLORE_ICONA_PRIMARIO);
     pagina_aggiungi(&s->testa, &s->titolo.base);
     if (spiegazione) {
-        paragrafo_prepara(&s->spiegazione, spiegazione, FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, TESTO_SECONDARIO);
+        paragrafo_prepara(&s->spiegazione, spiegazione, FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, COLORE_ICONA_SECONDARIO);
         pagina_aggiungi(&s->testa, &s->spiegazione.base);
     }
     widget_aggiungi(&s->colonna.base, &s->testa.base);

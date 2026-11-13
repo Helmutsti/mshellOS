@@ -34,6 +34,9 @@ int cancella(const char *p) { (void)p; return ERRORE_SOLA_LETTURA; }
 int rinomina(const char *a, const char *b) { (void)a; (void)b; return ERRORE_SOLA_LETTURA; }
 int chiudi(int d) { (void)d; return 0; }
 int data_ora(struct data_ora *d) { (void)d; return -1; }
+/* Il tema non si salva e non c'e' un compositore a cui dirlo (Impostazioni, la scelta del tema). */
+int tema_salva(const char *n) { (void)n; return -1; }
+int manda(int d, const void *x, unsigned int n) { (void)d; (void)x; (void)n; return -1; }
 
 /* --- il finto ciclo degli eventi --- */
 static struct finestra_tk *catturata;

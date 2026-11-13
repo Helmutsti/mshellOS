@@ -9,7 +9,9 @@
  *     Deve coprire proprio quella dell'applicazione, quindi conosce anche la barra della
  *     mini finestra ('mini' = 1: piu' bassa, con il titolo piccolo e il solo chiudi);
  *   - L'OMBRA E IL VETRO SMERIGLIATO intorno e sotto le finestre: sono del design (il token
- *     "ombra/finestra", diverso nei temi Chiaro e Scuro), anche se stanno fuori dalla finestra.
+ *     "ombra/finestra", diverso nei temi Chiaro e Scuro), anche se stanno fuori dalla finestra;
+ *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia (CAMBIA_TEMA, gkit.h)
+ *     il compositore lo rilegge dalle preferenze.
  *
  * Qui ci sono solo le dichiarazioni, con i tipi di GKit; il codice sta in
  * uikit_compositore.c, che vede lo stile. Le coordinate sono in pixel dello schermo, tranne
@@ -45,5 +47,9 @@ const struct strato_ombra *ombra_pannello(int sopra, int *quanti);
 
 /* Quanto si sfoca lo sfondo sotto il vetro di una finestra: il raggio di Figma, in pixel. */
 int sfocatura_finestra(void);
+
+/* Rilegge il tema dalle preferenze (tema_leggi, tema.h): da qui in poi barra congelata e
+ * ombre sono quelle del tema nuovo. Le ombre gia' calcolate vanno rifatte. */
+void compositore_rileggi_tema(void);
 
 #endif

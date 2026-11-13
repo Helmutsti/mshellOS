@@ -66,6 +66,15 @@
  * compositore nasconde la finestra, che non si vede e non sente il puntatore finche'
  * la scrivania non la fa tornare con PORTA_DAVANTI.
  *
+ * IL TEMA (Chiaro o Scuro) DI TUTTO IL SISTEMA. Chi lo cambia (Impostazioni) lo scrive nelle
+ * preferenze e chiede CAMBIA_TEMA al compositore; il compositore controlla che possa (il sistema,
+ * uid 0, o un'app del sistema con il permesso "impostazioni.sistema" nel manifesto: lo chiede al
+ * kernel quale programma c'e' all'altro capo, come il launcher per "app.gestire"), rilegge lui
+ * stesso il tema (le ombre intorno alle finestre sono sue) e manda TEMA_CAMBIATO a tutte le
+ * finestre e a tutti i pannelli aperti. Chi lo riceve rilegge il tema dalle preferenze e si
+ * ridisegna: le app di UIKit lo fanno da sole, la scrivania ricarica anche le icone delle app.
+ * Da chi non puo', CAMBIA_TEMA si ignora.
+ *
  * Una finestra per collegamento: per due finestre, due collegamenti.
  * Ogni messaggio comincia con il suo tipo. */
 
@@ -93,6 +102,9 @@
                              * UIKit non lo fa; serve ai giochi) */
 #define PORTA_DAVANTI   7   /* (solo un PANNELLO) la finestra 'numero' torna visibile,
                              * davanti a tutte, con il fuoco */
+#define CAMBIA_TEMA     9   /* "il tema nelle preferenze e' cambiato: dillo a tutti" (vedi
+                             * IL TEMA, sopra). Solo il sistema o un'app con il permesso
+                             * "impostazioni.sistema"; dagli altri si ignora */
 
 #define RUOLO_FINESTRA  0   /* una finestra normale */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
@@ -127,6 +139,10 @@ struct riducimi {
 struct porta_davanti {
     unsigned int tipo;
     unsigned int numero;
+};
+
+struct cambia_tema {
+    unsigned int tipo;
 };
 
 /* LE ZONE CAMBIATE. Con MOSTRA l'applicazione dice anche DOVE l'immagine nuova e' diversa da
@@ -225,6 +241,8 @@ struct pong {
 #define TASTO_FISICO 12  /* (solo a chi l'ha chiesto con VOGLIO_TASTI_FISICI) il tasto
                           * Linux 'tasto' (KEY_...) e' stato premuto ('premuto' = 1) o
                           * lasciato (0). Senza ripetizioni. Arriva in piu' di TASTO. */
+#define TEMA_CAMBIATO 13  /* (a tutte le finestre e a tutti i pannelli) il tema e' cambiato:
+                          * rileggilo dalle preferenze e ridisegnati (vedi IL TEMA, sopra) */
 
 struct notizia {
     unsigned int tipo;
@@ -474,6 +492,14 @@ static inline int finestra_tasti_fisici(struct finestra *f) {
  * quando la scrivania la fa tornare. */
 static inline int finestra_riducimi(struct finestra *f) {
     struct riducimi m = { .tipo = RIDUCIMI };
+    return manda(f->collegamento, &m, sizeof m);
+}
+
+/* Chiede al compositore di dire a tutte le finestre che il tema e' cambiato (CAMBIA_TEMA):
+ * il tema nuovo va scritto PRIMA nelle preferenze. Lo puo' chiedere solo chi ha il permesso
+ * (vedi IL TEMA, nella parte 1); per gli altri non succede niente. */
+static inline int finestra_cambia_tema(struct finestra *f) {
+    struct cambia_tema m = { .tipo = CAMBIA_TEMA };
     return manda(f->collegamento, &m, sizeof m);
 }
 

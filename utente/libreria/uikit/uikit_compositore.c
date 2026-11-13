@@ -87,3 +87,5 @@ const struct strato_ombra *ombra_pannello(int sopra, int *quanti) {
 }
 
 int sfocatura_finestra(void) { return OMBRA_FINESTRA_SFOCATURA_SFONDO; }
+
+void compositore_rileggi_tema(void) { tema_leggi(); }

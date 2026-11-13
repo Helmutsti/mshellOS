@@ -1,7 +1,8 @@
 /* Attivita': il task manager. Nella barra degli strumenti tre schede, per tre pagine:
- *   - Processi: i programmi che girano (numero, nome, utente, stato, memoria), aggiornati
- *     ogni secondo. Se ne sceglie uno con un clic: nella barra compaiono "Riavvia" (solo per
- *     le app) e "Termina processo". Sotto la tabella, quanti sono e quanta memoria usano.
+ *   - Processi: i programmi che girano (PID, nome, utente, stato, memoria), aggiornati ogni
+ *     secondo, ad albero: ognuno sotto chi l'ha lanciato. Se ne sceglie uno con un clic: nella
+ *     barra compaiono "Riavvia" (solo per le app) e "Termina processo". Sotto la tabella,
+ *     quanti sono e quanta memoria usano, e l'interruttore "Mostra i servizi di sistema".
  *   - Memoria: com'e' usata la RAM, come la pagina "Archiviazione" del Mac: una barra
  *     divisa in pezzi, e sotto la legenda con quanto pesa ogni pezzo.
  *   - Disco: lo stesso per i file: quanto pesano il sistema, le applicazioni, gli utenti,
@@ -15,7 +16,8 @@
  * L'ASPETTO e' quello della pagina "App - Attivita'" del file Figma, fatto con i componenti di
  * UIKit: la finestra a aree, le schede nella barra degli strumenti, i pulsanti, il pannello
  * chiaro incassato (la pagina con il fondo), la barra di utilizzo con la legenda, l'avviso del
- * riavvio. La tabella dei processi e' quella di UIKit (tabella.h), con l'ordinamento per colonna.
+ * riavvio, l'interruttore. La tabella dei processi e' quella di UIKit (tabella.h), con le righe
+ * ad albero (la colonna Processo); non si ordina per colonna: l'ordine e' quello dell'albero.
  *
  * LA SPAZIATURA (la regola: un solo livello con il padding, uguale in x e in y). Il corpo della
  * finestra ha 8 intorno e 8 tra la barra degli strumenti e il pannello. Processi: il pannello
@@ -59,62 +61,93 @@ static const char *nome_stato(unsigned int stato) {
     }
 }
 
-/* --- la tabella dei processi: la tabella di UIKit (tabella.h), con le righe "Processo" ---
+/* --- la tabella dei processi: la tabella di UIKit (tabella.h), con le righe ad albero ---
  *
- * Le colonne del disegno "Attivita' - Processi": Numero 96, Processo (prende quello che avanza,
- * in TESTO_PRIMARIO), Utente 120, Stato 120, Memoria 100 (a destra). All'inizio e' ordinata per
- * Numero, crescente (la freccia in su sull'intestazione); un clic su un'intestazione ordina per
- * quella colonna, un altro clic gira il verso. Un clic su una riga la sceglie. */
+ * Le colonne del disegno "Attivita' - Processi": PID 48, Processo (prende quello che avanza, in
+ * TESTO_PRIMARIO, ad albero), Utente 120, Stato 120, Memoria 100 (a destra). Nessuna si ordina.
+ *
+ * L'ALBERO: ogni processo sta sotto il suo padre (chi l'ha lanciato), i figli in ordine di PID.
+ * Un clic sulla freccia apre o chiude il ramo (i rami chiusi si ricordano per PID). Con
+ * l'interruttore spento non si vedono i servizi del sistema: i processi con il PID minore di
+ * quello della scrivania (avvio, eventi, compositore, launcher); chi ha il padre nascosto sale
+ * al primo livello. Un clic su una riga la sceglie. */
 
 static const struct colonna_tk colonne[] = {
-    { "Numero", 96, 0, 0, 1 },
-    { "Processo", 0, 0, 1, 1 },
-    { "Utente", 120, 0, 0, 1 },
-    { "Stato", 120, 0, 0, 1 },
-    { "Memoria", 100, 1, 0, 1 },
+    { "PID", 48, 0, 0, 0 },
+    { "Processo", 0, 0, 1, 0 },
+    { "Utente", 120, 0, 0, 0 },
+    { "Stato", 120, 0, 0, 0 },
+    { "Memoria", 100, 1, 0, 0 },
 };
-enum { COL_NUMERO, COL_PROCESSO, COL_UTENTE, COL_STATO, COL_MEMORIA };
+enum { COL_PID, COL_PROCESSO, COL_UTENTE, COL_STATO, COL_MEMORIA };
 
 static struct tabella_tk tabella;
 static struct info_processo processi[MAX_PROCESSI];
 static int quanti_processi;
-static int scelto = -1;                /* il numero del processo scelto, o -1 */
+static int scelto = -1;                /* il PID del processo scelto, o -1 */
 
-static int confronta_testi(const char *a, const char *b) {
+/* le righe: quale processo (indice in processi), il livello e il ramo */
+static int riga_processo[MAX_PROCESSI], riga_livello[MAX_PROCESSI], riga_ramo[MAX_PROCESSI];
+static int quante_righe;
+static int servizi_visibili;           /* l'interruttore "Mostra i servizi di sistema" */
+static int rami_chiusi[MAX_PROCESSI];  /* i PID dei rami chiusi */
+static int quanti_chiusi;
+
+static int ramo_chiuso(int pid) {
+    for (int i = 0; i < quanti_chiusi; i++) if (rami_chiusi[i] == pid) return 1;
+    return 0;
+}
+
+static void apri_chiudi_ramo(int pid) {
+    for (int i = 0; i < quanti_chiusi; i++)
+        if (rami_chiusi[i] == pid) { rami_chiusi[i] = rami_chiusi[--quanti_chiusi]; return; }
+    if (quanti_chiusi < MAX_PROCESSI) rami_chiusi[quanti_chiusi++] = pid;
+}
+
+static int stesso_testo(const char *a, const char *b) {
     while (*a && *a == *b) { a++; b++; }
-    return (unsigned char)*a - (unsigned char)*b;
+    return *a == *b;
 }
 
-static int confronta(const struct info_processo *a, const struct info_processo *b) {
-    int c;
-    switch (tabella.ordinata) {
-    case COL_PROCESSO: c = confronta_testi(a->nome, b->nome); break;
-    case COL_UTENTE:   c = confronta_testi(nome_utente(a->uid), nome_utente(b->uid)); break;
-    case COL_STATO:    c = confronta_testi(nome_stato(a->stato), nome_stato(b->stato)); break;
-    case COL_MEMORIA:  c = a->memoria < b->memoria ? -1 : a->memoria > b->memoria; break;
-    default:           c = 0; break;
-    }
-    if (!c) c = a->numero - b->numero;            /* a pari valore, per numero */
-    return tabella.verso == ORDINE_DECRESCENTE ? -c : c;
+/* Il PID della scrivania (dal nome del programma), o 0 se non c'e'. */
+static int pid_scrivania(void) {
+    for (int i = 0; i < quanti_processi; i++)
+        if (stesso_testo(processi[i].nome, "scrivania")) return processi[i].numero;
+    return 0;
 }
 
-/* In ordine (pochi processi: per inserimento), e la riga scelta segue il suo processo. */
-static void ordina(void) {
-    for (int i = 1; i < quanti_processi; i++) {
-        struct info_processo p = processi[i];
-        int j = i;
-        while (j > 0 && confronta(&processi[j - 1], &p) > 0) { processi[j] = processi[j - 1]; j--; }
-        processi[j] = p;
+/* Rifa' le righe: quali processi si vedono, messi in fila ad albero (tabella_tk_albero). I
+ * processi arrivano gia' in ordine di PID, quindi anche i figli di uno stesso padre. La riga
+ * scelta segue il suo processo; se non si vede piu' (e' finito, o il suo ramo si e' chiuso),
+ * non e' piu' scelto. */
+static void fai_righe(void) {
+    int primo = servizi_visibili ? 0 : pid_scrivania();
+    int visti[MAX_PROCESSI], genitore[MAX_PROCESSI], quanti = 0;
+    unsigned char chiuso[MAX_PROCESSI];
+    for (int i = 0; i < quanti_processi; i++)
+        if (processi[i].numero >= primo) visti[quanti++] = i;
+    for (int j = 0; j < quanti; j++) {
+        genitore[j] = -1;
+        for (int k = 0; k < quanti; k++)
+            if (processi[visti[k]].numero == processi[visti[j]].padre) genitore[j] = k;
+        chiuso[j] = (unsigned char)ramo_chiuso(processi[visti[j]].numero);
     }
+    quante_righe = tabella_tk_albero(quanti, genitore, chiuso, riga_processo, riga_livello, riga_ramo);
     int riga = -1;
-    for (int i = 0; i < quanti_processi; i++) if (processi[i].numero == scelto) riga = i;
+    for (int k = 0; k < quante_righe; k++) {
+        riga_processo[k] = visti[riga_processo[k]];
+        if (processi[riga_processo[k]].numero == scelto) riga = k;
+    }
+    if (riga < 0) scelto = -1;
     tabella_tk_scegli(&tabella, riga);
 }
 
 static void dati_riga(struct tabella_tk *t, int k, struct riga_tk *r, void *dati) {
     (void)t; (void)dati;
-    const struct info_processo *pr = &processi[k];
-    metti_numero(r->testi[COL_NUMERO], (unsigned int)pr->numero);
+    const struct info_processo *pr = &processi[riga_processo[k]];
+    r->livello = riga_livello[k];
+    r->ramo = riga_ramo[k];
+    metti_numero(r->testi[COL_PID], (unsigned int)pr->numero);
     copia_testo(r->testi[COL_PROCESSO], pr->nome, MAX_CELLA);
     copia_testo(r->testi[COL_UTENTE], nome_utente(pr->uid), MAX_CELLA);
     copia_testo(r->testi[COL_STATO], nome_stato(pr->stato), MAX_CELLA);
@@ -132,13 +165,19 @@ static int stessa_riga(const struct riga_tk *a, const struct riga_tk *b) {
             if (a->testi[c][i] != b->testi[c][i]) return 0;
             if (!a->testi[c][i]) break;
         }
-    return a->oggetto == b->oggetto;
+    return a->oggetto == b->oggetto && a->livello == b->livello && a->ramo == b->ramo;
 }
 
-/* Dopo aver riletto e ordinato i processi: le righe cambiate si ridisegnano; se e' cambiato
- * quante sono, tutta la tabella. */
-static void righe_cambiate(int prima) {
-    for (int k = 0; k < quanti_processi; k++) {
+/* Dopo aver rifatto le righe: quelle cambiate si ridisegnano; se e' cambiato quante sono,
+ * tutta la tabella. */
+static void righe_cambiate(void) {
+    int prima = tabella.righe;
+    if (quante_righe != prima) {
+        int sopra = tabella.sopra;
+        tabella_tk_aggiorna(&tabella, quante_righe);
+        tabella.sopra = sopra < quante_righe ? sopra : -1;   /* la riga sotto il puntatore resta accesa */
+    }
+    for (int k = 0; k < quante_righe; k++) {
         struct riga_tk r = { .oggetto = -1 };
         dati_riga(&tabella, k, &r, 0);
         if (k >= prima || !stessa_riga(&r, &righe_viste[k])) {
@@ -167,7 +206,7 @@ static void pagina_grafico_prepara(struct pagina_grafico *pg, int quanti, const 
     pg->pagina.base.nascosto = 1;
     pg->grafico = (struct grafico){ .quanti = quanti, .nomi = nomi, .toni = toni, .resto = resto };
     colonna_prepara(&pg->riepilogo, SPAZIO_8);
-    paragrafo_prepara(&pg->titolo, "", FONT_SEZIONE_NUOVO, INTERLINEA_SEZIONE, TESTO_PRIMARIO);
+    paragrafo_prepara(&pg->titolo, "", FONT_SEZIONE_NUOVO, INTERLINEA_SEZIONE, COLORE_ICONA_PRIMARIO);
     barra_utilizzo_prepara(&pg->barra, &pg->grafico);
     legenda_prepara(&pg->legenda, &pg->grafico);
     widget_aggiungi(&pg->riepilogo.base, &pg->titolo.base);
@@ -255,7 +294,9 @@ static int da_riavviare = -1;
 static struct pagina area;                    /* il corpo sotto la barra: uno dei pannelli */
 static struct pagina pagina_tabella, piede;
 static struct contenitore riga_piede;
-static struct paragrafo messaggio, riassunto_processi;
+static struct paragrafo messaggio, riassunto_processi, etichetta_servizi;
+static struct contenitore servizi;            /* l'etichetta e l'interruttore, a destra nel piede */
+static struct interruttore interruttore_servizi;
 static struct pagina_grafico memoria, disco;
 
 enum { SCHEDA_PROCESSI, SCHEDA_MEMORIA, SCHEDA_DISCO };
@@ -293,12 +334,13 @@ static void aggiorna_azioni(void) {
     if (cambia && finestra.base.l) uikit_ridisponi(&finestra);
 }
 
-/* Sotto la tabella: "8 processi \xFA 34,6 MB in uso" (\xFA e' il punto a mezza altezza). */
+/* Sotto la tabella: "8 processi \xFA 34,6 MB in uso" (\xFA e' il punto a mezza altezza),
+ * contando solo le righe che si vedono. */
 static void aggiorna_riassunto_processi(void) {
     unsigned long long in_uso = 0;
-    for (int i = 0; i < quanti_processi; i++) in_uso += processi[i].memoria;
-    char testo[MAX_TESTO_WIDGET], *d = metti_numero(testo, (unsigned int)quanti_processi);
-    d = metti_testo(d, quanti_processi == 1 ? " processo \xFA " : " processi \xFA ");
+    for (int k = 0; k < quante_righe; k++) in_uso += processi[riga_processo[k]].memoria;
+    char testo[MAX_TESTO_WIDGET], *d = metti_numero(testo, (unsigned int)quante_righe);
+    d = metti_testo(d, quante_righe == 1 ? " processo \xFA " : " processi \xFA ");
     d = testo_byte(d, in_uso);
     metti_testo(d, " in uso");
     int prima = larghezza_testo(riassunto_processi.font, riassunto_processi.testo);
@@ -315,15 +357,8 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     quanti_processi = n < 0 ? 0 : n;
     for (int i = 0; i < quanti_processi; i++)
         if (processi[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)processi[i].uid;
-    if (!processo_scelto()) scelto = -1;           /* e' finito: non e' piu' scelto */
-    int prima = tabella.righe;
-    if (quanti_processi != prima) {                 /* un processo in piu' o in meno: tutta */
-        int sopra = tabella.sopra;
-        tabella_tk_aggiorna(&tabella, quanti_processi);
-        tabella.sopra = sopra < quanti_processi ? sopra : -1;   /* la riga sotto il puntatore resta accesa */
-    }
-    ordina();
-    righe_cambiate(prima);
+    fai_righe();
+    righe_cambiate();
     aggiorna_azioni();
     aggiorna_riassunto_processi();
 
@@ -385,15 +420,32 @@ static void aggiorna_disco(struct finestra_tk *f, void *dati) {
 static void al_clic_tabella_processi(struct tabella_tk *t, int k, int come, int x, int y, void *dati) {
     (void)x; (void)y; (void)dati;
     if (k < 0 || come == CLIC_DESTRO) return;
-    scelto = processi[k].numero;
+    scelto = processi[riga_processo[k]].numero;
     tabella_tk_scegli(t, k);
     scrivi_messaggio("");
     aggiorna_azioni();
 }
 
-static void al_ordine_processi(struct tabella_tk *t, void *dati) {
+/* Le righe sono da rifare (un ramo aperto o chiuso, l'interruttore). */
+static void righe_da_rifare(void) {
+    fai_righe();
+    righe_cambiate();
+    aggiorna_azioni();
+    aggiorna_riassunto_processi();
+}
+
+/* Un clic sulla freccia di un ramo: lo apre o lo chiude. */
+static void al_ramo_processi(struct tabella_tk *t, int k, void *dati) {
     (void)t; (void)dati;
-    ordina();
+    apri_chiudi_ramo(processi[riga_processo[k]].numero);
+    righe_da_rifare();
+}
+
+/* L'interruttore "Mostra i servizi di sistema". */
+static void al_cambio_servizi(struct interruttore *i, void *dati) {
+    (void)dati;
+    servizi_visibili = i->acceso;
+    righe_da_rifare();
 }
 
 static void premi_termina(struct pulsante *b, void *dati) {
@@ -470,24 +522,33 @@ int main(void) {
     pagina_tabella.fondo = 1;
     tabella_tk_prepara(&tabella, colonne, (int)(sizeof colonne / sizeof colonne[0]), dati_riga,
                        al_clic_tabella_processi, 0);
-    tabella.al_ordine = al_ordine_processi;
-    tabella.ordinata = COL_NUMERO;
-    tabella.verso = ORDINE_CRESCENTE;
+    tabella.colonna_albero = COL_PROCESSO;
+    tabella.al_ramo = al_ramo_processi;
     pagina_aggiungi(&pagina_tabella, &tabella.base);
 
-    /* il piede: alto ALTEZZA_S (32), il testo (alto 16) al centro, 8 ai lati come le righe */
-    pagina_prepara(&piede, SPAZIO_0, TABELLA_DENTRO, (ALTEZZA_S - INTERLINEA_PICCOLO) / 2,
-                   (ALTEZZA_S - INTERLINEA_PICCOLO) / 2);
+    /* il piede: alto ALTEZZA_S (32), 8 ai lati come le righe; dentro, centrati in altezza, il
+     * conteggio (prende lo spazio), il messaggio e, a destra, "Mostra i servizi di sistema" con
+     * l'interruttore (alto 24: e' lui a dare l'altezza alla riga, 4 sopra e 4 sotto) */
+    pagina_prepara(&piede, SPAZIO_0, TABELLA_DENTRO, (ALTEZZA_S - INTERRUTTORE_ALTO) / 2,
+                   (ALTEZZA_S - INTERRUTTORE_ALTO) / 2);
     piede.base.elastico = 0;
     riga_prepara(&riga_piede, SPAZIO_16);
-    paragrafo_prepara(&riassunto_processi, "", FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, TESTO_SECONDARIO);
+    paragrafo_prepara(&riassunto_processi, "", FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, COLORE_ICONA_SECONDARIO);
     riassunto_processi.base.largo = 0;
-    paragrafo_prepara(&messaggio, "", FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, TESTO_PRIMARIO);
+    riassunto_processi.base.elastico = 1;
+    paragrafo_prepara(&messaggio, "", FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, COLORE_ICONA_PRIMARIO);
     messaggio.base.largo = 0;
-    messaggio.base.elastico = 1;
-    messaggio.allineamento = PARAGRAFO_DESTRA;
+    riga_prepara(&servizi, SPAZIO_8);
+    servizi.base.largo = 0;
+    paragrafo_prepara(&etichetta_servizi, "Mostra i servizi di sistema", FONT_CORPO, INTERLINEA_CORPO,
+                      COLORE_ICONA_PRIMARIO);
+    etichetta_servizi.base.largo = 0;
+    interruttore_prepara(&interruttore_servizi, 0, al_cambio_servizi, 0);
+    widget_aggiungi(&servizi.base, &etichetta_servizi.base);
+    widget_aggiungi(&servizi.base, &interruttore_servizi.base);
     widget_aggiungi(&riga_piede.base, &riassunto_processi.base);
     widget_aggiungi(&riga_piede.base, &messaggio.base);
+    widget_aggiungi(&riga_piede.base, &servizi.base);
     pagina_aggiungi(&piede, &riga_piede.base);
 
     pagina_grafico_prepara(&memoria, PEZZI_MEMORIA, nomi_memoria, toni_memoria, LIBERA);

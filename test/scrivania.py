@@ -51,7 +51,7 @@ VASSOIO_RETTANGOLO = (52, 154, 52 + 288, 154 + 252)
 
 # Le misure delle finestre (larghezza, altezza), senza l'ombra.
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),
-          "Impostazioni": (460, 420), "Files": (800, 480)}
+          "Impostazioni": (800, 520), "Files": (800, 480)}
 
 BARRA = 36            # l'altezza della barra del titolo delle finestre di UIKit
 

@@ -11,7 +11,7 @@
  *   avvia_con                  setuid/setgid (l'uid nuovo) ed execve
  *   processo                   pidfd_open: un descrittore che diventa pronto quando il
  *                              processo finisce
- *   elenco_processi            /proc/<numero>/stat e /proc/<numero>/status
+ *   elenco_processi            /proc/<numero>/stat (anche il padre) e /proc/<numero>/status
  *   termina_processo           kill(numero, SIGKILL): le regole sugli uid le controlla
  *                              il kernel
  *   stato_memoria              /proc/meminfo
@@ -261,11 +261,12 @@ static int leggi_processo(int numero, struct info_processo *p) {
     if (!apre || !chiude || chiude < apre) return 0;
     if (chiude[1] != ' ' || !chiude[2]) return 0;
     char stato = chiude[2], *dopo = chiude + 3;
-    for (int campo = 0; campo < 5; campo++) strtol(dopo, &dopo, 10);   /* padre, gruppo... */
+    int padre = (int)strtol(dopo, &dopo, 10);                          /* il padre (PPid) */
+    for (int campo = 0; campo < 4; campo++) strtol(dopo, &dopo, 10);   /* gruppo, sessione... */
     unsigned long flag = strtoul(dopo, 0, 10);
     if (flag & PF_KTHREAD) return 0;
 
-    *p = (struct info_processo){ .numero = numero };
+    *p = (struct info_processo){ .numero = numero, .padre = padre };
     int l = (int)(chiude - apre - 1);
     if (l > (int)sizeof p->nome - 1) l = (int)sizeof p->nome - 1;
     memcpy(p->nome, apre + 1, (size_t)l);

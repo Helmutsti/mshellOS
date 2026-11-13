@@ -3,8 +3,8 @@
  * E' un programma del sistema (uid 0), sorvegliato da init come il compositore. Per il
  * compositore e' un'applicazione come le altre, ma siccome e' del sistema puo' chiedere
  * delle SUPERFICI SPECIALI (vedi gkit.h):
- *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre, con le ICONE della
- *     scrivania in alto a sinistra (oggi solo "Terminale", provvisoria: vedi piu' sotto);
+ *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre, per ora senza icone
+ *     (le app si aprono dal vassoio);
  *   - la USERBAR, un PANNELLO (una barra) sul bordo sinistro, centrato in altezza, sopra
  *     tutte le finestre: il pulsante App e le applicazioni del sistema, con un segno a
  *     sinistra di quelle aperte;
@@ -27,6 +27,9 @@
  * uso con la misura piu' vicina a quella del posto (USERBAR_PNG_BARRA e USERBAR_PNG_VASSOIO, in userbar.h); se
  * nel tema non ce n'e' nessuna, quella dell'altro tema (APPLICAZIONI.md, "Icone mancanti").
  * Gli SVG non si sanno ancora disegnare: un'app che ha solo l'SVG ha il simbolo "pacchetto".
+ * QUANDO CAMBIA IL TEMA il compositore lo dice a tutti (TEMA_CAMBIATO, gkit.h): la scrivania
+ * rilegge il tema, ricarica le icone del tema nuovo e ridisegna la userbar e il vassoio. Lo
+ * sfondo non cambia (e' un'immagine sola, per tutti e due i temi).
  *
  * IL CLIC SU UN'APPLICAZIONE (nella userbar o nel vassoio):
  *   - se e' chiusa, la scrivania chiede al launcher (il servizio che fa partire le
@@ -53,7 +56,9 @@ struct app {
     char nome[MAX_NOME_APP];        /* quello che si vede (code page 437, per i font) */
     int di_sistema;                 /* sta in /system/apps: e' fissata nella userbar... */
     int nella_barra;                /* ...se il manifesto non dice nella_barra = false */
-    struct immagine png[2];         /* le icone caricate (al massimo due misure) */
+    int dove;                       /* in quale delle cartelle_applicazioni sta */
+    struct immagine png[2];         /* le icone caricate (al massimo due misure), del tema in uso */
+    const struct immagine *icona_barra, *icona_vassoio;   /* quali, o 0 (il simbolo "pacchetto") */
 };
 
 static struct app app[MAX_APP];
@@ -111,10 +116,40 @@ static const struct immagine *carica_icona(struct app *a, const char *cartella_a
     return immagine_carica(percorso, im) == 0 ? im : 0;
 }
 
+/* Le icone dell'app, del tema in uso (quelle di prima si buttano), e nella_barra: dal suo
+ * manifesto intero (la descrizione non le ha). */
+static void carica_icone(struct app *a) {
+    for (int k = 0; k < 2; k++) immagine_libera(&a->png[k]);
+    a->icona_barra = a->icona_vassoio = 0;
+    char cartella_app[MAX_PERCORSO];
+    copia(cartella_app, cartelle_applicazioni[a->dove], sizeof cartella_app);
+    aggiungi(cartella_app, "/", sizeof cartella_app);
+    aggiungi(cartella_app, a->cartella, sizeof cartella_app);
+    static struct manifesto m;
+    if (manifesto_dell_app(cartella_app, &m) < 0) return;
+    a->nella_barra = m.nella_barra;
+    const char *gia[2];
+    int quante = 0;
+    a->icona_barra = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_BARRA), gia, &quante);
+    a->icona_vassoio = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_VASSOIO), gia, &quante);
+}
+
+/* Le voci della userbar e del vassoio, dalle app (di nuovo quando cambiano le icone). */
+static void prepara_voci(void) {
+    for (int i = 0; i < quante_app; i++)
+        voci_vassoio[i] = (struct voce_app){ .icona = ICONA_PACKAGE, .immagine = app[i].icona_vassoio,
+                                             .nome = app[i].nome };
+    for (int k = 0; k < quante_fissate; k++) {
+        const struct app *a = &app[fissata[k]];
+        voci_barra[k] = (struct voce_app){ .icona = ICONA_PACKAGE, .immagine = a->icona_barra, .nome = a->nome };
+    }
+}
+
 /* Le applicazioni installate di una delle cartelle delle applicazioni: le sue cartelle
  * che hanno un manifest. Prima quelle del sistema, poi quelle della persona, ognuna in
  * ordine alfabetico. */
-static void leggi_applicazioni_in(const char *cartelle) {
+static void leggi_applicazioni_in(int dove) {
+    const char *cartelle = cartelle_applicazioni[dove];
     int d = apri(cartelle, APRI_LEGGERE);
     struct voce_cartella v;
     while (d >= 0 && quante_app < MAX_APP && leggi(d, &v, sizeof v) == sizeof v) {
@@ -123,37 +158,30 @@ static void leggi_applicazioni_in(const char *cartelle) {
             continue;
         int i = quante_app++;
         struct app *a = &app[i];
-        *a = (struct app){ .di_sistema = desc.di_sistema };
+        *a = (struct app){ .di_sistema = desc.di_sistema, .dove = dove };
         copia(a->cartella, v.nome, sizeof a->cartella);
         copia(a->programma, desc.programma, sizeof a->programma);
         in_437(a->nome, desc.nome, sizeof a->nome);
-        voci_barra[i] = voci_vassoio[i] = (struct voce_app){ .icona = ICONA_PACKAGE, .nome = a->nome };
-
-        /* le icone: il manifesto intero (descrizione non le ha) */
-        char cartella_app[MAX_PERCORSO];
-        copia(cartella_app, cartelle, sizeof cartella_app);
-        aggiungi(cartella_app, "/", sizeof cartella_app);
-        aggiungi(cartella_app, v.nome, sizeof cartella_app);
-        static struct manifesto m;
-        if (manifesto_dell_app(cartella_app, &m) < 0) continue;
-        a->nella_barra = m.nella_barra;
-        const char *gia[2];
-        int quante = 0;
-        voci_barra[i].immagine = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_BARRA), gia, &quante);
-        voci_vassoio[i].immagine = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_VASSOIO), gia, &quante);
+        carica_icone(a);
     }
     if (d >= 0) chiudi(d);
 }
 
 static void leggi_applicazioni(void) {
     for (int i = 0; i < QUANTE_CARTELLE_APPLICAZIONI; i++)
-        leggi_applicazioni_in(cartelle_applicazioni[i]);
+        leggi_applicazioni_in(i);
     /* nella userbar quelle del sistema, nel loro ordine, tranne quelle con nella_barra = false */
     for (int i = 0; i < quante_app; i++)
-        if (app[i].di_sistema && app[i].nella_barra) {
-            voci_barra[quante_fissate] = voci_barra[i];
-            fissata[quante_fissate++] = i;
-        }
+        if (app[i].di_sistema && app[i].nella_barra) fissata[quante_fissate++] = i;
+    prepara_voci();
+}
+
+/* Il tema e' cambiato (TEMA_CAMBIATO): lo si rilegge e si ricaricano le icone del tema nuovo.
+ * Poi userbar e vassoio vanno ridisegnati. */
+static void tema_cambiato(void) {
+    tema_leggi();
+    for (int i = 0; i < quante_app; i++) carica_icone(&app[i]);
+    prepara_voci();
 }
 
 /* --- le finestre aperte: le racconta il compositore --- */
@@ -371,102 +399,36 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
     }
 }
 
-/* --- le icone sullo sfondo --- */
+/* --- lo sfondo --- */
 
-/* LE ICONE DELLA SCRIVANIA, in colonna in alto a sinistra, a destra della userbar: l'elemento
- * di un file di Files (elemento_file.h, con l'oggetto del suo tipo: oggetti.h). Sotto il
- * puntatore si vela appena, premere la sceglie (vetro chiaro), premere altrove sullo sfondo
- * la lascia; il DOPPIO CLIC la apre.
- * Oggi c'e' solo "Terminale": apre l'app Terminale (utente/applicazioni/Terminale) tramite il
- * launcher, come il vassoio delle app (apri_applicazione). Le icone sono un elenco perche' un giorno saranno quelle della cartella Scrivania della persona. */
-struct icona_scrivania {
-    const char *nome;
-    const struct immagine *(*immagine)(void);   /* l'icona, nel tema in uso (risorse su disco) */
-    const char *app;                /* l'id dell'app che si apre con il doppio clic */
-};
-
-/* L'icona del Terminale (disegno Figma, "Icona dell'app"): una per tema, in /system/resources/icons/apps. */
-static const struct immagine *icona_terminale(void) {
-    return tema_corrente->testo_primario == tema_scuro.testo_primario ? &icona_terminale_scuro
-                                                                       : &icona_terminale_chiaro;
-}
-
-static const struct icona_scrivania icone[] = {
-    { "Terminale", icona_terminale, "terminale" },
-};
-#define QUANTE_ICONE ((int)(sizeof icone / sizeof icone[0]))
-
-#define ICONE_X (USERBAR_DAL_BORDO + USERBAR_LARGHEZZA + SPAZIO_16)   /* dopo la userbar */
-#define ICONE_Y SPAZIO_16
-
-static int icona_y[QUANTE_ICONE], icona_alta[QUANTE_ICONE];
-static int icona_sopra = -1, icona_scelta = -1;   /* -1: nessuna */
-static unsigned int *sfondo_pulito;  /* lo sfondo senza le icone: lo si ricopia a ogni disegno */
-
-static void sistema_icone(void) {
-    int y = ICONE_Y;
-    for (int i = 0; i < QUANTE_ICONE; i++) {
-        icona_y[i] = y;
-        icona_alta[i] = elemento_altezza(icone[i].nome);
-        y += icona_alta[i] + ELEMENTO_TRA;
-    }
-}
-
-static int icona_sotto(int x, int y) {
-    for (int i = 0; i < QUANTE_ICONE; i++)
-        if (x >= ICONE_X && x < ICONE_X + ELEMENTO_LARGHEZZA && y >= icona_y[i] && y < icona_y[i] + icona_alta[i])
-            return i;
-    return -1;
-}
-
-/* Lo sfondo con sopra le icone, nel loro stato. Si ricopia tutto lo sfondo (cosi' tutte e
- * due le immagini della finestra sono giuste), ma al compositore si dice solo la colonna
- * delle icone, l'unica parte che cambia ('tutto' la prima volta). */
-static int disegna_sfondo(int tutto) {
+/* Lo sfondo, disegnato una volta. Le icone della scrivania non ci sono: torneranno quando la
+ * scrivania mostrera' i file della cartella Scrivania della persona. Le app si aprono dal
+ * vassoio delle app. */
+static int disegna_sfondo(void) {
     unsigned int *pixel = finestra_tela(&sfondo);
     if (!pixel) return 0;
-    for (int i = 0; i < schermo_l * schermo_a; i++) pixel[i] = sfondo_pulito[i];
-    struct tela t = { pixel, schermo_l, schermo_a };
-    struct pennello p;
-    pennello_prepara(&p, &t);
-    for (int i = 0; i < QUANTE_ICONE; i++) {
-        int stato = i == icona_scelta ? ELEMENTO_STATO_SCELTO : i == icona_sopra ? ELEMENTO_STATO_SOPRA
-                                                                                   : ELEMENTO_NORMALE;
-        const struct immagine *icona = icone[i].immagine();
-        elemento_fondo(&p, ICONE_X, icona_y[i], icona_alta[i], stato);
-        disegna_immagine(&p, icona, ICONE_X + (ELEMENTO_LARGHEZZA - icona->l) / 2,
-                         icona_y[i] + ELEMENTO_MARGINE + (ELEMENTO_ICONA - icona->a) / 2);   /* come gli oggetti: al centro del posto */
-        elemento_nome(&p, ICONE_X, icona_y[i], icone[i].nome);
-    }
-    struct zona_finestra colonna = { ICONE_X, ICONE_Y, ELEMENTO_LARGHEZZA,
-                                     icona_y[QUANTE_ICONE - 1] + icona_alta[QUANTE_ICONE - 1] - ICONE_Y };
-    return finestra_mostra_zone(&sfondo, &colonna, tutto ? 0 : 1) >= 0;
+    prepara_sfondo(pixel, schermo_l, schermo_a);
+    return finestra_mostra(&sfondo) >= 0;
 }
 
-/* Il puntatore sullo sfondo: illumina, sceglie e apre le icone; premere li' chiude anche il
- * vassoio (come un clic fuori da un menu). Restituisce 1 se il vassoio si e' chiuso (la
- * userbar va ridisegnata); *icone_cambiate a 1 se le icone vanno ridisegnate. */
-static int notizia_sfondo(const struct notizia *n, int *icone_cambiate) {
-    static unsigned int pulsanti_prima, clic_prima;
+/* Il puntatore sullo sfondo: premere li' chiude il vassoio (come un clic fuori da un menu).
+ * Restituisce 1 se il vassoio si e' chiuso (la userbar va ridisegnata). */
+static int notizia_sfondo(const struct notizia *n) {
+    static unsigned int pulsanti_prima;
     if (n->tipo != PUNTATORE && n->tipo != USCITO) return 0;
-    int sopra_prima = icona_sopra, scelta_prima = icona_scelta;
-    icona_sopra = n->tipo == PUNTATORE ? icona_sotto(n->x, n->y) : -1;
     int premuto = n->tipo == PUNTATORE && (n->pulsanti & ~pulsanti_prima) != 0;   /* un pulsante qualsiasi */
-    int appena = premuto && (n->pulsanti & ~pulsanti_prima & PULSANTE_SINISTRO);
     pulsanti_prima = n->tipo == PUNTATORE ? n->pulsanti : 0;
-    if (appena) {
-        unsigned int adesso = tempo();
-        if (icona_sopra >= 0 && icona_sopra == icona_scelta && (int)(adesso - clic_prima) < DOPPIO_CLIC) {
-            apri_applicazione(icone[icona_sopra].app);
-            clic_prima = 0;
-        } else {
-            clic_prima = adesso;
-        }
-        icona_scelta = icona_sopra;
-    }
-    if (icona_sopra != sopra_prima || icona_scelta != scelta_prima) *icone_cambiate = 1;
     if (!premuto || !vassoio_aperto) return 0;
     chiudi_vassoio();
+    return 1;
+}
+
+/* La notizia del tema cambiato (arriva alla userbar, come a tutte le superfici): icone del
+ * tema nuovo, e il vassoio, se e' aperto, ridisegnato. 1 se la userbar va ridisegnata. */
+static int notizia_tema(const struct notizia *n) {
+    if (n->tipo != TEMA_CAMBIATO) return 0;
+    tema_cambiato();
+    if (vassoio_aperto && !disegna_vassoio()) chiudi_vassoio();
     return 1;
 }
 
@@ -479,12 +441,8 @@ int main(void) {
     }
     leggi_applicazioni();
 
-    sistema_icone();
-    sfondo_pulito = malloc((unsigned long)schermo_l * schermo_a * 4);
-    if (!sfondo_pulito) return 1;
-    prepara_sfondo(sfondo_pulito, schermo_l, schermo_a);
     if (finestra_apri_come(&sfondo, schermo_l, schermo_a, "sfondo", RUOLO_SFONDO, 0, 0, 0) < 0 ||
-        !disegna_sfondo(1))
+        !disegna_sfondo())
         return 1;
 
     userbar_posto(schermo_a, quante_fissate, &barra_x, &barra_y);
@@ -503,22 +461,13 @@ int main(void) {
         int ridisegna = 0, fuoco_cambiato = 0;
         if (g[0].pronto) {
             if (!finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
-            int icone_cambiate = 0;
-            ridisegna |= notizia_sfondo(&n, &icone_cambiate);
-            if (icone_cambiate) {
-                if (!disegna_sfondo(0)) return 1;
-                /* le notizie arrivate mentre si aspettava un'immagine libera */
-                int ancora = 0;
-                for (int i = 0; i < sfondo.quante; i++)
-                    ridisegna |= notizia_sfondo(&sfondo.messe_da_parte[i], &ancora);
-                sfondo.quante = 0;
-                if (ancora && !disegna_sfondo(0)) return 1;
-            }
+            ridisegna |= notizia_sfondo(&n);
         }
         if (g[1].pronto) {
             if (!finestra_ricevi(&barra, &n)) return 1;
             ridisegna |= notizia_barra(&n);
             ridisegna |= notizia_finestre(&n, &fuoco_cambiato);
+            ridisegna |= notizia_tema(&n);
         }
         if (vassoio_aperto && g[2].pronto) {
             /* del vassoio conta solo il puntatore: le notizie sulle finestre arrivano
@@ -539,6 +488,7 @@ int main(void) {
             for (int i = 0; i < barra.quante; i++) {
                 ancora |= notizia_barra(&barra.messe_da_parte[i]);
                 ancora |= notizia_finestre(&barra.messe_da_parte[i], &fuoco_cambiato);
+                ancora |= notizia_tema(&barra.messe_da_parte[i]);
             }
             barra.quante = 0;
             if (fuoco_cambiato && vassoio_aperto) { chiudi_vassoio(); ancora = 1; }

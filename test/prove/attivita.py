@@ -1,4 +1,5 @@
-"""attivita: la pagina Memoria di Attivita dice quanta RAM c'e', e si puo' terminare
+"""attivita: la pagina Memoria di Attivita dice quanta RAM c'e', l'albero dei processi
+nasconde e mostra i servizi del sistema e apre e chiude i rami, e si puo' terminare
 un'applicazione.
 
 Si apre prima Esempio (primo posto) e poi Attivita (secondo posto, angolo in 180,170).
@@ -18,10 +19,20 @@ kernel tiene per se' fin dall'avvio): 1972 MB sul PC con 2 GB, 7946 con --ram 81
 Il riferimento si rifa' con --riferimenti (con --ram, per un'altra RAM), e va guardato a
 occhio una volta.
 
-TERMINARE. Nella scheda "Processi" si sceglie la riga di Esempio (il primo processo
-dopo quelli del sistema: init, eventi, compositore, launcher, scrivania) e si preme
-"Termina processo" (compare a destra nella barra degli strumenti quando c'e' una riga scelta): la finestra di Esempio
-deve sparire, e nella userbar Esempio non deve piu' risultare aperta.
+L'ALBERO. Nella scheda "Processi" le righe sono ad albero (ognuno sotto chi l'ha lanciato).
+Le righe si contano guardando la colonna PID (c'e' scritto qualcosa o no), la freccia del
+ramo guardando il suo posto nella colonna Processo:
+  - l'interruttore "Mostra i servizi di sistema" e' spento: init (PID 1), eventi, compositore
+    e launcher non ci sono, la prima riga e' la scrivania (senza freccia: non ha figli);
+  - acceso: le righe sono 4 di piu' e la prima e' init, con la freccia del ramo aperto;
+  - un clic sulla freccia di init chiude il ramo: resta solo init (tutti gli altri
+    discendono da lui); un altro clic lo riapre.
+
+TERMINARE. Con l'interruttore acceso le righe sono init, eventi, compositore, launcher e
+sotto launcher le app in ordine di PID: Esempio (aperta per prima) e' la riga 4. Si
+sceglie e si preme "Termina processo" (compare a destra nella barra degli strumenti
+quando c'e' una riga scelta): la finestra di Esempio deve sparire, e nella userbar Esempio
+non deve piu' risultare aperta.
 """
 
 import time
@@ -31,10 +42,34 @@ from qemu import ErroreProva, PUNTO_VUOTO
 
 NOME = "attivita"
 ORDINE = 60
-DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); termina Esempio"
+DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); l'albero; termina Esempio"
 RIFERIMENTI = True
 
-RIGA_ESEMPIO = 5        # 0 init, 1 eventi, 2 compositore, 3 launcher, 4 scrivania
+RIGA_ESEMPIO = 4        # servizi visibili: 0 init, 1 eventi, 2 compositore, 3 launcher, 4 esempio
+PRIMA_RIGA = 150        # il centro della prima riga, dall'angolo della finestra
+PASSO = 44              # righe alte 40, a 4 l'una dall'altra
+RIGHE_IN_VISTA = 8      # quante ne stanno nella finestra (alta 526)
+COLONNA_PID = (24, 72)  # x della colonna PID
+FRECCIA = (96, 112)     # x del posto della freccia del ramo (livello 0)
+INTERRUTTORE = (724, 502)   # il centro dell'interruttore, in basso a destra nel piede
+
+
+def righe_piene(foto, x, y):
+    """Quante righe hanno qualcosa scritto nella colonna PID (dall'alto, fino alla prima vuota)."""
+    n = 0
+    for k in range(RIGHE_IN_VISTA):
+        cy = y + PRIMA_RIGA + PASSO * k
+        zona = (x + COLONNA_PID[0], cy - 8, x + COLONNA_PID[1], cy + 8)
+        if inchiostro(foto, zona, 200).getbbox() is None:
+            break
+        n += 1
+    return n
+
+
+def freccia_prima_riga(foto, x, y):
+    """Vero se al posto della freccia della prima riga c'e' disegnato qualcosa."""
+    cy = y + PRIMA_RIGA
+    return inchiostro(foto, (x + FRECCIA[0], cy - 8, x + FRECCIA[1], cy + 8), 200).getbbox() is not None
 
 
 def inchiostro(foto, area, soglia=120):
@@ -109,10 +144,32 @@ def esegui(p):
         except ErroreProva as e:
             raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
                               "memoria_totale_ottenuta.png e la foto 'memoria'") from None
-    # --- terminare Esempio ---
+    # --- l'albero: i servizi del sistema nascosti, poi visibili; un ramo chiuso e riaperto ---
     m.clic(x + 132, y + 65)                    # la scheda "Processi"
-    time.sleep(0.5)
-    m.clic(x + 150, y + 162 + 44 * RIGA_ESEMPIO)    # le righe sono a 44 l'una dall'altra, la prima ha il centro a 162
+    m.muovi(*PUNTO_VUOTO)
+    f = m.aspetta_che(lambda f: righe_piene(f, x, y) > 0, 5.0, cosa="le righe dei processi")
+    time.sleep(0.3)
+    f = m.foto("servizi_nascosti")
+    nascosti = righe_piene(f, x, y)
+    p.controlla(not freccia_prima_riga(f, x, y),
+                "servizi nascosti: la prima riga ha una freccia (e' init, PID 1, invece della scrivania?)")
+    m.clic(x + INTERRUTTORE[0], y + INTERRUTTORE[1])
+    m.muovi(*PUNTO_VUOTO)
+    f = m.aspetta_che(lambda f: righe_piene(f, x, y) == nascosti + 4, 5.0,
+                      cosa="acceso l'interruttore, 4 righe in piu' (init, eventi, compositore, launcher)")
+    time.sleep(0.3)
+    f = m.foto("servizi_visibili")
+    p.controlla(freccia_prima_riga(f, x, y), "servizi visibili: la prima riga (init, PID 1) non ha la freccia")
+    p.nota(f"righe: {nascosti} con i servizi nascosti, {nascosti + 4} visibili")
+    m.clic(x + (FRECCIA[0] + FRECCIA[1]) // 2, y + PRIMA_RIGA)     # chiude il ramo di init
+    m.muovi(*PUNTO_VUOTO)
+    m.aspetta_che(lambda f: righe_piene(f, x, y) == 1, 5.0, cosa="chiuso il ramo di init, resta solo lui")
+    m.foto("ramo_chiuso")
+    m.clic(x + (FRECCIA[0] + FRECCIA[1]) // 2, y + PRIMA_RIGA)     # e lo riapre
+    m.muovi(*PUNTO_VUOTO)
+    m.aspetta_che(lambda f: righe_piene(f, x, y) == nascosti + 4, 5.0, cosa="riaperto il ramo di init")
+    # --- terminare Esempio ---
+    m.clic(x + 300, y + PRIMA_RIGA + PASSO * RIGA_ESEMPIO)
     time.sleep(0.3)
     m.clic(x + 684, y + 65)                    # "Termina processo", in fondo a destra nella barra (compare con la riga scelta)
     m.muovi(*PUNTO_VUOTO)

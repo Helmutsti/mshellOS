@@ -44,7 +44,9 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          'badge-check', 'circle-x', 'circle-check', 'chevron-left', 'volume-2',
          # Files nel disegno nuovo: indietro, le frecce dell'ordinamento, i simboli della
          # barra laterale (Scrivania, Testi, Programmi)
-         'chevron-up', 'chevron-down', 'monitor', 'file-text', 'app-window']
+         'chevron-up', 'chevron-down', 'monitor', 'file-text', 'app-window',
+         # Impostazioni: la barra laterale (Aspetto, Tastiera e mouse, App e sicurezza, Rete)
+         'palette', 'keyboard', 'shield', 'wifi']
 LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: disegna_icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 # Le immagini a colori della scelta singola accesa: nome C, SVG di figma/
