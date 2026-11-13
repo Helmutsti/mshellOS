@@ -180,7 +180,7 @@ def esegui(p):
     cambia(casa, "la Scrivania (con contatore.app)")
     m.foto("scrivania")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])           # contatore.app
-    # si apre lo Store con la richiesta di installazione (nel secondo posto, 560 x 480): lo
+    # si apre lo Store con la richiesta di installazione (nel secondo posto, 600 x 600): lo
     # si chiude con la sua X (la prova store lo prova tutto)
     m.aspetta_seriale("store: richiesta di installazione: contatore", attesa=20.0)
     m.muovi(*PUNTO_VUOTO)
@@ -189,7 +189,7 @@ def esegui(p):
     m.aspetta_schermo_fermo()
     m.foto("pacchetto_nello_store")
     sx, sy = s.angolo(1)
-    m.clic(*s.comandi(sx, sy, 560)[1])
+    m.clic(*s.comandi(sx, sy, 600)[1])
     m.muovi(*PUNTO_VUOTO)
     m.aspetta_che(lambda f: s.segno_sotto(f, "Store") == 0, 10.0, cosa="lo Store chiuso")
     p.controlla(s.segno_sotto(m.aspetta_schermo_fermo(), "Files") > 0, "Files non e' piu' aperta")

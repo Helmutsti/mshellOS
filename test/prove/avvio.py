@@ -22,6 +22,9 @@ import re
 from scrivania import userbar_visibile
 
 NOME = "avvio"
+# Racconta l'avvio di Linux (kernel, UEFI, partizioni, tastiera e tavoletta di QEMU): nella
+# sandbox Docker non c'e' niente di tutto questo, quindi la sandbox la salta.
+SOLO_QEMU = "l'avvio di Linux e i dispositivi di QEMU non ci sono nella sandbox"
 ORDINE = 10
 DESCRIZIONE = "seriale dell'avvio: Linux, RAM, moduli, partizioni, tastiera e tavoletta USB; la scrivania compare"
 

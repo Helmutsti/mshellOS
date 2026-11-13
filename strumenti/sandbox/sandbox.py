@@ -466,11 +466,14 @@ def comando_prova(args):
     fallite = 0
     for nome in args.prove:
         modulo = prove[nome]
+        if getattr(modulo, "SOLO_QEMU", None):
+            print(f"  [sandbox] {nome:14} SALTATA: solo in QEMU ({modulo.SOLO_QEMU})", flush=True)
+            continue
         cartella = collaudo.RISULTATI / "sandbox" / nome
         shutil.rmtree(cartella, ignore_errors=True)
         cartella.mkdir(parents=True)
         sb = Sandbox(tema=args.tema, disco=getattr(modulo, "DISCO", "disco.img"), lavoro=cartella)
-        p = collaudo.Prova(nome, "x86_64", sb, cartella, False)
+        p = collaudo.Prova(nome, "x86_64", sb, cartella, args.riferimenti)
         inizio = time.time()
         esito = "OK"
         try:
@@ -507,6 +510,8 @@ def main():
     p = sotto.add_parser("prova", help="esegue prove di test/prove/ nella sandbox")
     p.add_argument("prove", nargs="+")
     p.add_argument("--tieni", action="store_true", help="tiene le foto anche se riesce")
+    p.add_argument("--riferimenti", action="store_true",
+                   help="rifa' le foto di riferimento (da guardare prima di salvarle)")
     for s in (f, p):
         s.add_argument("--tema", choices=["chiaro", "scuro"], default="chiaro")
         s.add_argument("--senza-compilare", action="store_true",

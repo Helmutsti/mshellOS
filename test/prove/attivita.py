@@ -98,12 +98,17 @@ def esegui(p):
                       cosa="la riga 'In uso ... su ...' nella scheda Memoria")
     time.sleep(0.3)
     f = m.foto("memoria")
-    cifre = parte_intera_del_totale(f, riga)
-    try:
-        p.riferimento(f"memoria_totale_{p.ram}", cifre, maschera=None, tollerati=3)
-    except ErroreProva as e:
-        raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
-                          "memoria_totale_ottenuta.png e la foto 'memoria'") from None
+    if not p.ram:
+        # nella sandbox la RAM e' quella del computer, diversa da uno all'altro: il totale
+        # non ha un riferimento (lo si controlla in QEMU, con la RAM data)
+        p.nota("totale della memoria non controllato: senza RAM fissa (sandbox)")
+    else:
+        cifre = parte_intera_del_totale(f, riga)
+        try:
+            p.riferimento(f"memoria_totale_{p.ram}", cifre, maschera=None, tollerati=3)
+        except ErroreProva as e:
+            raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
+                              "memoria_totale_ottenuta.png e la foto 'memoria'") from None
     # --- terminare Esempio ---
     m.clic(x + 132, y + 65)                    # la scheda "Processi"
     time.sleep(0.5)
