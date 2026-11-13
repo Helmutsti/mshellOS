@@ -12,7 +12,7 @@
  *     cartelle;
  *   - la finestra dell'applicazione come la decide il design, i componenti e il ciclo degli
  *     eventi: qui sotto (e l'elemento di un file in elemento_file.h; la userbar e il vassoio,
- *     della scrivania, in userbar.h);
+ *     della scrivania, in sistema/userbar.h);
  *   - quello che serve al compositore del design (sistema/uikit_compositore.h).
  * Sotto, GKit (utente/libreria/gkit/): la finestra (gkit.h) e gli strumenti di disegno
  * (gkit_disegno.h).
@@ -29,7 +29,8 @@
  *                     UTF-8 ai caratteri dei font del sistema), e gli header dei componenti.
  *   uikit/sistema/    DEL SISTEMA: quello che usano solo i programmi del sistema.
  *                     uikit_compositore.h (le poche cose del design che disegna il
- *                     compositore). Un'app non lo deve includere: puo' cambiare senza avviso.
+ *                     compositore), userbar.h (la userbar e il vassoio della scrivania).
+ *                     Un'app non li deve includere: possono cambiare senza avviso.
  *   uikit/interno/    INTERNO: il codice (i .c) e nucleo.h, le dichiarazioni che servono solo
  *                     dentro UIKit. Nessun programma li include.
  *
@@ -52,17 +53,19 @@
  *      puntatore e fuoco), barra_strumenti.c (barra, pulsante della barra, pillola, percorso),
  *      scorrimento.c e ciclo.c (il ciclo degli eventi: tutto quello che parla con il
  *      compositore). Le funzioni che servono solo dentro UIKit (ai .c del nucleo e ai
- *      componenti ancora scritti negli header) sono dichiarate in interno/nucleo.h.
- *   3. DA FARE: i componenti complessi (menu, tabella, griglia, barra_laterale, schede,
- *      userbar, oggetti, elemento_file, pagina, paragrafo, pannello).
+ *      .c dei componenti) sono dichiarate in interno/nucleo.h.
+ *   3. FATTO: i componenti complessi. Ognuno ha il suo header pubblico (tipi, costanti e
+ *      dichiarazioni) e il suo .c in interno/: menu, tabella, griglia, barra_laterale, schede,
+ *      oggetti, elemento_file, pagina, paragrafo, pannello; userbar (della scrivania) ha
+ *      l'header in sistema/. Quello che si dicono solo tra loro (il testo che va a capo, il campo
+ *      del nome nuovo, l'intestazione di un gruppo) e' in interno/nucleo.h.
  *   4. FATTO: i componenti piccoli. grafico.h, etichetta_stato.h, messaggio.h, icona_app.h,
  *      riga_permesso.h, riga_app.h e informazioni.h hanno solo dichiarazioni; il codice e' in
  *      interno/, un .c per header (informazioni_mostra.c a parte: apre la mini finestra con il
  *      ciclo degli eventi, e l'anteprima la lascia fuori come ciclo.c). Quello che un
  *      componente usa di un altro (l'etichetta di stato nella riga di permesso, l'icona
  *      dell'app nella riga dell'app) e' dichiarato in interno/componenti_piccoli.h.
- * Finche' un gruppo non e' fatto, le sue funzioni restano scritte negli header (static) e
- * funzionano come prima.
+ * Il riordino e' finito: nessun header pubblico ha piu' funzioni scritte dentro.
  *
  *     static struct finestra_tk finestra;
  *     static struct contenitore colonna;
@@ -961,7 +964,7 @@ int uikit_cambia_tema(struct finestra_tk *f, const char *nome);
 int uikit_esegui(struct finestra_tk *f);
 
 /* I componenti che stanno ognuno nel suo file (vedi LIBRERIE.md). */
-#include "elemento_file.h"    /* l'elemento di un file (e testo_a_capo, che usano anche avviso e stato vuoto) */
+#include "elemento_file.h"    /* l'elemento di un file: icona e nome sotto */
 #include "oggetti.h"          /* le icone di file e cartelle (l'"Oggetto" di Figma) */
 #include "menu.h"             /* il menu: voce, intestazione, separatore, sottomenu */
 #include "barra_laterale.h"   /* la barra laterale e le sue voci */

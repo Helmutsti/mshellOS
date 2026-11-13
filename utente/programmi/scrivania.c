@@ -12,7 +12,7 @@
  *     come un menu), a destra del pulsante App: tutte le applicazioni installate, in una
  *     griglia. C'e' solo mentre e' aperto: si apre e si chiude con il pulsante App.
  * Il disegno e' quello della pagina "Scrivania" del file Figma (userbar e vassoio:
- * uikit/userbar.h). L'ora e la data, che stavano nella vecchia isola, nel disegno non ci
+ * uikit/sistema/userbar.h). L'ora e la data, che stavano nella vecchia isola, nel disegno non ci
  * sono: per ora la scrivania non le mostra (STATO.md, "Da confermare").
  *
  * LE APPLICAZIONI INSTALLATE le legge da /system/apps (quelle del sistema) e poi da
@@ -42,7 +42,7 @@
  * un'altra finestra prende il fuoco. */
 #include "gkit/gkit.h"
 #include "gkit/sistema/protocollo.h"   /* i pannelli, lo sfondo, PORTA_DAVANTI */
-#include "uikit/userbar.h"
+#include "uikit/sistema/userbar.h"
 #include "corekit/sistema/descrizione.h"
 #include "corekit/apertura.h"
 #include "uikit/testo437.h"

@@ -4,11 +4,9 @@
  * Lo includono:
  *   - i .c del nucleo, che se li dicono tra loro (per esempio la finestra segna le zone da
  *     ridisegnare, il ciclo degli eventi le ridisegna);
- *   - i componenti che sono ancora scritti tutti nei loro header (menu.h, tabella.h,
- *     pagina.h...: i gruppi 3 e 4 del riordino, vedi uikit.h). Le loro funzioni si compilano
- *     dentro il programma che li usa, quindi anche il programma vede queste dichiarazioni:
- *     non per questo diventano pubbliche. Quando i componenti avranno i loro .c, lo
- *     includeranno solo quelli;
+ *   - i .c dei componenti (menu.c, tabella.c, griglia.c...), che usano quelle del nucleo e
+ *     se ne dicono alcune tra loro (in fondo: il testo che va a capo, il campo del nome nuovo,
+ *     l'intestazione di un gruppo);
  *   - l'anteprima (strumenti/anteprima), che fa al posto del ciclo degli eventi: misura,
  *     dispone e disegna la finestra una volta.
  *
@@ -141,5 +139,44 @@ int barra_strumenti_vuota(struct finestra_tk *f, int x, int y);
 
 /* Il tipo della barra di scorrimento: chi contiene una barra la riconosce tra i figli. */
 extern const struct tipo_widget tipo_barra_scorrimento;
+
+/* --- elemento_file.c --- */
+
+#define MAX_RIGA_NOME 96     /* lettere di una riga del nome, compreso lo 0 finale */
+
+/* Quanto e' largo un pezzo di testo (da 'da' a 'a', escluso). Inline: minuscola, la chiamano
+ * di continuo testo_a_capo e paragrafo_a_capo mentre cercano dove tagliare. */
+static inline int larghezza_pezzo(const struct font *f, const char *s, int da, int a) {
+    int l = 0;
+    for (int i = da; i < a; i++) l += glifo_di(f, (unsigned char)s[i])->avanzo;
+    return l;
+}
+
+/* Spezza 'testo' in righe larghe al massimo 'largo' pixel, al massimo 'massimo' righe:
+ * quante righe sono uscite. Si va a capo dopo uno spazio o un trattino (come fa Figma:
+ * "foto-" / "mare.png"); una parola piu' lunga della riga si spezza dove capita. Se il
+ * testo non ci sta tutto, l'ultima riga finisce con "...". Lo usano l'elemento di un file,
+ * l'avviso, lo stato vuoto, la griglia e testo_tagliato. */
+int testo_a_capo(const struct font *f, const char *testo, int largo,
+                 char righe[][MAX_RIGA_NOME], int massimo);
+
+/* --- oggetti.c --- */
+
+#define RINOMINA_DENTRO   SPAZIO_8     /* nel campo, ai lati del testo (nel tile: SPAZIO_4) */
+#define RINOMINA_CURSORE  2            /* la larghezza del cursore */
+
+/* IL CAMPO DEL NOME NUOVO (lo stato Rinomina di una riga della tabella o di un tile della
+ * griglia). Il campo largo 'l' e alto 'a', raggio 'raggio': incassato con il fuoco come
+ * campo_disegna (ombre "focus", SUPERFICIE_INCASSATA, bordo BORDO_FOCUS), con dentro il testo e
+ * il cursore in fondo. Il testo centrato se 'centrato'; se e' piu' lungo del campo si vede la
+ * fine. */
+void campo_rinomina_disegna(struct pennello *p, int x, int y, int l, int a, int raggio,
+                            const char *testo_nome, int centrato);
+
+/* --- menu.c --- */
+
+/* L'intestazione di un gruppo (in un menu o nella barra laterale): il testo a
+ * INTESTAZIONE_MENU_DENTRO dal bordo sinistro 'x', con la cima della riga in y. */
+void intestazione_menu_disegna(struct pennello *p, int x, int y, const char *titolo);
 
 #endif

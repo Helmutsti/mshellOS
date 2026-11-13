@@ -3,7 +3,7 @@
  * puntatore su Files. Files e' aperta (il puntino a sinistra), Attivita in primo piano (la
  * lineetta). Le icone sono i simboli del sistema: l'anteprima non legge le PNG delle app.
  * Uso: TEMA=scuro anteprima.sh userbar 2 */
-#include "uikit/userbar.h"
+#include "uikit/sistema/userbar.h"
 
 static struct finestra_tk finestra;
 static struct widget scrivania;
