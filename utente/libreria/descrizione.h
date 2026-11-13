@@ -14,6 +14,7 @@
  *     id, nome, versione, autore, descrizione       chi e' l'app
  *     processore, sistema_minimo                     per quale computer e sistema e' fatta
  *     programma                                      il file da far partire (di solito "code")
+ *     nella_barra                                    false: solo nel vassoio, non nella userbar
  *     permessi, deviazioni, funzioni                 elenchi di nomi (APPLICAZIONI.md, sezione 9)
  *     [icone.chiaro], [icone.scuro]                  svg = "...", png = { 18 = "...", 32 = "..." }
  *
@@ -79,6 +80,7 @@ struct icone_tema {
 #define VOCE_DEVIAZIONI      (1u << 9)
 #define VOCE_FUNZIONI        (1u << 10)
 #define VOCE_ICONE           (1u << 11)
+#define VOCE_NELLA_BARRA     (1u << 12)
 
 struct manifesto {
     char id[MAX_ID];
@@ -89,6 +91,7 @@ struct manifesto {
     char processore[MAX_PROCESSORE];
     int sistema_minimo;                      /* 0 se manca */
     char programma[MAX_PROGRAMMA];
+    int nella_barra;                         /* 1 se manca: l'app di sistema sta anche nella userbar */
     int quanti_permessi, quante_deviazioni, quante_funzioni;
     char permessi[MAX_VOCI][MAX_VOCE];
     char deviazioni[MAX_VOCI][MAX_VOCE];

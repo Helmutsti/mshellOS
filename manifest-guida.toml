@@ -57,6 +57,11 @@ sistema_minimo = 1
 # Il programma da avviare, relativo alla cartella dell'app installata.
 programma = "code"
 
+# Se l'app di sistema sta anche nella userbar (la barra a sinistra). Se manca vale
+# true. Con false l'app compare solo nel vassoio delle app. Le app installate
+# dalla persona non sono fissate nella userbar in ogni caso.
+nella_barra = true
+
 
 # --- Permessi: cosa l'app CHIEDE al sistema ----------------------------------
 #

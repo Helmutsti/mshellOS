@@ -3,8 +3,8 @@
  * Figma (pagina "App - Terminale"): barra del titolo, niente barra degli strumenti, e nel
  * corpo il pannello chiaro incassato (uikit/pannello.h) con il testo e la barra di scorrimento.
  *
- * Non e' un'app ma un programma normale (APPLICAZIONI.md, sezione 2), in /system/bin: lo fa
- * partire il launcher come la persona (uid 1000), quando lo chiede la scrivania. La shell
+ * E' un'app (utente/applicazioni/Terminale): la fa partire il launcher come la persona
+ * (uid 1000), dal vassoio delle app o dall'icona della scrivania. La shell
  * dentro, invece, la fa partire il launcher come SISTEMA (uid 0), dandole il nostro
  * terminale finto: PROVVISORIO, aperto a chiunque (launcher.h, APRI_SHELL).
  *

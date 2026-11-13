@@ -9,10 +9,10 @@
  *     come APPLICAZIONE (uid 1000), con l'argomento della richiesta se c'e'. E' per questo
  *     che il launcher e' del sistema (uid 0): solo il sistema puo' far partire un
  *     programma con un altro uid;
- *   - APRI_PROGRAMMA: un programma normale di /system/bin (non un'app: oggi il terminale),
+ *   - APRI_PROGRAMMA: un programma normale di /system/bin (non un'app; per ora nessuno lo usa),
  *     come la persona (uid 1000);
  *   - APRI_SHELL: la shell di prova come SISTEMA (uid 0), sul terminale finto che chi chiede
- *     gli passa (oggi il terminale della scrivania);
+ *     gli passa (oggi il Terminale);
  *   - APRI_FILE: un pacchetto .app non si apre mai da solo: si fa partire lo Store su di
  *     lui, se e' installato; se no si risponde che le app vanno installate prima;
  *   - RIMUOVI_PACCHETTO, SVUOTA_DATI: togliere un'app della persona, svuotare i dati di

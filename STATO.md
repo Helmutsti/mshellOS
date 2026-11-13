@@ -368,7 +368,7 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 - Terminale (più avanti): i comandi sono programmi, non app. L'app Terminale riceve un
   permesso esplicito "accedere ai tuoi file", come su macOS. Da dove prendere la shell e i
   comandi (toybox, busybox o fatti da noi) è ancora da decidere.
-- Terminale in finestra (icona "Shell" sulla scrivania, provvisorio): la shell dentro gira come
+- Terminale in finestra (app Terminale, anche con l'icona provvisoria sulla scrivania): la shell dentro gira come
   **sistema** (uid 0), non come la persona, e **chiunque può chiederla** al launcher
   (`APRI_SHELL`, che le passa il terminale finto). Decisione della persona, provvisoria:
   **terminale come sistema aperto a chiunque: da proteggere** ("poi lo proteggiamo"). I comandi

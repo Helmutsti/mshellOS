@@ -19,8 +19,8 @@ basta.
 
     IL VASSOIO DELLE APP si apre con il pulsante App, a destra della barra (x = 52), centrato
     sul pulsante App: tutte le app installate, 3 per riga, voci di 80 x 68 a 88 l'una
-    dall'altra. Con le 6 app del sistema: 288 x 176, angolo in (52, 192); il centro del
-    tondo della prima voce in (108, 232).
+    dall'altra. Con le 7 app del sistema (il Terminale sta solo qui, non nella userbar):
+    3 righe, 288 x 252, angolo in (52, 154); il centro del tondo della prima voce in (108, 194).
 
     LE FINESTRE si aprono "a scala": la prima con l'angolo in (140, 130), ognuna delle
     successive 40 pixel piu' in basso e a destra (a destra della userbar).
@@ -41,12 +41,13 @@ APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 280)
 APP = {nome: (VOCE_X, APP_PULSANTE[1] + 40 * (i + 1)) for i, nome in enumerate(FISSATE)}
 SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine a sinistra
 
-# Il vassoio con le 6 app del sistema (con Contatore installata ha una riga in piu', e
-# si apre piu' in alto: VASSOIO vale solo per le 6).
-VASSOIO_ANGOLO = (52, 192)
-VASSOIO = {nome: (52 + 16 + 40 + 88 * (i % 3), 192 + 16 + 24 + 76 * (i // 3))
-           for i, nome in enumerate(FISSATE)}
-VASSOIO_RETTANGOLO = (52, 192, 52 + 288, 192 + 176)
+# Il vassoio con le 7 app del sistema: quelle della userbar e il Terminale, in ordine
+# alfabetico (con Contatore installata le righe restano 3: VASSOIO vale per le 7 e le 8).
+NEL_VASSOIO = FISSATE + ["Terminale"]
+VASSOIO_ANGOLO = (52, 154)
+VASSOIO = {nome: (52 + 16 + 40 + 88 * (i % 3), 154 + 16 + 24 + 76 * (i // 3))
+           for i, nome in enumerate(NEL_VASSOIO)}
+VASSOIO_RETTANGOLO = (52, 154, 52 + 288, 154 + 252)
 
 # Le misure delle finestre (larghezza, altezza), senza l'ombra.
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),

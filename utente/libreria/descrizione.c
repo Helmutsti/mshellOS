@@ -134,6 +134,13 @@ int manifesto_leggi(char *testo, struct manifesto *m, char *errore, int max_erro
     testo_in(t, "descrizione", m->descrizione, sizeof m->descrizione, VOCE_DESCRIZIONE, m);
     testo_in(t, "processore", m->processore, sizeof m->processore, VOCE_PROCESSORE, m);
     testo_in(t, "programma", m->programma, sizeof m->programma, VOCE_PROGRAMMA, m);
+    m->nella_barra = 1;
+    if (toml_key_exists(t, "nella_barra")) {
+        m->presenti |= VOCE_NELLA_BARRA;
+        toml_datum_t v = toml_bool_in(t, "nella_barra");
+        if (!v.ok) m->sbagliate |= VOCE_NELLA_BARRA;
+        else m->nella_barra = v.u.b ? 1 : 0;
+    }
     if (toml_key_exists(t, "sistema_minimo")) {
         m->presenti |= VOCE_SISTEMA_MINIMO;
         toml_datum_t v = toml_int_in(t, "sistema_minimo");

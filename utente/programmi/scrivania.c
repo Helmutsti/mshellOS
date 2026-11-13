@@ -51,7 +51,8 @@ struct app {
     char cartella[MAX_NOME_FILE];   /* il nome della sua cartella: lo si chiede al launcher */
     char programma[MAX_PERCORSO_PROGRAMMA];   /* il percorso completo del programma */
     char nome[MAX_NOME_APP];        /* quello che si vede (code page 437, per i font) */
-    int di_sistema;                 /* sta in /system/apps: e' fissata nella userbar */
+    int di_sistema;                 /* sta in /system/apps: e' fissata nella userbar... */
+    int nella_barra;                /* ...se il manifesto non dice nella_barra = false */
     struct immagine png[2];         /* le icone caricate (al massimo due misure) */
 };
 
@@ -135,6 +136,7 @@ static void leggi_applicazioni_in(const char *cartelle) {
         aggiungi(cartella_app, v.nome, sizeof cartella_app);
         static struct manifesto m;
         if (manifesto_dell_app(cartella_app, &m) < 0) continue;
+        a->nella_barra = m.nella_barra;
         const char *gia[2];
         int quante = 0;
         voci_barra[i].immagine = carica_icona(a, cartella_app, png_per(&m, USERBAR_PNG_BARRA), gia, &quante);
@@ -146,9 +148,9 @@ static void leggi_applicazioni_in(const char *cartelle) {
 static void leggi_applicazioni(void) {
     for (int i = 0; i < QUANTE_CARTELLE_APPLICAZIONI; i++)
         leggi_applicazioni_in(cartelle_applicazioni[i]);
-    /* nella userbar quelle del sistema, nel loro ordine */
+    /* nella userbar quelle del sistema, nel loro ordine, tranne quelle con nella_barra = false */
     for (int i = 0; i < quante_app; i++)
-        if (app[i].di_sistema) {
+        if (app[i].di_sistema && app[i].nella_barra) {
             voci_barra[quante_fissate] = voci_barra[i];
             fissata[quante_fissate++] = i;
         }
@@ -375,13 +377,12 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
  * di un file di Files (elemento_file.h, con l'oggetto del suo tipo: oggetti.h). Sotto il
  * puntatore si vela appena, premere la sceglie (vetro chiaro), premere altrove sullo sfondo
  * la lascia; il DOPPIO CLIC la apre.
- * Oggi c'e' solo "Terminale", PROVVISORIA (STATO.md): apre il terminale con la shell di prova,
- * un programma normale che il launcher fa partire come la persona (APRI_PROGRAMMA). Le icone
- * sono un elenco perche' un giorno saranno quelle della cartella Scrivania della persona. */
+ * Oggi c'e' solo "Terminale": apre l'app Terminale (utente/applicazioni/Terminale) tramite il
+ * launcher, come il vassoio delle app (apri_applicazione). Le icone sono un elenco perche' un giorno saranno quelle della cartella Scrivania della persona. */
 struct icona_scrivania {
     const char *nome;
     const struct immagine *(*immagine)(void);   /* l'icona, nel tema in uso (risorse su disco) */
-    const char *programma;          /* cosa si apre con il doppio clic (in /system/bin) */
+    const char *app;                /* l'id dell'app che si apre con il doppio clic */
 };
 
 /* L'icona del Terminale (disegno Figma, "Icona dell'app"): una per tema, in /system/resources/icons/apps. */
@@ -391,7 +392,7 @@ static const struct immagine *icona_terminale(void) {
 }
 
 static const struct icona_scrivania icone[] = {
-    { "Terminale", icona_terminale, "/system/bin/terminale" },
+    { "Terminale", icona_terminale, "terminale" },
 };
 #define QUANTE_ICONE ((int)(sizeof icone / sizeof icone[0]))
 
@@ -456,7 +457,7 @@ static int notizia_sfondo(const struct notizia *n, int *icone_cambiate) {
     if (appena) {
         unsigned int adesso = tempo();
         if (icona_sopra >= 0 && icona_sopra == icona_scelta && (int)(adesso - clic_prima) < DOPPIO_CLIC) {
-            apri_programma(icone[icona_sopra].programma);
+            apri_applicazione(icone[icona_sopra].app);
             clic_prima = 0;
         } else {
             clic_prima = adesso;

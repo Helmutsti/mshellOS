@@ -24,7 +24,7 @@ ESTERNI  := $(O)/esterni/miniz.o $(O)/esterni/toml.o $(O)/esterni/stb_image.o
 # per i programmi del sistema: lo schermo della sandbox al posto del DRM
 LIBRERIA_SANDBOX := $(filter-out $(O)/utente/libreria/gkit/schermo.o,$(LIBRERIA)) $(O)/strumenti/sandbox/schermo_sandbox.o
 
-PROGRAMMI := init compositore launcher scrivania shell terminale
+PROGRAMMI := init compositore launcher scrivania shell
 APP_CARTELLE := $(sort $(wildcard utente/applicazioni/*/ utente/prove/applicazioni/*/))
 minuscolo = $(shell echo '$(1)' | tr A-Z a-z)
 

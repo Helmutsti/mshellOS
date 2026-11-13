@@ -1,0 +1,32 @@
+# Il manifesto del Terminale (la guida voce per voce: manifest-guida.toml; le regole: APPLICAZIONI.md).
+# Lo leggono il launcher, la scrivania e, dentro il pacchetto, chi lo installa.
+
+id = "terminale"
+nome = "Terminale"
+versione = "1.0.0"
+autore = "mshell"
+descrizione = "La shell in una finestra, per scrivere i comandi."
+
+# "@PROCESSORE@" lo sostituisce build.sh con il processore per cui compila (x86_64 o arm64):
+# lo stesso sorgente diventa un pacchetto per ogni processore.
+processore = "@PROCESSORE@"
+sistema_minimo = 1
+
+programma = "code"
+
+# Solo nel vassoio delle app, non nella userbar (decisione della persona, per ora).
+nella_barra = false
+
+permessi = []
+deviazioni = []
+funzioni = []
+
+# L'icona dal disegno Figma: il simbolo "terminal" di Lucide sul grigio scuro (piu' chiaro nel tema scuro), con la luce dall'alto.
+# Le PNG sono le versioni semplificate a 48, 32 e 18.
+[icone.chiaro]
+svg = "resources/icona-chiara.svg"
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png", 48 = "resources/icona-chiara-48.png" }
+
+[icone.scuro]
+svg = "resources/icona-scura.svg"
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png", 48 = "resources/icona-scura-48.png" }

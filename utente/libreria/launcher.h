@@ -61,7 +61,7 @@
  *   APRI_PROGRAMMA      argomento = il percorso di un PROGRAMMA normale, non un'app (per
  *                       ora solo quelli di /system/bin: APPLICAZIONI.md, sezione 2). Il
  *                       launcher lo fa partire come la persona (uid 1000), senza argomenti.
- *                       Oggi lo usa la scrivania per il terminale (l'icona "Shell"). Un
+ *                       Oggi non lo usa nessuno (il Terminale e' un'app). Un
  *                       percorso fuori da /system/bin: LAUNCHER_NON_PERMESSO.
  *
  *   APRI_SHELL          allegato = il capo "schiavo" di un terminale finto (pty) di chi

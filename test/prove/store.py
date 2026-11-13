@@ -10,10 +10,10 @@ persona, build.sh):
   - "Apri": parte Contatore (al posto dello Store, che si chiude); la si chiude;
   - di nuovo il doppio clic su contatore.app: ora e' gia' installata, con la stessa versione
     ("store: gia' installata: contatore"); "Chiudi";
-  - lo Store dalla userbar: l'elenco, con Contatore tra le tue app (7 app, 1 tua); un clic su
+  - lo Store dalla userbar: l'elenco, con Contatore tra le tue app (8 app, 1 tua); un clic su
     Contatore mostra il dettaglio;
   - "Svuota dati" e la conferma: il launcher svuota i dati;
-  - "Togli app" e "Togli app e dati": il launcher la toglie, e l'elenco torna a 6 app.
+  - "Togli app" e "Togli app e dati": il launcher la toglie, e l'elenco torna a 7 app.
 Ogni passo si controlla nella seriale (lo Store e il launcher scrivono cosa fanno) e se ne fa
 una foto. I posti dei pulsanti sono presi dallo schermo vero (1280x800).
 """
@@ -80,13 +80,13 @@ def esegui(p):
     passo(lambda: doppio_clic(m, *PACCHETTO), "store: gia' installata: contatore", "gia_installata")
     passo(lambda: m.clic(*CHIUDI), None, "store_chiuso")
 
-    passo(lambda: s.clic_app(m, "Store"), "store: elenco: 7 app, 1 tue", "elenco")
+    passo(lambda: s.clic_app(m, "Store"), "store: elenco: 8 app, 1 tue", "elenco")
     passo(lambda: m.clic(*RIGA_CONTATORE), None, "dettaglio")
     passo(lambda: m.clic(*SVUOTA), None, "conferma_svuota")
     passo(lambda: m.clic(*CONFERMA_SVUOTA), "store: dati svuotati di contatore", "dati_svuotati")
     p.controlla("launcher: dati svuotati di contatore" in m.testo_seriale(), "il launcher non ha svuotato i dati")
     passo(lambda: m.clic(*TOGLI), None, "conferma_togli")
-    passo(lambda: m.clic(*CONFERMA_TOGLI), "store: elenco: 6 app, 0 tue", "tolta")
+    passo(lambda: m.clic(*CONFERMA_TOGLI), "store: elenco: 7 app, 0 tue", "tolta")
     p.controlla("launcher: tolta contatore" in m.testo_seriale(), "il launcher non dice 'tolta contatore'")
 
 
