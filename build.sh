@@ -38,6 +38,8 @@
 #       disco_prove.img  il disco delle prove automatiche: lo stesso, con in piu' i
 #                      programmi di utente/prove in /data/tests (vedi in fondo al passo 6)
 #       disco_rete.img   per la prova della rete, in QEMU: il programma rete in /data/tests
+#       disco_firewall.img, disco_firewall_aperto.img  per la prova del firewall, in QEMU
+#                      (vedi in fondo)
 #       disco_messaggi.img  per la prova dei messaggi tra servizi: il programma messaggi
 #   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
 #
@@ -53,7 +55,7 @@
 #       init                     il primo programma (il processo 1)
 #       services/<servizio>      i servizi: eventi, compositore, launcher, scrivania, network
 #       config/<servizio>/       la configurazione predefinita dei servizi, da leggere (644):
-#                                i file di utente/config/ (oggi network/network.conf)
+#                                i file di utente/config/ (oggi network/network.conf e firewall.conf)
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
 #                                manifest.toml e resources/ (lo stesso contenuto del loro
 #                                pacchetto .app, scompattato)
@@ -144,7 +146,12 @@ RIGA_KERNEL="$CONSOLE vt.global_cursor_default=0 firmware_class.path=/system/fir
 #   virtio_net             la scheda di rete virtuale (virtio-net-pci in QEMU)
 #   af_packet              i pacchetti "grezzi": servono per chiedere l'indirizzo (DHCP)
 #                          quando la scheda non ne ha ancora uno
-MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev virtio_net af_packet"
+#   nf_tables              il filtro dei pacchetti (nftables), per il firewall del servizio
+#                          network; porta con se' nfnetlink, la presa da cui gli si parla
+#   nft_ct, nf_conntrack   "ct state": il conto delle connessioni, per lasciar entrare le
+#                          risposte a quelle aperte da noi (porta con se' nf_defrag_ipv4/6)
+# Il kernel non li carica da solo (non c'e' modprobe): devono esserci tutti qui.
+MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev virtio_net af_packet nf_tables nf_conntrack nft_ct"
 
 # --- 0. gli attrezzi e i pacchetti di Alpine ---
 SCARICO=/w/build/scarico
@@ -304,7 +311,7 @@ done
 done
 
 # La configurazione predefinita dei servizi: i file di utente/config/ tali e quali in
-# /system/config (oggi network/network.conf, letto dal servizio network). Di tutti da
+# /system/config (oggi network/network.conf e firewall.conf, letti dal servizio network). Di tutti da
 # leggere: 644. Quella della persona, quando ci sara', stara' in /data.
 (cd utente/config && find . -type f | sort) | while read -r f; do
     metti_file "utente/config/${f#./}" "/system/config/${f#./}" 644
@@ -665,11 +672,28 @@ metti_file "$B/oggetti/prove/rete" "/data/tests/rete" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_rete.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_rete.img pronto: con il programma rete in /data/tests"
 
+# I DISCHI DELLA PROVA DEL FIREWALL: come disco_rete.img, con in piu' in /data/tests il
+# programma firewall (utente/prove/firewall.c), che ascolta sulla porta 8080 e scrive se
+# gli arriva una connessione (rete prova intanto l'uscita). Serve QEMU con l'inoltro dal PC
+# (hostfwd), come spiegato in firewall.c.
+#   disco_firewall.img         con il firewall.conf del sistema (incoming=block): da fuori
+#                              non deve arrivare niente
+#   disco_firewall_aperto.img  la controprova: system con firewall.conf cambiato in
+#                              incoming=allow, e la connessione deve arrivare
+cp "$B/disco_app.img" "$B/disco_firewall.img"
+metti_file "$B/oggetti/prove/firewall" "/data/tests/firewall" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_firewall.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_firewall.img pronto: con i programmi rete e firewall in /data/tests"
+cp "$B/disco_firewall.img" "$B/disco_firewall_aperto.img"
+sed -i 's/^incoming=.*/incoming=allow/' "$(vero /system/config/network/firewall.conf)"
+mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$ALBERO_SISTEMA" "$B/disco_firewall_aperto.img" $((MISURA_SISTEMA * MB / 4096))
+echo "$B/disco_firewall_aperto.img pronto: come disco_firewall.img, ma con incoming=allow"
+
 # IL DISCO DELLA PROVA DEI MESSAGGI: lo stesso, ma in /data/tests c'e' solo il programma
 # messaggi (utente/prove/messaggi.c), che prova lo standard dei messaggi tra servizi e
 # clienti (messaggi.h) facendo da servizio finto e da cliente. Lo usa test/prove/messaggi.py.
 cp "$B/disco_app.img" "$B/disco_messaggi.img"
-rm -f "$(vero /data/tests)"/rete
+rm -f "$(vero /data/tests)"/rete "$(vero /data/tests)"/firewall
 metti_file "$B/oggetti/prove/messaggi" "/data/tests/messaggi" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_messaggi.img" $((MISURA_DATI * MB / 4096))

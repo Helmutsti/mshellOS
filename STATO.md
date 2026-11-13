@@ -461,8 +461,12 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 20. **Terminale** e la scelta di shell e comandi.
 21. **Internet**: c'è il servizio `network` (accende `eth0`, indirizzo con DHCP o fisso da
     `/system/config/network/network.conf`, DNS in `/run/network/resolv.conf`; prova con
-    `disco_rete.img` in QEMU). Mancano la configurazione della persona in `/data`, la porta di
-    controllo e il firewall.
+    `disco_rete.img` in QEMU). Prima di accendere la scheda mette il firewall (nftables, tabella
+    `inet mshell`, parlando al kernel via netlink con codice nostro), con le regole predefinite di
+    `/system/config/network/firewall.conf`: ingresso bloccato tranne risposte, ping e ICMPv6
+    necessario; inoltro bloccato; uscita libera. Prova con `disco_firewall.img` e
+    `disco_firewall_aperto.img` in QEMU (inoltro dal PC alla porta 8080). Mancano la
+    configurazione della persona in `/data` e la porta di controllo.
 22. **Sistema in sola lettura** come immagine erofs + dm-verity, con aggiornamenti A/B.
 23. **Prove più veloci su Windows**: accelerazione WHPX; con `-smp 4` QEMU su Windows si blocca
     con la finestra (le prove senza finestra usano già 4 processori).

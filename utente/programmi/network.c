@@ -13,14 +13,41 @@
  *      "chiave=valore": quale scheda (interface=eth0) e come avere l'indirizzo (mode=dhcp,
  *      chiesto alla rete, oppure mode=static, con address, gateway e dns scritti li').
  *      Oggi c'e' solo questa, del sistema; quella della persona in /data verra' dopo;
- *   2. accende lo (la scheda "finta" del computer verso se stesso, 127.0.0.1: Linux le da'
+ *   2. mette il firewall, con le regole di /system/config/network/firewall.conf (vedi IL
+ *      FIREWALL, sotto). PRIMA di accendere le schede: la rete non e' mai accesa senza.
+ *      Se il kernel non accetta le regole, lo scrive e lascia la rete spenta;
+ *   3. accende lo (la scheda "finta" del computer verso se stesso, 127.0.0.1: Linux le da'
  *      l'indirizzo da solo appena e' accesa) e la scheda configurata;
- *   3. con dhcp chiede l'indirizzo alla rete (vedi IL DHCP, sotto);
- *   4. da' l'indirizzo alla scheda e mette la strada predefinita verso il gateway, parlando
+ *   4. con dhcp chiede l'indirizzo alla rete (vedi IL DHCP, sotto);
+ *   5. da' l'indirizzo alla scheda e mette la strada predefinita verso il gateway, parlando
  *      con il kernel con rtnetlink (vedi IL KERNEL, sotto): e' quello che fa "ip" su Linux;
- *   5. scrive i DNS in /run/network/resolv.conf (vedi IL DNS, sotto);
- *   6. resta acceso: a meta' della durata del prestito dell'indirizzo lo rinnova; se il
+ *   6. scrive i DNS in /run/network/resolv.conf (vedi IL DNS, sotto);
+ *   7. resta acceso: a meta' della durata del prestito dell'indirizzo lo rinnova; se il
  *      prestito scade senza rinnovo, toglie l'indirizzo e lo richiede da capo.
+ *
+ * IL FIREWALL. Il filtro dei pacchetti e' quello del kernel, nftables; il servizio e'
+ * l'unico che lo tocca (SISTEMA.md). Mette una tabella "mshell" della famiglia inet (vale
+ * per IPv4 e IPv6 insieme) con tre catene, come fanno Mac e Windows a casa:
+ *   input    i pacchetti per noi. Con incoming=block la politica e' "scarta", e passano
+ *            solo: quelli da noi a noi (lo), le risposte alle connessioni che abbiamo
+ *            aperto noi (ct state established,related: il kernel tiene il conto delle
+ *            connessioni, il "conntrack"), l'ICMPv6 senza cui IPv6 non funziona e, con
+ *            ping=allow, il ping (ICMP echo-request). Chi prova a collegarsi da fuori non
+ *            riceve niente, nemmeno un rifiuto. Con incoming=allow passa tutto;
+ *   forward  i pacchetti che passerebbero da noi verso altri: con forward=block, nessuno;
+ *   output   i pacchetti che mandiamo: con outgoing=allow, tutti. Con outgoing=block solo
+ *            lo e le risposte (per chi vuole un computer che non apre connessioni).
+ * Il file e' "chiave=valore" come network.conf: incoming, outgoing, forward, ping, ognuna
+ * allow o block. Se manca il file o una chiave, si usa la scelta piu' sicura (ingresso,
+ * inoltro e ping chiusi, uscita libera) e lo si scrive nel registro: e' l'unico caso di
+ * valori non scritti in un file, perche' e' la via d'uscita sicura.
+ * Al kernel si parla con netlink (NETLINK_NETFILTER, il sottosistema nf_tables), con
+ * codice nostro e senza libnftnl ne' il comando nft: tutte le regole vanno in un solo
+ * "lotto" (NFNL_MSG_BATCH_BEGIN ... BATCH_END) che il kernel applica tutto o niente.
+ * Il DHCP non ne risente: usa prese AF_PACKET, che vedono i pacchetti prima del filtro,
+ * anche quelli del rinnovo (l'ACK del server arriva alla porta 68, che il filtro
+ * scarterebbe, ma la presa AF_PACKET l'ha gia' ricevuto).
+ * Servono i moduli del kernel nf_tables, nft_ct e nf_conntrack (build.sh, MODULI).
  *
  * SE LA SCHEDA NON C'E' (per esempio un computer senza rete) lo scrive una volta e
  * aspetta che compaia, guardando ogni 5 secondi: non esce, altrimenti init lo farebbe
@@ -57,6 +84,7 @@
  * trova mai a meta'.
  *
  * Scrive nel registro righe brevi, come gli altri servizi, per esempio:
+ *   network: firewall attivo (ingresso bloccato, uscita libera, inoltro bloccato, ping ammesso)
  *   network: eth0 10.0.2.15/24, gateway 10.0.2.2, dns 10.0.2.3 */
 #include "libreria.h"
 #include <errno.h>
@@ -71,6 +99,8 @@
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <netinet/icmp6.h>
+#include <netinet/ip_icmp.h>
 #include <netpacket/packet.h>
 #include <sys/ioctl.h>
 #include <sys/random.h>
@@ -80,6 +110,10 @@
 #include <linux/capability.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
+#include <linux/netfilter.h>
+#include <linux/netfilter/nfnetlink.h>
+#include <linux/netfilter/nf_tables.h>
+#include <linux/netfilter/nf_conntrack_common.h>
 
 #define CONFIGURAZIONE "/system/config/network/network.conf"
 #define CARTELLA_DNS   "/run/network"
@@ -155,7 +189,8 @@ static int leggi_ip(const char *testo, uint32_t *ip) {
 }
 
 /* Una riga "chiave=valore" (gia' senza spazi ai lati). 0 se non si capisce. */
-static int leggi_riga(struct configurazione *c, char *chiave, char *valore) {
+static int leggi_riga(void *dati, char *chiave, char *valore) {
+    struct configurazione *c = dati;
     if (!strcmp(chiave, "interface")) {
         if (!*valore || strlen(valore) >= sizeof c->interfaccia) return 0;
         strcpy(c->interfaccia, valore);
@@ -192,11 +227,11 @@ static char *senza_spazi(char *s) {
     return s;
 }
 
-/* Legge il file. 0 se e' tutto a posto; le righe che non capisce le scrive nel registro
- * e le salta. */
-static int leggi_configurazione(struct configurazione *c) {
-    memset(c, 0, sizeof *c);
-    int d = open(CONFIGURAZIONE, O_RDONLY | O_CLOEXEC);
+/* Legge un file "chiave=valore" (network.conf e firewall.conf): per ogni riga chiama
+ * capisci(dati, chiave, valore). -1 se il file non c'e', 0 altrimenti; le righe che non
+ * capisce le scrive nel registro e le salta. */
+static int leggi_file(const char *percorso, int (*capisci)(void *, char *, char *), void *dati) {
+    int d = open(percorso, O_RDONLY | O_CLOEXEC);
     if (d < 0) return -1;
     static char testo[4096];
     int n = 0, letti;
@@ -213,11 +248,13 @@ static int leggi_configurazione(struct configurazione *c) {
         int capita = 0;
         if (uguale) {
             *uguale = 0;
-            capita = leggi_riga(c, senza_spazi(s), senza_spazi(uguale + 1));
+            capita = capisci(dati, senza_spazi(s), senza_spazi(uguale + 1));
             if (!capita) *uguale = '=';
         }
         if (!capita) {
-            metti("network: in " CONFIGURAZIONE " non capisco la riga \"");
+            metti("network: in ");
+            metti(percorso);
+            metti(" non capisco la riga \"");
             metti(s);
             metti("\", la salto");
             fine_riga();
@@ -226,7 +263,12 @@ static int leggi_configurazione(struct configurazione *c) {
     return 0;
 }
 
-/* --- 2. le schede --- */
+static int leggi_configurazione(struct configurazione *c) {
+    memset(c, 0, sizeof *c);
+    return leggi_file(CONFIGURAZIONE, leggi_riga, c);
+}
+
+/* --- 3. le schede --- */
 
 /* Accende la scheda (IFF_UP). 0, o -errno. */
 static int accendi(const char *nome) {
@@ -281,7 +323,7 @@ static int permessi_di_rete(void) {
     return (d[0].effective & servono) == servono;
 }
 
-/* --- 4. il kernel: rtnetlink --- */
+/* --- 5. il kernel: rtnetlink --- */
 
 static int presa_kernel = -1;
 static unsigned int sequenza;
@@ -368,7 +410,342 @@ static int strada_predefinita(int scheda, uint32_t gateway, int da_dhcp) {
     return chiedi_al_kernel(&m.h);
 }
 
-/* --- 5. il DNS --- */
+/* --- 2. il firewall: nf_tables ---
+ *
+ * Le regole stanno nel kernel (nftables); noi gliele diamo da una presa AF_NETLINK
+ * NETLINK_NETFILTER, come fa il comando "nft", ma con codice nostro (vedi IL FIREWALL in
+ * testa). Ogni messaggio e' un nlmsghdr con tipo (NFNL_SUBSYS_NFTABLES << 8) | NFT_MSG_...,
+ * poi un nfgenmsg (la famiglia: NFPROTO_INET), poi gli attributi (struct nlattr), alcuni
+ * "annidati" (un attributo che contiene altri attributi). I numeri dentro gli attributi
+ * (registri, chiavi, ganci, politiche) vanno in big-endian; i dati da confrontare con il
+ * pacchetto invece sono come li vede il kernel (l'indice di una scheda e lo stato della
+ * connessione nell'ordine della CPU, i byte del pacchetto come sono). */
+
+#define CONFIGURAZIONE_FIREWALL "/system/config/network/firewall.conf"
+#define TABELLA "mshell"
+
+struct firewall {
+    int ingresso, uscita, inoltro, ping;   /* 1: allow, 0: block, -1: non scritto nel file */
+};
+
+static int leggi_riga_firewall(void *dati, char *chiave, char *valore) {
+    struct firewall *f = dati;
+    int *dove;
+    if (!strcmp(chiave, "incoming")) dove = &f->ingresso;
+    else if (!strcmp(chiave, "outgoing")) dove = &f->uscita;
+    else if (!strcmp(chiave, "forward")) dove = &f->inoltro;
+    else if (!strcmp(chiave, "ping")) dove = &f->ping;
+    else return 0;
+    if (!strcmp(valore, "allow")) *dove = 1;
+    else if (!strcmp(valore, "block")) *dove = 0;
+    else return 0;
+    return 1;
+}
+
+/* Le regole del file. Se il file manca, o una chiave non c'e' (o non si capisce), si usa
+ * la scelta PIU' SICURA che lascia comunque usare la rete: ingresso, inoltro e ping
+ * chiusi, uscita libera. E' l'unico caso in cui il servizio usa valori non scritti in un
+ * file: e' la via d'uscita sicura (meglio un computer chiuso che uno aperto per sbaglio),
+ * e lo scrive nel registro. */
+static void leggi_firewall(struct firewall *f) {
+    f->ingresso = f->uscita = f->inoltro = f->ping = -1;
+    if (leggi_file(CONFIGURAZIONE_FIREWALL, leggi_riga_firewall, f) < 0)
+        di("manca " CONFIGURAZIONE_FIREWALL ", uso le regole piu' sicure");
+    static const struct { const char *chiave, *valore; } sicuro[] = {
+        { "incoming", "block" }, { "outgoing", "allow" }, { "forward", "block" }, { "ping", "block" },
+    };
+    int *chi[] = { &f->ingresso, &f->uscita, &f->inoltro, &f->ping };
+    for (int i = 0; i < 4; i++) {
+        if (*chi[i] >= 0) continue;
+        *chi[i] = !strcmp(sicuro[i].valore, "allow");
+        metti("network: nel firewall manca ");
+        metti(sicuro[i].chiave);
+        metti("=, uso ");
+        metti(sicuro[i].valore);
+        fine_riga();
+    }
+}
+
+/* Il "lotto" (batch): tutti i messaggi, tra un BATCH_BEGIN e un BATCH_END, si mandano
+ * insieme, e il kernel li applica tutti o nessuno. */
+static char lotto[8192];
+static int pieno;                   /* byte gia' usati dai messaggi chiusi */
+static struct nlmsghdr *corrente;   /* il messaggio che si sta scrivendo */
+static int da_confermare;           /* quanti messaggi chiedono la conferma (NLM_F_ACK) */
+static int troppo;                  /* il lotto non ci sta in lotto[] */
+
+static void chiudi_messaggio(void) {
+    if (corrente) pieno += (int)NLMSG_ALIGN(corrente->nlmsg_len);
+    corrente = 0;
+}
+
+static void messaggio(int tipo, int flag, int famiglia, int sottosistema) {
+    chiudi_messaggio();
+    if (pieno + (int)NLMSG_SPACE(sizeof(struct nfgenmsg)) > (int)sizeof lotto) { troppo = 1; pieno = 0; }
+    corrente = (struct nlmsghdr *)(lotto + pieno);
+    memset(corrente, 0, NLMSG_SPACE(sizeof(struct nfgenmsg)));
+    corrente->nlmsg_len = NLMSG_LENGTH(sizeof(struct nfgenmsg));
+    corrente->nlmsg_type = (unsigned short)tipo;
+    corrente->nlmsg_flags = (unsigned short)(NLM_F_REQUEST | flag);
+    corrente->nlmsg_seq = ++sequenza;
+    if (flag & NLM_F_ACK) da_confermare++;
+    struct nfgenmsg *g = NLMSG_DATA(corrente);
+    g->nfgen_family = (unsigned char)famiglia;
+    g->version = NFNETLINK_V0;
+    g->res_id = htons((unsigned short)sottosistema);
+}
+
+/* un messaggio di nf_tables, nella nostra famiglia (inet: IPv4 e IPv6 insieme) */
+static void messaggio_nft(int tipo, int flag) {
+    messaggio(NFNL_SUBSYS_NFTABLES << 8 | tipo, flag | NLM_F_ACK, NFPROTO_INET, 0);
+}
+
+static struct nlattr *aggiungi(int tipo, const void *dati, int byte) {
+    int dove = pieno + (int)NLMSG_ALIGN(corrente->nlmsg_len);
+    if (dove + NLA_HDRLEN + NLA_ALIGN(byte) > (int)sizeof lotto) { troppo = 1; return (struct nlattr *)lotto; }
+    struct nlattr *a = (struct nlattr *)(lotto + dove);
+    a->nla_type = (unsigned short)tipo;
+    a->nla_len = (unsigned short)(NLA_HDRLEN + byte);
+    if (byte) memcpy((char *)a + NLA_HDRLEN, dati, (size_t)byte);
+    corrente->nlmsg_len = NLMSG_ALIGN(corrente->nlmsg_len) + NLA_ALIGN(a->nla_len);
+    return a;
+}
+
+static void aggiungi_numero(int tipo, uint32_t n) {
+    n = htonl(n);
+    aggiungi(tipo, &n, 4);
+}
+
+static void aggiungi_testo(int tipo, const char *s) {
+    aggiungi(tipo, s, (int)strlen(s) + 1);
+}
+
+/* un attributo che ne contiene altri: si apre, si aggiungono i suoi, si chiude */
+static struct nlattr *apri_gruppo(int tipo) {
+    return aggiungi(tipo | NLA_F_NESTED, 0, 0);
+}
+
+static void chiudi_gruppo(struct nlattr *a) {
+    if (!troppo) a->nla_len = (unsigned short)((char *)corrente + corrente->nlmsg_len - (char *)a);
+}
+
+/* Le "espressioni" di una regola: piccoli passi che il kernel fa su ogni pacchetto, uno
+ * dopo l'altro. Leggono un dato del pacchetto in un registro (meta, ct, payload), lo
+ * cambiano (bitwise) o lo confrontano (cmp: se il confronto non torna, la regola finisce
+ * li'), e alla fine danno il verdetto (immediate). Usiamo un solo registro, NFT_REG_1. */
+static struct nlattr *espressioni, *elemento, *dati_espressione;
+
+static void espressione(const char *nome) {
+    elemento = apri_gruppo(NFTA_LIST_ELEM);
+    aggiungi_testo(NFTA_EXPR_NAME, nome);
+    dati_espressione = apri_gruppo(NFTA_EXPR_DATA);
+}
+
+static void fine_espressione(void) {
+    chiudi_gruppo(dati_espressione);
+    chiudi_gruppo(elemento);
+}
+
+/* meta: un dato del pacchetto che non sta nei suoi byte (da quale scheda arriva, il
+ * protocollo sopra IP...) */
+static void e_meta(int chiave) {
+    espressione("meta");
+    aggiungi_numero(NFTA_META_DREG, NFT_REG_1);
+    aggiungi_numero(NFTA_META_KEY, (uint32_t)chiave);
+    fine_espressione();
+}
+
+/* ct: lo stato della connessione a cui appartiene il pacchetto (il "conntrack") */
+static void e_stato_connessione(void) {
+    espressione("ct");
+    aggiungi_numero(NFTA_CT_DREG, NFT_REG_1);
+    aggiungi_numero(NFTA_CT_KEY, NFT_CT_STATE);
+    fine_espressione();
+}
+
+/* payload: byte del pacchetto, qui dall'inizio dell'intestazione del trasporto (ICMP) */
+static void e_byte_trasporto(int da, int quanti) {
+    espressione("payload");
+    aggiungi_numero(NFTA_PAYLOAD_DREG, NFT_REG_1);
+    aggiungi_numero(NFTA_PAYLOAD_BASE, NFT_PAYLOAD_TRANSPORT_HEADER);
+    aggiungi_numero(NFTA_PAYLOAD_OFFSET, (uint32_t)da);
+    aggiungi_numero(NFTA_PAYLOAD_LEN, (uint32_t)quanti);
+    fine_espressione();
+}
+
+static void e_valore(int tipo, const void *dati, int byte) {
+    struct nlattr *v = apri_gruppo(tipo);
+    aggiungi(NFTA_DATA_VALUE, dati, byte);
+    chiudi_gruppo(v);
+}
+
+/* bitwise: registro = (registro & maschera) ^ 0, su 4 byte */
+static void e_maschera(uint32_t maschera) {
+    uint32_t zero = 0;
+    espressione("bitwise");
+    aggiungi_numero(NFTA_BITWISE_SREG, NFT_REG_1);
+    aggiungi_numero(NFTA_BITWISE_DREG, NFT_REG_1);
+    aggiungi_numero(NFTA_BITWISE_LEN, 4);
+    e_valore(NFTA_BITWISE_MASK, &maschera, 4);
+    e_valore(NFTA_BITWISE_XOR, &zero, 4);
+    fine_espressione();
+}
+
+static void e_confronta(int come, const void *dati, int byte) {
+    espressione("cmp");
+    aggiungi_numero(NFTA_CMP_SREG, NFT_REG_1);
+    aggiungi_numero(NFTA_CMP_OP, (uint32_t)come);
+    e_valore(NFTA_CMP_DATA, dati, byte);
+    fine_espressione();
+}
+
+/* immediate: il verdetto, qui sempre "accetta" (quello che non e' accettato lo scarta la
+ * politica della catena) */
+static void e_accetta(void) {
+    espressione("immediate");
+    aggiungi_numero(NFTA_IMMEDIATE_DREG, NFT_REG_VERDICT);
+    struct nlattr *dati = apri_gruppo(NFTA_IMMEDIATE_DATA);
+    struct nlattr *verdetto = apri_gruppo(NFTA_DATA_VERDICT);
+    aggiungi_numero(NFTA_VERDICT_CODE, NF_ACCEPT);
+    chiudi_gruppo(verdetto);
+    chiudi_gruppo(dati);
+    fine_espressione();
+}
+
+/* Una regola, in fondo alla catena: regola(), le espressioni, fine_regola() */
+static void regola(const char *catena) {
+    messaggio_nft(NFT_MSG_NEWRULE, NLM_F_CREATE | NLM_F_APPEND);
+    aggiungi_testo(NFTA_RULE_TABLE, TABELLA);
+    aggiungi_testo(NFTA_RULE_CHAIN, catena);
+    espressioni = apri_gruppo(NFTA_RULE_EXPRESSIONS);
+}
+
+static void fine_regola(void) {
+    e_accetta();
+    chiudi_gruppo(espressioni);
+}
+
+/* Una catena di base: si aggancia a un punto del kernel (gancio), con la politica per i
+ * pacchetti che nessuna regola accetta. */
+static void catena(const char *nome, int gancio, int aperta) {
+    messaggio_nft(NFT_MSG_NEWCHAIN, NLM_F_CREATE);
+    aggiungi_testo(NFTA_CHAIN_TABLE, TABELLA);
+    aggiungi_testo(NFTA_CHAIN_NAME, nome);
+    struct nlattr *g = apri_gruppo(NFTA_CHAIN_HOOK);
+    aggiungi_numero(NFTA_HOOK_HOOKNUM, (uint32_t)gancio);
+    aggiungi_numero(NFTA_HOOK_PRIORITY, 0);           /* "filter", come nft */
+    chiudi_gruppo(g);
+    aggiungi_numero(NFTA_CHAIN_POLICY, aperta ? NF_ACCEPT : NF_DROP);
+    aggiungi_testo(NFTA_CHAIN_TYPE, "filter");
+}
+
+/* Le due regole di ogni catena chiusa: la scheda verso se stessi (lo), e i pacchetti
+ * delle connessioni gia' aperte (le risposte) o collegate a una aperta (per esempio un
+ * errore ICMP che parla di una nostra connessione). */
+static void regole_di_base(const char *nome, int entrata) {
+    uint32_t lo = if_nametoindex("lo"), zero = 0;
+    regola(nome);
+    e_meta(entrata ? NFT_META_IIF : NFT_META_OIF);
+    e_confronta(NFT_CMP_EQ, &lo, 4);
+    fine_regola();
+    regola(nome);
+    e_stato_connessione();
+    e_maschera(NF_CT_STATE_BIT(IP_CT_ESTABLISHED) | NF_CT_STATE_BIT(IP_CT_RELATED));
+    e_confronta(NFT_CMP_NEQ, &zero, 4);
+    fine_regola();
+}
+
+/* accetta in entrata i messaggi ICMP (o ICMPv6) di un tipo */
+static void accetta_icmp(int protocollo, int tipo) {
+    uint8_t p = (uint8_t)protocollo, t = (uint8_t)tipo;
+    regola("input");
+    e_meta(NFT_META_L4PROTO);
+    e_confronta(NFT_CMP_EQ, &p, 1);
+    e_byte_trasporto(0, 1);                            /* il primo byte: il tipo */
+    e_confronta(NFT_CMP_EQ, &t, 1);
+    fine_regola();
+}
+
+/* Manda il lotto e aspetta le conferme. 0, o -errno. */
+static int manda_lotto(void) {
+    chiudi_messaggio();
+    if (troppo) return -ENOBUFS;
+    int s = socket(AF_NETLINK, SOCK_RAW | SOCK_CLOEXEC, NETLINK_NETFILTER);
+    if (s < 0) return -errno;
+    int si = 1;   /* negli errori il kernel non ci rimanda tutto il messaggio */
+    setsockopt(s, SOL_NETLINK, NETLINK_CAP_ACK, &si, sizeof si);
+    struct sockaddr_nl kernel = { .nl_family = AF_NETLINK };
+    int esito = 0;
+    if (sendto(s, lotto, (size_t)pieno, 0, (struct sockaddr *)&kernel, sizeof kernel) < 0) esito = -errno;
+    static char risposta[8192];
+    while (!esito && da_confermare > 0) {
+        struct pollfd p = { .fd = s, .events = POLLIN };
+        if (poll(&p, 1, 5000) <= 0) { esito = -ETIMEDOUT; break; }
+        ssize_t letti = recv(s, risposta, sizeof risposta, 0);
+        if (letti < 0) {
+            if (errno == EINTR) continue;
+            esito = -errno;
+            break;
+        }
+        unsigned int n = (unsigned int)letti;
+        for (struct nlmsghdr *r = (struct nlmsghdr *)risposta; NLMSG_OK(r, n); r = NLMSG_NEXT(r, n)) {
+            if (r->nlmsg_type != NLMSG_ERROR) continue;
+            int errore = ((struct nlmsgerr *)NLMSG_DATA(r))->error;
+            if (errore) { esito = errore; break; }
+            da_confermare--;
+        }
+    }
+    close(s);
+    return esito;
+}
+
+/* Mette tutte le regole, in un lotto solo. Se la tabella c'e' gia' (il servizio e'
+ * ripartito) la si sostituisce: "crea, cancella, crea", come fa nft, cosi' la prima
+ * creazione non fallisce se c'e' e la cancellazione non fallisce se non c'e'. Tutto nello
+ * stesso lotto: il computer non resta mai, nemmeno per un attimo, senza regole. */
+static int metti_firewall(const struct firewall *f) {
+    pieno = 0;
+    corrente = 0;
+    da_confermare = 0;
+    troppo = 0;
+    messaggio(NFNL_MSG_BATCH_BEGIN, 0, AF_UNSPEC, NFNL_SUBSYS_NFTABLES);
+    messaggio_nft(NFT_MSG_NEWTABLE, NLM_F_CREATE);
+    aggiungi_testo(NFTA_TABLE_NAME, TABELLA);
+    messaggio_nft(NFT_MSG_DELTABLE, 0);
+    aggiungi_testo(NFTA_TABLE_NAME, TABELLA);
+    messaggio_nft(NFT_MSG_NEWTABLE, NLM_F_CREATE);
+    aggiungi_testo(NFTA_TABLE_NAME, TABELLA);
+
+    catena("input", NF_INET_LOCAL_IN, f->ingresso);
+    catena("forward", NF_INET_FORWARD, f->inoltro);
+    catena("output", NF_INET_LOCAL_OUT, f->uscita);
+    if (!f->ingresso) {
+        regole_di_base("input", 1);
+        /* I messaggi ICMPv6 senza cui IPv6 non funziona: chi ha quale indirizzo fisico
+         * (neighbor solicitation e advertisement: per IPv6 sono quello che e' ARP per IPv4,
+         * e ARP il firewall IP non lo vede), dove sta il router (router advertisement), e
+         * gli errori (destinazione irraggiungibile, pacchetto troppo grande, tempo scaduto,
+         * intestazione sbagliata: quelli delle nostre connessioni sono gia' "collegati",
+         * ma servono anche prima che una connessione esista). Per IPv4 basta "collegati". */
+        static const int icmp6[] = {
+            ND_NEIGHBOR_SOLICIT, ND_NEIGHBOR_ADVERT, ND_ROUTER_ADVERT,
+            ICMP6_DST_UNREACH, ICMP6_PACKET_TOO_BIG, ICMP6_TIME_EXCEEDED, ICMP6_PARAM_PROB,
+        };
+        for (unsigned int i = 0; i < sizeof icmp6 / sizeof icmp6[0]; i++)
+            accetta_icmp(IPPROTO_ICMPV6, icmp6[i]);
+        if (f->ping) {
+            accetta_icmp(IPPROTO_ICMP, ICMP_ECHO);
+            accetta_icmp(IPPROTO_ICMPV6, ICMP6_ECHO_REQUEST);
+        }
+    }
+    /* l'inoltro non ha regole: il computer non fa da router, e con forward=block la
+     * politica scarta tutto */
+    if (!f->uscita) regole_di_base("output", 0);
+    messaggio(NFNL_MSG_BATCH_END, 0, AF_UNSPEC, NFNL_SUBSYS_NFTABLES);
+    return manda_lotto();
+}
+
+/* --- 6. il DNS --- */
 
 static void scrivi_dns(const uint32_t *dns, int quanti) {
     if (mkdir(CARTELLA_DNS, 0755) < 0 && errno != EEXIST) {
@@ -395,7 +772,7 @@ static void scrivi_dns(const uint32_t *dns, int quanti) {
     }
 }
 
-/* --- 3. il DHCP --- */
+/* --- 4. il DHCP --- */
 
 #define DHCP_DISCOVER 1
 #define DHCP_OFFER    2
@@ -736,7 +1113,29 @@ int main(void) {
         resta_fermo();
     }
 
-    int e = accendi("lo");
+    /* il firewall, PRIMA di accendere le schede: la rete non e' mai accesa senza */
+    struct firewall f;
+    leggi_firewall(&f);
+    int e = metti_firewall(&f);
+    if (e < 0) {
+        metti("network: non riesco a mettere il firewall: ");
+        metti(strerror(-e));
+        metti(", lascio la rete spenta");
+        fine_riga();
+        resta_fermo();
+    }
+    metti("network: firewall attivo (ingresso ");
+    metti(f.ingresso ? "libero" : "bloccato");
+    metti(", uscita ");
+    metti(f.uscita ? "libera" : "bloccata");
+    metti(", inoltro ");
+    metti(f.inoltro ? "libero" : "bloccato");
+    metti(", ping ");
+    metti(f.ping || f.ingresso ? "ammesso" : "bloccato");
+    metti(")");
+    fine_riga();
+
+    e = accendi("lo");
     if (e < 0) fermo("non riesco ad accendere", "lo", e);
 
     /* la scheda: se non c'e', si aspetta che compaia */
