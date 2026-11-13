@@ -21,6 +21,8 @@
 #include "libreria.h"
 #include "gkit/gkit.h"
 #include "launcher.h"
+#include <fcntl.h>
+#include <unistd.h>
 
 /* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Eventi riceve
  * in prestito il capo del tubo su cui scrive; il compositore lo schermo, l'altro capo del
@@ -31,6 +33,8 @@ struct servizio {
     const int *risorse;      /* i descrittori da prestargli, ai posti 0, 1, 2... */
     int quante;
     int processo;            /* il descrittore del suo processo: pronto quando finisce */
+    const char *dispositivo; /* se non e' 0, il servizio parte solo se questo si apre */
+    int non_qui;             /* 1: il dispositivo manca, su questo computer non parte */
 };
 
 static int risorse_eventi[1];
@@ -41,13 +45,26 @@ static struct servizio servizi[] = {
     { "/system/services/compositore", risorse_compositore, 3, -1 },
     { "/system/services/launcher", risorse_launcher, 1, -1 },
     { "/system/services/scrivania", 0, 0, -1 },
-    /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere */
-    { "/system/bin/shell", 0, 0, -1 },
+    /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere.
+     * Parte solo se la seriale c'e' (come la getty sulla seriale di Linux): nella sandbox
+     * Docker non c'e', e la shell ripartirebbe ogni 5 secondi senza poter fare niente. */
+    { "/system/bin/shell", 0, 0, -1, "/dev/ttyS0", 0 },
 };
 #define QUANTI_SERVIZI ((int)(sizeof servizi / sizeof servizi[0]))
 
+/* Il dispositivo si apre? Si prova senza prenderlo come terminale di init (O_NOCTTY) e
+ * senza aspettare (O_NONBLOCK), e lo si richiude subito. Una seriale senza hardware dietro
+ * esiste come file ma non si apre: come se non ci fosse. */
+static int dispositivo_presente(const char *percorso) {
+    int d = open(percorso, O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
+    if (d < 0) return 0;
+    close(d);
+    return 1;
+}
+
 /* Lo fa partire e si tiene il descrittore del suo processo. */
 static void avvia_servizio(struct servizio *s) {
+    if (s->non_qui) return;
     int n = avvia_con(s->percorso, s->risorse, s->quante);
     s->processo = n < 0 ? -1 : processo(n);
     if (s->processo < 0) {
@@ -103,7 +120,18 @@ int main(void) {
         for (;;) dormi(60 * 1000);
     }
 
-    for (int i = 0; i < QUANTI_SERVIZI; i++) avvia_servizio(&servizi[i]);
+    for (int i = 0; i < QUANTI_SERVIZI; i++) {
+        struct servizio *s = &servizi[i];
+        if (s->dispositivo && !dispositivo_presente(s->dispositivo)) {
+            s->non_qui = 1;
+            scrivi_testo("init: manca ");
+            scrivi_testo(s->dispositivo);
+            scrivi_testo(", non avvio ");
+            scrivi_testo(s->percorso);
+            scrivi_testo("\n");
+        }
+        avvia_servizio(s);
+    }
     avvia_prove();
 
     /* Le applicazioni non le fa partire init: le apre il launcher, quando la scrivania
@@ -116,6 +144,7 @@ int main(void) {
         int n = 0, mancanti = 0;
         int chi_e[QUANTI_SERVIZI];
         for (int i = 0; i < QUANTI_SERVIZI; i++) {
+            if (servizi[i].non_qui) continue;
             if (servizi[i].processo < 0) { mancanti = 1; continue; }
             g[n].descrittore = servizi[i].processo;
             chi_e[n++] = i;
