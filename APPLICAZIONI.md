@@ -179,6 +179,19 @@ autorizzato ("chiavi a due livelli").
 | `spegnimento` | spegnere e riavviare il computer | (scrivania) |
 | `app.gestire` | installare, aggiornare e togliere app | Store |
 
+### Permessi che i servizi chiedono dalla porta (provvisorio: oggi sempre concesso)
+
+I servizi che usano lo standard dei messaggi (`SISTEMA.md`, sezione 3) chiedono a
+`ha_permesso` se chi chiede ha un permesso. Oggi la risposta è **sempre sì** e la domanda finisce
+nel registro con la parola "provvisorio"; quando sarà vera, questi nomi si legheranno ai permessi
+del manifesto qui sopra (per esempio `apps.manage` ad `app.gestire`).
+
+| Permesso | Servizio | Cosa permette | Note |
+|---|---|---|---|
+| `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | provvisorio: oggi sempre concesso; il launcher controlla in più, come prima, che sia il sistema o un'app del sistema con `app.gestire` (lo Store) |
+| `programs.open` | launcher | far partire un programma di `/system/bin` come la persona | provvisorio: oggi sempre concesso; oggi non lo chiede nessuno |
+| `system.shell` | launcher | aprire la shell come sistema (il Terminale) | provvisorio: oggi sempre concesso (terminale come sistema aperto a chiunque, `STATO.md`) |
+
 ### Deviazioni dallo standard: si dichiarano, la persona viene informata
 
 | Deviazione | Cosa vuol dire | Cosa vede la persona |

@@ -50,9 +50,10 @@ nostra libreria lo usa già (CoreKit, `utente/libreria/corekit/interno/comunicaz
 - può portare con sé un descrittore aperto (un foglio di memoria, un file);
 - il kernel dice al servizio chi c'è dall'altra parte: processo e utente (`chi`).
 
-Oggi il compositore e il launcher hanno ciascuno un **formato dei messaggi suo**
-(il compositore in `gkit/sistema/protocollo.h`, gli eventi in `corekit/chiamate.h`, il launcher in
-`corekit/sistema/launcher.h`). Lo standard serve a non farne uno nuovo per ogni servizio.
+Il **launcher** usa già lo standard qui sotto (il suo contratto, cioè richieste, chiavi, risposte
+e permessi, è in testa a `corekit/sistema/launcher.h`). Il **compositore** ha ancora un formato
+dei messaggi suo (in `gkit/sistema/protocollo.h`, gli eventi in `corekit/chiamate.h`). Lo
+standard serve a non farne uno nuovo per ogni servizio.
 
 ### Lo standard (piccolissimo)
 
@@ -73,7 +74,15 @@ Cosa deve dire:
 - **il controllo dei permessi**, uguale per tutti: dall'identità che dà il kernel si risale a "chi è" (un'app e i suoi permessi concessi, una persona, il sistema), e il servizio chiede solo "ha il permesso X?";
 - ogni servizio aggiunge solo l'elenco delle sue richieste.
 
-Il primo a usarlo sarà il servizio network. Compositore e launcher si allineeranno più avanti.
+Il primo a usarlo è il launcher (aprire le app e i file, installare e togliere i pacchetti,
+aprire la shell): i dati grandi (il resoconto di un pacchetto, l'elenco delle app) viaggiano
+nel foglio allegato alla risposta. Il servizio network lo userà per la sua porta. Il
+compositore si allineerà più avanti.
+
+Un'avvertenza per chi scrive app: UIKit ha anche lei una `struct messaggio` (il riquadro con un
+avviso, `uikit/messaggio.h`), quindi un file che include `uikit.h` non può includere
+`messaggi.h`. Per questo le app non vedono i messaggi: chiamano le funzioni del servizio
+(`apertura.h`, `sistema/launcher.h`), che li fanno dentro CoreKit.
 
 **Dove sta il codice:** in CoreKit, `utente/libreria/corekit/messaggi.h` (pubblico: chi chiede), `corekit/sistema/servizi.h` (del sistema: il lato del servizio) e `corekit/interno/messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
 - costruire: `messaggio_inizia`, `messaggio_aggiungi`, `messaggio_aggiungi_numero`, `messaggio_risposta` (la busta della risposta: stesso `id`, `result`);
@@ -91,7 +100,8 @@ collegamento si chiude e chi chiede lo sa subito.
 **Permessi (provvisori).** Il servizio chiede `ha_permesso(chi chiede, "nome.permesso")` (es.
 `network.configure`). **Oggi risponde sempre sì** e scrive la domanda nel registro, con la parola
 "provvisorio". Quando sarà vera riconoscerà sistema, app (manifesto e permessi concessi) e
-comando della persona: il commento in `messaggi.c` dice come. Nessun servizio la usa ancora.
+comando della persona: il commento in `messaggi.c` dice come. La usa il launcher
+(`apps.manage`, `programs.open`, `system.shell`: `APPLICAZIONI.md`, sezione 9).
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
 

@@ -2,8 +2,8 @@
  *
  * PERCHE'. Un servizio (network, domani il firewall, gli account...) riceve richieste dai
  * suoi clienti (le app, la shell, la scrivania) sulla sua PORTA: un socket con un nome in
- * /run/mshell/<nome> (comunicazione.c). Il compositore e il launcher hanno ognuno un
- * formato dei messaggi suo, fatto di struct C (chiamate.h, launcher.h). Per non farne uno
+ * /run/mshell/<nome> (comunicazione.c). Il compositore ha un formato dei messaggi suo,
+ * fatto di struct C (chiamate.h); il launcher usa gia' questo (launcher.h). Per non farne uno
  * nuovo per ogni servizio, da qui in poi c'e' uno standard solo (SISTEMA.md, sezione 3),
  * piccolissimo, e lo stesso dei file di configurazione:
  *

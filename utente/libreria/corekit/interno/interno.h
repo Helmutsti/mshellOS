@@ -26,4 +26,16 @@ int ricevi_non_socket(int d, void *dove, unsigned int byte);
 /* Se d e' una cartella aperta con apri, la dimentica (chiudi). */
 void dimentica_cartella(int d);
 
+/* IL LAUNCHER, dalla parte di chi chiede (launcher.c, e apertura.c che lo usa): si collega
+ * al launcher, manda 'richiesta' con chiedi_entro (al massimo 'ms' millisecondi), chiude il
+ * collegamento e traduce la risposta in un LAUNCHER_... (sistema/launcher.h). La risposta
+ * resta in *risposta, con il suo allegato se c'e' (lo chiude chi chiama); se non e'
+ * arrivata, *risposta ha result=error (o timeout) e niente allegato. */
+struct messaggio;
+int launcher_chiedi(struct messaggio *richiesta, struct messaggio *risposta, int ms);
+
+/* Copia la frase per la persona (message) della risposta in 'perche' (al massimo 'byte'
+ * byte, compreso lo 0; "" se non c'e'). Con 'perche' 0 o 'byte' 0 non fa niente. */
+void launcher_frase(const struct messaggio *risposta, char *perche, unsigned int byte);
+
 #endif

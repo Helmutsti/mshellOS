@@ -52,7 +52,7 @@ int main(void) {
 
     /* aprire contatore.app farebbe partire lo Store (lo prova test/prove/store.py): qui si
      * prova solo un file che non e' un pacchetto */
-    struct risposta_launcher risposta;
+    char perche[MAX_FRASE_LAUNCHER] = "";
     passo("apri il file leggimi.txt", apri_file(NON_PACCHETTO, 0, 0), LAUNCHER_NON_SUPPORTATO);
     passo("apri l'app contatore (non installata)", apri_applicazione("contatore") >= 0, 0);
 
@@ -70,15 +70,15 @@ int main(void) {
           LAUNCHER_PACCHETTO_NON_VALIDO);
     passo("elenco dopo", elenco_app_installate(&e), LAUNCHER_FATTO);
     passo("contatore nell'elenco dopo (installata dalla persona)", ha_contatore(), 1);
-    passo("togli un'app del sistema (files)", togli_app("files", 0, &risposta), LAUNCHER_DEL_SISTEMA);
-    passo("togli '../apps/contatore'", togli_app("../apps/contatore", 0, &risposta), LAUNCHER_ERRORE);
-    passo("svuota i dati di '..'", svuota_dati_app("..", &risposta), LAUNCHER_ERRORE);
-    passo("svuota i dati di contatore (spenta)", svuota_dati_app("contatore", &risposta), LAUNCHER_FATTO);
+    passo("togli un'app del sistema (files)", togli_app("files", 0, perche, sizeof perche), LAUNCHER_DEL_SISTEMA);
+    passo("togli '../apps/contatore'", togli_app("../apps/contatore", 0, perche, sizeof perche), LAUNCHER_ERRORE);
+    passo("svuota i dati di '..'", svuota_dati_app("..", perche, sizeof perche), LAUNCHER_ERRORE);
+    passo("svuota i dati di contatore (spenta)", svuota_dati_app("contatore", perche, sizeof perche), LAUNCHER_FATTO);
     passo("apri l'app contatore (installata)", apri_applicazione("contatore") >= 0, 1);
     dormi(1500);    /* che sia partita */
-    passo("togli contatore mentre e' accesa", togli_app("contatore", 0, &risposta), LAUNCHER_IN_USO);
+    passo("togli contatore mentre e' accesa", togli_app("contatore", 0, perche, sizeof perche), LAUNCHER_IN_USO);
     scrivi_testo("pacchetti: messaggio: ");
-    scrivi_testo(risposta.messaggio);
+    scrivi_testo(perche);
     scrivi_testo("\n");
 
     scrivi_testo(fallite ? "pacchetti: fallita\n" : "pacchetti: tutto bene\n");

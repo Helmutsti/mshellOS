@@ -1,32 +1,34 @@
-/* CoreKit: aprire un'app o un file (apertura.h), sopra il protocollo del launcher
- * (sistema/launcher.h). Ogni funzione e' UNA richiesta al launcher, con launcher_chiedi:
- * si collega al nome "launcher", manda la richiesta, aspetta la risposta. Gli esiti del
- * launcher che un'app puo' vedere qui sono gli stessi numeri degli APERTURA_...: launcher.h
- * li definisce da loro. */
+/* CoreKit: aprire un'app o un file (apertura.h), con le richieste open_app e open_file al
+ * launcher (il contratto e' in sistema/launcher.h). Ogni funzione e' UNA richiesta, fatta
+ * con launcher_chiedi (interno/launcher.c): si collega al nome "launcher", manda la
+ * richiesta, aspetta la risposta al massimo TEMPO_CHIEDI. Gli esiti del launcher che
+ * un'app puo' vedere qui sono gli stessi numeri degli APERTURA_...: launcher.h li definisce
+ * da loro. */
 #include "../apertura.h"
+#include "../messaggi.h"
 #include "../sistema/launcher.h"
+#include "interno.h"
 
 int apri_applicazione_con(const char *id, const char *argomento) {
-    struct richiesta_launcher r = { .tipo = APRI_APPLICAZIONE };
-    struct risposta_launcher risposta;
-    launcher_copia(r.applicazione, id, MAX_NOME_FILE);
-    launcher_copia(r.argomento, argomento, MAX_PERCORSO);
-    return launcher_chiedi(&r, -1, &risposta, 0, 0) < 0 ? -1 : risposta.numero;
+    struct messaggio q, r;
+    messaggio_inizia(&q);
+    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, APRI_APPLICAZIONE);
+    messaggio_aggiungi(&q, CHIAVE_APP, id ? id : "");
+    if (argomento && argomento[0]) messaggio_aggiungi(&q, CHIAVE_ARGOMENTO, argomento);
+    long n;
+    if (launcher_chiedi(&q, &r, TEMPO_CHIEDI) != LAUNCHER_FATTO || messaggio_numero(&r, CHIAVE_COMPITO, &n) < 0 || n < 0)
+        return -1;
+    return (int)n;
 }
 
 int apri_applicazione(const char *id) { return apri_applicazione_con(id, 0); }
 
 int apri_file(const char *percorso, char *perche, unsigned int byte) {
-    struct richiesta_launcher r = { .tipo = APRI_FILE };
-    struct risposta_launcher risposta;
-    launcher_copia(r.argomento, percorso, MAX_PERCORSO);
-    int esito = launcher_chiedi(&r, -1, &risposta, 0, 0);
-    if (perche && byte > 0) {
-        /* la frase, tagliata se non ci sta, sempre con lo 0 finale (launcher_chiedi lo
-         * mette in fondo al messaggio) */
-        unsigned int n = 0;
-        for (; n < byte - 1 && risposta.messaggio[n]; n++) perche[n] = risposta.messaggio[n];
-        perche[n] = 0;
-    }
+    struct messaggio q, r;
+    messaggio_inizia(&q);
+    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, APRI_FILE);
+    messaggio_aggiungi(&q, CHIAVE_PERCORSO, percorso ? percorso : "");
+    int esito = launcher_chiedi(&q, &r, TEMPO_CHIEDI);
+    launcher_frase(&r, perche, byte);
     return esito;
 }

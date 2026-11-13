@@ -377,7 +377,7 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
   comandi (toybox, busybox o fatti da noi) è ancora da decidere.
 - Terminale in finestra (app Terminale, si apre dal vassoio delle app): la shell dentro gira come
   **sistema** (uid 0), non come la persona, e **chiunque può chiederla** al launcher
-  (`APRI_SHELL`, che le passa il terminale finto). Decisione della persona, provvisoria:
+  (`open_shell`, che le passa il terminale finto). Decisione della persona, provvisoria:
   **terminale come sistema aperto a chiunque: da proteggere** ("poi lo proteggiamo"). I comandi
   restano quelli della shell (nessuno per modificare); `/system` resta in sola lettura.
 
@@ -422,13 +422,20 @@ Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande ch
 persona sono nella sezione 8.
 
 **Da proteggere**: il terminale in finestra apre una shell come sistema (uid 0) a chiunque la
-chieda al launcher (`APRI_SHELL`, `utente/programmi/launcher.c`): decisione provvisoria della
+chieda al launcher (`open_shell`, `utente/programmi/launcher.c`): decisione provvisoria della
 persona, "poi lo proteggiamo" (chi può chiederla, e con quale permesso).
 
 **I permessi delle porte rispondono sempre sì (provvisorio): da accendere.** La funzione dei
 permessi dei servizi (`ha_permesso`, `corekit/sistema/servizi.h` e `corekit/interno/messaggi.c`) oggi non controlla niente e
 scrive ogni domanda nel registro con "provvisorio"; va resa vera (sistema / app con i permessi
 concessi / comando della persona).
+
+**Il launcher parla con lo standard dei messaggi** (13/11/2026): richieste `request=open_app`,
+`install_package`... in testo `chiave=valore`, esiti `result=` con `reason=` per i perché del
+launcher; il resoconto dei pacchetti e l'elenco delle app nel foglio allegato. Il contratto è in
+testa a `corekit/sistema/launcher.h`, le funzioni per chi chiede in
+`corekit/interno/launcher.c`. Chiede `ha_permesso` per `apps.manage`, `programs.open`,
+`system.shell` (provvisori). Resta col formato suo il compositore.
 
 **Fatti per ultimi** (12/11/2026): i tasti speciali (l'errore era nella tabella dei tasti di
 Doom; Esc ora chiude gli avvisi) e le risorse su disco (`/system/resources`, sezione 4). Restano

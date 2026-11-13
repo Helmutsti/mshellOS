@@ -743,9 +743,9 @@ static void chiedi_togli(struct pulsante *b, void *dati) {
 static void scelta_svuota(struct avviso *a, int risposta, void *dati) {
     (void)a; (void)dati;
     if (risposta != AVVISO_CONFERMA) return;
-    struct risposta_launcher r;
+    char perche[MAX_FRASE_LAUNCHER];
     const struct manifesto *m = &installate.app[scelta].m;
-    int fatto = svuota_dati_app(m->id, &r) == LAUNCHER_FATTO;
+    int fatto = svuota_dati_app(m->id, perche, sizeof perche) == LAUNCHER_FATTO;
     registro(fatto ? "dati svuotati di " : "dati non svuotati di ", m->id);
     char testo[200];
     if (fatto) {
@@ -753,7 +753,7 @@ static void scelta_svuota(struct avviso *a, int risposta, void *dati) {
         messaggio_utf8(&esito_dettaglio, MESSAGGIO_INFORMAZIONE, "Dati svuotati", testo);
     } else {
         messaggio_utf8(&esito_dettaglio, MESSAGGIO_ERRORE, "I dati non sono stati svuotati",
-                       r.messaggio[0] ? r.messaggio : "Non si \xc3\xa8 riusciti a svuotare i dati.");
+                       perche[0] ? perche : "Non si \xc3\xa8 riusciti a svuotare i dati.");
     }
     mostra_dettaglio(&esito_dettaglio);
 }
@@ -763,17 +763,17 @@ static void scelta_togli(struct avviso *a, int risposta, void *dati) {
     (void)a; (void)dati;
     if (risposta != AVVISO_CONFERMA && risposta != AVVISO_ALTERNATIVA) return;
     int tieni_dati = risposta == AVVISO_ALTERNATIVA;
-    struct risposta_launcher r;
+    char perche[MAX_FRASE_LAUNCHER];
     char id[MAX_ID], nome[MAX_NOME_APP];
     descrizione_copia(id, installate.app[scelta].m.id, MAX_ID);
     descrizione_copia(nome, nome_di(&installate.app[scelta].m), MAX_NOME_APP);
-    int esito_launcher = togli_app(id, tieni_dati, &r);
+    int esito_launcher = togli_app(id, tieni_dati, perche, sizeof perche);
     registro(esito_launcher == LAUNCHER_FATTO ? (tieni_dati ? "tolta (dati tenuti) " : "tolta ") : "non tolta ", id);
     char titolo[120];
     if (esito_launcher != LAUNCHER_FATTO && esito_launcher != LAUNCHER_ERRORE) {   /* c'e' ancora: si resta li' */
         con_nome(titolo, sizeof titolo, "\"", nome, "\" non \xc3\xa8 stata tolta");
         messaggio_utf8(&esito_dettaglio, MESSAGGIO_ERRORE, titolo,
-                       r.messaggio[0] ? r.messaggio : "Non si \xc3\xa8 riusciti a togliere l'app.");
+                       perche[0] ? perche : "Non si \xc3\xa8 riusciti a togliere l'app.");
         mostra_dettaglio(&esito_dettaglio);
         return;
     }
@@ -785,7 +785,7 @@ static void scelta_togli(struct avviso *a, int risposta, void *dati) {
     } else {
         con_nome(titolo, sizeof titolo, "\"", nome, "\" forse non \xc3\xa8 stata tolta del tutto");
         messaggio_utf8(&esito_elenco, MESSAGGIO_ERRORE, titolo,
-                       r.messaggio[0] ? r.messaggio : "Non si \xc3\xa8 riusciti a togliere l'app.");
+                       perche[0] ? perche : "Non si \xc3\xa8 riusciti a togliere l'app.");
     }
     mostra_elenco_app(&esito_elenco);
 }
