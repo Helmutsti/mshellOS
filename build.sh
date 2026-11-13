@@ -16,7 +16,7 @@
 #                      sistema di Linux e la libreria C musl; si compila in libcorekit.a),
 #                      e le due librerie della grafica: gkit/ (le finestre, lo schermo e il
 #                      disegno; si compila in libgkit.a) e uikit/ (lo stile, i materiali e i
-#                      componenti)
+#                      componenti; si compila in libuikit.a)
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
@@ -32,6 +32,7 @@
 #       linux          il kernel (per il PC: bzImage; per ARM: Image)
 #       libcorekit.a   CoreKit compilata (una libreria statica), legata in ogni programma
 #       libgkit.a      GKit compilata (la grafica), come libcorekit.a
+#       libuikit.a     UIKit compilata (l'interfaccia), come libcorekit.a
 #       avvio.img      l'archivio di avvio (initramfs: cpio compresso con gzip)
 #       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
 #                      UEFI (una "UKI", Unified Kernel Image)
@@ -182,7 +183,7 @@ MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
 # si ripulisce la cartella d'uscita (mai build/ intera: dentro ci sono le altre CPU)
 [ "$B" = build ] && { echo "build.sh: USCITA=build cancellerebbe tutto"; exit 1; }
 rm -rf "$B"
-mkdir -p "$B/oggetti/libreria"
+mkdir -p "$B/oggetti"
 
 # --- 1. il compilatore ---
 # clang compila per la CPU scelta (--target) con gli header e le librerie della radice di
@@ -233,8 +234,8 @@ COREKIT="$B/libcorekit.a"
 
 # GKIT, la grafica (utente/libreria/gkit/, LIBRERIE.md), come CoreKit: i suoi .c (in
 # gkit/interno/) e stb_image (le PNG: la usa solo GKit) diventano libgkit.a. Nel comando
-# di lega va dopo UIKit e gli oggetti del programma (che usano le sue funzioni) e prima di
-# libcorekit.a (che usa lei): UIKit, il programma, GKit, CoreKit, la libreria C.
+# di lega va dopo gli oggetti del programma e UIKit (che usano le sue funzioni) e prima di
+# libcorekit.a (che usa lei): il programma, UIKit, GKit, CoreKit, la libreria C.
 mkdir -p "$B/oggetti/gkit"
 for f in utente/libreria/gkit/interno/*.c; do
     $CC $UTENTE -c "$f" -o "$B/oggetti/gkit/$(basename "$f" .c).o"
@@ -244,12 +245,17 @@ rm -f "$B/libgkit.a"
 ar rcs "$B/libgkit.a" "$B"/oggetti/gkit/*.o
 GKIT="$B/libgkit.a"
 
-# UIKit: per ora oggetti sciolti, legati in ogni programma (--gc-sections ne tiene solo
-# quello che il programma usa).
-for f in utente/libreria/uikit/*.c; do
-    $CC $UTENTE -c "$f" -o "$B/oggetti/libreria/$(basename "$f" .c).o"
+# UIKIT, l'interfaccia (utente/libreria/uikit/, LIBRERIE.md), come GKit: i suoi .c (in
+# uikit/interno/) diventano libuikit.a. Nel comando di lega va subito dopo gli oggetti del
+# programma (che usano le sue funzioni) e prima di libgkit.a e libcorekit.a (che usa lei):
+# il programma, UIKit, GKit, CoreKit, la libreria C.
+mkdir -p "$B/oggetti/uikit"
+for f in utente/libreria/uikit/interno/*.c; do
+    $CC $UTENTE -c "$f" -o "$B/oggetti/uikit/$(basename "$f" .c).o"
 done
-LIBRERIA="$B/oggetti/libreria/*.o"
+rm -f "$B/libuikit.a"
+ar rcs "$B/libuikit.a" "$B"/oggetti/uikit/*.o
+UIKIT="$B/libuikit.a"
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
 # che sono gia' come saranno le partizioni system e data, con proprietari e permessi
@@ -365,7 +371,7 @@ APPS=""
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
-    lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o" $GKIT $COREKIT
+    lega "$B/oggetti/$nome" "$B/oggetti/$nome.o" $UIKIT $GKIT $COREKIT
     case "$nome" in
         init) posto=/system/init ;;
         shell) posto=/system/bin/$nome ;;   # la shell di prova
@@ -409,7 +415,7 @@ for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
         $CC $UTENTE -I"$cartella" -c "$f" -o "$o"
         oggetti="$oggetti $o"
     done
-    lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti $GKIT $COREKIT
+    lega "$B/oggetti/applicazioni/$nome/code" $oggetti $UIKIT $GKIT $COREKIT
 
     manifesto="${cartella}manifest.toml"
     [ -f "$manifesto" ] || { echo "build.sh: manca $manifesto"; exit 1; }
@@ -508,7 +514,7 @@ mkdir -p "$B/oggetti/prove"
 for f in utente/prove/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
-    lega "$B/oggetti/prove/$nome" $LIBRERIA "$B/oggetti/prove/$nome.o" $GKIT $COREKIT
+    lega "$B/oggetti/prove/$nome" "$B/oggetti/prove/$nome.o" $UIKIT $GKIT $COREKIT
 done
 RIEMPITIVI=6
 

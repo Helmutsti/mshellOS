@@ -3,7 +3,7 @@
  *
  * L'elenco dei materiali del sistema, di UIKit: per ognuno il nome in C e il file, dentro la
  * cartella delle risorse (/system/resources). I dati non sono qui ma nei file: li carica
- * uikit/materiali.c la prima volta che servono (vedi uikit/materiali.h). */
+ * uikit/interno/materiali.c la prima volta che servono (vedi uikit/materiali.h). */
 #ifndef MATERIALI_ELENCO_H
 #define MATERIALI_ELENCO_H
 

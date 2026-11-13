@@ -1,9 +1,9 @@
-/* Quello che UIKit da' al compositore (vedi uikit_compositore.h): la barra del titolo
+/* Quello che UIKit da' al compositore (vedi sistema/uikit_compositore.h): la barra del titolo
  * congelata, l'ombra e il vetro delle finestre, con lo stile del sistema (stile.h), cosi' sono
  * uguali a quelli delle applicazioni. */
 #include "gkit/gkit.h"   /* MAX_TITOLO */
-#include "stile.h"
-#include "uikit_compositore.h"
+#include "uikit/stile.h"
+#include "uikit/sistema/uikit_compositore.h"
 
 /* Le misure della barra, come la testata della finestra di UIKit (finestra_tk, uikit.h): alta
  * TITOLO_ALTEZZA (40), o ALTEZZA_BARRA_MINI (28) nella mini finestra; i comandi tondi da

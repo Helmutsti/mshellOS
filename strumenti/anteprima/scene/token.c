@@ -1,7 +1,8 @@
 /* I token del nuovo design (utente/libreria/tema.h e stile.h) nei due temi, uno accanto
  * all'altro: per OGNI colore semantico un campione col suo nome. Serve a vedere a occhio che
- * le tabelle di tema.h somigliano al disegno. Sotto i campioni, le ombre (stile.h:
- * le tabelle di struct strato_ombra), una per livello di profondita'.
+ * le tabelle dei temi (uikit/interno/tema.c) somigliano al disegno. Sotto i campioni, le
+ * ombre (stile.h: le tabelle di struct strato_ombra, in uikit/interno/stile.c), una per
+ * livello di profondita'.
  *
  * Il tema di partenza non conta: la scena imposta tema_corrente da sola, una volta per
  * pannello, e disegna con le MACRO (SUPERFICIE_SCENA, TESTO_PRIMARIO...), cosi' prova anche
@@ -57,8 +58,7 @@ static void pannello(struct pennello *p, int x0, int y0, const struct tema *t, c
  * fondo, interne). Il fondo e' SUPERFICIE_ELEVATA tranne per l'incassato (SUPERFICIE_INCASSATA). */
 static void ombre(struct pennello *p, int x0, int y0, const struct tema *t) {
     int scuro = t == &tema_scuro;
-#define LIVELLO(N) scuro ? ombra_##N##_scuro : ombra_##N##_chiaro, \
-                   OMBRA_STRATI(ombra_##N##_chiaro)
+#define LIVELLO(N) ombre_##N.strati[scuro], ombre_##N.quanti[scuro]
     struct { const char *nome; const struct strato_ombra *s; int n; int r; } v[] = {
         { "incassato",       LIVELLO(incassato),       RAGGIO_CAMPO_M },
         { "sollevato",       LIVELLO(sollevato),       RAGGIO_CAMPO_M },

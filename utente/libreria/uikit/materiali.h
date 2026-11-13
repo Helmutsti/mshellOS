@@ -6,7 +6,7 @@
  * I dati stanno in file su disco, in /system/resources (fonts/, icons/, wallpapers/; nel
  * repository in risorse/), preparati da strumenti/grafica/genera.py. L'elenco (nomi e file)
  * e' materiali_elenco.h, generato anche lui. Ogni materiale si carica la PRIMA volta che
- * serve (uikit/materiali.c, con le funzioni di GKit font_da_file, icona_da_file,
+ * serve (uikit/interno/materiali.c, con le funzioni di GKit font_da_file, icona_da_file,
  * immagine_da_file), e poi resta: un programma tocca solo i file di quello che disegna.
  *
  * Per chi usa UIKit non cambia niente: un materiale si chiama con il suo nome come se fosse
@@ -35,10 +35,6 @@ const struct icona *icona_del_sistema(int quale, int *quante);
 
 /* L'icona del sistema 'quale' (ICONA_...) di lato 'lato' pixel, nel colore del pennello.
  * Se quella misura non c'e', si usa la piu' vicina. */
-static inline void icona(struct pennello *p, int quale, int lato, int x, int y) {
-    int quante;
-    const struct icona *misure = icona_del_sistema(quale, &quante);
-    disegna_icona(p, misure, quante, lato, x, y);
-}
+void icona(struct pennello *p, int quale, int lato, int x, int y);
 
 #endif

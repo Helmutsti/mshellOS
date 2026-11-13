@@ -13,8 +13,11 @@
  *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia (CAMBIA_TEMA, gkit/sistema/protocollo.h)
  *     il compositore lo rilegge dalle preferenze.
  *
+ * E' un header DEL SISTEMA (uikit/sistema/): lo include solo il compositore, un'app non lo
+ * deve includere.
+ *
  * Qui ci sono solo le dichiarazioni, con i tipi di GKit; il codice sta in
- * uikit_compositore.c, che vede lo stile. Le coordinate sono in pixel dello schermo, tranne
+ * interno/uikit_compositore.c, che vede lo stile. Le coordinate sono in pixel dello schermo, tranne
  * dove e' detto. */
 #ifndef UIKIT_COMPOSITORE_H
 #define UIKIT_COMPOSITORE_H

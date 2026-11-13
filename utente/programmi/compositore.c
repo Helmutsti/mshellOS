@@ -54,14 +54,14 @@
  * (gkit.h) e gli strumenti di disegno (gkit_disegno.h). Non vede lo stile del sistema: le
  * poche cose del design che deve disegnare lui (la barra di emergenza, uguale a quella delle
  * applicazioni, e l'ombra e il vetro delle finestre) gliele da' UIKit, con le sole funzioni
- * di uikit_compositore.h. */
+ * di uikit/sistema/uikit_compositore.h. */
 #include "corekit/corekit.h"
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
 #include "gkit/sistema/protocollo.h"   /* i messaggi delle finestre, i ruoli speciali */
 #include "gkit/sistema/schermo.h"      /* lo schermo (il DRM) */
 #include "gkit/sistema/pixel.h"        /* i conti per pixel: comporre le finestre */
-#include "uikit/uikit_compositore.h"
+#include "uikit/sistema/uikit_compositore.h"
 #include "corekit/sistema/pacchetto.h"   /* chi puo' cambiare il tema (CAMBIA_TEMA) */
 
 /* Le risorse che init gli passa gia' aperte (vedi sopra). */

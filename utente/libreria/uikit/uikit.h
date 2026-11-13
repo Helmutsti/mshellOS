@@ -4,7 +4,7 @@
  * tastiera, il ciclo degli eventi, il ridisegno. Un'applicazione include solo questo file:
  * dentro c'e' tutto quello che le serve.
  *
- * I PEZZI DI UIKIT, tutti in questa cartella:
+ * I PEZZI DI UIKIT:
  *   - lo stile e i temi (stile.h, tema.h, dal file Figma "mshell - interfaccia"): colori
  *     semantici Chiaro/Scuro, misure, raggi, ombre;
  *   - i materiali del sistema (materiali.h; i dati in file su disco, /system/resources,
@@ -13,9 +13,43 @@
  *   - la finestra dell'applicazione come la decide il design, i componenti e il ciclo degli
  *     eventi: qui sotto (e l'elemento di un file in elemento_file.h; la userbar e il vassoio,
  *     della scrivania, in userbar.h);
- *   - quello che serve al compositore del design (uikit_compositore.h).
+ *   - quello che serve al compositore del design (sistema/uikit_compositore.h).
  * Sotto, GKit (utente/libreria/gkit/): la finestra (gkit.h) e gli strumenti di disegno
  * (gkit_disegno.h).
+ *
+ * LE CARTELLE DI UIKIT (utente/libreria/uikit/). Tre livelli, come CoreKit e GKit (corekit.h,
+ * gkit.h):
+ *
+ *   uikit/            PUBBLICO: quello che un'applicazione puo' usare. uikit.h (questo:
+ *                     include tutto quello che serve a un'app), stile.h (colori, misure,
+ *                     font e ombre del design), tema.h (i due temi e quello in uso),
+ *                     materiali.h e materiali_elenco.h (i font, le icone, gli oggetti del
+ *                     sistema; l'elenco e' generato da strumenti/grafica/genera.py), tasti.h
+ *                     (i codici dei tasti e gli ascoltatori delle scorciatoie), testo437.h (da
+ *                     UTF-8 ai caratteri dei font del sistema), e gli header dei componenti.
+ *   uikit/sistema/    DEL SISTEMA: quello che usano solo i programmi del sistema.
+ *                     uikit_compositore.h (le poche cose del design che disegna il
+ *                     compositore). Un'app non lo deve includere: puo' cambiare senza avviso.
+ *   uikit/interno/    INTERNO: il codice (i .c). Nessun programma li include.
+ *
+ * build.sh compila i .c di interno/ in una libreria statica, libuikit.a, e la lega dentro ogni
+ * programma: ne entra solo quello che il programma usa. Nel comando di lega viene subito dopo
+ * il programma (che usa le sue funzioni) e prima di libgkit.a e libcorekit.a (che usa lei).
+ *
+ * IL RIORDINO E' IN CORSO. L'obiettivo e' quello di CoreKit e GKit: negli header pubblici solo
+ * dichiarazioni, tipi, costanti e i commenti per chi li usa, e il codice tutto nei .c di
+ * interno/. A che punto siamo:
+ *   1. FATTO: le basi. stile.h, tema.h, materiali.h, tasti.h, testo437.h e
+ *      sistema/uikit_compositore.h hanno solo dichiarazioni; il codice (e le tabelle dei due
+ *      temi e delle ombre) e' in interno/ (tema.c, stile.c, materiali.c, testo437.c,
+ *      uikit_compositore.c).
+ *   2. DA FARE: il nucleo, questo file (le sue funzioni sono ancora scritte qui).
+ *   3. DA FARE: i componenti complessi (menu, tabella, griglia, barra_laterale, schede,
+ *      userbar, oggetti, elemento_file, pagina, paragrafo, pannello).
+ *   4. DA FARE: i componenti piccoli (grafico, etichetta_stato, messaggio, icona_app,
+ *      riga_permesso, riga_app, informazioni).
+ * Finche' un gruppo non e' fatto, le sue funzioni restano scritte negli header (static) e
+ * funzionano come prima.
  *
  *     static struct finestra_tk finestra;
  *     static struct contenitore colonna;

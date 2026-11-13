@@ -23,16 +23,18 @@ endef
 COREKIT_OGGETTI := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/corekit/interno/*.c))) $(O)/esterni/miniz.o $(O)/esterni/toml.o
 COREKIT  := $(O)/libcorekit.a
 # GKit, come build.sh: i suoi .c e stb_image (le PNG: la usa solo lei) in libgkit.a, che
-# nel comando di lega va dopo UIKit e il programma e prima di libcorekit.a
+# nel comando di lega va dopo il programma e UIKit e prima di libcorekit.a
 GKIT_OGGETTI := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/gkit/interno/*.c))) $(O)/esterni/stb_image.o
 GKIT     := $(O)/libgkit.a
-# UIKit, per ora oggetti sciolti, come build.sh
-LIBRERIA := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/uikit/*.c)))
+# UIKit, come build.sh: i suoi .c in libuikit.a, che nel comando di lega va subito dopo il
+# programma e prima di libgkit.a
+UIKIT_OGGETTI := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/uikit/interno/*.c)))
+UIKIT    := $(O)/libuikit.a
 # per i programmi del sistema: lo schermo della sandbox al posto del DRM. E' un oggetto
 # sciolto che definisce le tre funzioni dello schermo (gkit/sistema/schermo.h): chi lega le
 # trova gia' li', e dall'archivio non prende schermo.o (si prende un oggetto da un archivio
 # solo per una funzione che manca ancora)
-LIBRERIA_SANDBOX := $(LIBRERIA) $(O)/strumenti/sandbox/schermo_sandbox.o
+SCHERMO_SANDBOX := $(O)/strumenti/sandbox/schermo_sandbox.o
 
 PROGRAMMI := init compositore launcher scrivania network shell
 APP_CARTELLE := $(sort $(wildcard utente/applicazioni/*/ utente/prove/applicazioni/*/))
@@ -59,6 +61,9 @@ $(COREKIT): $(COREKIT_OGGETTI)
 $(GKIT): $(GKIT_OGGETTI)
 	@rm -f $@
 	ar rcs $@ $^
+$(UIKIT): $(UIKIT_OGGETTI)
+	@rm -f $@
+	ar rcs $@ $^
 
 ESTERNI_ARG := -w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES
 $(O)/esterni/miniz.o: utente/libreria/esterni/miniz/miniz.c
@@ -72,21 +77,21 @@ $(O)/esterni/stb_image.o: utente/libreria/esterni/stb/stb_image.c
 	$(CC) $(ESTERNI_ARG) $(DIP) -c $< -o $@
 
 # i programmi del sistema
-$(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIBRERIA_SANDBOX) $(GKIT) $(COREKIT)
-	$(call lega,$@,$(LIBRERIA_SANDBOX) $< $(GKIT) $(COREKIT))
-$(O)/bin/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(LIBRERIA_SANDBOX) $(GKIT) $(COREKIT)
-	$(call lega,$@,$(LIBRERIA_SANDBOX) $< $(GKIT) $(COREKIT))
+$(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(SCHERMO_SANDBOX) $(UIKIT) $(GKIT) $(COREKIT)
+	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(UIKIT) $(GKIT) $(COREKIT))
+$(O)/bin/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(SCHERMO_SANDBOX) $(UIKIT) $(GKIT) $(COREKIT)
+	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(UIKIT) $(GKIT) $(COREKIT))
 $(O)/bin/avvio: $(O)/strumenti/sandbox/avvio_sandbox.o
 	$(call lega,$@,$<)
 # i programmi delle prove (utente/prove)
-$(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIA) $(GKIT) $(COREKIT)
-	$(call lega,$@,$(LIBRERIA) $< $(GKIT) $(COREKIT))
+$(O)/bin/prove/%: $(O)/utente/prove/%.o $(UIKIT) $(GKIT) $(COREKIT)
+	$(call lega,$@,$< $(UIKIT) $(GKIT) $(COREKIT))
 
 # le applicazioni: $(O)/app/<id>/code, con la libreria vera (come build.sh)
 define APP
 $(2)_OGGETTI := $$(patsubst %.c,$(O)/%.o,$$(sort $$(wildcard $(1)*.c)))
-$(O)/app/$(2)/code: $$($(2)_OGGETTI) $$(LIBRERIA) $$(GKIT) $$(COREKIT)
-	$$(call lega,$$@,$$(LIBRERIA) $$($(2)_OGGETTI) $$(GKIT) $$(COREKIT))
+$(O)/app/$(2)/code: $$($(2)_OGGETTI) $$(UIKIT) $$(GKIT) $$(COREKIT)
+	$$(call lega,$$@,$$($(2)_OGGETTI) $$(UIKIT) $$(GKIT) $$(COREKIT))
 FATTI += $(O)/app/$(2)/code
 endef
 $(foreach c,$(APP_CARTELLE),$(eval $(call APP,$(c),$(call minuscolo,$(notdir $(patsubst %/,%,$(c)))))))

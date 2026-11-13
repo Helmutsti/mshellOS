@@ -4,7 +4,8 @@
  * E' di UIKit (vedi LIBRERIE.md): lo usano i componenti, per dare a tutte le applicazioni lo
  * stesso aspetto, e la scrivania. Il compositore non lo vede: quello che gli serve del design
  * (la barra di un'applicazione che non risponde, l'ombra e il vetro delle finestre) glielo da'
- * uikit_compositore.h. Cambiare un valore qui cambia l'aspetto di tutto il sistema.
+ * sistema/uikit_compositore.h. Cambiare un valore qui cambia l'aspetto di tutto il sistema.
+ * Qui ci sono solo costanti e macro; le tabelle delle ombre (sotto) stanno in interno/stile.c.
  *
  * Ci sono DUE stili. Il nuovo (in alto): scala di grigi, colori semantici letti dal tema in
  * uso (Chiaro o Scuro, scelto a tempo di esecuzione: tema.h). Il vecchio (in fondo): "a
@@ -216,106 +217,32 @@
  * per ogni tema, nell'ordine dei token: la PRIMA riga sta sopra a tutte (vedi il commento
  * delle ombre a strati in gkit_disegno.h per l'ordine in cui si disegnano). Livelli: incassato (campi,
  * binari), sollevato (pulsanti), sollevato_pieno (pulsante d'azione), sovrapposto (menu,
- * suggerimento), barra, finestra, focus (l'anello), puntatore. Si sceglie la tabella del
- * tema in uso (tema_corrente == &tema_scuro ? ..._scuro : ..._chiaro) e si passa a
- * ombre_strati_fuori / ombre_strati_dentro; il numero di righe e' OMBRA_STRATI(tabella)
- * (gkit_disegno.h).
+ * suggerimento), barra, finestra, focus (l'anello), puntatore. La tabella del tema in uso
+ * la danno OMBRA_TAB(livello) e il suo numero di righe OMBRA_N(livello) (qui sotto); si
+ * passano a ombre_strati_fuori / ombre_strati_dentro (gkit_disegno.h).
  * Il JSON ha anche degli strati "BB" (sfocatura dello sfondo, solo un raggio) per barra e
  * finestra: struct strato_ombra non li puo' dire, e non sono ombre; sono le due misure
  * qui sotto, per chi sfoca quello che sta sotto. */
 #define OMBRA_BARRA_SFOCATURA_SFONDO   20
 #define OMBRA_FINESTRA_SFOCATURA_SFONDO 28
-static const struct strato_ombra ombra_incassato_chiaro[] = {
-    { VELATO(0x14141A, 18), OMBRA_INTERNA, 0, 1, 2, 0 },
-    { VELATO(0x14141A, 10), OMBRA_ESTERNA, 0, 1, 0, 0 },
+/* Le tabelle stanno in interno/stile.c. Qui, per ogni livello, le due tabelle (chiaro e
+ * scuro) con il loro numero di righe: [0] e' il chiaro, [1] lo scuro. */
+struct ombra_del_design {
+    const struct strato_ombra *strati[2];
+    int quanti[2];
 };
-static const struct strato_ombra ombra_sollevato_chiaro[] = {
-    { VELATO(0x14141A, 15), OMBRA_ESTERNA, 0, 1, 1, 0 },
-    { VELATO(0x14141A, 18), OMBRA_ESTERNA, 0, 2, 4, -1 },
-    { VELATO(0x14141A, 15), OMBRA_ESTERNA, 0, 6, 12, -4 },
-};
-static const struct strato_ombra ombra_sollevato_pieno_chiaro[] = {
-    { VELATO(0x1F1F26, 26), OMBRA_ESTERNA, 0, 1, 1, 0 },
-    { VELATO(0x1F1F26, 41), OMBRA_ESTERNA, 0, 4, 8, -2 },
-    { VELATO(0x1F1F26, 46), OMBRA_ESTERNA, 0, 10, 20, -6 },
-};
-static const struct strato_ombra ombra_sovrapposto_chiaro[] = {
-    { VELATO(0x14141A, 13), OMBRA_ESTERNA, 0, 1, 2, 0 },
-    { VELATO(0x14141A, 20), OMBRA_ESTERNA, 0, 8, 16, -4 },
-    { VELATO(0x14141A, 36), OMBRA_ESTERNA, 0, 20, 40, -12 },
-};
-static const struct strato_ombra ombra_barra_chiaro[] = {
-    { VELATO(0x14141A, 15), OMBRA_ESTERNA, 0, 1, 2, 0 },
-    { VELATO(0x14141A, 26), OMBRA_ESTERNA, 0, 6, 14, -4 },
-    { VELATO(0x14141A, 41), OMBRA_ESTERNA, 0, 16, 32, -10 },
-};
-static const struct strato_ombra ombra_finestra_chiaro[] = {
-    { VELATO(0x14141A, 13), OMBRA_ESTERNA, 0, 2, 4, 0 },
-    { VELATO(0x14141A, 26), OMBRA_ESTERNA, 0, 12, 24, -6 },
-    { VELATO(0x14141A, 51), OMBRA_ESTERNA, 0, 32, 64, -16 },
-};
-static const struct strato_ombra ombra_focus_chiaro[] = {
-    { VELATO(0x14141A, 18), OMBRA_INTERNA, 0, 1, 2, 0 },
-    { VELATO(0x14141A, 36), OMBRA_ESTERNA, 0, 0, 0, 3 },
-};
-static const struct strato_ombra ombra_puntatore_chiaro[] = {
-    { VELATO(0x000000, 51), OMBRA_ESTERNA, 0, 1, 1, 0 },
-    { VELATO(0x000000, 66), OMBRA_ESTERNA, 0, 3, 6, -1 },
-};
-static const struct strato_ombra ombra_incassato_scuro[] = {
-    { VELATO(0x000000, 89), OMBRA_INTERNA, 0, 1, 3, 0 },
-};
-static const struct strato_ombra ombra_sollevato_scuro[] = {
-    { VELATO(0xFFFFFF, 15), OMBRA_INTERNA, 0, 1, 0, 0 },
-    { VELATO(0x000000, 51), OMBRA_ESTERNA, 0, 1, 1, 0 },
-    { VELATO(0x000000, 61), OMBRA_ESTERNA, 0, 3, 6, -1 },
-    { VELATO(0x000000, 56), OMBRA_ESTERNA, 0, 8, 14, -4 },
-};
-static const struct strato_ombra ombra_sollevato_pieno_scuro[] = {
-    { VELATO(0xFFFFFF, 77), OMBRA_INTERNA, 0, 1, 0, 0 },
-    { VELATO(0x000000, 56), OMBRA_ESTERNA, 0, 1, 1, 0 },
-    { VELATO(0x000000, 77), OMBRA_ESTERNA, 0, 4, 8, -2 },
-    { VELATO(0x000000, 77), OMBRA_ESTERNA, 0, 12, 22, -6 },
-};
-static const struct strato_ombra ombra_sovrapposto_scuro[] = {
-    { VELATO(0xFFFFFF, 13), OMBRA_INTERNA, 0, 1, 0, 0 },
-    { VELATO(0x000000, 51), OMBRA_ESTERNA, 0, 2, 3, 0 },
-    { VELATO(0x000000, 77), OMBRA_ESTERNA, 0, 10, 20, -4 },
-    { VELATO(0x000000, 97), OMBRA_ESTERNA, 0, 24, 44, -12 },
-};
-static const struct strato_ombra ombra_barra_scuro[] = {
-    { VELATO(0xFFFFFF, 18), OMBRA_INTERNA, 0, 1, 0, 0 },
-    { VELATO(0x000000, 61), OMBRA_ESTERNA, 0, 1, 2, 0 },
-    { VELATO(0x000000, 82), OMBRA_ESTERNA, 0, 8, 16, -4 },
-    { VELATO(0x000000, 107), OMBRA_ESTERNA, 0, 20, 36, -10 },
-};
-static const struct strato_ombra ombra_finestra_scuro[] = {
-    { VELATO(0xFFFFFF, 18), OMBRA_INTERNA, 0, 1, 0, 0 },
-    { VELATO(0x000000, 56), OMBRA_ESTERNA, 0, 2, 4, 0 },
-    { VELATO(0x000000, 87), OMBRA_ESTERNA, 0, 16, 28, -6 },
-    { VELATO(0x000000, 128), OMBRA_ESTERNA, 0, 40, 72, -16 },
-};
-static const struct strato_ombra ombra_focus_scuro[] = {
-    { VELATO(0x000000, 89), OMBRA_INTERNA, 0, 1, 3, 0 },
-    { VELATO(0xFFFFFF, 36), OMBRA_ESTERNA, 0, 0, 0, 3 },
-};
-static const struct strato_ombra ombra_puntatore_scuro[] = {
-    { VELATO(0x000000, 140), OMBRA_ESTERNA, 0, 1, 1, 0 },
-    { VELATO(0x000000, 140), OMBRA_ESTERNA, 0, 3, 6, -1 },
-};
+extern const struct ombra_del_design ombre_incassato, ombre_sollevato, ombre_sollevato_pieno,
+                                     ombre_sovrapposto, ombre_barra, ombre_finestra, ombre_focus,
+                                     ombre_puntatore;
 
+/* Il tema in uso e' lo scuro? 1 o 0. I due temi sono uno per programma (tema.h): basta
+ * confrontare gli indirizzi. */
+#define TEMA_SCURO_IN_USO (tema_corrente == &tema_scuro)
 /* Le tabelle del tema in uso: OMBRA_TAB(sollevato) da' la tabella giusta per il tema
  * corrente, e OMBRA_N(sollevato) il suo numero di righe. Si usano con ombre_strati_fuori /
  * ombre_strati_dentro. (Le due varianti hanno la stessa forma, ma righe diverse.) */
-/* ATTENZIONE: il tema in uso si riconosce dal VALORE (la superficie di scena, diversa nei due
- * temi), non dall'indirizzo. tema_scuro e' 'static const' in tema.h: ogni file .c ne ha una
- * copia sua, e 'tema_corrente' (debole, unico per programma) punta a quella del file che ha
- * chiamato tema_scegli (tema.c), che non e' la copia di uikit.h: confrontare gli
- * indirizzi darebbe sempre "chiaro" nelle applicazioni. */
-#define TEMA_SCURO_IN_USO (tema_corrente->superficie_scena == tema_scuro.superficie_scena)
-#define OMBRA_TAB(nome)  (TEMA_SCURO_IN_USO ? ombra_##nome##_scuro : ombra_##nome##_chiaro)
-#define OMBRA_N(nome)    (TEMA_SCURO_IN_USO ? OMBRA_STRATI(ombra_##nome##_scuro) \
-                                                       : OMBRA_STRATI(ombra_##nome##_chiaro))
+#define OMBRA_TAB(nome)  (ombre_##nome.strati[TEMA_SCURO_IN_USO])
+#define OMBRA_N(nome)    (ombre_##nome.quanti[TEMA_SCURO_IN_USO])
 
 /* altre misure del nuovo design nate nei controlli (non hanno un token) */
 /* Quanto un widget puo' disegnare fuori dal suo rettangolo (UIKit ritaglia li'): l'anello

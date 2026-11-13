@@ -1,7 +1,7 @@
 /* UIKit: i materiali del sistema, caricati dai file la prima volta che servono (vedi
  * materiali.h). I file li legge GKit (gkit/interno/materiali_file.c); qui c'e' solo quale file e'
  * di quale materiale, e il ricordo di quelli gia' caricati. */
-#include "materiali.h"
+#include "uikit/materiali.h"
 
 #define MATERIALE_FILE(nome, file) file,
 static const char *const file_font[FONT_DEL_SISTEMA] = { MATERIALI_FONT(MATERIALE_FILE) };
@@ -51,4 +51,10 @@ const struct icona *icona_del_sistema(int quale, int *quante) {
     }
     *quante = icone_quante[quale];
     return icone[quale];
+}
+
+void icona(struct pennello *p, int quale, int lato, int x, int y) {
+    int quante;
+    const struct icona *misure = icona_del_sistema(quale, &quante);
+    disegna_icona(p, misure, quante, lato, x, y);
 }

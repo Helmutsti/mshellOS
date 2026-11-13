@@ -36,8 +36,8 @@ uniche funzioni scritte dentro gli header sono i conti di ogni pixel (`sistema/p
 vera costerebbe più del conto.
 
 **La libreria compilata.** `build.sh` compila i `.c` di `gkit/interno/`, con stb_image (le PNG:
-la usa solo GKit), in `build/<cpu>/libgkit.a`. Nel comando di lega l'ordine è: UIKit, il
-programma, `libgkit.a`, `libcorekit.a`, la libreria C. Nella sandbox i programmi del sistema
+la usa solo GKit), in `build/<cpu>/libgkit.a`. Nel comando di lega l'ordine è: il programma,
+`libuikit.a`, `libgkit.a`, `libcorekit.a`, la libreria C. Nella sandbox i programmi del sistema
 hanno in più lo schermo della sandbox (`strumenti/sandbox/schermo_sandbox.c`) come oggetto
 sciolto: le tre funzioni dello schermo si trovano lì, e dall'archivio non si prende `schermo.o`.
 L'anteprima sul Mac (`strumenti/anteprima/anteprima.sh`) compila con sé solo gli strumenti di
@@ -89,6 +89,33 @@ Costruita sopra GKit:
   menu, stato vuoto, avviso (due e tre scelte), userbar e vassoio;
 - **il ciclo degli eventi** dell'applicazione: fuoco, tastiera, ridisegno.
 
+Come CoreKit e GKit, è divisa in **tre livelli** (il commento in testa a `uikit/uikit.h` li
+spiega). **Il riordino è in corso**: per ora sono riordinate solo le basi (lo stile, i temi, i
+materiali, i tasti, la code page 437 e quello che serve al compositore). Il nucleo (`uikit.h`) e i
+componenti hanno ancora le loro funzioni scritte negli header, `static`, e funzionano come prima.
+
+| file | livello | perché |
+|---|---|---|
+| `uikit/stile.h` | **pubblico** | colori semantici, misure, font e ombre del design: li usano anche le app (per esempio `TEMA_SCURO_IN_USO` in Impostazioni, `OMBRA_TAB` in Files) |
+| `uikit/tema.h` | **pubblico** | i due temi, quello in uso, `tema_salva` |
+| `uikit/materiali.h`, `uikit/materiali_elenco.h` | **pubblico** | i font, le icone e gli oggetti del sistema per nome (`&plex_14`, `icona()`); l'elenco lo genera `strumenti/grafica/genera.py` |
+| `uikit/tasti.h` | **pubblico** | i codici dei tasti e gli ascoltatori delle scorciatoie (Files, Terminale) |
+| `uikit/testo437.h` | **pubblico** | da UTF-8 ai caratteri dei font del sistema (Store, scrivania): serve a chiunque scriva con i font del sistema testi che arrivano da fuori |
+| `uikit/sistema/uikit_compositore.h` | **del sistema** | la barra congelata, le ombre delle finestre e il tema per il compositore: lo usa solo lui |
+| `uikit/interno/` | **interno** | il codice: `tema.c` (i valori dei due temi, il tema in uso, le preferenze), `stile.c` (le tabelle delle ombre), `materiali.c`, `testo437.c`, `uikit_compositore.c` |
+
+Gli header riordinati hanno solo dichiarazioni, tipi, costanti, macro e i commenti per chi li
+usa. I valori del design che prima erano tabelle `static const` negli header (i due temi, le
+ombre a strati) ora stanno una volta sola in `interno/`; le macro (`SUPERFICIE_ELEVATA`,
+`OMBRA_TAB`, `OMBRA_N`...) si usano come prima.
+
+**La libreria compilata.** `build.sh` compila i `.c` di `uikit/interno/` in
+`build/<cpu>/libuikit.a`, che nel comando di lega va subito dopo gli oggetti del programma e prima
+di `libgkit.a`. Il tema si legge dalle preferenze prima di `main` (un constructor in
+`interno/tema.c`, nello stesso file del tema in uso): lo prende ogni programma che disegna con i
+colori del tema; quelli che non li usano (init, i servizi senza grafica) non lo prendono.
+L'anteprima (`strumenti/anteprima/anteprima.sh`) compila con sé tutto `uikit/interno/`.
+
 ## CoreKit, la libreria comune (sotto tutte e due)
 
 **CoreKit** (`utente/libreria/corekit/`) è la libreria che usano tutti i programmi, anche quelli
@@ -118,8 +145,8 @@ tipi, costanti e i commenti per chi li usa; l'unico codice dentro sono due funzi
 **La libreria compilata.** `build.sh` compila i `.c` di `corekit/interno/`, con miniz e tomlc99
 (le librerie di altri che usa solo CoreKit), in una libreria statica, `build/<cpu>/libcorekit.a`,
 e ogni programma si lega a lei: dall'archivio entra solo quello che il programma usa. La sandbox
-fa lo stesso (`strumenti/sandbox/Makefile`). GKit segue lo stesso schema (`libgkit.a`, sopra);
-UIKit per ora resta di oggetti sciolti e si riordinerà allo stesso modo.
+fa lo stesso (`strumenti/sandbox/Makefile`). GKit e UIKit seguono lo stesso schema
+(`libgkit.a` e `libuikit.a`, sopra).
 
 ## Un punto che oggi attraversa il confine
 
