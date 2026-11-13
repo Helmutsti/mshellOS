@@ -442,7 +442,7 @@ concessi / comando della persona).
 launcher; il resoconto dei pacchetti e l'elenco delle app nel foglio allegato. Il contratto è in
 testa a `corekit/sistema/launcher.h`, le funzioni per chi chiede in
 `corekit/interno/launcher.c`. Chiede `ha_permesso` per `apps.manage`, `programs.open`,
-`system.shell` (provvisori). Resta col formato suo il compositore.
+`system.shell` (provvisori). Resta col formato suo il compositore (rimandato: punto 26).
 
 **Fatti per ultimi** (12/11/2026): i tasti speciali (l'errore era nella tabella dei tasti di
 Doom; Esc ora chiude gli avvisi) e le risorse su disco (`/system/resources`, sezione 4). Restano
@@ -499,6 +499,16 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 24. **Integrazione a pannelli**; **ragionare sulla barra del titolo**; pulsante a griglia nel
     launcher (rimandato).
 25. **ARM**: alla fine, tutte le prove sul Mac (sezione 10).
+
+**Rimandati per il futuro** (decisione della persona, 13/11/2026)
+26. **Il compositore sullo standard dei messaggi.** Per ora tiene il suo formato a dati fissi
+    (`gkit/sistema/protocollo.h`): passano decine di messaggi al secondo (mouse, tasti, zone da
+    ridisegnare) e trasformarli in testo costerebbe a ogni messaggio; come Wayland su Linux e il
+    server delle finestre del Mac, separati da D-Bus/XPC. Da riprendere almeno per le richieste
+    rare (cambiare il tema, aprire un pannello), se un comando dovrà farle.
+27. **Banco di prova per le app**: usare un'app dal vivo mentre la si scrive, senza avviare il
+    sistema (l'app in una finestra sul PC, la sandbox usabile dal browser, o l'anteprima che si
+    ridisegna da sola). Oggi ci sono la sandbox (foto) e l'anteprima (tre scene rotte).
 
 Non servono più: priorità e tempo reale (li dà Linux); la chiamata "chi sono io" (su Linux
 c'è `getuid`).
