@@ -58,12 +58,11 @@
 #define CASA         OGGETTO_CASA
 
 /* Le misure della finestra (il disegno di Figma e' 960 x 600: qui resta quella di prima, che sta
- * nella "scala" delle finestre sullo schermo da 1280 x 800). I controlli della barra degli
- * strumenti cominciano dove finisce la barra laterale: prima di loro uno spazio lungo quanto la
- * barra laterale meno il padding della barra degli strumenti (200 - 8 = 192, come nel disegno). */
+ * nella "scala" delle finestre sullo schermo da 1280 x 800). La struttura e' quella del disegno
+ * (finestra a aree): il corpo ha 8 intorno e 8 tra le aree; a sinistra la barra laterale, a
+ * tutta altezza; a destra una colonna con la barra degli strumenti e sotto il pannello. */
 #define FINESTRA_LARGA 800
 #define FINESTRA_ALTA  480
-#define ALLINEA_LATERALE (BARRA_LATERALE_LARGHEZZA - STRUMENTI_MARGINE_LATI)
 #define RICERCA_LARGA  200
 #define MENU_FILES     220     /* la larghezza dei menu di Files, come nel disegno */
 
@@ -301,11 +300,10 @@ static void scrivi_dimensione(char *d, const struct elemento *e) {
 
 static struct finestra_tk finestra;
 static struct barra_strumenti strumenti;
-static struct spazio_fisso allinea;
 static struct pillola frecce, viste;
 static struct pulsante_barra indietro, avanti, a_icone, a_elenco;
 static struct percorso percorso;
-static struct contenitore corpo;
+static struct contenitore corpo, area;
 static struct barra_laterale_tk laterale;
 static struct pannello_tk pannello;
 static struct griglia_tk griglia;
@@ -363,7 +361,7 @@ static void avvisa(const char *testo) {
 #define AVVISO_DENTRO  PADDING_S
 #define AVVISO_ICONA   ICONA_S
 #define AVVISO_GAP     GAP_M
-#define AVVISO_BASSO   SPAZIO_16    /* dal fondo del pannello */
+#define AVVISO_BASSO   SPAZIO_8     /* dal fondo dello spazio dentro il pannello: 8 + 8 = 16 dal bordo */
 
 static void avviso_basso_disegna(struct widget *w, struct pennello *p) {
     if (!avviso[0]) return;
@@ -1025,10 +1023,9 @@ static void ricerca_cambiata(struct campo *c, void *dati) {
 }
 
 int main(int quanti, char **argomenti) {
-    /* la barra degli strumenti, come nel disegno: dopo lo spazio della barra laterale,
-     * indietro e avanti, icone o elenco, il percorso (prende il resto), la ricerca */
+    /* la barra degli strumenti, come nel disegno: sopra il pannello, indietro e avanti, icone
+     * o elenco, il percorso (prende il resto), la ricerca */
     barra_strumenti_prepara(&strumenti);
-    spazio_fisso_prepara(&allinea, ALLINEA_LATERALE - GAP_M);   /* il gap della barra lo completa */
     pillola_prepara(&frecce, 0);
     pulsante_barra_prepara(&indietro, ICONA_CHEVRON_LEFT, premi_indietro, 0);
     pulsante_barra_prepara(&avanti, ICONA_CHEVRON_RIGHT, premi_avanti, 0);
@@ -1043,7 +1040,6 @@ int main(int quanti, char **argomenti) {
     percorso_prepara(&percorso, clic_percorso, 0);
     ricerca_prepara(&ricerca, "Cerca in Home", ricerca_cambiata, 0);
     ricerca.larghezza = RICERCA_LARGA;
-    barra_strumenti_aggiungi(&strumenti, &allinea.base);
     barra_strumenti_aggiungi(&strumenti, &frecce.base);
     barra_strumenti_aggiungi(&strumenti, &viste.base);
     barra_strumenti_aggiungi(&strumenti, &percorso.base);
@@ -1060,8 +1056,9 @@ int main(int quanti, char **argomenti) {
     voce_programmi = barra_laterale_voce(&laterale, "Programmi", ICONA_APP_WINDOW);
     barra_laterale_intestazione(&laterale, "Tags");
 
-    /* il pannello: la griglia o la tabella, lo stato vuoto sopra, l'avviso sopra a tutto */
-    pannello_prepara(&pannello);
+    /* il pannello (padding 8: le righe e gli elementi hanno il loro fondo con 8 dentro): la
+     * griglia o la tabella, lo stato vuoto sopra, l'avviso sopra a tutto */
+    pannello_prepara(&pannello, SPAZIO_8);
     griglia_prepara(&griglia, dati_tile, clic_griglia, 0);
     griglia.al_tasto = tasto_griglia;
     tabella_tk_prepara(&tabella, colonne, QUANTE(colonne), dati_riga, clic_tabella, 0);
@@ -1074,14 +1071,18 @@ int main(int quanti, char **argomenti) {
     widget_aggiungi(&pannello.base, &stato.base);
     widget_aggiungi(&pannello.base, &avviso_w.base);
 
-    /* il corpo: la barra laterale e il pannello, fino ai bordi della finestra */
-    riga_prepara(&corpo, 0);
+    /* il corpo: la barra laterale e, a destra, la barra degli strumenti sopra il pannello (a
+     * CORPO_GAP l'una dall'altro); il padding intorno e' quello della finestra a aree */
+    colonna_prepara(&area, CORPO_GAP);
+    area.base.elastico = area.base.largo = 1;
+    widget_aggiungi(&area.base, &strumenti.base);
+    widget_aggiungi(&area.base, &pannello.base);
+    riga_prepara(&corpo, CORPO_GAP);
     widget_aggiungi(&corpo.base, &laterale.base);
-    widget_aggiungi(&corpo.base, &pannello.base);
+    widget_aggiungi(&corpo.base, &area.base);
 
     finestra_tk_prepara(&finestra, "Files", &corpo.base);
-    finestra_tk_barra(&finestra, &strumenti.base);
-    finestra_tk_bordo(&finestra);
+    finestra_tk_aree(&finestra);
     finestra_tk_dimensione(&finestra, FINESTRA_LARGA, FINESTRA_ALTA);
     finestra_tk_ascolta_tasti(&finestra, scorciatoie, 0);
 

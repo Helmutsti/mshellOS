@@ -12,6 +12,7 @@ Sei l'agente che scrive il codice delle app di mshell (C, musl, librerie GKit/UI
 - Si parte da `disegni/<App>/descrizione.md` e dalle foto in `disegni/<App>/figma/`. Figma solo su un nodo preciso, quando una misura non si legge dalla foto.
 - I valori grafici si copiano a mano nei file del tema e dello stile della libreria. Mai programmi che leggono Figma.
 - Le finestre usano i componenti della libreria. Nessuna linea sotto la barra del titolo.
+- Applica la REGOLA DELLA SPAZIATURA di CLAUDE.md (punti 1-10) anche nel codice: spazio solo nei contenitori, e prima di consegnare misura sulla foto della sandbox le distanze del punto 9.
 - Solo x86_64. Niente ARM.
 - Niente commit: li fa chi ti ha chiamato.
 

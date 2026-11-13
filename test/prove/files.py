@@ -6,12 +6,12 @@ sulla casa, /home, dove build.sh ha copiato la cartella file/ del repository:
     Immagini/    due .png
     Scrivania/   contatore.app (il pacchetto di Contatore, da installare: build.sh)
     dati.bin, leggimi.txt
-La finestra e' come nel disegno di Figma: la barra del titolo (40 + 1), la barra degli
-strumenti (48: indietro/avanti, icone/elenco, il percorso, la ricerca, che cominciano dove
-finisce la barra laterale, a x +208), sotto la barra laterale (larga 200) e il pannello chiaro
-(da x +208, y +89). Nella vista a icone i tile sono larghi 96 a 8 l'uno dall'altro, in righe da
-5: l'icona del k-esimo al centro in (+264 + 104 * (k % 5), +133 + 124 * (k // 5)). Prima le
-cartelle, poi i file, per nome.
+La finestra e' come nel disegno di Figma (finestra a aree: corpo con 8 intorno e 8 tra le
+aree): la barra del titolo (40); a sinistra la barra laterale (da x +8, larga 184, da y +48);
+a destra la barra degli strumenti (y +48, alta 32: indietro/avanti, icone/elenco, il percorso,
+la ricerca, da x +200) e sotto il pannello chiaro (da x +200, y +88, padding 8). Nella vista a
+icone i tile sono larghi 96 a 8 l'uno dall'altro, in righe da 5: l'icona del k-esimo al centro
+in (+256 + 104 * (k % 5), +128 + 124 * (k // 5)). Prima le cartelle, poi i file, per nome.
 
 Si prova, una cosa dopo l'altra:
   - la casa a icone e a elenco (il gruppo nella barra: +282 e +308, y +65), confrontate
@@ -51,14 +51,14 @@ DESCRIZIONE = "Files: viste, ordine, cartelle, stati, menu, scorciatoie, informa
 RIFERIMENTI = True
 
 # dentro la finestra di Files (dall'angolo in alto a sinistra)
-INDIETRO = (216, 65)
-A_ICONE, A_ELENCO = (282, 65), (308, 65)
-RICERCA = (700, 65)
-HOME, SCRIVANIA = (60, 145), (60, 181)
-TESTI = (60, 285)
-INTESTAZIONE_NOME = (240, 105)  # l'intestazione della colonna Nome, nella vista a elenco
+INDIETRO = (216, 64)
+A_ICONE, A_ELENCO = (282, 64), (308, 64)
+RICERCA = (700, 64)
+HOME, SCRIVANIA = (60, 96), (60, 132)
+TESTI = (60, 236)
+INTESTAZIONE_NOME = (240, 112)  # l'intestazione della colonna Nome, nella vista a elenco
 VUOTO = (520, 420)              # un punto del pannello dove non c'e' niente (sotto i file)
-CORPO_Y = 89                    # sotto le barre
+CORPO_Y = 88                    # sotto la barra degli strumenti (dove comincia il pannello)
 
 # il menu (voci S da 32, padding 10 sopra): il centro della voce n (contando i separatori, 9)
 def voce(n, separatori=0):
@@ -67,7 +67,7 @@ def voce(n, separatori=0):
 
 def elemento(k):
     """Il centro dell'icona del k-esimo elemento (vista a icone)."""
-    return 264 + (k % 5) * 104, 133 + (k // 5) * 124
+    return 256 + (k % 5) * 104, 128 + (k // 5) * 124
 
 
 def doppio_clic(m, x, y):

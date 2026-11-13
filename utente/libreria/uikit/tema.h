@@ -58,6 +58,8 @@ struct tema {
     unsigned int controllo_sfondo_sopra;
     unsigned int controllo_sfondo_premuto;
     unsigned int controllo_sfondo_disabilitato;
+    unsigned int controllo_selezione_vetro;   /* la voce scelta della barra laterale, sul vetro */
+    unsigned int controllo_sopra_vetro;       /* la voce sotto il puntatore, sul vetro */
     unsigned int azione_sfondo;
     unsigned int azione_sfondo_sopra;
     unsigned int azione_sfondo_premuto;
@@ -103,6 +105,8 @@ static const struct tema tema_chiaro = {
     .controllo_sfondo_sopra         = OPACO(0xE3E3E5),
     .controllo_sfondo_premuto       = OPACO(0xD8D8DA),
     .controllo_sfondo_disabilitato  = OPACO(0xF2F2F3),
+    .controllo_selezione_vetro      = VELATO(0x000000, 20),    /*  8% */
+    .controllo_sopra_vetro          = VELATO(0x000000, 10),    /*  4% */
     .azione_sfondo                  = OPACO(0x4C4C52),
     .azione_sfondo_sopra            = OPACO(0x5F5F64),
     .azione_sfondo_premuto          = OPACO(0x414146),
@@ -174,6 +178,8 @@ static const struct tema tema_scuro = {
     .controllo_sfondo_sopra         = OPACO(0x414146),
     .controllo_sfondo_premuto       = OPACO(0x2F2F33),
     .controllo_sfondo_disabilitato  = OPACO(0x242427),
+    .controllo_selezione_vetro      = VELATO(0xFFFFFF, 31),    /* 12% */
+    .controllo_sopra_vetro          = VELATO(0xFFFFFF, 15),    /*  6% */
     .azione_sfondo                  = OPACO(0xC4C4C7),   /* grigio chiaro, non bianco */
     .azione_sfondo_sopra            = OPACO(0xD8D8DA),
     .azione_sfondo_premuto          = OPACO(0xB8B8BB),

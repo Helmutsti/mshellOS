@@ -39,6 +39,8 @@
 #define CONTROLLO_SFONDO_SOPRA                   (tema_corrente->controllo_sfondo_sopra)
 #define CONTROLLO_SFONDO_PREMUTO                 (tema_corrente->controllo_sfondo_premuto)
 #define CONTROLLO_SFONDO_DISABILITATO            (tema_corrente->controllo_sfondo_disabilitato)
+#define CONTROLLO_SELEZIONE_VETRO                (tema_corrente->controllo_selezione_vetro)
+#define CONTROLLO_SOPRA_VETRO                    (tema_corrente->controllo_sopra_vetro)
 #define AZIONE_SFONDO                            (tema_corrente->azione_sfondo)
 #define AZIONE_SFONDO_SOPRA                      (tema_corrente->azione_sfondo_sopra)
 #define AZIONE_SFONDO_PREMUTO                    (tema_corrente->azione_sfondo_premuto)
@@ -148,12 +150,14 @@
 #define TITOLO_ALTEZZA          40
 #define TITOLO_MARGINE           4
 #define FINESTRA_PADDING        24
-#define TITOLO_DIVISORE          1   /* la linea (BORDO_SEPARATORE) sotto la testata, da bordo a bordo */
+#define CORPO_PADDING     SPAZIO_8   /* la finestra a aree (finestra_tk_aree): intorno al corpo */
+#define CORPO_GAP         SPAZIO_8   /* e tra le sue aree */
 #define TITOLO_COMANDI_LARGHEZZA (2 * ALTEZZA_S + 3 * TITOLO_MARGINE)   /* riduci e chiudi, con i margini: 76 */
 #define OPACITA_COMANDI_INATTIVI 128   /* i comandi di una finestra sullo sfondo: 50% */
 /* la barra degli strumenti e il gruppo di pulsanti (la pillola) */
-/* La barra degli strumenti delle schermate di Figma (Files, Attivita): alta 48, con 8 di padding
- * su tutti i lati intorno ai controlli S (8 + 32 + 8) e 8 tra un controllo e l'altro. */
+/* La barra degli strumenti: alta ALTEZZA_S (32), padding 0, 8 tra un controllo e l'altro. Nella
+ * finestra a aree sta nel corpo (padding 8). Nelle altre finestre (finestra_tk_barra senza
+ * aree) la sua striscia sotto la testata e' alta 48: 8 sopra e sotto, 8 ai lati. */
 #define STRUMENTI_ALTEZZA       48
 #define STRUMENTI_MARGINE_LATI  SPAZIO_8    /* a sinistra e a destra */
 #define STRUMENTI_MARGINE_SOPRA SPAZIO_8    /* sopra e sotto: (48 - 32) / 2 */

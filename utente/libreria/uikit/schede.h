@@ -8,7 +8,7 @@
  * testo del pulsante S (FONT_PULSANTE_S) al centro:
  *   - Normale: testo TESTO_SECONDARIO;
  *   - Selezionata: testo TESTO_PRIMARIO e sotto il testo l'INDICATORE, una pillola alta 2 larga
- *     quanto la scheda, AZIONE_SFONDO;
+ *     quanto la scheda meno il suo padding (PADDING_S per lato, come il testo), AZIONE_SFONDO;
  *   - Sopra (il puntatore sopra una scheda non scelta): il disegno non la mostra; qui il testo
  *     diventa TESTO_PRIMARIO, come le voci dei gruppi di pulsanti.
  * Il testo sta al centro dello spazio sopra l'indicatore (32 - 2).
@@ -81,7 +81,7 @@ static inline void schede_disegna(struct widget *w, struct pennello *p) {
         }
         if (scelta) {
             pennello_colore(p, AZIONE_SFONDO);
-            riempi_pillola(p, x, w->y + alto, l, SCHEDE_INDICATORE);
+            riempi_pillola(p, x + PADDING_S, w->y + alto, l - 2 * PADDING_S, SCHEDE_INDICATORE);
         }
         pennello_colore(p, scelta || i == s->sopra ? TESTO_PRIMARIO : TESTO_SECONDARIO);
         pennello_salva(p);

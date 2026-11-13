@@ -28,17 +28,17 @@ ORDINE = 85
 DESCRIZIONE = "Store: richiesta di installazione, installa, apri, gia' installata, elenco, svuota dati, togli"
 
 FILES = s.angolo(0)
-SCRIVANIA_FILES = (FILES[0] + 72, FILES[1] + 177)      # la Scrivania nella barra laterale di Files
-PACCHETTO = (FILES[0] + 263, FILES[1] + 133)           # contatore.app, il primo elemento
+SCRIVANIA_FILES = (FILES[0] + 72, FILES[1] + 132)      # la Scrivania nella barra laterale di Files
+PACCHETTO = (FILES[0] + 256, FILES[1] + 128)           # contatore.app, il primo elemento
 
 # La richiesta di installazione: lo Store nel secondo posto, i pulsanti in basso a destra
-INSTALLA = (699, 726)           # "Installa" (con "Annulla" a sinistra), in fondo a destra
-APRI, CHIUDI = (690, 726), (578, 726)   # "Apri Contatore" e, a sinistra, "Chiudi"
+INSTALLA = (715, 742)           # "Installa" (con "Annulla" a sinistra), in fondo a destra, a 8 dai bordi
+APRI, CHIUDI = (706, 742), (594, 742)   # "Apri Contatore" e, a sinistra, "Chiudi"
 CHIUDI_CONTATORE = (393, 190)   # la X di Contatore, aperta nel secondo posto
 
 # L'elenco: lo Store (760 x 600) nel secondo posto; il dettaglio con la barra degli strumenti
-RIGA_CONTATORE = (266, 289)     # la prima riga di "Le tue app"
-SVUOTA, TOGLI = (760, 323), (869, 323)   # nell'intestazione dell'app, a destra
+RIGA_CONTATORE = (266, 288)     # la prima riga di "Le tue app"
+SVUOTA, TOGLI = (760, 314), (869, 314)   # nell'intestazione dell'app, a destra
 CONFERMA_SVUOTA = (684, 526)    # nell'avviso di UIKit: il pulsante "Svuota dati" (Annulla a sinistra)
 CONFERMA_TOGLI = (705, 516)     # nell'avviso a tre scelte: "Togli app e dati", il piu' a destra
 

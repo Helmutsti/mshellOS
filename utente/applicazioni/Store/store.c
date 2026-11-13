@@ -13,13 +13,14 @@
  * installare, togliere e svuotare perche' e' un'app del sistema con il permesso "app.gestire".
  *
  * L'ASPETTO e' quello della pagina "App - Store" del file Figma, fatto con i componenti di UIKit:
- * la pagina (l'area dei contenuti chiara, che scorre), il paragrafo, la riga dell'app, la riga di
+ * la finestra a aree, la pagina (il pannello chiaro incassato, che scorre), il paragrafo, la riga dell'app, la riga di
  * permesso con l'etichetta di stato, il messaggio in linea, l'icona dell'app, lo stato vuoto, i
  * pulsanti, l'avviso. Dove il disegno non dice niente, le scelte sono scritte vicino al codice.
  *
- * LA SPAZIATURA (un solo livello con il margine, uguale in x e in y): l'elenco ha 16 ai lati e 24
- * sopra; le righe dell'app hanno 8 di margine interno (hanno un fondo) e i titoli delle sezioni si
- * allineano a loro: 16 + 8 = 24 in x, 24 in y. Il dettaglio e la richiesta: 24 e 24.
+ * LA SPAZIATURA (un solo livello con il padding, uguale in x e in y): il corpo della finestra ha 8
+ * intorno e 8 tra le aree (barra degli strumenti, pannello, azioni). Il pannello dell'elenco ha 8
+ * ai lati e 16 sopra e sotto; le righe dell'app hanno 8 dentro (hanno un fondo) e i titoli delle
+ * sezioni si allineano a loro: 8 + 8 = 16 in x, 16 in y. Il dettaglio e la richiesta: 16 e 16.
  *
  * Ogni passo importante lo scrive anche nella seriale ("store: ..."): lo guardano le prove
  * (test/prove/store.py). */
@@ -312,7 +313,6 @@ static void mostra_esito(int simbolo, const char *titolo, const char *spiegazion
     in_437_qui(esito.titolo, MAX_TESTO_WIDGET);
     in_437_qui(esito.spiegazione, (int)sizeof esito.spiegazione);
     pagina_svuota(&pg_richiesta);
-    pg_richiesta.margine_x = pg_richiesta.margine_sopra = pg_richiesta.margine_sotto = SPAZIO_0;
     pagina_aggiungi(&pg_richiesta, &esito.base);
 }
 
@@ -507,12 +507,12 @@ static void premi_apri(struct pulsante *b, void *dati) {
 
 static int richiesta(const char *percorso) {
     pacchetto = percorso;
-    pagina_prepara(&area, SPAZIO_0, SPAZIO_0, SPAZIO_0, SPAZIO_0);
-    area.fondo = 1;
-    pagina_prepara(&pg_richiesta, SPAZIO_24, SPAZIO_24, SPAZIO_24, SPAZIO_24);
+    /* il corpo: il pannello (padding 16, scorre) e sotto, a CORPO_GAP, le azioni a destra */
+    pagina_prepara(&area, CORPO_GAP, SPAZIO_0, SPAZIO_0, SPAZIO_0);
+    pagina_prepara(&pg_richiesta, SPAZIO_24, SPAZIO_16, SPAZIO_16, SPAZIO_16);
+    pg_richiesta.fondo = 1;
     pg_richiesta.scorre = 1;
-    /* le azioni in fondo, a destra: 24 ai lati e sotto (sopra c'e' gia' il margine della pagina) */
-    pagina_prepara(&pg_azioni, SPAZIO_0, SPAZIO_24, SPAZIO_0, SPAZIO_24);
+    pagina_prepara(&pg_azioni, SPAZIO_0, SPAZIO_0, SPAZIO_0, SPAZIO_0);
     pg_azioni.base.elastico = 0;
     riga_prepara(&riga_azioni, SPAZIO_8);
     spazio_prepara(&spinta);
@@ -534,21 +534,21 @@ static int richiesta(const char *percorso) {
     pagina_aggiungi(&area, &pg_richiesta.base);
     pagina_aggiungi(&area, &pg_azioni.base);
     finestra_tk_prepara(&finestra, "Store", &area.base);
-    finestra_tk_bordo(&finestra);
+    finestra_tk_aree(&finestra);
 
     /* la misura dipende da cosa si mostra (il disegno: 600 per la richiesta, 560 se non si
      * puo' installare, 480 per il pacchetto illeggibile); poi non cambia */
     int esito_launcher = launcher_pacchetto(DESCRIVI_PACCHETTO, pacchetto, &resoconto);
     if (esito_launcher == LAUNCHER_ERRORE && !resoconto.manifesto_letto && !resoconto.quanti) {
         mostra_illeggibile(0);
-        finestra_tk_dimensione(&finestra, 480, 257);
+        finestra_tk_dimensione(&finestra, 480, 240);
     } else if (!resoconto.manifesto_letto) {
         mostra_illeggibile(1);
-        finestra_tk_dimensione(&finestra, 480, 257);
+        finestra_tk_dimensione(&finestra, 480, 240);
     } else {
         mostra_richiesta();
         int errori = !p_chiudi.base.nascosto && p_apri.base.nascosto;
-        if (errori) finestra_tk_dimensione(&finestra, 560, 345);
+        if (errori) finestra_tk_dimensione(&finestra, 560, 328);
         else finestra_tk_dimensione(&finestra, 600, 600);   /* nel disegno 900: non ci sta nello schermo, scorre */
     }
     int esito = uikit_esegui(&finestra);
@@ -807,19 +807,21 @@ static int elenco(void) {
     pulsante_prepara(&p_gestisci, "Gestisci in Impostazioni", ICONA_EXTERNAL_LINK, apri_impostazioni, 0);
     pulsante_stile(&p_gestisci, GHOST, MISURA_S);
 
+    /* sotto la barra, uno dei due pannelli (scorrono): l'elenco, 8 ai lati (le righe hanno 8
+     * dentro) e 16 sopra e sotto; il dettaglio, 16 */
     pagina_prepara(&area, SPAZIO_0, SPAZIO_0, SPAZIO_0, SPAZIO_0);
-    area.fondo = 1;
-    /* l'elenco: 16 ai lati (le righe hanno 8 dentro) e 24 sopra e sotto; il dettaglio: 24 */
-    pagina_prepara(&pg_elenco, SPAZIO_24, SPAZIO_16, SPAZIO_24, SPAZIO_24);
+    pagina_prepara(&pg_elenco, SPAZIO_24, SPAZIO_8, SPAZIO_16, SPAZIO_16);
+    pg_elenco.fondo = 1;
     pg_elenco.scorre = 1;
-    pagina_prepara(&pg_dettaglio, SPAZIO_24, SPAZIO_24, SPAZIO_24, SPAZIO_24);
+    pagina_prepara(&pg_dettaglio, SPAZIO_24, SPAZIO_16, SPAZIO_16, SPAZIO_16);
+    pg_dettaglio.fondo = 1;
     pg_dettaglio.scorre = 1;
     pagina_aggiungi(&area, &pg_elenco.base);
     pagina_aggiungi(&area, &pg_dettaglio.base);
 
     finestra_tk_prepara(&finestra, "Store", &area.base);
     finestra_tk_barra(&finestra, &strumenti.base);
-    finestra_tk_bordo(&finestra);
+    finestra_tk_aree(&finestra);
     finestra_tk_dimensione(&finestra, 760, 600);   /* nel disegno 640: in basso uscirebbe dallo schermo */
     mostra_elenco_app(0);
     return uikit_esegui(&finestra);

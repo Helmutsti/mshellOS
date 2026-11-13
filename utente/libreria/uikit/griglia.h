@@ -1,17 +1,18 @@
 /* LA GRIGLIA DI ICONE, dal file Figma ("Griglia" e "Icona", Layout Tile, pagina "Componenti
  * complessi"): la vista a icone di Files (e un domani la scrivania, le finestre Apri/Salva).
- * Padding SPAZIO_8 intorno, SPAZIO_8 tra un tile e l'altro, in righe (quanti ne stanno).
+ * PADDING ZERO (lo spazio intorno lo da' il pannello che la contiene), SPAZIO_8 tra un tile e
+ * l'altro, in righe (quanti ne stanno).
  *
  * IL TILE, largo TILE_LARGHEZZA (96) e alto TILE_ALTEZZA (116, fisso: due righe di nome), senza
- * un fondo suo, in colonna con SPAZIO_4 sopra e sotto e SPAZIO_4 tra i pezzi:
+ * un fondo suo, in colonna, il riquadro in cima e SPAZIO_4 tra i pezzi:
  *
- *     +----------------+   4
+ *     +----------------+
  *     |   +--------+   |   il riquadro dell'icona, 64 x 64, raggio RAGGIO_CONTROLLO_NUOVO, con
- *     |   | oggetto|   |   l'oggetto grande (48, oggetti.h) al centro
+ *     |   | oggetto|   |   l'oggetto grande (48, oggetti.h) al centro (8 dal bordo del riquadro)
  *     |   +--------+   |   4
  *     |  nome del file |   l'etichetta: "corpo" centrato, al massimo due righe (poi "..."),
- *     |  lungo...      |   SPAZIO_4 di padding ai lati, raggio RAGGIO_CASELLA
- *     +----------------+   4
+ *     |  lungo...      |   SPAZIO_8 di padding ai lati (ha un fondo), raggio RAGGIO_CASELLA
+ *     +----------------+
  *
  * Stati (piatti): Normale (niente fondi), Sopra (il riquadro dell'icona CONTROLLO_SFONDO),
  * Selezionato (il riquadro CONTROLLO_SFONDO_SOPRA e l'etichetta evidenziata: fondo
@@ -24,13 +25,13 @@
 #ifndef GRIGLIA_H
 #define GRIGLIA_H
 
-#define GRIGLIA_PADDING   SPAZIO_8
+#define GRIGLIA_PADDING   SPAZIO_0
 #define GRIGLIA_TRA       SPAZIO_8
 #define TILE_ALTEZZA      116
-#define TILE_DENTRO       SPAZIO_4      /* sopra e sotto il tile, e tra riquadro ed etichetta */
+#define TILE_DENTRO       SPAZIO_4      /* tra riquadro ed etichetta */
 #define TILE_RIQUADRO     64
 #define TILE_RIGHE        2
-#define TILE_ETICHETTA_DENTRO SPAZIO_4  /* ai lati del testo dell'etichetta */
+#define TILE_ETICHETTA_DENTRO SPAZIO_8  /* ai lati del testo dell'etichetta */
 #define TILE_CAMPO_ALTO   (INTERLINEA_CORPO + SPAZIO_4)   /* il campo del nome nuovo: 24 */
 
 struct elemento_griglia_tk {
@@ -106,7 +107,7 @@ static inline void griglia_disponi(struct widget *w) { griglia_impagina((struct 
 /* IL TILE, con l'angolo in (x, y). 'stato': 0 normale, 1 sopra, 2 selezionato. */
 static inline void tile_disegna(struct pennello *p, int x, int y, const struct elemento_griglia_tk *e, int stato,
                                 const char *rinomina) {
-    int rx = x + (TILE_LARGHEZZA - TILE_RIQUADRO) / 2, ry = y + TILE_DENTRO;
+    int rx = x + (TILE_LARGHEZZA - TILE_RIQUADRO) / 2, ry = y;
     if (stato) {
         pennello_colore(p, stato == 2 ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
         riempi_tondo(p, rx, ry, TILE_RIQUADRO, TILE_RIQUADRO, RAGGIO_CONTROLLO_NUOVO);

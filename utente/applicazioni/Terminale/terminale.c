@@ -42,8 +42,8 @@
 /* Le misure dal disegno: testo 13 con la riga da 20 e 25 righe. Le lettere di Plex Mono 13
  * avanzano di 7,8 pixel (Figma non li arrotonda): la casella k comincia a k * 39 / 5, arrotondato
  * (il font ha l'avanzo intero, 8: ogni lettera si disegna da sola al suo posto). In 712 pixel di
- * testo ci stanno 91 colonne. Dentro il pannello il testo ha SPAZIO_16 di margine; il pannello
- * ha SPAZIO_8 dalla finestra. */
+ * testo ci stanno 91 colonne. Il pannello ha SPAZIO_16 di padding (il testo non ne ha); il
+ * pannello sta a CORPO_PADDING (8) dalla finestra (finestra a aree). */
 #define COLONNE 91
 #define TESTO_LARGO 712
 #define CASELLA_X(k) (((k) * 39 + 2) / 5)
@@ -53,7 +53,7 @@
 #define FONT_GRASSETTO (&plexmono_grassetto_13)
 #define RIGA_ALTA 20
 #define CURSORE_ALTO 16                  /* il cursore a blocco: largo una casella, alto 16, al centro della riga */
-#define TERMINALE_DENTRO SPAZIO_16       /* tra il bordo del pannello e il testo */
+#define TERMINALE_DENTRO SPAZIO_16       /* il padding del pannello: tra il suo bordo e il testo */
 
 /* Il colore di una casella (i 4 bit bassi: 1-6 sono i numeri SGR 31-36) e il grassetto (il bit alto). */
 enum { COL_TESTO, COL_ROSSO, COL_VERDE, COL_GIALLO, COL_BLU, COL_VIOLA, COL_MENTA, COL_GRIGIO, COL_ARANCIO };
@@ -137,8 +137,8 @@ static void metti(unsigned char c) {
 
 /* --- il widget della griglia --- */
 
-/* Sta dentro il pannello (uikit/pannello.h) e lo riempie tutto; la barra di scorrimento e'
- * quella della libreria, lungo il bordo destro. Il terminale non ha storia: il contenuto e'
+/* Sta dentro il padding del pannello (uikit/pannello.h), senza padding suo; la barra di
+ * scorrimento e' quella della libreria, nel padding destro del pannello. Il terminale non ha storia: il contenuto e'
  * sempre alto quanto la vista, quindi la barra non compare. */
 struct schermo_tk {
     struct widget base;
@@ -148,8 +148,8 @@ static struct schermo_tk schermo;
 
 static void schermo_misura(struct widget *w, int *l, int *a) {
     (void)w;
-    *l = TESTO_LARGO + 2 * TERMINALE_DENTRO;
-    *a = RIGHE * RIGA_ALTA + 2 * TERMINALE_DENTRO;
+    *l = TESTO_LARGO;
+    *a = RIGHE * RIGA_ALTA;
 }
 
 static void schermo_disponi(struct widget *w) {
@@ -174,7 +174,7 @@ static unsigned int colore_di(unsigned char s) {
 }
 
 static void schermo_disegna(struct widget *w, struct pennello *p) {
-    int x0 = w->x + TERMINALE_DENTRO, y0 = w->y + TERMINALE_DENTRO;
+    int x0 = w->x, y0 = w->y;
     int giu = (RIGA_ALTA - FONT_TERMINALE->altezza) / 2;      /* il testo al centro della riga */
     for (int r = 0; r < RIGHE; r++) {
         int k = 0;
@@ -251,7 +251,7 @@ static void dalla_shell(struct finestra_tk *f, void *dati) {
     }
     for (ssize_t i = 0; i < n; i++) metti(b[i]);
     if (cambiata_a < 0) return;
-    widget_cambiato_zona(&schermo.base, schermo.base.x, schermo.base.y + TERMINALE_DENTRO + cambiata_da * RIGA_ALTA,
+    widget_cambiato_zona(&schermo.base, schermo.base.x, schermo.base.y + cambiata_da * RIGA_ALTA,
                          schermo.base.l, (cambiata_a - cambiata_da + 1) * RIGA_ALTA);
     cambiata_da = RIGHE;
     cambiata_a = -1;
@@ -283,17 +283,16 @@ int main(void) {
     schermo = (struct schermo_tk){ .base = { .tipo = &tipo_schermo, .elastico = 1, .largo = 1 } };
     barra_scorrimento_prepara(&schermo.barra);
     widget_aggiungi(&schermo.base, &schermo.barra.base);
-    /* il corpo: il pannello chiaro incassato, con SPAZIO_8 di margine anche in alto */
-    pannello_prepara(&pannello);
-    pannello.sopra = PANNELLO_MARGINE;
+    /* il corpo: il pannello chiaro incassato (la finestra a aree gli lascia 8 intorno) */
+    pannello_prepara(&pannello, TERMINALE_DENTRO);
     widget_aggiungi(&pannello.base, &schermo.base);
     /* il trattino lungo del titolo, nei font, e' il codice 0x96 */
     finestra_tk_prepara(&finestra, "Terminale \x96 super amministratore", &pannello.base);
-    finestra_tk_bordo(&finestra);
-    /* la misura giusta per la griglia, col pannello e il suo margine sotto la barra del titolo */
-    int l, a;
+    finestra_tk_aree(&finestra);
+    /* la misura giusta per la griglia: il testo, il padding del pannello e quello del corpo */
+    int l, a, intorno = 2 * (TERMINALE_DENTRO + CORPO_PADDING);
     schermo_misura(&schermo.base, &l, &a);
-    finestra_tk_dimensione(&finestra, l + 2 * PANNELLO_MARGINE, finestra_tk_corpo(&finestra) + a + 2 * PANNELLO_MARGINE);
+    finestra_tk_dimensione(&finestra, l + intorno, finestra_tk_corpo(&finestra) + a + intorno);
     finestra_tk_ascolta_tasti(&finestra, scorciatoie, 0);
     uikit_fuoco(&finestra, &schermo.base);    /* la tastiera va alla griglia da subito */
     if (avvia_shell() == 0) {

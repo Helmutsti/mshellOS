@@ -855,7 +855,7 @@ static inline void ricerca_prepara(struct campo *c, const char *suggerimento,
  * schermate d'errore del disegno la vogliono Primario: stato_vuoto_colore_icona), il titolo
  * (FONT_SEZIONE_NUOVO, TESTO_PRIMARIO) e la spiegazione (FONT_CORPO, TESTO_SECONDARIO, a
  * capo da sola, al massimo STATO_VUOTO_RIGHE righe), tutto centrato; SPAZIO_8 tra un pezzo
- * e l'altro, FINESTRA_PADDING (24) di margine. Per una cartella vuota (senza icona), una
+ * e l'altro, PADDING ZERO (lo spazio intorno lo da' il pannello che lo contiene). Per una cartella vuota (senza icona), una
  * cartella che non si legge (ICONA_TRIANGLE_ALERT), un permesso negato (ICONA_LOCK).
  * Prende tutto lo spazio che avanza (elastico e largo). */
 #define STATO_VUOTO_RIGHE 3
@@ -878,16 +878,15 @@ static inline void stato_vuoto_misura(struct widget *w, int *l, int *a) {
     char righe[STATO_VUOTO_RIGHE][MAX_RIGA_NOME];
     int n = stato_vuoto_righe(s, AVVISO_LARGHEZZA, righe);
     int t = larghezza_testo(FONT_SEZIONE_NUOVO, s->titolo);
-    *l = 2 * FINESTRA_PADDING + (t > AVVISO_LARGHEZZA ? t : AVVISO_LARGHEZZA);
-    *a = 2 * FINESTRA_PADDING + INTERLINEA_SEZIONE +
+    *l = t > AVVISO_LARGHEZZA ? t : AVVISO_LARGHEZZA;
+    *a = INTERLINEA_SEZIONE +
          (s->icona != NESSUNA_ICONA ? ICONA_OGGETTO + SPAZIO_8 : 0) + (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0);
 }
 
 static inline void stato_vuoto_disegna(struct widget *w, struct pennello *p) {
     struct stato_vuoto *s = (struct stato_vuoto *)w;
-    int largo = w->l - 2 * FINESTRA_PADDING;
     char righe[STATO_VUOTO_RIGHE][MAX_RIGA_NOME];
-    int n = stato_vuoto_righe(s, largo, righe);
+    int n = stato_vuoto_righe(s, w->l, righe);
     int alto = INTERLINEA_SEZIONE + (s->icona != NESSUNA_ICONA ? ICONA_OGGETTO + SPAZIO_8 : 0) +
                (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0);
     int y = w->y + (w->a - alto) / 2, cx = w->x + w->l / 2;
@@ -1144,6 +1143,7 @@ struct finestra_tk {
     struct widget *strumenti;          /* la barra degli strumenti, o 0 (finestra_tk_barra) */
     char titolo[MAX_TITOLO];
     int l_fissa, a_fissa;              /* 0: la misura la decide il contenuto */
+    int aree;                          /* 1: corpo a aree, padding CORPO_PADDING (finestra_tk_aree) */
     int senza_margine;                 /* 1: il contenuto arriva fino ai bordi (finestra_tk_bordo) */
     struct finestra finestra;          /* il collegamento con il compositore */
     int attiva;                        /* ha il fuoco: e' in primo piano */
@@ -1188,8 +1188,11 @@ static inline int comando_lato(const struct finestra_tk *f) { return f->mini ? A
 static inline int comandi_larghezza(const struct finestra_tk *f) {
     return f->mini ? TITOLO_MARGINE + ALTEZZA_XS : TITOLO_COMANDI_LARGHEZZA;
 }
-/* Il margine intorno al contenuto: FINESTRA_PADDING (24), SPAZIO_16 nella mini finestra. */
-static inline int finestra_padding(const struct finestra_tk *f) { return f->mini ? SPAZIO_16 : FINESTRA_PADDING; }
+/* Il margine intorno al contenuto: FINESTRA_PADDING (24), SPAZIO_16 nella mini finestra,
+ * CORPO_PADDING (8) nella finestra a aree (finestra_tk_aree). */
+static inline int finestra_padding(const struct finestra_tk *f) {
+    return f->senza_margine ? 0 : f->aree ? CORPO_PADDING : f->mini ? SPAZIO_16 : FINESTRA_PADDING;
+}
 
 /* L'avviso e' aperto. Se bloccante, la finestra sotto non si usa. */
 static inline struct avviso *finestra_tk_avviso_aperto(const struct finestra_tk *f) {
@@ -1226,7 +1229,7 @@ static inline void uikit_cambiata_tutta(struct finestra_tk *f) {
 
 /* La testata (il titolo, i comandi riduci e chiudi), con il suo divisore. */
 static inline void uikit_cambiata_testata(struct finestra_tk *f) {
-    uikit_cambiata_zona(f, 0, 0, f->base.l, testata_altezza(f) + TITOLO_DIVISORE);
+    uikit_cambiata_zona(f, 0, 0, f->base.l, testata_altezza(f));
 }
 
 /* Se il widget non e' ancora in una finestra (lo si sta preparando, prima di
@@ -1264,12 +1267,15 @@ static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, i
  *     TITOLO_MARGINE (4) dal bordo e l'uno dall'altro: 4 + 32 + 4 = 40, cioe' proprio
  *     l'altezza della testata. Lo spazio vuoto a sinistra e' largo quanto il gruppo dei
  *     comandi (TITOLO_COMANDI_LARGHEZZA), cosi' il titolo resta centrato nella finestra.
- *     Sotto la testata c'e' una riga di 1 pixel (il divisore) dello stesso vetro: non si
- *     vede mai (deciso dalla persona: nessuna linea sotto il titolo, con o senza barra
- *     degli strumenti). La riga resta solo perche' le misure non cambino;
- *   - il CONTENUTO: tutto quello che sta sotto il divisore, con i soli angoli in BASSO
+ *     Sotto la testata nessuna linea, mai (deciso dalla persona), e nessun pixel in piu':
+ *     il corpo comincia subito sotto, come nel disegno;
+ *   - il CORPO: tutto quello che sta sotto la testata, con i soli angoli in BASSO
  *     arrotondati. Comincia con la barra degli strumenti, se c'e', poi il contenuto
- *     dell'applicazione, con FINESTRA_PADDING (24) intorno (a meno di finestra_tk_bordo).
+ *     dell'applicazione, con FINESTRA_PADDING (24) intorno. La finestra A AREE
+ *     (finestra_tk_aree: la struttura delle finestre del disegno, Files, Attivita, Store,
+ *     Terminale) ha invece CORPO_PADDING (8) su tutti i lati e CORPO_GAP (8) tra la barra
+ *     degli strumenti e il contenuto: barra laterale, barra degli strumenti e pannello
+ *     partono dalla stessa linea, a 8 dal bordo della finestra.
  *
  * La testata non e' contenuto: ha la sua funzione di disegno e le sue misure, e quello che
  * l'applicazione mette nella finestra comincia sempre sotto di lei (finestra_tk_corpo).
@@ -1289,11 +1295,22 @@ static inline int su_comando(const struct finestra_tk *f, int chiudi, int x, int
     return x >= cx && x < cx + lato && y >= cy && y < cy + lato;
 }
 
-/* Dove comincia il corpo della finestra: sotto la testata col suo divisore e, se c'e' (e non
- * e' nascosta), sotto la barra degli strumenti. */
+/* La striscia della barra degli strumenti sotto la testata (0 se non c'e' o e' nascosta): nella
+ * finestra a aree il padding del corpo e la barra, alta quanto le sue cose (il gap sotto e' il
+ * margine del contenuto, finestra_padding); nelle altre STRUMENTI_ALTEZZA (48: la barra, alta
+ * 32, con STRUMENTI_MARGINE_SOPRA sopra e sotto). */
+static inline int finestra_tk_striscia(const struct finestra_tk *f) {
+    if (!f->strumenti || f->strumenti->nascosto) return 0;
+    if (!f->aree) return STRUMENTI_ALTEZZA;
+    int l, a;
+    widget_misura(f->strumenti, &l, &a);
+    return CORPO_PADDING + a;
+}
+
+/* Dove comincia il contenuto della finestra, senza il suo margine: sotto la testata e, se c'e'
+ * (e non e' nascosta), sotto la barra degli strumenti. */
 static inline int finestra_tk_corpo(const struct finestra_tk *f) {
-    return testata_altezza(f) + TITOLO_DIVISORE +
-           (f->strumenti && !f->strumenti->nascosto ? STRUMENTI_ALTEZZA : 0);
+    return testata_altezza(f) + finestra_tk_striscia(f);
 }
 
 /* Il contenuto, piu' il padding e le barre; abbastanza larga per il titolo e i comandi, e
@@ -1312,6 +1329,7 @@ static inline void finestra_tk_misura(struct widget *w, int *l, int *a) {
     if (f->strumenti && !f->strumenti->nascosto) {
         int sl, sa;
         widget_misura(f->strumenti, &sl, &sa);
+        sl += 2 * STRUMENTI_MARGINE_LATI;   /* e' a 8 dai bordi (CORPO_PADDING, a aree) */
         if (*l < sl) *l = sl;
     }
     *a = finestra_tk_corpo(f) + 2 * finestra_padding(f) + ca;
@@ -1320,14 +1338,16 @@ static inline void finestra_tk_misura(struct widget *w, int *l, int *a) {
 static inline void finestra_tk_disponi(struct widget *w) {
     struct finestra_tk *f = (struct finestra_tk *)w;
     if (!w->quanti_figli) return;
-    if (f->strumenti) {                     /* tutta la larghezza, subito sotto il divisore */
-        f->strumenti->x = 0;
-        f->strumenti->y = testata_altezza(f) + TITOLO_DIVISORE;
-        f->strumenti->l = w->l;
-        f->strumenti->a = STRUMENTI_ALTEZZA;
+    if (f->strumenti) {                     /* tutta la larghezza, a 8 dai bordi e dalla testata */
+        int lati = f->aree ? CORPO_PADDING : STRUMENTI_MARGINE_LATI;
+        int sopra = f->aree ? CORPO_PADDING : STRUMENTI_MARGINE_SOPRA;
+        f->strumenti->x = lati;
+        f->strumenti->y = testata_altezza(f) + sopra;
+        f->strumenti->l = w->l - 2 * lati;
+        f->strumenti->a = f->aree ? finestra_tk_striscia(f) - sopra : ALTEZZA_S;
     }
     int corpo = finestra_tk_corpo(f);
-    int margine = f->senza_margine ? 0 : finestra_padding(f);
+    int margine = finestra_padding(f);
     struct widget *c = w->figli[0];
     c->x = margine;
     c->y = corpo + margine;
@@ -1340,15 +1360,15 @@ static inline void finestra_tk_disponi(struct widget *w) {
  * soli angoli in basso arrotondati. Quello che sta nel contenuto (la barra degli strumenti,
  * il widget dell'applicazione) lo disegnano i figli, dopo. */
 static inline void finestra_tk_contenuto_disegna(struct finestra_tk *f, struct pennello *p) {
-    int inizio = testata_altezza(f) + TITOLO_DIVISORE;
+    int inizio = testata_altezza(f);
     struct tondo contenuto = { 0, inizio, f->base.l, f->base.a - inizio,
                                { 0, 0, RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO } };
     pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &contenuto);
 }
 
-/* LA TESTATA: il fondo (lo stesso vetro, soli angoli in alto arrotondati), il divisore di
- * 1 pixel da bordo a bordo (solo senza barra degli strumenti: vedi sotto), il titolo centrato e i comandi. Una finestra che non ha il
+/* LA TESTATA: il fondo (lo stesso vetro, soli angoli in alto arrotondati), il titolo centrato e
+ * i comandi (sotto, nessuna linea: deciso dalla persona). Una finestra che non ha il
  * fuoco (non e' in primo piano) ha il titolo in TESTO_SECONDARIO e i comandi al 50%.
  *
  * Il VETRO e' lo stesso del contenuto: i due pezzi si toccano lungo il divisore, e le
@@ -1360,12 +1380,6 @@ static inline void finestra_tk_titolo_disegna(struct finestra_tk *f, struct penn
                              { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
     pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &testata);
-    /* Il divisore: la riga resta (le misure non cambiano) ma e' dello stesso vetro, quindi
-     * non si vede. Deciso dalla persona: sotto il titolo nessuna linea, mai, con o senza la
-     * barra degli strumenti. */
-    pennello_colore(p, SUPERFICIE_VETRO);
-    riempi_rettangolo(p, 0, alta, w->l, TITOLO_DIVISORE);
-
     /* il titolo, al centro della finestra: tra lo spazio vuoto a sinistra (largo quanto i
      * comandi) e i comandi non entra mai nei comandi, un titolo lungo si taglia. Nella mini
      * finestra e' piu' piccolo (l'etichetta, 12). */
@@ -1438,10 +1452,17 @@ static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strum
     widget_aggiungi(&f->base, strumenti);
 }
 
-/* Il contenuto senza il margine intorno: arriva fino ai bordi della finestra e fin sotto
- * la barra (degli strumenti, se c'e'). Per le finestre fatte a "pannelli", come Files con
- * la sua barra laterale: i margini, dentro, li decide l'applicazione. Prima di
- * uikit_esegui. */
+/* LA FINESTRA A AREE, la struttura di tutte le finestre del disegno: il corpo sotto la testata
+ * ha CORPO_PADDING (8) su tutti i lati e CORPO_GAP (8) tra le aree (barra degli strumenti,
+ * barra laterale, pannello). Le aree non hanno padding loro: lo spazio dentro lo da' solo il
+ * pannello (pannello.h, o una pagina con il fondo). Con finestra_tk_barra la barra degli
+ * strumenti prende tutta la larghezza del corpo, sopra il contenuto; chi la vuole solo sopra
+ * un'area (Files: a destra della barra laterale) la mette nel suo contenuto, in una colonna a
+ * CORPO_GAP. Prima di uikit_esegui. */
+static inline void finestra_tk_aree(struct finestra_tk *f) { f->aree = 1; }
+
+/* Il contenuto senza nessun margine, fino ai bordi della finestra: solo per chi disegna tutto
+ * da se' (le scene dell'anteprima). Le applicazioni usano finestra_tk_aree. */
 static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine = 1; }
 
 
@@ -1535,13 +1556,13 @@ static inline void uikit_ridisponi(struct finestra_tk *f) {
 
 /* --- la barra degli strumenti --- */
 
-/* LA BARRA DEGLI STRUMENTI, dal file Figma. Una riga alta STRUMENTI_ALTEZZA (48) sotto la
- * testata, DENTRO la finestra: e' parte del contenuto e non ha un fondo suo (si vede il
- * vetro della finestra), larga quanto tutta la finestra (non sta nel padding del
- * contenuto), come nel Finder del Mac. Dentro, da sinistra a destra, le sue cose: controlli
- * S (32 di altezza) con STRUMENTI_MARGINE_SOPRA (8) sopra e sotto, a GAP_M (8) l'una
- * dall'altra, a STRUMENTI_MARGINE_LATI (8) dai bordi: come nelle schermate di Figma. Una cosa 'elastica' (il percorso, o
- * uno spazio) prende la larghezza che avanza.
+/* LA BARRA DEGLI STRUMENTI, dal file Figma. Una riga alta ALTEZZA_S (32) con PADDING ZERO, senza
+ * un fondo suo (si vede il vetro della finestra): i suoi controlli S, a GAP_M (8) l'uno
+ * dall'altro. Una cosa 'elastica' (il percorso, o uno spazio) prende la larghezza che avanza.
+ * Lo spazio intorno lo da' il corpo della finestra: con finestra_tk_barra sta in cima al corpo,
+ * larga quanto tutta la finestra meno 8 per lato (finestra_tk_aree, o la striscia di 48 delle
+ * altre finestre); oppure l'applicazione la mette dove vuole nel suo contenuto (Files: sopra il
+ * pannello, a destra della barra laterale).
  *
  * Un clic sullo spazio vuoto della barra trascina la finestra, come sulla testata (cosi'
  * fa il Mac): vedi uikit_puntatore.
@@ -1551,26 +1572,26 @@ static inline void uikit_ridisponi(struct finestra_tk *f) {
  *     barra_strumenti_aggiungi(&strumenti, &dove.base);
  *     finestra_tk_barra(&finestra, &strumenti.base);
  *
- * Dentro c'e' una riga (il suo unico figlio): la barra le lascia lo spazio meno i
- * margini, e la riga mette in fila le cose. */
+ * Dentro c'e' una riga (il suo unico figlio), grande quanto la barra, che mette in fila le
+ * cose. La barra e' alta quanto le sue cose: ALTEZZA_S (32), o 33 con le schede. */
 struct barra_strumenti {
     struct widget base;
     struct contenitore riga;
 };
 
+/* Alta quanto le sue cose (ALTEZZA_S; le schede 33, con il pixel della loro linea di base). */
 static inline void barra_strumenti_misura(struct widget *w, int *l, int *a) {
     struct barra_strumenti *b = (struct barra_strumenti *)w;
     widget_misura(&b->riga.base, l, a);
-    *l += 2 * STRUMENTI_MARGINE_LATI;
-    *a = STRUMENTI_ALTEZZA;
+    if (*a < ALTEZZA_S) *a = ALTEZZA_S;
 }
 
 static inline void barra_strumenti_disponi(struct widget *w) {
     struct barra_strumenti *b = (struct barra_strumenti *)w;
-    b->riga.base.x = w->x + STRUMENTI_MARGINE_LATI;
-    b->riga.base.y = w->y + STRUMENTI_MARGINE_SOPRA;
-    b->riga.base.l = w->l - 2 * STRUMENTI_MARGINE_LATI;
-    b->riga.base.a = ALTEZZA_S;
+    b->riga.base.x = w->x;
+    b->riga.base.y = w->y;
+    b->riga.base.l = w->l;
+    b->riga.base.a = w->a;
 }
 
 static const struct tipo_widget tipo_barra_strumenti = {
@@ -1578,7 +1599,7 @@ static const struct tipo_widget tipo_barra_strumenti = {
 };
 
 static inline void barra_strumenti_prepara(struct barra_strumenti *b) {
-    *b = (struct barra_strumenti){ .base = { .tipo = &tipo_barra_strumenti } };
+    *b = (struct barra_strumenti){ .base = { .tipo = &tipo_barra_strumenti, .largo = 1 } };
     riga_prepara(&b->riga, GAP_M);
     widget_aggiungi(&b->base, &b->riga.base);
 }
@@ -1587,12 +1608,13 @@ static inline void barra_strumenti_aggiungi(struct barra_strumenti *b, struct wi
     widget_aggiungi(&b->riga.base, w);
 }
 
-/* Lo spazio vuoto della barra (non una delle sue cose): da li' si trascina la finestra. */
+/* Lo spazio vuoto di una barra degli strumenti (non una delle sue cose), ovunque sia nella
+ * finestra: da li' si trascina la finestra. */
 static inline int barra_strumenti_vuota(struct finestra_tk *f, int x, int y) {
-    struct widget *s = f->strumenti;
-    if (!s || s->nascosto || !widget_contiene(s, x, y)) return 0;
-    struct widget *w = widget_in(s, x, y);
-    return !w || w == s || w == s->figli[0] || w->tipo == &tipo_spazio;
+    struct widget *w = widget_in(&f->base, x, y);
+    if (w && w->tipo == &tipo_spazio) w = w->genitore;          /* uno spazio nella riga */
+    if (w && w->genitore && w->genitore->tipo == &tipo_barra_strumenti) w = w->genitore;   /* la riga */
+    return w && w->tipo == &tipo_barra_strumenti;
 }
 
 /* IL PULSANTE DELLA BARRA, dal file Figma. Fuori da un gruppo e' un pulsante GHOST S: senza

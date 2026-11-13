@@ -7,7 +7,7 @@
  *     Decrescente. Un clic sull'intestazione ordina per quella colonna (un altro clic gira il
  *     verso);
  *   - una linea BORDO_SEPARATORE da bordo a bordo;
- *   - le RIGHE: SPAZIO_4 sopra la prima, alte ALTEZZA_M (40), a SPAZIO_4 l'una dall'altra (due
+ *   - le RIGHE: subito sotto la linea, alte ALTEZZA_M (40), a SPAZIO_4 l'una dall'altra (due
  *     fondi arrotondati non si toccano mai), raggio RAGGIO_CONTROLLO_NUOVO, padding SPAZIO_8 ai
  *     lati. Stati: Normale (piatta), Sopra (fondo CONTROLLO_SFONDO), Selezionata (fondo
  *     CONTROLLO_SFONDO_SOPRA). Le celle in "corpo", con "..." se non ci stanno; la prima colonna
@@ -32,7 +32,7 @@
 #define TABELLA_ALTEZZA_TESTATA     ALTEZZA_S
 #define TABELLA_ALTEZZA_RIGA        ALTEZZA_M
 #define TABELLA_TRA_RIGHE   SPAZIO_4
-#define TABELLA_SOPRA_RIGHE SPAZIO_4
+#define TABELLA_SOPRA_RIGHE SPAZIO_0
 #define TABELLA_DENTRO      SPAZIO_8      /* il padding della riga e dell'intestazione, ai lati */
 #define TABELLA_TRA_COLONNE SPAZIO_24
 #define TABELLA_FRECCIA     ICONA_S

@@ -13,15 +13,16 @@
  * le applicazioni; i servizi del sistema no.
  *
  * L'ASPETTO e' quello della pagina "App - Attivita'" del file Figma, fatto con i componenti di
- * UIKit: le schede nella barra degli strumenti, i pulsanti, l'area dei contenuti chiara (la
- * pagina), la barra di utilizzo con la legenda, l'avviso del riavvio. La tabella dei processi e'
- * quella di UIKit (tabella.h), con l'ordinamento per colonna.
+ * UIKit: la finestra a aree, le schede nella barra degli strumenti, i pulsanti, il pannello
+ * chiaro incassato (la pagina con il fondo), la barra di utilizzo con la legenda, l'avviso del
+ * riavvio. La tabella dei processi e' quella di UIKit (tabella.h), con l'ordinamento per colonna.
  *
- * LA SPAZIATURA (la regola: un solo livello con il margine, uguale in x e in y). Processi: la
- * pagina della tabella ha 16 di margine, le righe hanno 8 di margine interno perche' hanno un
- * fondo (e l'intestazione si allinea a loro): dal bordo dell'area al primo testo 16 + 8 = 24 in
- * x, e in y 16 + 8 (il testo alto 16 al centro dell'intestazione alta 32) = 24. Il piede: 24 ai
- * lati e sotto. Memoria e Disco: la pagina ha 24 di margine, i figli niente: 24 e 24. */
+ * LA SPAZIATURA (la regola: un solo livello con il padding, uguale in x e in y). Il corpo della
+ * finestra ha 8 intorno e 8 tra la barra degli strumenti e il pannello. Processi: il pannello
+ * ha 8 di padding, le righe hanno 8 dentro perche' hanno un fondo (e l'intestazione e il piede
+ * si allineano a loro): dal bordo del pannello al primo testo 8 + 8 = 16 in x, e in y 8 + 8 (il
+ * testo alto 16 al centro dell'intestazione alta 32) = 16. Memoria e Disco: il pannello ha 16
+ * di padding, i figli niente: 16 e 16. */
 #include "uikit/uikit.h"
 #include "launcher.h"     /* Riavvia: riaprire l'app */
 
@@ -150,7 +151,7 @@ static void righe_cambiate(int prima) {
 /* --- le pagine Memoria e Disco: il riepilogo, la barra di utilizzo e la legenda di UIKit --- */
 
 struct pagina_grafico {
-    struct pagina pagina;              /* margine 24, SPAZIO_16 tra riepilogo e legenda */
+    struct pagina pagina;              /* il pannello: padding 16, SPAZIO_16 tra riepilogo e legenda */
     struct contenitore riepilogo;      /* il titolo e la barra, a SPAZIO_8 */
     struct paragrafo titolo;
     struct barra_utilizzo barra;
@@ -161,7 +162,8 @@ struct pagina_grafico {
 
 static void pagina_grafico_prepara(struct pagina_grafico *pg, int quanti, const char *const *nomi,
                                    const int *toni, int resto) {
-    pagina_prepara(&pg->pagina, SPAZIO_16, SPAZIO_24, SPAZIO_24, SPAZIO_24);
+    pagina_prepara(&pg->pagina, SPAZIO_16, SPAZIO_16, SPAZIO_16, SPAZIO_16);
+    pg->pagina.fondo = 1;
     pg->pagina.base.nascosto = 1;
     pg->grafico = (struct grafico){ .quanti = quanti, .nomi = nomi, .toni = toni, .resto = resto };
     colonna_prepara(&pg->riepilogo, SPAZIO_8);
@@ -250,7 +252,7 @@ static struct pulsante pulsante_riavvia, pulsante_termina;
 static struct avviso avviso_riavvia;
 static char id_da_riavviare[MAX_NOME_FILE];   /* l'app da riavviare (il nome del processo e' il suo id) */
 static int da_riavviare = -1;
-static struct pagina area;                    /* l'area dei contenuti, chiara */
+static struct pagina area;                    /* il corpo sotto la barra: uno dei pannelli */
 static struct pagina pagina_tabella, piede;
 static struct contenitore riga_piede;
 static struct paragrafo messaggio, riassunto_processi;
@@ -436,7 +438,6 @@ static void premi_riavvia(struct pulsante *b, void *dati) {
 static void mostra_pagina(struct schede *s, int scelta, void *dati) {
     (void)s; (void)dati;
     widget_nascondi(&pagina_tabella.base, scelta != SCHEDA_PROCESSI);
-    widget_nascondi(&piede.base, scelta != SCHEDA_PROCESSI);
     widget_nascondi(&memoria.pagina.base, scelta != SCHEDA_MEMORIA);
     widget_nascondi(&disco.pagina.base, scelta != SCHEDA_DISCO);
     if (scelta == SCHEDA_DISCO) aggiorna_disco(&finestra, 0);
@@ -462,11 +463,11 @@ int main(void) {
     barra_strumenti_aggiungi(&strumenti, &pulsante_riavvia.base);
     barra_strumenti_aggiungi(&strumenti, &pulsante_termina.base);
 
-    /* l'area dei contenuti: la pagina della tabella (margine 16, sotto niente: il piede ha il
-     * suo) e il piede (24 ai lati e sotto, 16 sopra), oppure le pagine Memoria e Disco */
+    /* sotto la barra, uno dei pannelli: quello dei processi (padding 8: la tabella e, sotto, il
+     * piede alto 32 con 8 ai lati come le righe), oppure le pagine Memoria e Disco */
     pagina_prepara(&area, SPAZIO_0, SPAZIO_0, SPAZIO_0, SPAZIO_0);
-    area.fondo = 1;
-    pagina_prepara(&pagina_tabella, SPAZIO_0, SPAZIO_16, SPAZIO_16, SPAZIO_0);
+    pagina_prepara(&pagina_tabella, SPAZIO_0, SPAZIO_8, SPAZIO_8, SPAZIO_8);
+    pagina_tabella.fondo = 1;
     tabella_tk_prepara(&tabella, colonne, (int)(sizeof colonne / sizeof colonne[0]), dati_riga,
                        al_clic_tabella_processi, 0);
     tabella.al_ordine = al_ordine_processi;
@@ -474,7 +475,9 @@ int main(void) {
     tabella.verso = ORDINE_CRESCENTE;
     pagina_aggiungi(&pagina_tabella, &tabella.base);
 
-    pagina_prepara(&piede, SPAZIO_0, SPAZIO_24, SPAZIO_16, SPAZIO_24);
+    /* il piede: alto ALTEZZA_S (32), il testo (alto 16) al centro, 8 ai lati come le righe */
+    pagina_prepara(&piede, SPAZIO_0, TABELLA_DENTRO, (ALTEZZA_S - INTERLINEA_PICCOLO) / 2,
+                   (ALTEZZA_S - INTERLINEA_PICCOLO) / 2);
     piede.base.elastico = 0;
     riga_prepara(&riga_piede, SPAZIO_16);
     paragrafo_prepara(&riassunto_processi, "", FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, TESTO_SECONDARIO);
@@ -490,15 +493,15 @@ int main(void) {
     pagina_grafico_prepara(&memoria, PEZZI_MEMORIA, nomi_memoria, toni_memoria, LIBERA);
     pagina_grafico_prepara(&disco, PEZZI_DISCO, nomi_disco, toni_disco, DISCO_LIBERO);
 
+    pagina_aggiungi(&pagina_tabella, &piede.base);
     pagina_aggiungi(&area, &pagina_tabella.base);
-    pagina_aggiungi(&area, &piede.base);
     pagina_aggiungi(&area, &memoria.pagina.base);
     pagina_aggiungi(&area, &disco.pagina.base);
 
     finestra_tk_prepara(&finestra, "Attivit\x85", &area.base);
     finestra_tk_barra(&finestra, &strumenti.base);
-    finestra_tk_bordo(&finestra);
-    finestra_tk_dimensione(&finestra, 768, 547);
+    finestra_tk_aree(&finestra);
+    finestra_tk_dimensione(&finestra, 768, 526);   /* il disegno, schermata Processi */
     avviso_prepara(&avviso_riavvia, "Riavviare?",
                    "Il processo viene chiuso e aperto di nuovo. I dati non salvati andranno persi.",
                    "Riavvia", PERICOLO, 1, risposta_riavvia, 0);

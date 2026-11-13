@@ -17,7 +17,7 @@ Sei l'agente che disegna l'interfaccia di mshell in Figma. Il compito preciso (a
 - Una regola decisa per un componente vale per tutti quelli dello stesso tipo, senza chiedere.
 - Nessuna linea sotto la barra del titolo, in nessuna finestra.
 - Niente ombre tagliate: i frame interni non ritagliano (createAutoLayout ritaglia di default: spegnilo). Ritagliano solo finestre ed elenchi che scorrono. I bordi non contano nel layout.
-- Applica la REGOLA DELLA SPAZIATURA di CLAUDE.md, tutti e sei i punti, e nel resoconto scrivi le somme x e y per ogni schermata.
+- Applica la REGOLA DELLA SPAZIATURA di CLAUDE.md, tutti i punti (1-10), e nel resoconto scrivi le somme x e y per ogni schermata.
 
 ## Consegna (obbligatoria)
 In `disegni/<App>/`:

@@ -30,7 +30,7 @@
 - **Nessuna linea sotto la barra del titolo**, in nessuna finestra (anche se il componente Figma la mostra).
 - Niente ombre tagliate: i frame interni non ritagliano; ritagliano solo finestre ed elenchi che scorrono. I bordi non contano nel layout.
 - **Alla fine del disegno** l'agente salva in `disegni/<App>/`: `figma/` con una foto per schermata in chiaro e scuro (fatte una volta, si rifanno solo se il disegno cambia) e `descrizione.md` (struttura della finestra, misure, componenti e varianti, nomi di colori e misure, indirizzi delle schermate).
-- Impostazioni va ridisegnata da zero più avanti: non toccarla ora.
+- Impostazioni è stata ridisegnata (schermata 228:52, vedi `disegni/Impostazioni/`): si lavora sul disegno nuovo, il vecchio frame 139:1708 non si tocca.
 
 ### REGOLA DELLA SPAZIATURA (da ricopiare identica in ogni istruzione di disegno)
 ```
@@ -40,7 +40,12 @@
 4. Il numero che conta è la DISTANZA TOTALE tra il bordo visibile del contenitore e il primo pixel di contenuto (testo o icona). Deve essere uguale a un solo valore spazio/*, ed essere uguale in orizzontale e in verticale.
 5. Verifica obbligatoria prima di consegnare: per ogni schermata, percorri i livelli dal bordo della finestra fino al testo della prima riga e della prima colonna. Somma i padding di tutti i livelli, separatamente per x e per y. Se le due somme sono diverse, o se più di un livello per lato ha padding diverso da zero (tranne l'eccezione del punto 3), correggi togliendo il padding dal livello PIÙ INTERNO. Nel resoconto scrivi le due somme per ogni schermata.
 6. ZONA DEI CONTENUTI UGUALE IN TUTTE LE APP: il contenuto principale di una finestra (elenco di file, tabella dei processi, elenco delle app, impostazioni) sta sempre in un pannello chiaro incassato, come in Files: sfondo superficie/elevata, angoli raggio/pannello, margine spazio/* uguale su tutti i lati rispetto al corpo della finestra. Barra degli strumenti e barra laterale restano fuori dal pannello. Prima di disegnare una schermata, apri "App – Files" e copia la stessa struttura.
+7. LO SPAZIO LO DÀ SOLO IL CONTENITORE. Un elemento ha padding solo se è un contenitore che delimita un'area visibile (corpo della finestra, pannello). Tutto il resto ha padding 0: barre laterali, barre degli strumenti, aree, intestazioni, piedi, celle senza sfondo proprio. Mai due livelli annidati che danno spazio sullo stesso lato. Mai frame "margine" che servono solo a spostare qualcosa.
+8. STRUTTURA DI OGNI FINESTRA: il corpo ha padding spazio/8 su tutti i lati e gap spazio/8 tra le aree (barra laterale, barra degli strumenti, pannello). Il pannello ha il suo padding. Così barra laterale, barra degli strumenti e pannello partono dalla stessa linea, a 8 dal bordo della finestra.
+9. DISTANZE FISSE, uguali in tutte le app: bordo della finestra → primo testo della barra laterale = 16; bordo del pannello → primo testo del contenuto = 16; sfondo della voce selezionata → bordo della finestra = 8 e → pannello = 8. Nessuna linea e nessun bordo tra le aree.
+10. VERIFICA SULLA FOTO, non sui numeri dei nodi: prima di consegnare misura queste distanze sulla foto di ogni schermata e scrivile nel resoconto. Se una non torna, la causa è un padding su un livello interno: toglilo lì. Mai compensare spostando o aggiungendo spazio altrove.
 ```
+La regola vale anche per il codice: l'agente del codice la riceve identica.
 
 ## Flusso: codice delle app e delle librerie
 - Si parte da `disegni/<App>/descrizione.md` e dalle foto in `disegni/<App>/figma/`. Figma (MCP) si apre **solo** su un elemento preciso, quando una misura non si capisce dalla foto.

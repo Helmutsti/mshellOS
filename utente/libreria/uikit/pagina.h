@@ -8,10 +8,10 @@
  * fondo visibile con un loro margine interno (le righe sotto il puntatore), la pagina toglie lo
  * stesso valore dal suo margine su quel lato: la somma resta quella del design.
  *
- * IL FONDO ('fondo' a 1): l'AREA DEI CONTENUTI della finestra, chiara (SUPERFICIE_ELEVATA), sotto
- * la barra degli strumenti; se arriva al fondo della finestra, i suoi angoli in basso seguono
- * quelli della finestra (RAGGIO_FINESTRA_NUOVO). Si usa con finestra_tk_bordo: la pagina prende
- * tutta la finestra sotto le barre.
+ * IL FONDO ('fondo' a 1): la pagina e' il PANNELLO DEL CONTENUTO della finestra, chiaro e
+ * incassato (SUPERFICIE_ELEVATA, raggio RAGGIO_PANNELLO, come pannello.h), e il suo margine e'
+ * il padding del pannello. Si usa nel corpo della finestra a aree (finestra_tk_aree), che le
+ * lascia 8 intorno. Se scorre, scorre tutto il pannello: il contenuto si taglia sul suo bordo.
  *
  * LA LARGHEZZA DEI FIGLI. La pagina da' a ogni figlio tutta la sua larghezza (meno i margini)
  * PRIMA di misurarlo: cosi' un paragrafo o una riga che va a capo sanno quanto sono alti
@@ -188,11 +188,8 @@ static inline void pagina_disponi(struct widget *w) {
 static inline void pagina_disegna(struct widget *w, struct pennello *p) {
     struct pagina *g = (struct pagina *)w;
     if (g->fondo) {
-        struct finestra_tk *f = widget_finestra(w);
-        int r = w->y + w->a >= f->base.a ? RAGGIO_FINESTRA_NUOVO : 0;
-        struct tondo t = { w->x, w->y, w->l, w->a, { 0, 0, r, r } };
         pennello_colore(p, SUPERFICIE_ELEVATA);
-        riempi_forma(p, &t);
+        riempi_tondo(p, w->x, w->y, w->l, w->a, RAGGIO_PANNELLO);
     }
     if (!g->scorre) return;
     int dy = g->barra.scorrimento.posizione - g->spostato;

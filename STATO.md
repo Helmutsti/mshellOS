@@ -509,9 +509,8 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   contenuto (menu, barre, finestre, suggerimento); *piatto* = il resto, premuto e disabilitato inclusi.
 - Controlli S 32 / M 40 / L 48. Azioni (pulsanti, solo icona, gruppi, ricerca) a pillola; campi dati
   a rettangolo arrotondato (raggio 10/12/14). Titolo e contenuto della finestra sono separati
-  (titolo 40 px, finestra raggio 28). Il divisore da bordo a bordo sotto il titolo si vede solo
-  se sotto c'è il contenuto; con la barra degli strumenti sotto, titolo e barra sono un vetro solo
-  (deciso dalla persona: nel disegno la linea c'è, ma sul vetro di Figma non si vede).
+  (titolo 40 px, finestra raggio 28). Sotto il titolo nessuna linea e nessun pixel in più, in
+  nessuna finestra: il corpo comincia subito sotto (deciso dalla persona, come nel disegno).
 - Le icone prendono il colore dalla raccolta "Colore icona" del disegno (`COLORE_ICONA(...)`,
   `tema.h`): Primario, Inverso, Attenuato, Secondario, Pericolo, Successo, Avviso, Informazione,
   col modo che usa il componente in Figma.
