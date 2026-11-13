@@ -55,8 +55,12 @@
  *      componenti ancora scritti negli header) sono dichiarate in interno/nucleo.h.
  *   3. DA FARE: i componenti complessi (menu, tabella, griglia, barra_laterale, schede,
  *      userbar, oggetti, elemento_file, pagina, paragrafo, pannello).
- *   4. DA FARE: i componenti piccoli (grafico, etichetta_stato, messaggio, icona_app,
- *      riga_permesso, riga_app, informazioni).
+ *   4. FATTO: i componenti piccoli. grafico.h, etichetta_stato.h, messaggio.h, icona_app.h,
+ *      riga_permesso.h, riga_app.h e informazioni.h hanno solo dichiarazioni; il codice e' in
+ *      interno/, un .c per header (informazioni_mostra.c a parte: apre la mini finestra con il
+ *      ciclo degli eventi, e l'anteprima la lascia fuori come ciclo.c). Quello che un
+ *      componente usa di un altro (l'etichetta di stato nella riga di permesso, l'icona
+ *      dell'app nella riga dell'app) e' dichiarato in interno/componenti_piccoli.h.
  * Finche' un gruppo non e' fatto, le sue funzioni restano scritte negli header (static) e
  * funzionano come prima.
  *

@@ -109,6 +109,9 @@ e funzionano come prima.
 | `uikit/interno/` | **interno** | il codice delle basi: `tema.c` (i valori dei due temi, il tema in uso, le preferenze), `stile.c` (le tabelle delle ombre), `materiali.c`, `testo437.c`, `uikit_compositore.c` |
 | `uikit/interno/` | **interno** | il codice del nucleo: `widget.c` (l'albero, riga e colonna, spazi, etichetta), `pulsanti.c` (pulsante, casella, scelta, interruttore), `campo.c`, `stato_vuoto.c`, `avviso.c`, `finestra_tk.c` (la finestra come widget: misure, zone da ridisegnare, testata, opzioni, chiamate "ogni tanto", fuoco), `barra_strumenti.c` (con il pulsante della barra, la pillola e il percorso), `scorrimento.c`, `ciclo.c` (il ciclo degli eventi: l'unico che parla con il compositore) |
 | `uikit/interno/nucleo.h` | **interno** | le funzioni e i dati del nucleo che servono solo dentro UIKit: ai `.c` del nucleo tra loro e ai componenti ancora scritti negli header (che per questo lo includono), e all'anteprima. Un'app non lo include |
+| `uikit/grafico.h`, `etichetta_stato.h`, `messaggio.h`, `icona_app.h`, `riga_permesso.h`, `riga_app.h`, `informazioni.h` | **pubblico** | i componenti piccoli: barra di utilizzo e legenda con `testo_byte` (Attività), etichetta di stato, messaggio in linea, icona dell'app, riga di permesso, riga dell'app (Store), informazioni nella mini finestra (Files). Oggi li usano app del sistema, ma sono pezzi generici: ricevono solo testi, simboli e numeri, non sanno niente di pacchetti o permessi veri, e un'app di terzi può usarli |
+| `uikit/interno/` | **interno** | il codice dei componenti piccoli: un `.c` per header (`grafico.c`, `etichetta_stato.c`, `messaggio.c`, `icona_app.c`, `riga_permesso.c`, `riga_app.c`, `informazioni.c`), più `informazioni_mostra.c`, a parte perché apre la mini finestra con il ciclo degli eventi (l'anteprima lo lascia fuori come `ciclo.c`) |
+| `uikit/interno/componenti_piccoli.h` | **interno** | quello che un componente piccolo usa di un altro: l'etichetta di stato disegnata nella riga di permesso, l'icona dell'app nella riga dell'app (`etichetta_stato_disegna_in`, `icona_app_disegna_in`...). Un'app usa i widget |
 
 Gli header riordinati hanno solo dichiarazioni, tipi, costanti, macro e i commenti per chi li
 usa. I valori del design che prima erano tabelle `static const` negli header (i due temi, le
@@ -123,7 +126,7 @@ di `libgkit.a`. Il tema si legge dalle preferenze prima di `main` (un constructo
 `interno/tema.c`, nello stesso file del tema in uso): lo prende ogni programma che disegna con i
 colori del tema; quelli che non li usano (init, i servizi senza grafica) non lo prendono.
 L'anteprima (`strumenti/anteprima/anteprima.sh`) compila con sé tutto `uikit/interno/` tranne
-`ciclo.c`: al posto di `uikit_esegui` c'è la sua (in `anteprima.c`), che si tiene la finestra e
+`ciclo.c` (e `informazioni_mostra.c`, che lo usa): al posto di `uikit_esegui` c'è la sua (in `anteprima.c`), che si tiene la finestra e
 torna; poi l'anteprima la impagina e la disegna una volta su un PNG.
 
 ## CoreKit, la libreria comune (sotto tutte e due)

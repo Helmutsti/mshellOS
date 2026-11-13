@@ -22,13 +22,17 @@ USCITA=${3:-$QUI/out/$1.png}
 # (gkit/interno/: il pennello, le forme, il testo, le immagini, le zone); la finestra, lo
 # schermo e le PNG no: qui non ci sono. Di UIKit si compila tutto il codice (uikit/interno/),
 # TRANNE il ciclo degli eventi (ciclo.c: apre la finestra e parla con il compositore), che qui
-# fa anteprima.c con la sua uikit_esegui. (I componenti ancora negli header arrivano con uikit.h.)
+# fa anteprima.c con la sua uikit_esegui, e chi apre una finestra con lui (informazioni_mostra.c).
+# (I componenti ancora negli header arrivano con uikit.h.)
 G="$RADICE/utente/libreria/gkit/interno"
 SCENA=$1
 SCALA=${2:-1}
-set --                                   # i .c di UIKit, senza ciclo.c
+set --                                   # i .c di UIKit, senza ciclo.c e informazioni_mostra.c
 for f in "$RADICE"/utente/libreria/uikit/interno/*.c; do
-    [ "$(basename "$f")" = ciclo.c ] || set -- "$@" "$f"
+    case "$(basename "$f")" in
+        ciclo.c|informazioni_mostra.c) ;;
+        *) set -- "$@" "$f" ;;
+    esac
 done
 clang -std=gnu11 -O1 -w -I"$RADICE/utente/libreria" -I"$QUI" \
     -DSCENA="\"$QUI/scene/$SCENA.c\"" "$QUI/anteprima.c" \
