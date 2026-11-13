@@ -510,6 +510,36 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
     sistema (l'app in una finestra sul PC, la sandbox usabile dal browser, o l'anteprima che si
     ridisegna da sola). Oggi ci sono la sandbox (foto) e l'anteprima (tre scene rotte).
 
+**Da riprendere** (lasciati qui il 13/11/2026)
+28. **Nomi dei permessi in inglese** (deciso dalla persona): `app.gestire` → `apps.manage`,
+    `file.leggere` → `files.read`, `file.scrivere` → `files.write`, `notifiche` →
+    `notifications`, `rete` → `network`, `processi` → `processes`, `impostazioni.sistema` →
+    `settings.system`, `spegnimento` → `system.power`, `audio` resta. Ovunque: manifesti,
+    manifest-guida.toml, pacchetto.c/descrizione.c/launcher.c, test/pacchetti, APPLICAZIONI.md
+    (una sola tabella: oggi il launcher controlla sia `apps.manage` sia `app.gestire`). I testi
+    per la persona restano in italiano; le chiavi del manifesto (`permessi`, `programma`...) non
+    sono state decise. Un lavoro iniziato è rimasto a metà sul ramo dell'agente, non unito.
+29. **Il componente UIKit "messaggio" diventa `alert`** (deciso dalla persona): `uikit/alert.h`,
+    `interno/alert.c`, `struct alert`, `alert_*`. Oggi ha lo stesso nome di `struct messaggio`
+    dello standard dei messaggi (`corekit/messaggi.h`), e un'app grafica non può includerli
+    insieme. Serve prima della pagina della rete nelle Impostazioni.
+30. **Comandi di base** (elencare, copiare, leggere file): toybox, busybox o nostri; ancora
+    niente, per decisione della persona. Insieme: `PATH`, `TERM`, e `/home` per i programmi che
+    non usano CoreKit. Proposta: spostare la shell in `utente/comandi/`.
+31. **La shell**: Ctrl-Z ferma un programma ma la shell non sa tenerlo da parte (lo fa ripartire);
+    Ctrl-C provato solo sulla seriale, non nel Terminale; la prova `test/shell.py` aspetta
+    "cartella non trovata" ma la shell scrive "cartella inesistente" (già prima).
+32. **HTTPS** per `webask`: ancora niente (BearSSL o mbedTLS quando servirà).
+33. **Il servizio di rete**: porta di controllo (per la pagina della rete e un comando
+    `network`), configurazione della persona in `/data`, API del firewall per le app (due
+    permessi: aggiungere regole / controllo pieno, sempre attraverso il servizio). Non provati:
+    rinnovo del DHCP, `mode=static`, firewall con la tabella già presente, IPv6.
+34. **Store e Terminale** usano la parte "del sistema" del launcher (installare, shell come
+    sistema): da decidere se restano app di sistema per sempre.
+35. **Comandi distribuiti dalla persona**: come si installano e con quali poteri (SISTEMA.md,
+    domande aperte).
+36. **L'apertura della shell dal Terminale** con il launcher nuovo non è provata mentre gira.
+
 Non servono più: priorità e tempo reale (li dà Linux); la chiamata "chi sono io" (su Linux
 c'è `getuid`).
 
