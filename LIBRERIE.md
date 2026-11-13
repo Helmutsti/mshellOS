@@ -90,31 +90,41 @@ Costruita sopra GKit:
 - **il ciclo degli eventi** dell'applicazione: fuoco, tastiera, ridisegno.
 
 Come CoreKit e GKit, è divisa in **tre livelli** (il commento in testa a `uikit/uikit.h` li
-spiega). **Il riordino è in corso**: per ora sono riordinate solo le basi (lo stile, i temi, i
-materiali, i tasti, la code page 437 e quello che serve al compositore). Il nucleo (`uikit.h`) e i
-componenti hanno ancora le loro funzioni scritte negli header, `static`, e funzionano come prima.
+spiega). **Il riordino è in corso**: sono riordinate le basi (lo stile, i temi, i materiali, i
+tasti, la code page 437 e quello che serve al compositore) e il nucleo (`uikit.h`: il widget, i
+contenitori, pulsanti, caselle, interruttore, campo, stato vuoto, avviso, la finestra, la barra
+degli strumenti, lo scorrimento, il ciclo degli eventi). I componenti negli altri header (menu,
+tabella, griglia, barra laterale, pagina...) hanno ancora le loro funzioni scritte lì, `static`,
+e funzionano come prima.
 
 | file | livello | perché |
 |---|---|---|
+| `uikit/uikit.h` | **pubblico** | il nucleo: i tipi dei widget e della finestra, le costanti e le dichiarazioni delle funzioni per le app (`colonna_prepara`, `pulsante_prepara`, `finestra_tk_prepara`, `uikit_esegui`...), più quelle per chi scrive un widget suo (`widget_misura`, `widget_disponi`, `widget_disegna`, `widget_contiene`). Include tutto quello che serve a un'app, anche i componenti |
 | `uikit/stile.h` | **pubblico** | colori semantici, misure, font e ombre del design: li usano anche le app (per esempio `TEMA_SCURO_IN_USO` in Impostazioni, `OMBRA_TAB` in Files) |
 | `uikit/tema.h` | **pubblico** | i due temi, quello in uso, `tema_salva` |
 | `uikit/materiali.h`, `uikit/materiali_elenco.h` | **pubblico** | i font, le icone e gli oggetti del sistema per nome (`&plex_14`, `icona()`); l'elenco lo genera `strumenti/grafica/genera.py` |
 | `uikit/tasti.h` | **pubblico** | i codici dei tasti e gli ascoltatori delle scorciatoie (Files, Terminale) |
 | `uikit/testo437.h` | **pubblico** | da UTF-8 ai caratteri dei font del sistema (Store, scrivania): serve a chiunque scriva con i font del sistema testi che arrivano da fuori |
 | `uikit/sistema/uikit_compositore.h` | **del sistema** | la barra congelata, le ombre delle finestre e il tema per il compositore: lo usa solo lui |
-| `uikit/interno/` | **interno** | il codice: `tema.c` (i valori dei due temi, il tema in uso, le preferenze), `stile.c` (le tabelle delle ombre), `materiali.c`, `testo437.c`, `uikit_compositore.c` |
+| `uikit/interno/` | **interno** | il codice delle basi: `tema.c` (i valori dei due temi, il tema in uso, le preferenze), `stile.c` (le tabelle delle ombre), `materiali.c`, `testo437.c`, `uikit_compositore.c` |
+| `uikit/interno/` | **interno** | il codice del nucleo: `widget.c` (l'albero, riga e colonna, spazi, etichetta), `pulsanti.c` (pulsante, casella, scelta, interruttore), `campo.c`, `stato_vuoto.c`, `avviso.c`, `finestra_tk.c` (la finestra come widget: misure, zone da ridisegnare, testata, opzioni, chiamate "ogni tanto", fuoco), `barra_strumenti.c` (con il pulsante della barra, la pillola e il percorso), `scorrimento.c`, `ciclo.c` (il ciclo degli eventi: l'unico che parla con il compositore) |
+| `uikit/interno/nucleo.h` | **interno** | le funzioni e i dati del nucleo che servono solo dentro UIKit: ai `.c` del nucleo tra loro e ai componenti ancora scritti negli header (che per questo lo includono), e all'anteprima. Un'app non lo include |
 
 Gli header riordinati hanno solo dichiarazioni, tipi, costanti, macro e i commenti per chi li
 usa. I valori del design che prima erano tabelle `static const` negli header (i due temi, le
-ombre a strati) ora stanno una volta sola in `interno/`; le macro (`SUPERFICIE_ELEVATA`,
-`OMBRA_TAB`, `OMBRA_N`...) si usano come prima.
+ombre a strati, le misure dei pulsanti e dei campi) ora stanno una volta sola in `interno/`; le
+macro (`SUPERFICIE_ELEVATA`, `OMBRA_TAB`, `OMBRA_N`...) si usano come prima. Anche i tipi dei widget
+(`tipo_finestra_tk`, `tipo_contenitore`...) sono uno solo per programma: prima ogni file che
+includeva `uikit.h` ne aveva una copia sua.
 
 **La libreria compilata.** `build.sh` compila i `.c` di `uikit/interno/` in
 `build/<cpu>/libuikit.a`, che nel comando di lega va subito dopo gli oggetti del programma e prima
 di `libgkit.a`. Il tema si legge dalle preferenze prima di `main` (un constructor in
 `interno/tema.c`, nello stesso file del tema in uso): lo prende ogni programma che disegna con i
 colori del tema; quelli che non li usano (init, i servizi senza grafica) non lo prendono.
-L'anteprima (`strumenti/anteprima/anteprima.sh`) compila con sé tutto `uikit/interno/`.
+L'anteprima (`strumenti/anteprima/anteprima.sh`) compila con sé tutto `uikit/interno/` tranne
+`ciclo.c`: al posto di `uikit_esegui` c'è la sua (in `anteprima.c`), che si tiene la finestra e
+torna; poi l'anteprima la impagina e la disegna una volta su un PNG.
 
 ## CoreKit, la libreria comune (sotto tutte e due)
 

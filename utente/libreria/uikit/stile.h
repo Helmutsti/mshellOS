@@ -189,7 +189,7 @@
 #define FONT_CORPO_MEDIO        (&plex_medio_14)
 #define FONT_PICCOLO_NUOVO      (&plex_12)
 #define FONT_ETICHETTA          (&plex_medio_12)
-/* i font dei pulsanti anche per numero, per le tabelle fisse (misure_pulsante, in uikit.h):
+/* i font dei pulsanti anche per numero, per le tabelle fisse (misure_pulsante, in interno/pulsanti.c):
  * un materiale si carica la prima volta che serve (materiali.h), quindi in una tabella
  * fissa ci va il suo numero, non il suo indirizzo */
 #define FONT_PULSANTE_S_NUMERO  MATERIALE_plex_medio_13

@@ -36,6 +36,8 @@
 #ifndef TABELLA_H
 #define TABELLA_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 #define MAX_COLONNE_TABELLA 6
 #define MAX_CELLA           96
 #define TABELLA_ALTEZZA_TESTATA     ALTEZZA_S

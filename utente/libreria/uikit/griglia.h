@@ -25,6 +25,8 @@
 #ifndef GRIGLIA_H
 #define GRIGLIA_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 #define GRIGLIA_PADDING   SPAZIO_0
 #define GRIGLIA_TRA       SPAZIO_8
 #define TILE_ALTEZZA      116

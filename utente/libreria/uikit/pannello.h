@@ -16,6 +16,8 @@
 #ifndef PANNELLO_H
 #define PANNELLO_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 struct pannello_tk {
     struct widget base;
     int padding;                       /* su tutti i lati: SPAZIO_8 (con righe) o SPAZIO_16 */

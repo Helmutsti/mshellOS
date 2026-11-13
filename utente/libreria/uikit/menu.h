@@ -40,6 +40,8 @@
 #ifndef MENU_H
 #define MENU_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 #define MENU_VOCE_SEPARATORE    (-1)
 #define MENU_VOCE_INTESTAZIONE  (-2)
 

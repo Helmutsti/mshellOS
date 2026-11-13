@@ -1,9 +1,10 @@
 /* ANTEPRIMA: disegna una scena di UIKit su un PNG, sul Mac, senza QEMU.
  *
- * UIKit e' fatto di funzioni 'static inline' negli header: non ha bisogno del kernel
- * per disegnare, solo di una tela (un array di pixel). Qui si include uikit.h cosi' com'e',
- * si FINGE uikit_esegui (invece del ciclo degli eventi: impagina, disegna una volta e
- * torna) e si scrive il PNG. Una scena e' un file C con un main() come quello di
+ * Per disegnare UIKit non ha bisogno del kernel, solo di una tela (un array di pixel). Qui si
+ * include uikit.h cosi' com'e' e si compilano i .c di UIKit (anteprima.sh), TRANNE il ciclo
+ * degli eventi (uikit/interno/ciclo.c, l'unico che parla con il compositore): al suo posto
+ * c'e' uikit_esegui qui sotto, che si tiene la finestra e torna; poi main la impagina, la
+ * disegna una volta (con le funzioni interne di UIKit, uikit/interno/nucleo.h) e scrive il PNG. Una scena e' un file C con un main() come quello di
  * un'applicazione (anche l'applicazione stessa: vedi scene/impostazioni.c).
  *
  * Opzionale, nella scena: 'static void ritocco(struct finestra_tk *f)' + '#define HA_RITOCCO',
@@ -17,6 +18,7 @@
 #include <time.h>
 
 #include "uikit/uikit.h"
+#include "uikit/interno/nucleo.h"   /* uikit_disegna_tutto, avviso_sistema...: quello che fa il ciclo */
 
 /* --- gli scudi: quello che la libreria prenderebbe dal kernel --- */
 unsigned int tempo(void) {
@@ -36,10 +38,10 @@ int chiudi(int d) { (void)d; return 0; }
 int data_ora(struct data_ora *d) { (void)d; return -1; }
 int manda(int d, const void *x, unsigned int n) { (void)d; (void)x; (void)n; return -1; }
 
-/* --- il finto ciclo degli eventi --- */
+/* --- il ciclo degli eventi dell'anteprima: si tiene la finestra e torna (il disegno lo fa
+ * main, dopo). E' la uikit_esegui di uikit.h: quella vera, in ciclo.c, qui non si compila. --- */
 static struct finestra_tk *catturata;
-static int anteprima_esegui(struct finestra_tk *f) { catturata = f; return 0; }
-#define uikit_esegui anteprima_esegui
+int uikit_esegui(struct finestra_tk *f) { catturata = f; return 0; }
 
 #define main scena_main
 #include SCENA

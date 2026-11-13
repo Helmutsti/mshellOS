@@ -31,6 +31,8 @@
 #ifndef UIKIT_PAGINA_H
 #define UIKIT_PAGINA_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 struct pagina {
     struct widget base;
     int margine_x, margine_sopra, margine_sotto;

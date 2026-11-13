@@ -30,7 +30,8 @@
  *   uikit/sistema/    DEL SISTEMA: quello che usano solo i programmi del sistema.
  *                     uikit_compositore.h (le poche cose del design che disegna il
  *                     compositore). Un'app non lo deve includere: puo' cambiare senza avviso.
- *   uikit/interno/    INTERNO: il codice (i .c). Nessun programma li include.
+ *   uikit/interno/    INTERNO: il codice (i .c) e nucleo.h, le dichiarazioni che servono solo
+ *                     dentro UIKit. Nessun programma li include.
  *
  * build.sh compila i .c di interno/ in una libreria statica, libuikit.a, e la lega dentro ogni
  * programma: ne entra solo quello che il programma usa. Nel comando di lega viene subito dopo
@@ -43,7 +44,15 @@
  *      sistema/uikit_compositore.h hanno solo dichiarazioni; il codice (e le tabelle dei due
  *      temi e delle ombre) e' in interno/ (tema.c, stile.c, materiali.c, testo437.c,
  *      uikit_compositore.c).
- *   2. DA FARE: il nucleo, questo file (le sue funzioni sono ancora scritte qui).
+ *   2. FATTO: il nucleo, questo file. Qui restano i tipi, le costanti e le dichiarazioni delle
+ *      funzioni pubbliche; il codice e' in interno/, diviso per argomento: widget.c (l'albero,
+ *      contenitori, spazi, etichetta), pulsanti.c (pulsante, casella, scelta, interruttore),
+ *      campo.c (campo e ricerca), stato_vuoto.c, avviso.c, finestra_tk.c (la finestra come
+ *      widget: misure, zone da ridisegnare, testata, opzioni, chiamate "ogni tanto", sotto il
+ *      puntatore e fuoco), barra_strumenti.c (barra, pulsante della barra, pillola, percorso),
+ *      scorrimento.c e ciclo.c (il ciclo degli eventi: tutto quello che parla con il
+ *      compositore). Le funzioni che servono solo dentro UIKit (ai .c del nucleo e ai
+ *      componenti ancora scritti negli header) sono dichiarate in interno/nucleo.h.
  *   3. DA FARE: i componenti complessi (menu, tabella, griglia, barra_laterale, schede,
  *      userbar, oggetti, elemento_file, pagina, paragrafo, pannello).
  *   4. DA FARE: i componenti piccoli (grafico, etichetta_stato, messaggio, icona_app,
@@ -131,7 +140,6 @@
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
 #include "stile.h"           /* con i temi (tema.h) e i materiali (materiali.h) */
-#include "elemento_file.h"   /* testo_a_capo, per il messaggio dell'avviso */
 #include "tasti.h"           /* i codici dei tasti fisici e gli ascoltatori delle scorciatoie */
 
 /* --- il widget in generale --- */
@@ -181,120 +189,57 @@ struct widget {
     int nascosto;                      /* non c'e': non si misura, non si vede, non sente */
 };
 
-static inline void widget_aggiungi(struct widget *genitore, struct widget *figlio) {
-    if (genitore->quanti_figli >= MAX_FIGLI) return;
-    genitore->figli[genitore->quanti_figli++] = figlio;
-    figlio->genitore = genitore;
-}
+/* Mette 'figlio' in fondo ai figli di 'genitore' e gli segna il genitore. Al massimo
+ * MAX_FIGLI figli: quelli in piu' non entrano (senza avviso). */
+void widget_aggiungi(struct widget *genitore, struct widget *figlio);
 
-static inline void widget_misura(struct widget *w, int *l, int *a) {
-    *l = *a = 0;
-    if (w->tipo->misura) w->tipo->misura(w, l, a);
-}
+/* Quanto spazio vorrebbe il widget (in 'l' e 'a'): lo chiede al suo tipo; 0 x 0 se il tipo
+ * non ha 'misura'. La usa chi scrive un widget che ne contiene altri, per misurare i figli. */
+void widget_misura(struct widget *w, int *l, int *a);
 
-static inline void widget_disponi(struct widget *w) {
-    if (w->tipo->disponi) w->tipo->disponi(w);
-    for (int i = 0; i < w->quanti_figli; i++) widget_disponi(w->figli[i]);
-}
+/* Il posto del widget (x, y, l, a) e' deciso: il suo tipo sistema i figli ('disponi'), poi
+ * si fa lo stesso con ognuno di loro, giu' per tutto l'albero. */
+void widget_disponi(struct widget *w);
 
-static inline void widget_disegna(struct widget *w, struct pennello *p) {
-    if (w->nascosto) return;
-    /* tutto quello che il widget (e i suoi figli) disegna sta nel suo spazio piu' lo sbordo:
-     * se quello non tocca il ritaglio (la zona che si sta ridisegnando), non c'e' niente da fare */
-    if (w->x + w->l + WIDGET_SBORDO <= p->s.rx || w->x - WIDGET_SBORDO >= p->s.rx2 ||
-        w->y + w->a + WIDGET_SBORDO <= p->s.ry || w->y - WIDGET_SBORDO >= p->s.ry2) return;
-    pennello_salva(p);
-    pennello_ritaglia(p, w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO,
-                     w->l + 2 * WIDGET_SBORDO, w->a + 2 * WIDGET_SBORDO);   /* anelli e ombre sbordano */
-    if (w->disabilitato && !w->tipo->disegna_disabilitato) pennello_opacita(p, OPACITA_DISABILITATO);
-    if (w->tipo->disegna) w->tipo->disegna(w, p);
-    for (int i = 0; i < w->quanti_figli; i++) widget_disegna(w->figli[i], p);
-    pennello_ripristina(p);
-}
+/* Disegna il widget e i suoi figli, ognuno ritagliato nel suo spazio piu' WIDGET_SBORDO
+ * (anelli e ombre escono un po'). Un widget nascosto, o che non tocca la zona che si sta
+ * ridisegnando (il ritaglio del pennello), si salta; uno disabilitato si disegna al 40%, se il
+ * suo tipo non sa disegnarsi disabilitato da se'. */
+void widget_disegna(struct widget *w, struct pennello *p);
 
-static inline int widget_contiene(const struct widget *w, int x, int y) {
-    return x >= w->x && x < w->x + w->l && y >= w->y && y < w->y + w->a;
-}
-
-/* Il widget piu' interno sotto (x, y) che vuole sentire il puntatore, o 0. I widget
- * disabilitati (e quello che c'e' dentro) non si trovano. */
-static inline struct widget *widget_sotto(struct widget *w, int x, int y) {
-    if (w->disabilitato || w->nascosto || !widget_contiene(w, x, y)) return 0;
-    for (int i = w->quanti_figli - 1; i >= 0; i--) {
-        struct widget *trovato = widget_sotto(w->figli[i], x, y);
-        if (trovato) return trovato;
-    }
-    return w->tipo->puntatore ? w : 0;
-}
-
-/* Il widget piu' interno sotto (x, y), anche se non sente il puntatore, o 0. */
-static inline struct widget *widget_in(struct widget *w, int x, int y) {
-    if (w->disabilitato || w->nascosto || !widget_contiene(w, x, y)) return 0;
-    for (int i = w->quanti_figli - 1; i >= 0; i--) {
-        struct widget *trovato = widget_in(w->figli[i], x, y);
-        if (trovato) return trovato;
-    }
-    return w;
-}
+/* 1 se il punto (x, y), in coordinate della finestra, sta nello spazio del widget; se no 0. */
+int widget_contiene(const struct widget *w, int x, int y);
 
 /* Un widget e' cambiato (un testo nuovo, un pulsante premuto): va ridisegnato il suo spazio
  * (con lo sbordo). Si risale l'albero fino alla finestra, che si segna la zona. Un widget
- * nascosto (o dentro uno nascosto) non si vede: niente da ridisegnare. (Piu' sotto, con la
- * finestra.) */
-static inline void widget_cambiato(struct widget *w);
+ * nascosto (o dentro uno nascosto) non si vede: niente da ridisegnare. */
+void widget_cambiato(struct widget *w);
 
 /* Solo un pezzo del widget e' cambiato: il rettangolo (x, y, l, a), in coordinate della
  * finestra (la parte fuori dal widget e dal suo sbordo non conta). */
-static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, int a);
+void widget_cambiato_zona(struct widget *w, int x, int y, int l, int a);
 
 /* Il widget si vede: ne' lui ne' chi lo contiene e' nascosto. */
-static inline int widget_visibile(const struct widget *w) {
-    for (; w; w = w->genitore)
-        if (w->nascosto) return 0;
-    return 1;
-}
+int widget_visibile(const struct widget *w);
 
-static inline void widget_disabilita(struct widget *w, int disabilitato) {
-    w->disabilitato = disabilitato;
-    widget_cambiato(w);
-}
-
-static inline void widget_segna(struct widget *w);   /* piu' sotto: il suo spazio, sempre */
+/* Disabilita (1) o riabilita (0) il widget: disabilitato si vede spento e non sente niente
+ * (ne' puntatore ne' tasti). Si ridisegna da solo. */
+void widget_disabilita(struct widget *w, int disabilitato);
 
 /* Mostra o nasconde un widget. Lo spazio si ridistribuisce con uikit_ridisponi. Il posto
  * dove stava (o dove sta) si ridisegna anche se adesso e' nascosto. */
-static inline void widget_nascondi(struct widget *w, int nascosto) {
-    w->nascosto = nascosto;
-    if (!w->genitore || widget_visibile(w->genitore)) widget_segna(w);
-}
+void widget_nascondi(struct widget *w, int nascosto);
 
-/* Di quanto un'ombra a strati esce dalla sua forma, al massimo (per sapere cosa ridisegnare
- * quando la forma compare o sparisce). */
-static inline int ombra_sporgenza(const struct strato_ombra *strati, int n) {
-    int massimo = 0;
-    for (int i = 0; i < n; i++) {
-        if (strati[i].tipo != OMBRA_ESTERNA) continue;
-        int dx = strati[i].dx < 0 ? -strati[i].dx : strati[i].dx, dy = strati[i].dy < 0 ? -strati[i].dy : strati[i].dy;
-        int s = (dx > dy ? dx : dy) + strati[i].sfocatura + (strati[i].diffusione > 0 ? strati[i].diffusione : 0) + 2;
-        if (s > massimo) massimo = s;
-    }
-    return massimo;
-}
-
-static inline void copia_testo(char *dove, const char *da, int massimo) {
-    int i = 0;
-    for (; i < massimo - 1 && da[i]; i++) dove[i] = da[i];
-    dove[i] = 0;
-}
+/* Copia la stringa 'da' in 'dove', grande 'massimo' byte (lo 0 finale compreso): quello
+ * che non ci sta si taglia. 'dove' finisce sempre con lo 0. */
+void copia_testo(char *dove, const char *da, int massimo);
 
 #define MAX_TESTO_WIDGET 64
 #define NESSUNA_ICONA (-1)
 
 /* Un testo centrato in verticale nel rettangolo (x, y, ..., a), con il colore del pennello. */
-static inline int testo_centrato(struct pennello *p, const struct font *f, int x, int y, int a,
-                                 const char *s) {
-    return testo(p, f, x, y + (a - f->altezza) / 2, s);
-}
+int testo_centrato(struct pennello *p, const struct font *f, int x, int y, int a,
+                   const char *s);
 
 /* --- riga e colonna: il contenitore (la "box" di GTK, gli stack di SwiftUI) --- */
 
@@ -304,90 +249,27 @@ struct contenitore {
     int spazio;                        /* tra un figlio e l'altro */
 };
 
-/* Si somma lungo la direzione del contenitore, si prende il piu' grande nell'altra. */
-static inline void contenitore_misura(struct widget *w, int *l, int *a) {
-    struct contenitore *c = (struct contenitore *)w;
-    int visti = 0;
-    for (int i = 0; i < w->quanti_figli; i++) {
-        if (w->figli[i]->nascosto) continue;
-        int fl, fa;
-        widget_misura(w->figli[i], &fl, &fa);
-        int lungo = c->in_riga ? fl : fa, largo = c->in_riga ? fa : fl;
-        int *somma = c->in_riga ? l : a, *massimo = c->in_riga ? a : l;
-        *somma += lungo + (visti++ ? c->spazio : 0);
-        if (largo > *massimo) *massimo = largo;
-    }
-}
+/* Prepara un contenitore che mette i figli in RIGA, da sinistra a destra, con 'spazio'
+ * pixel tra uno e l'altro. Nell'altra direzione prende tutto lo spazio che riceve ('largo'). */
+void riga_prepara(struct contenitore *c, int spazio);
 
-/* Ognuno la sua misura; lo spazio in piu' diviso tra gli elastici. Nell'altra
- * direzione: tutto lo spazio a chi e' "largo", agli altri la loro misura (in una riga,
- * centrati in altezza). */
-static inline void contenitore_disponi(struct widget *w) {
-    struct contenitore *c = (struct contenitore *)w;
-    int l = 0, a = 0, elastici = 0;
-    contenitore_misura(w, &l, &a);
-    for (int i = 0; i < w->quanti_figli; i++)
-        if (!w->figli[i]->nascosto) elastici += w->figli[i]->elastico;
-    int in_piu = c->in_riga ? w->l - l : w->a - a;
-    if (in_piu < 0) in_piu = 0;
-    int pos = c->in_riga ? w->x : w->y;
-    for (int i = 0; i < w->quanti_figli; i++) {
-        struct widget *f = w->figli[i];
-        if (f->nascosto) continue;
-        int fl, fa;
-        widget_misura(f, &fl, &fa);
-        int lungo = (c->in_riga ? fl : fa) + (f->elastico ? in_piu / elastici : 0);
-        if (c->in_riga) {
-            f->x = pos; f->l = lungo;
-            f->a = f->largo ? w->a : fa;
-            f->y = w->y + (w->a - f->a) / 2;
-        } else {
-            f->y = pos; f->a = lungo;
-            f->l = f->largo ? w->l : fl;
-            f->x = w->x;
-        }
-        pos += lungo + c->spazio;
-    }
-}
-
-static const struct tipo_widget tipo_contenitore = {
-    contenitore_misura, contenitore_disponi, 0, 0, 0, 0, 0, 0, 0
-};
-
-static inline void riga_prepara(struct contenitore *c, int spazio) {
-    *c = (struct contenitore){ .base = { .tipo = &tipo_contenitore, .largo = 1 },
-                               .in_riga = 1, .spazio = spazio };
-}
-
-static inline void colonna_prepara(struct contenitore *c, int spazio) {
-    *c = (struct contenitore){ .base = { .tipo = &tipo_contenitore, .largo = 1 },
-                               .in_riga = 0, .spazio = spazio };
-}
+/* Come riga_prepara, ma in COLONNA: i figli dall'alto in basso. */
+void colonna_prepara(struct contenitore *c, int spazio);
 
 /* --- lo spazio elastico: vuoto, prende lo spazio che avanza --- */
 
 struct spazio { struct widget base; };
 
-static const struct tipo_widget tipo_spazio = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-
-static inline void spazio_prepara(struct spazio *s) {
-    *s = (struct spazio){ .base = { .tipo = &tipo_spazio, .elastico = 1 } };
-}
+/* Prepara uno spazio elastico: vuoto, prende lo spazio che avanza nel suo contenitore. */
+void spazio_prepara(struct spazio *s);
 
 /* Lo SPAZIO FISSO: vuoto, largo 'larghezza' (in una riga) o alto (in una colonna). Serve ad
  * allineare: per esempio i controlli della barra degli strumenti di Files cominciano dove
  * finisce la barra laterale. */
 struct spazio_fisso { struct widget base; int misura; };
 
-static inline void spazio_fisso_misura(struct widget *w, int *l, int *a) {
-    *l = *a = ((struct spazio_fisso *)w)->misura;
-}
-
-static const struct tipo_widget tipo_spazio_fisso = { spazio_fisso_misura, 0, 0, 0, 0, 0, 0, 0, 0 };
-
-static inline void spazio_fisso_prepara(struct spazio_fisso *s, int misura) {
-    *s = (struct spazio_fisso){ .base = { .tipo = &tipo_spazio_fisso }, .misura = misura };
-}
+/* Prepara uno spazio fisso, vuoto, di 'misura' pixel. */
+void spazio_fisso_prepara(struct spazio_fisso *s, int misura);
 
 /* --- l'etichetta: un testo --- */
 
@@ -397,31 +279,13 @@ struct etichetta {
     const struct font *font;           /* FONT_TESTO, FONT_TITOLO... */
 };
 
-static inline void etichetta_misura(struct widget *w, int *l, int *a) {
-    struct etichetta *e = (struct etichetta *)w;
-    *l = larghezza_testo(e->font, e->testo);
-    *a = e->font->altezza;
-}
-
-static inline void etichetta_disegna(struct widget *w, struct pennello *p) {
-    struct etichetta *e = (struct etichetta *)w;
-    pennello_colore(p, TESTO_PRIMARIO);   /* chiesto qui, non copiato: segue il tema */
-    testo_centrato(p, e->font, w->x, w->y, w->a, e->testo);
-}
-
-static const struct tipo_widget tipo_etichetta = { etichetta_misura, 0, etichetta_disegna, 0, 0, 0, 0, 0, 0 };
-
-static inline void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font) {
-    *e = (struct etichetta){ .base = { .tipo = &tipo_etichetta }, .font = font };
-    copia_testo(e->testo, testo, MAX_TESTO_WIDGET);
-}
+/* Prepara un'etichetta con 'testo' (al massimo MAX_TESTO_WIDGET - 1 byte: il resto si
+ * taglia) nel 'font' dato (FONT_TESTO, FONT_TITOLO...), in TESTO_PRIMARIO, centrata in altezza. */
+void etichetta_prepara(struct etichetta *e, const char *testo, const struct font *font);
 
 /* Cambia il testo. (Lo spazio dell'etichetta resta quello deciso all'apertura della
  * finestra: un testo piu' lungo si taglia.) */
-static inline void etichetta_testo(struct etichetta *e, const char *testo) {
-    copia_testo(e->testo, testo, MAX_TESTO_WIDGET);
-    widget_cambiato(&e->base);
-}
+void etichetta_testo(struct etichetta *e, const char *testo);
 
 /* --- il pulsante: 3 tipi, 3 misure, con o senza icona, anche solo icona --- */
 
@@ -445,17 +309,6 @@ enum { MISURA_S, MISURA_M, MISURA_L, MISURA_XS };
 enum { NEUTRO = SECONDARIO, BLU = PRIMARIO, VERDE = PRIMARIO, ROSSO = PRIMARIO, ARANCIO = PRIMARIO };
 enum { PICCOLO = MISURA_S, MEDIO = MISURA_M, GRANDE = MISURA_L };
 
-/* Le misure del disegno: altezza, margine ai lati, spazio icona-testo, lato dell'icona,
- * font (il suo numero: font_del_sistema, materiali.h). Il raggio non c'e': i pulsanti sono
- * pillole (raggio = meta' altezza). */
-struct misure_pulsante { int altezza, margine, spazio, icona, font; };
-static const struct misure_pulsante misure_pulsante[] = {
-    { ALTEZZA_S, PADDING_S, GAP_S, ICONA_S, FONT_PULSANTE_S_NUMERO },
-    { ALTEZZA_M, PADDING_M, GAP_M, ICONA_M, FONT_PULSANTE_M_NUMERO },
-    { ALTEZZA_L, PADDING_L, GAP_L, ICONA_L, FONT_PULSANTE_L_NUMERO },
-    { ALTEZZA_XS, PADDING_S, GAP_S, ICONA_XS, FONT_PULSANTE_S_NUMERO },   /* XS: pensato solo icona */
-};
-
 struct pulsante;
 typedef void (*al_clic_pulsante)(struct pulsante *p, void *dati);
 
@@ -470,137 +323,14 @@ struct pulsante {
     int dentro;                        /* ... e il puntatore e' ancora sopra di lui */
 };
 
-static inline void pulsante_misura(struct widget *w, int *l, int *a) {
-    struct pulsante *b = (struct pulsante *)w;
-    const struct misure_pulsante *m = &misure_pulsante[b->dimensione];
-    *a = m->altezza;
-    if (!b->testo[0]) { *l = m->altezza; return; }             /* solo icona: tondo, lato = altezza */
-    *l = 2 * m->margine + larghezza_testo(font_del_sistema(m->font), b->testo);
-    if (b->icona != NESSUNA_ICONA) *l += m->icona + m->spazio;
-}
-
-/* LA PROFONDITA' del pulsante. Si preme, quindi e' SOLLEVATO: il Primario ha l'ombra
- * "sollevato-pieno", il Secondario "sollevato", e le ombre ci sono sia a riposo sia sotto
- * il puntatore. Premuto "scende" e disabilitato "si spegne": tutti e due PIATTI, senza
- * ombra. Ghost e' sempre piatto. L'ordine e' quello di gkit_disegno.h: ombre esterne, fondo,
- * ombre interne (nel tema scuro c'e' un filo di luce sul bordo alto), poi icona e testo. */
-static inline void pulsante_disegna(struct widget *w, struct pennello *p) {
-    struct pulsante *b = (struct pulsante *)w;
-    const struct misure_pulsante *m = &misure_pulsante[b->dimensione];
-    int premuto = b->premuto && b->dentro;
-    int sopra = w->sopra, spento = w->disabilitato;
-    if (spento) premuto = sopra = 0;
-    struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
-    const struct strato_ombra *ombre = 0;
-    int quante = 0;
-    int pieno = b->colore == PRIMARIO || b->colore >= PERICOLO;   /* Primario e i colorati */
-    if (!premuto && !spento && pieno) {
-        ombre = OMBRA_TAB(sollevato_pieno); quante = OMBRA_N(sollevato_pieno);
-    } else if (!premuto && !spento && b->colore == SECONDARIO) {
-        ombre = OMBRA_TAB(sollevato); quante = OMBRA_N(sollevato);
-    }
-    if (ombre) ombre_strati_fuori(p, &t, ombre, quante);
-
-    /* il testo e l'icona: l'icona prende il colore dalla raccolta "Colore icona" (tema.h),
-     * con il modo che il disegno da' a ogni tipo di pulsante */
-    unsigned int fondo = 0, testo = TESTO_PRIMARIO;
-    int modo_icona = COLORE_ICONA_PRIMARIO;
-    if (spento) {
-        if (b->colore != GHOST) fondo = CONTROLLO_SFONDO_DISABILITATO;
-        testo = TESTO_DISABILITATO;
-        modo_icona = COLORE_ICONA_ATTENUATO;
-    } else if (b->colore == PRIMARIO) {
-        fondo = premuto ? AZIONE_SFONDO_PREMUTO : sopra ? AZIONE_SFONDO_SOPRA : AZIONE_SFONDO;
-        testo = AZIONE_TESTO;
-        modo_icona = COLORE_ICONA_INVERSO;
-    } else if (b->colore == PERICOLO) {
-        fondo = premuto ? PERICOLO_SFONDO_PREMUTO : sopra ? PERICOLO_SFONDO_SOPRA : PERICOLO_SFONDO;
-        testo = PERICOLO_TESTO;
-        modo_icona = COLORE_ICONA_PERICOLO;
-    } else if (b->colore == SUCCESSO) {
-        fondo = premuto ? SUCCESSO_SFONDO_PREMUTO : sopra ? SUCCESSO_SFONDO_SOPRA : SUCCESSO_SFONDO;
-        testo = SUCCESSO_TESTO;
-        modo_icona = COLORE_ICONA_SUCCESSO;
-    } else if (b->colore == AVVISO) {
-        fondo = premuto ? AVVISO_SFONDO_PREMUTO : sopra ? AVVISO_SFONDO_SOPRA : AVVISO_SFONDO;
-        testo = AVVISO_TESTO;
-        modo_icona = COLORE_ICONA_AVVISO;
-    } else if (b->colore == INFORMAZIONE) {
-        fondo = premuto ? INFORMAZIONE_SFONDO_PREMUTO : sopra ? INFORMAZIONE_SFONDO_SOPRA : INFORMAZIONE_SFONDO;
-        testo = INFORMAZIONE_TESTO;
-        modo_icona = COLORE_ICONA_INFORMAZIONE;
-    } else if (b->colore == SECONDARIO) {
-        fondo = premuto ? CONTROLLO_SFONDO_PREMUTO : sopra ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO;
-    } else {                           /* Ghost: nessun fondo a riposo */
-        fondo = premuto ? CONTROLLO_SFONDO_SOPRA : sopra ? CONTROLLO_SFONDO_NUOVO : 0;
-    }
-    if (fondo) {
-        pennello_colore(p, fondo);
-        riempi_forma(p, &t);
-    }
-    if (ombre) ombre_strati_dentro(p, &t, ombre, quante);
-
-    /* icona e testo, centrati insieme */
-    const struct font *font = font_del_sistema(m->font);
-    int largo = b->testo[0] ? larghezza_testo(font, b->testo) : 0;
-    if (b->icona != NESSUNA_ICONA) largo += m->icona + (b->testo[0] ? m->spazio : 0);
-    int x = w->x + (w->l - largo) / 2;
-    if (b->icona != NESSUNA_ICONA) {
-        pennello_colore(p, COLORE_ICONA(modo_icona));
-        icona(p, b->icona, m->icona, x, w->y + (w->a - m->icona) / 2);
-        x += m->icona + m->spazio;
-    }
-    pennello_colore(p, testo);
-    if (b->testo[0]) testo_centrato(p, font, x, w->y, w->a, b->testo);
-}
-
-/* Come i pulsanti veri: scatta quando si LASCIA, e solo se il puntatore e' ancora
- * sopra. Chi preme e poi cambia idea esce dal pulsante prima di lasciare. Tiene il conto
- * in 'premuto' e 'dentro' (del widget che lo usa) e dice 1 quando il clic e' fatto. Lo
- * usano tutti i pulsanti: questo e quelli della barra degli strumenti. */
-static inline int pressione(struct widget *w, int *premuto, int *dentro, int x, int y,
-                            unsigned int pulsanti) {
-    int giu = pulsanti & PULSANTE_SINISTRO, sopra = widget_contiene(w, x, y);
-    if (giu && !*premuto) {
-        *premuto = 1;
-        *dentro = sopra;
-        widget_cambiato(w);
-    } else if (giu && sopra != *dentro) {
-        *dentro = sopra;
-        widget_cambiato(w);
-    } else if (!giu && *premuto) {
-        *premuto = 0;
-        widget_cambiato(w);
-        return sopra;
-    }
-    return 0;
-}
-
-static inline void pulsante_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct pulsante *b = (struct pulsante *)w;
-    if (pressione(w, &b->premuto, &b->dentro, x, y, pulsanti) && b->al_clic) b->al_clic(b, b->dati);
-}
-
-static const struct tipo_widget tipo_pulsante = {
-    pulsante_misura, 0, pulsante_disegna, pulsante_puntatore, 0, 0, 0, 0, 1
-};
-
 /* Un pulsante secondario, di misura media. Per un pulsante solo icona, testo "". */
-static inline void pulsante_prepara(struct pulsante *b, const char *testo, int icona,
-                                    al_clic_pulsante al_clic, void *dati) {
-    *b = (struct pulsante){ .base = { .tipo = &tipo_pulsante }, .icona = icona,
-                            .colore = SECONDARIO, .dimensione = MISURA_M, .al_clic = al_clic, .dati = dati };
-    copia_testo(b->testo, testo, MAX_TESTO_WIDGET);
-}
+void pulsante_prepara(struct pulsante *b, const char *testo, int icona,
+                      al_clic_pulsante al_clic, void *dati);
 
 /* Il tipo (PRIMARIO, SECONDARIO, GHOST, PERICOLO, SUCCESSO, AVVISO, INFORMAZIONE) e la
  * misura (MISURA_S, _M, _L, e _XS per i pulsanti solo icona). Accetta anche i
  * vecchi nomi (NEUTRO, BLU..., PICCOLO...): sono sinonimi. */
-static inline void pulsante_stile(struct pulsante *b, int colore, int dimensione) {
-    b->colore = colore;
-    b->dimensione = dimensione;
-    widget_cambiato(&b->base);
-}
+void pulsante_stile(struct pulsante *b, int colore, int dimensione);
 
 /* --- la casella di spunta e la scelta singola --- */
 
@@ -622,100 +352,16 @@ struct casella {
     int premuto;
 };
 
-static inline void casella_misura(struct widget *w, int *l, int *a) {
-    struct casella *c = (struct casella *)w;
-    *l = CASELLA_LATO + CASELLA_GAP + larghezza_testo(FONT_CORPO, c->testo);
-    *a = CASELLA_LATO > FONT_CORPO->altezza ? CASELLA_LATO : FONT_CORPO->altezza;
-}
+/* Prepara una casella di spunta con 'testo' e 'valore' (SPENTO, ACCESO, MISTO). Un clic
+ * la cambia e chiama 'al_cambio' (se non e' 0) con 'dati'. */
+void casella_prepara(struct casella *c, const char *testo, int valore,
+                     al_cambio_casella al_cambio, void *dati);
 
-/* La casella e la scelta CONTENGONO una risposta, quindi sono INCASSATE: fondo
- * SUPERFICIE_INCASSATA, ombra interna (e una sottile esterna), mai bordo. Accese cambiano
- * solo il colore del fondo (AZIONE_SFONDO, come un'azione) e mettono il segno sopra; il
- * livello non cambia. Disabilitate sono piatte: fondo CONTROLLO_SFONDO_DISABILITATO, niente
- * ombra, segno e testo TESTO_DISABILITATO. Il tondo della scelta accesa e' un punto di 8 px
- * disegnato con riempi_cerchio (non piu' un'immagine precalcolata). */
-static inline void casella_disegna(struct widget *w, struct pennello *p) {
-    struct casella *c = (struct casella *)w;
-    int spento = w->disabilitato, acceso = c->valore != SPENTO;
-    int x = w->x, y = w->y + (w->a - CASELLA_LATO) / 2;
-    struct tondo t = tondo(x, y, CASELLA_LATO, CASELLA_LATO, c->tonda ? CASELLA_LATO / 2 : RAGGIO_CASELLA);
-    const struct strato_ombra *ombre = OMBRA_TAB(incassato);
-    int quante = OMBRA_N(incassato);
-
-    if (!spento) ombre_strati_fuori(p, &t, ombre, quante);
-    unsigned int fondo = SUPERFICIE_INCASSATA;
-    if (spento) fondo = CONTROLLO_SFONDO_DISABILITATO;
-    else if (acceso && !c->tonda) fondo = w->sopra ? AZIONE_SFONDO_SOPRA : AZIONE_SFONDO;
-    pennello_colore(p, fondo);
-    riempi_forma(p, &t);
-    if (!spento) ombre_strati_dentro(p, &t, ombre, quante);
-
-    unsigned int segno = spento ? TESTO_DISABILITATO : AZIONE_SFONDO;
-    if (acceso && c->tonda) {
-        pennello_colore(p, segno);
-        riempi_cerchio(p, x + CASELLA_LATO / 2, y + CASELLA_LATO / 2, SCELTA_PUNTO / 2);
-    } else if (acceso) {
-        pennello_colore(p, COLORE_ICONA(spento ? COLORE_ICONA_ATTENUATO : COLORE_ICONA_INVERSO));
-        int lato = CASELLA_LATO - 4;                     /* il segno, 2 px di margine */
-        icona(p, c->valore == ACCESO ? ICONA_CHECK : ICONA_MINUS, lato, x + 2, y + 2);
-    }
-    pennello_colore(p, spento ? TESTO_DISABILITATO : TESTO_PRIMARIO);
-    testo_centrato(p, FONT_CORPO, x + CASELLA_LATO + CASELLA_GAP, w->y, w->a, c->testo);
-}
-
-static inline void casella_puntatore(struct widget *w, int x, int y, unsigned int pulsanti);
-
-/* Spegne le altre scelte dello stesso gruppo, in tutto l'albero. */
-static inline void spegni_gruppo(struct widget *w, struct casella *tranne) {
-    for (int i = 0; i < w->quanti_figli; i++) {
-        struct widget *f = w->figli[i];
-        if (f->tipo->puntatore == casella_puntatore) {
-            struct casella *c = (struct casella *)f;
-            if (c != tranne && c->tonda && c->gruppo == tranne->gruppo && c->valore) {
-                c->valore = SPENTO;
-                widget_cambiato(f);
-            }
-        }
-        spegni_gruppo(f, tranne);
-    }
-}
-
-static inline void casella_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct casella *c = (struct casella *)w;
-    if (pulsanti & PULSANTE_SINISTRO) { c->premuto = 1; return; }
-    if (!c->premuto) return;
-    c->premuto = 0;
-    if (!widget_contiene(w, x, y)) return;   /* lasciato fuori: ci ha ripensato */
-    if (c->tonda) {
-        if (c->valore == ACCESO) return;     /* una scelta accesa resta accesa */
-        c->valore = ACCESO;
-        struct widget *radice = w;
-        while (radice->genitore) radice = radice->genitore;
-        spegni_gruppo(radice, c);
-    } else {
-        c->valore = c->valore == ACCESO ? SPENTO : ACCESO;   /* "misto" diventa acceso */
-    }
-    widget_cambiato(w);
-    if (c->al_cambio) c->al_cambio(c, c->dati);
-}
-
-static const struct tipo_widget tipo_casella = {
-    casella_misura, 0, casella_disegna, casella_puntatore, 0, 0, 0, 0, 1
-};
-
-static inline void casella_prepara(struct casella *c, const char *testo, int valore,
-                                   al_cambio_casella al_cambio, void *dati) {
-    *c = (struct casella){ .base = { .tipo = &tipo_casella }, .valore = valore,
-                           .al_cambio = al_cambio, .dati = dati };
-    copia_testo(c->testo, testo, MAX_TESTO_WIDGET);
-}
-
-static inline void scelta_prepara(struct casella *c, const char *testo, void *gruppo, int accesa,
-                                  al_cambio_casella al_cambio, void *dati) {
-    casella_prepara(c, testo, accesa ? ACCESO : SPENTO, al_cambio, dati);
-    c->tonda = 1;
-    c->gruppo = gruppo;
-}
+/* Prepara una scelta singola (il tondo) con 'testo', accesa (1) o spenta (0). Le scelte con
+ * lo stesso 'gruppo' (un puntatore qualsiasi, lo stesso per tutte) si escludono: accenderne
+ * una spegne le altre. Un clic chiama 'al_cambio' (se non e' 0) con 'dati'. */
+void scelta_prepara(struct casella *c, const char *testo, void *gruppo, int accesa,
+                    al_cambio_casella al_cambio, void *dati);
 
 /* --- l'interruttore --- */
 
@@ -737,52 +383,10 @@ struct interruttore {
     int premuto;
 };
 
-static inline void interruttore_misura(struct widget *w, int *l, int *a) {
-    (void)w;
-    *l = INTERRUTTORE_LARGO;
-    *a = INTERRUTTORE_ALTO;
-}
-
-static inline void interruttore_disegna(struct widget *w, struct pennello *p) {
-    struct interruttore *i = (struct interruttore *)w;
-    int spento = w->disabilitato;
-    int x = w->x, y = w->y + (w->a - INTERRUTTORE_ALTO) / 2;
-    struct tondo binario = tondo(x, y, INTERRUTTORE_LARGO, INTERRUTTORE_ALTO, INTERRUTTORE_ALTO / 2);
-    if (!spento) ombre_strati_fuori(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
-    pennello_colore(p, spento ? CONTROLLO_SFONDO_DISABILITATO : i->acceso ? AZIONE_SFONDO : SUPERFICIE_INCASSATA);
-    riempi_forma(p, &binario);
-    if (!spento) ombre_strati_dentro(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
-
-    int px = i->acceso ? x + INTERRUTTORE_LARGO - INTERRUTTORE_MARGINE - INTERRUTTORE_POMELLO
-                       : x + INTERRUTTORE_MARGINE;
-    struct tondo pomello = tondo(px, y + INTERRUTTORE_MARGINE, INTERRUTTORE_POMELLO, INTERRUTTORE_POMELLO,
-                                 INTERRUTTORE_POMELLO / 2);
-    if (!spento) ombre_strati_fuori(p, &pomello, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
-    pennello_colore(p, spento ? TESTO_DISABILITATO : i->acceso ? AZIONE_TESTO : SUPERFICIE_ELEVATA);
-    riempi_forma(p, &pomello);
-    if (!spento) ombre_strati_dentro(p, &pomello, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
-}
-
-static inline void interruttore_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct interruttore *i = (struct interruttore *)w;
-    if (pulsanti & PULSANTE_SINISTRO) { i->premuto = 1; return; }
-    if (!i->premuto) return;
-    i->premuto = 0;
-    if (!widget_contiene(w, x, y)) return;   /* lasciato fuori: ci ha ripensato */
-    i->acceso = !i->acceso;
-    widget_cambiato(w);
-    if (i->al_cambio) i->al_cambio(i, i->dati);
-}
-
-static const struct tipo_widget tipo_interruttore = {
-    interruttore_misura, 0, interruttore_disegna, interruttore_puntatore, 0, 0, 0, 0, 1
-};
-
-static inline void interruttore_prepara(struct interruttore *i, int acceso, al_cambio_interruttore al_cambio,
-                                        void *dati) {
-    *i = (struct interruttore){ .base = { .tipo = &tipo_interruttore }, .acceso = acceso,
-                                .al_cambio = al_cambio, .dati = dati };
-}
+/* Prepara un interruttore, acceso (1) o spento (0). Un clic lo cambia e chiama
+ * 'al_cambio' (se non e' 0) con 'dati'. */
+void interruttore_prepara(struct interruttore *i, int acceso, al_cambio_interruttore al_cambio,
+                          void *dati);
 
 /* --- il campo di testo --- */
 
@@ -802,150 +406,24 @@ struct campo {
     void *dati;
 };
 
-/* Le misure del disegno, una riga per misura: altezza, margine ai lati (dentro), lato
- * dell'icona, spazio dopo di lei, raggio degli angoli (RAGGIO_CAMPO_S/M/L: il campo e' un
- * rettangolo arrotondato, NON una pillola; la ricerca ha il raggio = meta' altezza) e font.
- * Il font e' Plex Regular (non Medium come i pulsanti: si scrive, non si preme) della stessa
- * dimensione del testo dei pulsanti: 13, 14, 16. Larghezza: 280 il campo (di solito si
- * allarga), 180 la ricerca. Il font per numero, come in misure_pulsante. */
-struct misure_campo { int altezza, margine, icona, spazio, raggio, font; };
-static const struct misure_campo misure_campo[] = {
-    { ALTEZZA_S, PADDING_S, ICONA_S, GAP_S, RAGGIO_CAMPO_S, MATERIALE_plex_13 },
-    { ALTEZZA_M, PADDING_M, ICONA_M, GAP_M, RAGGIO_CAMPO_M, MATERIALE_plex_14 },
-    { ALTEZZA_L, PADDING_L, ICONA_L, GAP_L, RAGGIO_CAMPO_L, MATERIALE_plex_16 },
-};
-#define CAMPO_LARGHEZZA_NORMALE 280
-
-static inline void campo_misura(struct widget *w, int *l, int *a) {
-    struct campo *c = (struct campo *)w;
-    *l = c->larghezza ? c->larghezza : c->piccolo ? RICERCA_LARGHEZZA_NUOVA : CAMPO_LARGHEZZA_NORMALE;   /* il campo normale di solito si allarga */
-    *a = misure_campo[c->misura].altezza;
-}
-
-/* Un campo CONTIENE quello che si scrive, quindi e' INCASSATO: fondo SUPERFICIE_INCASSATA,
- * ombra interna e una sottile esterna, mai bordo a riposo. Il fuoco NON cambia livello: il
- * campo resta incassato e aggiunge il bordo BORDO_FOCUS di 1,5 px (dentro) e l'anello
- * "focus" (la tabella ombra_focus_*: stessa ombra interna, ma la esterna e' un anello di
- * 3 px). L'errore non ha rosso (scala di grigi): ha lo stesso bordo del fuoco, piu' il
- * triangolo di avviso a destra e il testo secondario. Disabilitato e' piatto. */
-static inline void campo_disegna(struct widget *w, struct pennello *p) {
-    struct campo *c = (struct campo *)w;
-    const struct misure_campo *m = &misure_campo[c->misura];
-    const struct font *font = font_del_sistema(m->font);
-    int spento = w->disabilitato;
-    struct tondo t = tondo(w->x, w->y, w->l, w->a, c->piccolo ? w->a / 2 : m->raggio);
-    if (!spento) {
-        const struct strato_ombra *ombre = w->fuoco ? OMBRA_TAB(focus) : OMBRA_TAB(incassato);
-        int quante = w->fuoco ? OMBRA_N(focus) : OMBRA_N(incassato);
-        ombre_strati_fuori(p, &t, ombre, quante);
-        pennello_colore(p, SUPERFICIE_INCASSATA);
-        riempi_forma(p, &t);
-        ombre_strati_dentro(p, &t, ombre, quante);
-        if (c->errore || w->fuoco) {       /* errore o fuoco: bordo di un pixel e mezzo */
-            pennello_colore(p, BORDO_FOCUS);
-            contorna_forma(p, &t, BORDO_FOCUS_SPESSORE);
-        }
-    } else {
-        pennello_colore(p, CONTROLLO_SFONDO_DISABILITATO);
-        riempi_forma(p, &t);
-    }
-
-    pennello_salva(p);
-    pennello_ritaglia(p, w->x + 1, w->y + 1, w->l - 2, w->a - 2);
-    unsigned int colore_testo = spento ? TESTO_DISABILITATO : c->errore ? TESTO_SECONDARIO : TESTO_PRIMARIO;
-    int x = w->x + m->margine;
-    int destra = w->x + w->l - m->margine;
-    if (c->errore && !spento) {            /* il triangolo di avviso, a destra */
-        pennello_colore(p, COLORE_ICONA(COLORE_ICONA_SECONDARIO));
-        icona(p, ICONA_TRIANGLE_ALERT, m->icona, destra - m->icona, w->y + (w->a - m->icona) / 2);
-        destra -= m->icona + m->spazio;
-    }
-    if (c->icona != NESSUNA_ICONA) {   /* come nel disegno: secondaria, primaria con il fuoco */
-        pennello_colore(p, COLORE_ICONA(spento ? COLORE_ICONA_ATTENUATO
-                                        : w->fuoco ? COLORE_ICONA_PRIMARIO : COLORE_ICONA_SECONDARIO));
-        icona(p, c->icona, m->icona, x, w->y + (w->a - m->icona) / 2);
-        x += m->icona + m->spazio;
-    }
-    pennello_colore(p, colore_testo);
-    if (c->testo[0] || w->fuoco) {
-        /* LO SCORRIMENTO. Il testo si vede in una striscia, dal suo inizio fino al margine
-         * destro (lo stesso di sinistra). Se e' piu' lungo, si fa scorrere
-         * a sinistra quanto basta perche' il cursore resti dentro, come in ogni campo di
-         * testo. Il cursore e' sempre in fondo (la tastiera non manda ancora le frecce),
-         * quindi basta guardare la fine del testo: scrivendo il testo va a sinistra,
-         * cancellando torna a destra. Senza fuoco si vede l'inizio, come sul Mac. */
-        int fine = larghezza_testo(font, c->testo) + CAMPO_CURSORE_SPAZIO + 2;   /* il cursore compreso */
-        int scorrimento = w->fuoco && x + fine > destra ? x + fine - destra : 0;
-        pennello_ritaglia(p, x - 2, w->y, destra - (x - 2), w->a);  /* 2: le lettere che sbordano */
-        x = testo_centrato(p, font, x - scorrimento, w->y, w->a, c->testo);
-        if (w->fuoco) {                    /* il cursore: una barretta alta quanto la riga */
-            int alto = font->altezza;
-            struct tondo cursore = tondo(x + CAMPO_CURSORE_SPAZIO, w->y + (w->a - alto) / 2, 2, alto, 0);
-            riempi_forma(p, &cursore);
-        }
-    } else {
-        pennello_colore(p, spento ? TESTO_DISABILITATO : TESTO_SECONDARIO);
-        testo_centrato(p, font, x, w->y, w->a, c->suggerimento);
-    }
-    pennello_ripristina(p);
-}
-
-/* Il clic gli da' il fuoco (lo fa UIKit): qui non serve altro. */
-static inline void campo_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    (void)w; (void)x; (void)y; (void)pulsanti;
-}
-
-/* I tasti: le lettere si aggiungono in fondo, "cancella" toglie l'ultima. */
-static inline void campo_tasto(struct widget *w, unsigned int tasto) {
-    struct campo *c = (struct campo *)w;
-    int n = lunghezza(c->testo);
-    if (tasto == '\b') {
-        if (!n) return;
-        c->testo[n - 1] = 0;
-    } else if (tasto >= ' ' && tasto != 0x7F) {
-        if (n >= MAX_TESTO_WIDGET - 1) return;
-        c->testo[n] = (char)tasto;
-        c->testo[n + 1] = 0;
-    } else {
-        return;                            /* Invio, Tab...: non sono per lui */
-    }
-    widget_cambiato(w);
-    if (c->al_cambio) c->al_cambio(c, c->dati);
-}
-
-static const struct tipo_widget tipo_campo = {
-    campo_misura, 0, campo_disegna, campo_puntatore, campo_tasto, 0, 0, 0, 1
-};
-
-static inline void campo_prepara(struct campo *c, const char *testo, const char *suggerimento,
-                                 int icona, al_cambio_campo al_cambio, void *dati) {
-    *c = (struct campo){ .base = { .tipo = &tipo_campo, .largo = 1 }, .icona = icona, .misura = MISURA_M,
-                         .al_cambio = al_cambio, .dati = dati };
-    copia_testo(c->testo, testo, MAX_TESTO_WIDGET);
-    copia_testo(c->suggerimento, suggerimento, MAX_TESTO_WIDGET);
-}
+/* Prepara un campo di testo di misura M con il 'testo' di partenza, il 'suggerimento' (si
+ * vede quando e' vuoto) e l'icona a sinistra (ICONA_..., o NESSUNA_ICONA). A ogni tasto che lo
+ * cambia chiama 'al_cambio' (se non e' 0) con 'dati'. Si allarga a tutto lo spazio che riceve. */
+void campo_prepara(struct campo *c, const char *testo, const char *suggerimento,
+                   int icona, al_cambio_campo al_cambio, void *dati);
 
 /* La misura del campo o della ricerca: MISURA_S (32), MISURA_M (40, il default del campo), MISURA_L (48). */
-static inline void campo_stile(struct campo *c, int misura) {
-    c->misura = misura;
-    widget_cambiato(&c->base);
-}
+void campo_stile(struct campo *c, int misura);
 
-static inline void campo_errore(struct campo *c, int errore) {
-    c->errore = errore;
-    widget_cambiato(&c->base);
-}
+/* Mette (1) o toglie (0) lo stato di errore del campo: bordo del fuoco e triangolo di
+ * avviso. Si ridisegna da solo. */
+void campo_errore(struct campo *c, int errore);
 
 /* La ricerca piccola, per la barra degli strumenti: un campo di testo come gli altri
  * (si scrive, si cancella, al_cambio a ogni tasto), ma a PILLOLA, alta 32, larga 180, con la
  * lente. Come il campo e' incassata, e col fuoco ha bordo e anello. Non si allarga da solo (se deve, 'elastico'). */
-static inline void ricerca_prepara(struct campo *c, const char *suggerimento,
-                                   al_cambio_campo al_cambio, void *dati) {
-    campo_prepara(c, "", suggerimento, ICONA_SEARCH, al_cambio, dati);
-    c->piccolo = 1;
-    c->misura = MISURA_S;
-    c->base.largo = 0;
-}
+void ricerca_prepara(struct campo *c, const char *suggerimento,
+                     al_cambio_campo al_cambio, void *dati);
 
 /* --- lo stato vuoto: un'area senza contenuto, o in errore --- */
 
@@ -967,65 +445,19 @@ struct stato_vuoto {
     char spiegazione[STATO_VUOTO_RIGHE * MAX_TESTO_WIDGET];
 };
 
-static inline int stato_vuoto_righe(struct stato_vuoto *s, int largo, char righe[][MAX_RIGA_NOME]) {
-    if (!s->spiegazione[0]) return 0;
-    return testo_a_capo(FONT_CORPO, s->spiegazione, largo, righe, STATO_VUOTO_RIGHE);
-}
-
-static inline void stato_vuoto_misura(struct widget *w, int *l, int *a) {
-    struct stato_vuoto *s = (struct stato_vuoto *)w;
-    char righe[STATO_VUOTO_RIGHE][MAX_RIGA_NOME];
-    int n = stato_vuoto_righe(s, AVVISO_LARGHEZZA, righe);
-    int t = larghezza_testo(FONT_SEZIONE_NUOVO, s->titolo);
-    *l = t > AVVISO_LARGHEZZA ? t : AVVISO_LARGHEZZA;
-    *a = INTERLINEA_SEZIONE +
-         (s->icona != NESSUNA_ICONA ? ICONA_OGGETTO + SPAZIO_8 : 0) + (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0);
-}
-
-static inline void stato_vuoto_disegna(struct widget *w, struct pennello *p) {
-    struct stato_vuoto *s = (struct stato_vuoto *)w;
-    char righe[STATO_VUOTO_RIGHE][MAX_RIGA_NOME];
-    int n = stato_vuoto_righe(s, w->l, righe);
-    int alto = INTERLINEA_SEZIONE + (s->icona != NESSUNA_ICONA ? ICONA_OGGETTO + SPAZIO_8 : 0) +
-               (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0);
-    int y = w->y + (w->a - alto) / 2, cx = w->x + w->l / 2;
-    if (s->icona != NESSUNA_ICONA) {
-        pennello_colore(p, COLORE_ICONA(s->colore_icona));
-        icona(p, s->icona, ICONA_OGGETTO, cx - ICONA_OGGETTO / 2, y);
-        y += ICONA_OGGETTO + SPAZIO_8;
-    }
-    pennello_colore(p, TESTO_PRIMARIO);
-    testo_centrato(p, FONT_SEZIONE_NUOVO, cx - larghezza_testo(FONT_SEZIONE_NUOVO, s->titolo) / 2, y,
-                   INTERLINEA_SEZIONE, s->titolo);
-    y += INTERLINEA_SEZIONE + SPAZIO_8;
-    pennello_colore(p, TESTO_SECONDARIO);
-    for (int i = 0; i < n; i++, y += INTERLINEA_CORPO)
-        testo_centrato(p, FONT_CORPO, cx - larghezza_testo(FONT_CORPO, righe[i]) / 2, y, INTERLINEA_CORPO, righe[i]);
-}
-
-static const struct tipo_widget tipo_stato_vuoto = { stato_vuoto_misura, 0, stato_vuoto_disegna, 0, 0, 0, 0, 0, 0 };
-
-static inline void stato_vuoto_prepara(struct stato_vuoto *s, int icona_, const char *titolo,
-                                       const char *spiegazione) {
-    *s = (struct stato_vuoto){ .base = { .tipo = &tipo_stato_vuoto, .elastico = 1, .largo = 1 },
-                               .icona = icona_, .colore_icona = COLORE_ICONA_SECONDARIO };
-    copia_testo(s->titolo, titolo, MAX_TESTO_WIDGET);
-    copia_testo(s->spiegazione, spiegazione ? spiegazione : "", sizeof s->spiegazione);
-}
+/* Prepara uno stato vuoto con l'icona (ICONA_..., o NESSUNA_ICONA), il 'titolo' e la
+ * 'spiegazione' (o 0, se non c'e'). */
+void stato_vuoto_prepara(struct stato_vuoto *s, int icona_, const char *titolo,
+                         const char *spiegazione);
 
 /* Il colore dell'icona (COLORE_ICONA_..., tema.h). Nel disegno lo stato vuoto ha l'icona
  * Secondario; le schermate d'errore (cartella che non si legge, permesso negato, pacchetto
  * illeggibile) la mettono Primario. */
-static inline void stato_vuoto_colore_icona(struct stato_vuoto *s, int modo) { s->colore_icona = modo; }
+void stato_vuoto_colore_icona(struct stato_vuoto *s, int modo);
 
 /* Cambia icona e testi (per esempio, da "cartella vuota" a "impossibile leggere"). */
-static inline void stato_vuoto_cambia(struct stato_vuoto *s, int icona_, const char *titolo,
-                                      const char *spiegazione) {
-    s->icona = icona_;
-    copia_testo(s->titolo, titolo, MAX_TESTO_WIDGET);
-    copia_testo(s->spiegazione, spiegazione ? spiegazione : "", sizeof s->spiegazione);
-    widget_cambiato(&s->base);
-}
+void stato_vuoto_cambia(struct stato_vuoto *s, int icona_, const char *titolo,
+                        const char *spiegazione);
 
 /* --- l'avviso: un messaggio che interrompe e chiede conferma --- */
 
@@ -1081,147 +513,22 @@ struct avviso {
     void *dati;
 };
 
-static inline int avviso_larghezza(const struct avviso *v) {
-    return v->tre ? AVVISO_LARGHEZZA_TRE : AVVISO_LARGHEZZA;
-}
-
-static inline int avviso_righe(struct avviso *v, char righe[][MAX_RIGA_NOME]) {
-    return testo_a_capo(FONT_CORPO, v->messaggio, avviso_larghezza(v) - 2 * FINESTRA_PADDING,
-                        righe, AVVISO_RIGHE);
-}
-
-/* L'altezza del riquadro: margine, titolo, messaggio, spazio, pulsanti, margine. */
-static inline int avviso_altezza(struct avviso *v) {
-    char righe[AVVISO_RIGHE][MAX_RIGA_NOME];
-    int n = v->messaggio[0] ? avviso_righe(v, righe) : 0;
-    int pl, pa;
-    widget_misura(&v->conferma.base, &pl, &pa);
-    return 2 * FINESTRA_PADDING + INTERLINEA_SEZIONE + (n ? SPAZIO_8 + n * INTERLINEA_CORPO : 0) +
-           SPAZIO_24 + pa;
-}
-
-/* Dispone il riquadro al centro della finestra (larga fl, alta fa) e i due pulsanti in
- * fondo a destra. */
-static inline void avviso_sistema(struct avviso *v, int fl, int fa) {
-    v->l = avviso_larghezza(v);
-    v->a = avviso_altezza(v);
-    v->x = (fl - v->l) / 2;
-    v->y = (fa - v->a) / 2;
-    v->base.x = v->x; v->base.y = v->y; v->base.l = v->l; v->base.a = v->a;
-    /* da destra: la conferma, poi (se c'e') l'alternativa, poi Annulla, a SPAZIO_8 */
-    struct pulsante *fila[3] = { &v->conferma, v->tre ? &v->alternativa : 0, &v->annulla };
-    int ca, x = v->x + v->l - FINESTRA_PADDING;
-    int dummy;
-    widget_misura(&v->conferma.base, &dummy, &ca);
-    int y = v->y + v->a - FINESTRA_PADDING - ca;
-    for (int i = 0; i < 3; i++) {
-        if (!fila[i]) continue;
-        int bl, ba;
-        widget_misura(&fila[i]->base, &bl, &ba);
-        x -= bl;
-        fila[i]->base.x = x; fila[i]->base.y = y; fila[i]->base.l = bl; fila[i]->base.a = ba;
-        x -= SPAZIO_8;
-    }
-}
-
-/* Sotto il riquadro: il velo (se bloccante) su tutta la finestra (larga fl, alta fa), con i
- * suoi angoli, e l'ombra del riquadro. Lo chiama la finestra, senza ritagli. */
-static inline void avviso_sotto(struct avviso *v, struct pennello *p, int fl, int fa) {
-    if (v->bloccante) {
-        struct tondo velo = tondo(0, 0, fl, fa, RAGGIO_FINESTRA_NUOVO);
-        pennello_colore(p, SUPERFICIE_VELO);
-        riempi_forma(p, &velo);
-    }
-    struct tondo r = tondo(v->x, v->y, v->l, v->a, RAGGIO_FINESTRA_NUOVO);
-    ombre_strati_fuori(p, &r, OMBRA_TAB(finestra), OMBRA_N(finestra));
-}
-
-static inline void avviso_disegna(struct widget *w, struct pennello *p) {
-    struct avviso *v = (struct avviso *)w;
-    struct tondo r = tondo(v->x, v->y, v->l, v->a, RAGGIO_FINESTRA_NUOVO);
-    pennello_salva(p);
-    /* Pieno, non vetro: in Figma l'avviso e' di vetro con la sfocatura dello sfondo, ma
-     * dentro una finestra nessuno sfoca quello che sta sotto (lo fa solo il compositore,
-     * sotto le finestre): il vetro lascerebbe leggere il testo di sotto. Come i menu di Files. */
-    pennello_colore(p, SUPERFICIE_ELEVATA);
-    riempi_forma(p, &r);
-    ombre_strati_dentro(p, &r, OMBRA_TAB(finestra), OMBRA_N(finestra));
-    int x = v->x + FINESTRA_PADDING, y = v->y + FINESTRA_PADDING;
-    pennello_colore(p, TESTO_PRIMARIO);
-    testo_centrato(p, FONT_SEZIONE_NUOVO, x, y, INTERLINEA_SEZIONE, v->titolo);
-    y += INTERLINEA_SEZIONE;
-    if (v->messaggio[0]) {
-        char righe[AVVISO_RIGHE][MAX_RIGA_NOME];
-        int n = avviso_righe(v, righe);
-        y += SPAZIO_8;
-        pennello_colore(p, TESTO_SECONDARIO);
-        for (int i = 0; i < n; i++, y += INTERLINEA_CORPO)
-            testo_centrato(p, FONT_CORPO, x, y, INTERLINEA_CORPO, righe[i]);
-    }
-    pennello_ripristina(p);
-}
-
-/* Il riquadro prende i clic che non vanno ai pulsanti: cosi' sotto non arriva niente. (Se
- * l'avviso e' bloccante, i clic fuori dal riquadro li butta via la finestra.) */
-static inline void avviso_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    (void)w; (void)x; (void)y; (void)pulsanti;
-}
-
-static inline void avviso_chiudi(struct avviso *v);
-
-static inline void avviso_rispondi(struct avviso *v, int scelta) {
-    avviso_chiudi(v);
-    if (v->al_risposta) v->al_risposta(v, scelta, v->dati);
-}
-
-/* Invio arriva come carattere; Esc no (non e' un carattere): lo da' all'avviso
- * uikit_tasto_fisico, come tasto fisico. */
-static inline void avviso_tasto(struct widget *w, unsigned int tasto) {
-    struct avviso *v = (struct avviso *)w;
-    if (tasto == '\n' || tasto == '\r') avviso_rispondi(v, AVVISO_CONFERMA);
-}
-
-static const struct tipo_widget tipo_avviso = {
-    0, 0, avviso_disegna, avviso_puntatore, avviso_tasto, 0, 0, 0, 1
-};
-
-static inline void avviso_al_annulla(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, AVVISO_ANNULLA); }
-static inline void avviso_al_conferma(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, AVVISO_CONFERMA); }
-static inline void avviso_al_alternativa(struct pulsante *b, void *dati) { (void)b; avviso_rispondi(dati, AVVISO_ALTERNATIVA); }
-
 /* Prepara l'avviso (chiuso). 'tipo' e' il tipo del pulsante di conferma (PERICOLO,
  * PRIMARIO...), 'bloccante' 1 o 0. Annulla si puo' rinominare con avviso_annulla. */
-static inline void avviso_prepara(struct avviso *v, const char *titolo, const char *messaggio,
-                                  const char *conferma, int tipo, int bloccante,
-                                  al_risposta_avviso al_risposta, void *dati) {
-    *v = (struct avviso){ .base = { .tipo = &tipo_avviso, .nascosto = 1 }, .bloccante = bloccante,
-                          .al_risposta = al_risposta, .dati = dati };
-    copia_testo(v->titolo, titolo, MAX_TESTO_WIDGET);
-    copia_testo(v->messaggio, messaggio ? messaggio : "", sizeof v->messaggio);
-    pulsante_prepara(&v->annulla, "Annulla", NESSUNA_ICONA, avviso_al_annulla, v);
-    pulsante_prepara(&v->conferma, conferma, NESSUNA_ICONA, avviso_al_conferma, v);
-    pulsante_stile(&v->conferma, tipo, MISURA_M);
-    widget_aggiungi(&v->base, &v->annulla.base);
-    widget_aggiungi(&v->base, &v->conferma.base);
-}
+void avviso_prepara(struct avviso *v, const char *titolo, const char *messaggio,
+                    const char *conferma, int tipo, int bloccante,
+                    al_risposta_avviso al_risposta, void *dati);
 
 /* Cambia il testo di Annulla (per esempio "Apri cartella" in un avviso non bloccante). */
-static inline void avviso_annulla(struct avviso *v, const char *testo) {
-    copia_testo(v->annulla.testo, testo, MAX_TESTO_WIDGET);
-}
+void avviso_annulla(struct avviso *v, const char *testo);
 
 /* Aggiunge il terzo pulsante, tra Annulla e la conferma (di solito SECONDARIO): la risposta
  * sara' AVVISO_ALTERNATIVA. Prima di avviso_apri. */
-static inline void avviso_alternativa(struct avviso *v, const char *testo, int tipo) {
-    if (!v->tre) {
-        pulsante_prepara(&v->alternativa, testo, NESSUNA_ICONA, avviso_al_alternativa, v);
-        widget_aggiungi(&v->base, &v->alternativa.base);
-        v->tre = 1;
-    } else {
-        copia_testo(v->alternativa.testo, testo, MAX_TESTO_WIDGET);
-    }
-    pulsante_stile(&v->alternativa, tipo, MISURA_M);
-}
+void avviso_alternativa(struct avviso *v, const char *testo, int tipo);
+
+/* Apre l'avviso della finestra (finestra_tk_avviso), al centro, e gli da' la tastiera
+ * (Invio, Esc). Si chiude da solo quando si risponde. */
+void avviso_apri(struct avviso *v);
 
 /* --- la finestra: la radice dell'albero, con la barra del titolo --- */
 
@@ -1276,87 +583,6 @@ struct finestra_tk {
     void *dati_pronto;
 };
 
-/* L'altezza della testata: TITOLO_ALTEZZA (40), o ALTEZZA_BARRA_MINI (28) nella mini finestra. */
-static inline int testata_altezza(const struct finestra_tk *f) {
-    return f->mini ? ALTEZZA_BARRA_MINI : TITOLO_ALTEZZA;
-}
-/* Il lato dei comandi (riduci, chiudi): S (32), o XS (24) nella mini finestra. */
-static inline int comando_lato(const struct finestra_tk *f) { return f->mini ? ALTEZZA_XS : ALTEZZA_S; }
-/* Lo spazio dei comandi a destra (e, uguale, quello vuoto a sinistra che centra il titolo):
- * riduci e chiudi con i margini (76), o nella mini finestra il solo chiudi (4 + 24 = 28). */
-static inline int comandi_larghezza(const struct finestra_tk *f) {
-    return f->mini ? TITOLO_MARGINE + ALTEZZA_XS : TITOLO_COMANDI_LARGHEZZA;
-}
-/* Il margine intorno al contenuto: FINESTRA_PADDING (24), SPAZIO_16 nella mini finestra,
- * CORPO_PADDING (8) nella finestra a aree (finestra_tk_aree). */
-static inline int finestra_padding(const struct finestra_tk *f) {
-    return f->senza_margine ? 0 : f->aree ? CORPO_PADDING : f->mini ? SPAZIO_16 : FINESTRA_PADDING;
-}
-
-/* L'avviso e' aperto. Se bloccante, la finestra sotto non si usa. */
-static inline struct avviso *finestra_tk_avviso_aperto(const struct finestra_tk *f) {
-    return f->avviso && !f->avviso->base.nascosto ? f->avviso : 0;
-}
-static inline int finestra_tk_bloccata(const struct finestra_tk *f) {
-    struct avviso *v = finestra_tk_avviso_aperto(f);
-    return v && v->bloccante;
-}
-
-/* La finestra in cui sta un widget: la radice del suo albero. */
-static inline struct finestra_tk *widget_finestra(struct widget *w) {
-    while (w->genitore) w = w->genitore;
-    return (struct finestra_tk *)w;
-}
-
-static const struct tipo_widget tipo_finestra_tk;   /* piu' sotto */
-
-/* LE ZONE DA RIDISEGNARE della finestra (vedi in cima, "si ridisegna solo quello che e'
- * cambiato"): un rettangolo in piu', in coordinate della finestra. */
-static inline void uikit_cambiata_zona(struct finestra_tk *f, int x, int y, int l, int a) {
-    struct zona_finestra z = zona_dentro((struct zona_finestra){ x, y, l, a },
-                                         (struct zona_finestra){ 0, 0, f->base.l, f->base.a });
-    if (zona_vuota(z)) return;
-    f->da_ridisegnare = 1;
-    if (!f->tutta_cambiata) zone_aggiungi(f->cambiate, &f->quante_cambiate, MAX_ZONE_MOSTRA, z);
-}
-
-/* Tutta la finestra (l'impaginazione e' cambiata, o il tema). */
-static inline void uikit_cambiata_tutta(struct finestra_tk *f) {
-    f->da_ridisegnare = 1;
-    f->tutta_cambiata = 1;
-}
-
-/* La testata (il titolo, i comandi riduci e chiudi), con il suo divisore. */
-static inline void uikit_cambiata_testata(struct finestra_tk *f) {
-    uikit_cambiata_zona(f, 0, 0, f->base.l, testata_altezza(f));
-}
-
-/* Se il widget non e' ancora in una finestra (lo si sta preparando, prima di
- * uikit_esegui), non c'e' niente da ridisegnare: la cima del suo albero non e' una
- * finestra, e non la si tocca. La zona si taglia sullo spazio del widget con il suo sbordo:
- * fuori di li' il widget non disegna. */
-static inline void widget_segna_zona(struct widget *w, int x, int y, int l, int a) {
-    struct finestra_tk *f = widget_finestra(w);
-    if (f->base.tipo != &tipo_finestra_tk) return;
-    struct zona_finestra z = zona_dentro((struct zona_finestra){ x, y, l, a },
-                                         (struct zona_finestra){ w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO,
-                                                                 w->l + 2 * WIDGET_SBORDO, w->a + 2 * WIDGET_SBORDO });
-    uikit_cambiata_zona(f, z.x, z.y, z.l, z.a);
-}
-
-static inline void widget_segna(struct widget *w) {
-    widget_segna_zona(w, w->x - WIDGET_SBORDO, w->y - WIDGET_SBORDO, w->l + 2 * WIDGET_SBORDO,
-                      w->a + 2 * WIDGET_SBORDO);
-}
-
-static inline void widget_cambiato(struct widget *w) {
-    if (widget_visibile(w)) widget_segna(w);
-}
-
-static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, int a) {
-    if (widget_visibile(w)) widget_segna_zona(w, x, y, l, a);
-}
-
 /* LA FINESTRA, dal file Figma. Sono DUE pezzi separati, uno sopra l'altro:
  *
  *   - la TESTATA (il titolo): alta TITOLO_ALTEZZA (40), con i soli angoli in ALTO
@@ -1377,179 +603,22 @@ static inline void widget_cambiato_zona(struct widget *w, int x, int y, int l, i
  *     partono dalla stessa linea, a 8 dal bordo della finestra.
  *
  * La testata non e' contenuto: ha la sua funzione di disegno e le sue misure, e quello che
- * l'applicazione mette nella finestra comincia sempre sotto di lei (finestra_tk_corpo).
- *
- * Dove stanno i due comandi nella testata: riduci e chiudi, a destra. */
-static inline int comando_x(const struct finestra_tk *f, int chiudi) {
-    int lato = comando_lato(f);
-    return f->base.l - TITOLO_MARGINE - lato - (chiudi ? 0 : lato + TITOLO_MARGINE);
-}
-/* centrati in altezza nella testata: 4 nella normale (4 + 32 + 4), 2 nella mini (2 + 24 + 2) */
-static inline int comando_y(const struct finestra_tk *f) { return (testata_altezza(f) - comando_lato(f)) / 2; }
-
-/* Il puntatore e' sopra il comando? La mini finestra non si riduce: ha solo chiudi. */
-static inline int su_comando(const struct finestra_tk *f, int chiudi, int x, int y) {
-    if (f->mini && !chiudi) return 0;
-    int cx = comando_x(f, chiudi), cy = comando_y(f), lato = comando_lato(f);
-    return x >= cx && x < cx + lato && y >= cy && y < cy + lato;
-}
-
-/* La striscia della barra degli strumenti sotto la testata (0 se non c'e' o e' nascosta): nella
- * finestra a aree il padding del corpo e la barra, alta quanto le sue cose (il gap sotto e' il
- * margine del contenuto, finestra_padding); nelle altre STRUMENTI_ALTEZZA (48: la barra, alta
- * 32, con STRUMENTI_MARGINE_SOPRA sopra e sotto). */
-static inline int finestra_tk_striscia(const struct finestra_tk *f) {
-    if (!f->strumenti || f->strumenti->nascosto) return 0;
-    if (!f->aree) return STRUMENTI_ALTEZZA;
-    int l, a;
-    widget_misura(f->strumenti, &l, &a);
-    return CORPO_PADDING + a;
-}
+ * l'applicazione mette nella finestra comincia sempre sotto di lei (finestra_tk_corpo). */
 
 /* Dove comincia il contenuto della finestra, senza il suo margine: sotto la testata e, se c'e'
  * (e non e' nascosta), sotto la barra degli strumenti. */
-static inline int finestra_tk_corpo(const struct finestra_tk *f) {
-    return testata_altezza(f) + finestra_tk_striscia(f);
-}
+int finestra_tk_corpo(const struct finestra_tk *f);
 
-/* Il contenuto, piu' il padding e le barre; abbastanza larga per il titolo e i comandi, e
- * per quello che sta nella barra degli strumenti. Con una misura fissa, la misura e' di
- * tutta la finestra: la barra degli strumenti la prende al contenuto. */
-static inline void finestra_tk_misura(struct widget *w, int *l, int *a) {
-    struct finestra_tk *f = (struct finestra_tk *)w;
-    if (f->l_fissa) { *l = f->l_fissa; *a = f->a_fissa; return; }
-    int cl = 0, ca = 0;
-    if (w->quanti_figli) widget_misura(w->figli[0], &cl, &ca);
-    /* il titolo sta tra i due gruppi (lo spazio vuoto e i comandi), con un po' d'aria */
-    int barra = 2 * (comandi_larghezza(f) + SPAZIO_8) +
-                larghezza_testo(f->mini ? FONT_ETICHETTA : FONT_TITOLO_FINESTRA, f->titolo);
-    *l = 2 * finestra_padding(f) + cl;
-    if (*l < barra) *l = barra;
-    if (f->strumenti && !f->strumenti->nascosto) {
-        int sl, sa;
-        widget_misura(f->strumenti, &sl, &sa);
-        sl += 2 * STRUMENTI_MARGINE_LATI;   /* e' a 8 dai bordi (CORPO_PADDING, a aree) */
-        if (*l < sl) *l = sl;
-    }
-    *a = finestra_tk_corpo(f) + 2 * finestra_padding(f) + ca;
-}
-
-static inline void finestra_tk_disponi(struct widget *w) {
-    struct finestra_tk *f = (struct finestra_tk *)w;
-    if (!w->quanti_figli) return;
-    if (f->strumenti) {                     /* tutta la larghezza, a 8 dai bordi e dalla testata */
-        int lati = f->aree ? CORPO_PADDING : STRUMENTI_MARGINE_LATI;
-        int sopra = f->aree ? CORPO_PADDING : STRUMENTI_MARGINE_SOPRA;
-        f->strumenti->x = lati;
-        f->strumenti->y = testata_altezza(f) + sopra;
-        f->strumenti->l = w->l - 2 * lati;
-        f->strumenti->a = f->aree ? finestra_tk_striscia(f) - sopra : ALTEZZA_S;
-    }
-    int corpo = finestra_tk_corpo(f);
-    int margine = finestra_padding(f);
-    struct widget *c = w->figli[0];
-    c->x = margine;
-    c->y = corpo + margine;
-    c->l = w->l - 2 * margine;
-    c->a = w->a - corpo - 2 * margine;
-}
-
-/* IL CONTENUTO della finestra, cioe' il suo fondo: il vetro (SUPERFICIE_VETRO, bianco o
- * grafite al 72%) che lascia vedere lo sfondo che il compositore ha sfocato qui sotto, con i
- * soli angoli in basso arrotondati. Quello che sta nel contenuto (la barra degli strumenti,
- * il widget dell'applicazione) lo disegnano i figli, dopo. */
-static inline void finestra_tk_contenuto_disegna(struct finestra_tk *f, struct pennello *p) {
-    int inizio = testata_altezza(f);
-    struct tondo contenuto = { 0, inizio, f->base.l, f->base.a - inizio,
-                               { 0, 0, RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO } };
-    pennello_colore(p, SUPERFICIE_VETRO);
-    riempi_forma(p, &contenuto);
-}
-
-/* LA TESTATA: il fondo (lo stesso vetro, soli angoli in alto arrotondati), il titolo centrato e
- * i comandi (sotto, nessuna linea: deciso dalla persona). Una finestra che non ha il
- * fuoco (non e' in primo piano) ha il titolo in TESTO_SECONDARIO e i comandi al 50%.
- *
- * Il VETRO e' lo stesso del contenuto: i due pezzi si toccano lungo il divisore, e le
- * coperture dei loro bordi dritti sono piene, quindi in mezzo non resta nessuna cucitura. */
-static inline void finestra_tk_titolo_disegna(struct finestra_tk *f, struct pennello *p) {
-    struct widget *w = &f->base;
-    int alta = testata_altezza(f);
-    struct tondo testata = { 0, 0, w->l, alta,
-                             { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
-    pennello_colore(p, SUPERFICIE_VETRO);
-    riempi_forma(p, &testata);
-    /* il titolo, al centro della finestra: tra lo spazio vuoto a sinistra (largo quanto i
-     * comandi) e i comandi non entra mai nei comandi, un titolo lungo si taglia. Nella mini
-     * finestra e' piu' piccolo (l'etichetta, 12). */
-    const struct font *font = f->mini ? FONT_ETICHETTA : FONT_TITOLO_FINESTRA;
-    pennello_salva(p);
-    int margine = comandi_larghezza(f) + SPAZIO_8;
-    pennello_ritaglia(p, margine, 0, w->l - 2 * margine, alta);
-    int attiva = f->attiva && !finestra_tk_bloccata(f);   /* sotto un avviso bloccante si spegne */
-    pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_SECONDARIO);
-    testo_centrato(p, font, (w->l - larghezza_testo(font, f->titolo)) / 2, 0, alta, f->titolo);
-    pennello_ripristina(p);
-
-    /* i comandi: pulsanti ghost tondi (S, o XS nella mini finestra, che ha solo chiudi).
-     * Senza fondo a riposo; sotto il puntatore CONTROLLO_SFONDO, premuto
-     * CONTROLLO_SFONDO_SOPRA (come ogni ghost di UIKit). */
-    int lato = comando_lato(f), segno = f->mini ? ICONA_XS : ICONA_S, cy = comando_y(f);
-    pennello_salva(p);
-    if (!attiva) pennello_opacita(p, OPACITA_COMANDI_INATTIVI);
-    for (int chiudi = f->mini ? 1 : 0; chiudi < 2; chiudi++) {
-        int cx = comando_x(f, chiudi);
-        int sopra = f->comando_sopra == 1 + chiudi;
-        int premuto = sopra && (chiudi ? f->chiudi_premuto : f->riduci_premuto);
-        if (sopra) {
-            pennello_colore(p, premuto ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
-            riempi_cerchio(p, cx + lato / 2, cy + lato / 2, lato / 2);
-        }
-        pennello_colore(p, COLORE_ICONA(COLORE_ICONA_PRIMARIO));
-        icona(p, chiudi ? ICONA_X : ICONA_MINUS, segno, cx + (lato - segno) / 2, cy + (lato - segno) / 2);
-    }
-    pennello_ripristina(p);
-}
-
-/* La finestra: pulisce, disegna il contenuto e la testata (due pezzi separati, vedi sopra),
- * e infine il filo di luce interno del tema scuro (gli strati INTERNI della tabella
- * "finestra": nel chiaro non ce ne sono). Le ombre ESTERNE e la sfocatura dello sfondo non
- * sono qui: stanno fuori dalla finestra, le fa il compositore. Non c'e' nessun bordo.
- *
- * IL FONDO SCURO. Prima, sotto il vetro, c'era VETRO_FONDO (un blu scuro al 50%) perche' il
- * testo era bianco e sopra uno sfondo chiaro non si sarebbe letto. Ora il testo cambia col
- * tema: scuro sul vetro bianco (tema chiaro), chiaro sul vetro grafite (tema scuro). Il vetro
- * bianco al 72% sopra lo sfondo sfocato resta chiaro (il testo scuro si legge: sotto, il
- * colore dello sfondo conta per il 28%); il vetro grafite al 72% resta scuro. Un fondo scuro
- * in piu' renderebbe grigio il vetro chiaro, e non c'e' nel disegno: tolto in tutti e due i
- * temi. */
-static inline void finestra_tk_disegna(struct widget *w, struct pennello *p) {
-    struct finestra_tk *f = (struct finestra_tk *)w;
-    pulisci(p);
-    finestra_tk_contenuto_disegna(f, p);
-    finestra_tk_titolo_disegna(f, p);
-    struct tondo tutta = tondo(0, 0, w->l, w->a, RAGGIO_FINESTRA_NUOVO);
-    ombre_strati_dentro(p, &tutta, OMBRA_TAB(finestra), OMBRA_N(finestra));
-}
-
-static const struct tipo_widget tipo_finestra_tk = {
-    finestra_tk_misura, finestra_tk_disponi, finestra_tk_disegna, 0, 0, 0, 0, 0, 0
-};
-
-static inline void finestra_tk_prepara(struct finestra_tk *f, const char *titolo,
-                                       struct widget *contenuto) {
-    *f = (struct finestra_tk){ .base = { .tipo = &tipo_finestra_tk } };
-    copia_testo(f->titolo, titolo, MAX_TITOLO);
-    widget_aggiungi(&f->base, contenuto);
-}
+/* Prepara la finestra dell'applicazione: il 'titolo' (nella testata) e il 'contenuto',
+ * il widget che la riempie (di solito una colonna o una riga). Poi, se servono, le altre
+ * finestra_tk_..., e infine uikit_esegui. */
+void finestra_tk_prepara(struct finestra_tk *f, const char *titolo,
+                         struct widget *contenuto);
 
 /* Mette una barra degli strumenti sotto la barra del titolo (di solito una 'struct
  * barra_strumenti', piu' sotto): la finestra si allunga della sua altezza. Da chiamare
  * prima di uikit_esegui, dopo finestra_tk_prepara. */
-static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strumenti) {
-    f->strumenti = strumenti;
-    widget_aggiungi(&f->base, strumenti);
-}
+void finestra_tk_barra(struct finestra_tk *f, struct widget *strumenti);
 
 /* LA FINESTRA A AREE, la struttura di tutte le finestre del disegno: il corpo sotto la testata
  * ha CORPO_PADDING (8) su tutti i lati e CORPO_GAP (8) tra le aree (barra degli strumenti,
@@ -1558,100 +627,48 @@ static inline void finestra_tk_barra(struct finestra_tk *f, struct widget *strum
  * strumenti prende tutta la larghezza del corpo, sopra il contenuto; chi la vuole solo sopra
  * un'area (Files: a destra della barra laterale) la mette nel suo contenuto, in una colonna a
  * CORPO_GAP. Prima di uikit_esegui. */
-static inline void finestra_tk_aree(struct finestra_tk *f) { f->aree = 1; }
+void finestra_tk_aree(struct finestra_tk *f);
 
 /* Il contenuto senza nessun margine, fino ai bordi della finestra: solo per chi disegna tutto
  * da se' (le scene dell'anteprima). Le applicazioni usano finestra_tk_aree. */
-static inline void finestra_tk_bordo(struct finestra_tk *f) { f->senza_margine = 1; }
-
+void finestra_tk_bordo(struct finestra_tk *f);
 
 /* Cambia il titolo della finestra (per esempio, la cartella in cui si e'). Lo disegna la
  * finestra stessa, nella sua barra: basta ridisegnarla. */
-static inline void finestra_tk_titolo(struct finestra_tk *f, const char *titolo) {
-    copia_testo(f->titolo, titolo, MAX_TITOLO);
-    uikit_cambiata_testata(f);
-}
+void finestra_tk_titolo(struct finestra_tk *f, const char *titolo);
 
 /* LA MINI FINESTRA, per le cose secondarie (informazioni su un file, un avanzamento, uno
  * strumento): testata da ALTEZZA_BARRA_MINI (28) con il titolo piccolo (FONT_ETICHETTA) e il
  * solo pulsante di chiusura XS (24): non si riduce. Il contenuto ha SPAZIO_16 di margine.
  * Prima di uikit_esegui, dopo finestra_tk_prepara. */
-static inline void finestra_tk_mini(struct finestra_tk *f) { f->mini = 1; }
+void finestra_tk_mini(struct finestra_tk *f);
 
 /* Da' alla finestra il suo avviso (chiuso): si apre con avviso_apri. Prima di
  * uikit_esegui, dopo finestra_tk_prepara. Una finestra ha un solo avviso alla volta. */
-static inline void finestra_tk_avviso(struct finestra_tk *f, struct avviso *v) {
-    f->avviso = v;
-    v->base.genitore = &f->base;
-}
+void finestra_tk_avviso(struct finestra_tk *f, struct avviso *v);
 
 /* Chiude la finestra, come il pulsante "chiudi": uikit_esegui torna. */
-static inline void finestra_tk_chiudi(struct finestra_tk *f) { f->da_chiudere = 1; }
+void finestra_tk_chiudi(struct finestra_tk *f);
 
 /* Una misura fissa per la finestra, invece di quella del contenuto. */
-static inline void finestra_tk_dimensione(struct finestra_tk *f, int l, int a) {
-    f->l_fissa = l;
-    f->a_fissa = a;
-}
+void finestra_tk_dimensione(struct finestra_tk *f, int l, int a);
 
 /* Chiama 'funzione' ogni 'ms' millisecondi, finche' la finestra e' aperta (0: smette).
  * La prima volta dopo 'ms'. La stessa funzione con gli stessi dati e' la stessa chiamata:
  * chiederla di nuovo cambia il suo ritmo (e la sua prossima volta), non ne aggiunge
  * un'altra. Cosi' una funzione puo' anche decidere da se' quando essere richiamata. */
-static inline void finestra_tk_ogni(struct finestra_tk *f, unsigned int ms,
-                                    void (*funzione)(struct finestra_tk *f, void *dati), void *dati) {
-    struct chiamata_tk *posto = 0;
-    for (int i = 0; i < MAX_CHIAMATE; i++) {
-        struct chiamata_tk *c = &f->chiamate[i];
-        if (c->funzione == funzione && c->dati == dati) { posto = c; break; }
-        if (!c->funzione && !posto) posto = c;
-    }
-    if (!posto) return;                         /* tutte prese: non si puo' */
-    if (!ms) {
-        if (posto->funzione == funzione && posto->dati == dati) posto->funzione = 0;
-        return;
-    }
-    *posto = (struct chiamata_tk){ funzione, dati, ms, tempo() + ms };
-}
+void finestra_tk_ogni(struct finestra_tk *f, unsigned int ms,
+                      void (*funzione)(struct finestra_tk *f, void *dati), void *dati);
 
 /* Guarda anche il descrittore 'd' (una pipe, un terminale, un socket dell'app): quando c'e'
  * da leggere, o l'altro capo ha chiuso, il ciclo degli eventi chiama 'funzione', che legge
  * (senza bloccarsi) e segna cosa ridisegnare; come g_io_add_watch in GTK. Uno solo per
  * finestra; 'funzione' 0 smette. */
-static inline void finestra_tk_guarda(struct finestra_tk *f, int d,
-                                      void (*funzione)(struct finestra_tk *f, void *dati), void *dati) {
-    f->guardato = d;
-    f->al_pronto = funzione;
-    f->dati_pronto = dati;
-}
-
-/* La chiamata che scade per prima, o 0 se non ce ne sono. */
-static inline struct chiamata_tk *uikit_prima_chiamata(struct finestra_tk *f) {
-    struct chiamata_tk *prima = 0;
-    for (int i = 0; i < MAX_CHIAMATE; i++) {
-        struct chiamata_tk *c = &f->chiamate[i];
-        if (c->funzione && (!prima || (int)(c->scadenza - prima->scadenza) < 0)) prima = c;
-    }
-    return prima;
-}
-
-/* Fa le chiamate scadute. Ognuna prima si rimette in fila (la prossima volta tra 'ms'),
- * poi si chiama: cosi' puo' cambiare il suo ritmo, o smettere. */
-static inline void uikit_chiamate_scadute(struct finestra_tk *f) {
-    unsigned int ora = tempo();
-    for (int i = 0; i < MAX_CHIAMATE; i++) {
-        struct chiamata_tk *c = &f->chiamate[i];
-        if (!c->funzione || (int)(c->scadenza - ora) > 0) continue;
-        c->scadenza = ora + c->ms;
-        c->funzione(f, c->dati);
-    }
-}
+void finestra_tk_guarda(struct finestra_tk *f, int d,
+                        void (*funzione)(struct finestra_tk *f, void *dati), void *dati);
 
 /* Rifa' l'impaginazione dentro la finestra (dopo aver mostrato o nascosto dei widget). */
-static inline void uikit_ridisponi(struct finestra_tk *f) {
-    widget_disponi(&f->base);
-    uikit_cambiata_tutta(f);
-}
+void uikit_ridisponi(struct finestra_tk *f);
 
 /* --- la barra degli strumenti --- */
 
@@ -1664,7 +681,7 @@ static inline void uikit_ridisponi(struct finestra_tk *f) {
  * pannello, a destra della barra laterale).
  *
  * Un clic sullo spazio vuoto della barra trascina la finestra, come sulla testata (cosi'
- * fa il Mac): vedi uikit_puntatore.
+ * fa il Mac): vedi "il puntatore", nel ciclo degli eventi.
  *
  *     barra_strumenti_prepara(&strumenti);
  *     barra_strumenti_aggiungi(&strumenti, &frecce.base);
@@ -1678,43 +695,11 @@ struct barra_strumenti {
     struct contenitore riga;
 };
 
-/* Alta quanto le sue cose (ALTEZZA_S; le schede 33, con il pixel della loro linea di base). */
-static inline void barra_strumenti_misura(struct widget *w, int *l, int *a) {
-    struct barra_strumenti *b = (struct barra_strumenti *)w;
-    widget_misura(&b->riga.base, l, a);
-    if (*a < ALTEZZA_S) *a = ALTEZZA_S;
-}
+/* Prepara una barra degli strumenti vuota. */
+void barra_strumenti_prepara(struct barra_strumenti *b);
 
-static inline void barra_strumenti_disponi(struct widget *w) {
-    struct barra_strumenti *b = (struct barra_strumenti *)w;
-    b->riga.base.x = w->x;
-    b->riga.base.y = w->y;
-    b->riga.base.l = w->l;
-    b->riga.base.a = w->a;
-}
-
-static const struct tipo_widget tipo_barra_strumenti = {
-    barra_strumenti_misura, barra_strumenti_disponi, 0, 0, 0, 0, 0, 0, 0
-};
-
-static inline void barra_strumenti_prepara(struct barra_strumenti *b) {
-    *b = (struct barra_strumenti){ .base = { .tipo = &tipo_barra_strumenti, .largo = 1 } };
-    riga_prepara(&b->riga, GAP_M);
-    widget_aggiungi(&b->base, &b->riga.base);
-}
-
-static inline void barra_strumenti_aggiungi(struct barra_strumenti *b, struct widget *w) {
-    widget_aggiungi(&b->riga.base, w);
-}
-
-/* Lo spazio vuoto di una barra degli strumenti (non una delle sue cose), ovunque sia nella
- * finestra: da li' si trascina la finestra. */
-static inline int barra_strumenti_vuota(struct finestra_tk *f, int x, int y) {
-    struct widget *w = widget_in(&f->base, x, y);
-    if (w && w->tipo == &tipo_spazio) w = w->genitore;          /* uno spazio nella riga */
-    if (w && w->genitore && w->genitore->tipo == &tipo_barra_strumenti) w = w->genitore;   /* la riga */
-    return w && w->tipo == &tipo_barra_strumenti;
-}
+/* Mette 'w' in fondo alla barra degli strumenti, a destra di quello che c'e' gia'. */
+void barra_strumenti_aggiungi(struct barra_strumenti *b, struct widget *w);
 
 /* IL PULSANTE DELLA BARRA, dal file Figma. Fuori da un gruppo e' un pulsante GHOST S: senza
  * fondo a riposo, CONTROLLO_SFONDO sotto il puntatore, CONTROLLO_SFONDO_SOPRA premuto (gli
@@ -1744,74 +729,12 @@ struct pulsante_barra {
     int premuto, dentro;               /* come il pulsante (vedi pressione) */
 };
 
-static const struct tipo_widget tipo_pillola;   /* piu' sotto */
-
 /* La pillola (il gruppo, descritto sotto): qui serve sapere se e' a scelta e la sua misura. */
 struct pillola {
     struct widget base;
     int a_scelta;
     int dimensione;                    /* MISURA_S (32, la barra degli strumenti) o MISURA_M (40) */
 };
-
-/* La pillola e' M (alta 40)? */
-static inline int pillola_m(const struct widget *gruppo) {
-    return gruppo && ((const struct pillola *)gruppo)->dimensione == MISURA_M;
-}
-
-/* Il gruppo (la pillola) in cui sta il pulsante, o 0 se sta da solo nella barra. */
-static inline struct widget *pulsante_barra_gruppo(const struct widget *w) {
-    return w->genitore && w->genitore->tipo == &tipo_pillola ? w->genitore : 0;
-}
-
-static inline void pulsante_barra_misura(struct widget *w, int *l, int *a) {
-    struct pulsante_barra *b = (struct pulsante_barra *)w;
-    struct widget *gruppo = pulsante_barra_gruppo(w);
-    int m = pillola_m(gruppo);
-    *a = !gruppo ? ALTEZZA_S : m ? GRUPPO_ELEMENTO_M : GRUPPO_ELEMENTO;
-    *l = *a;                                                  /* solo icona: tondo */
-    if (b->testo[0]) *l = m ? 2 * PADDING_M + larghezza_testo(FONT_PULSANTE_M, b->testo)
-                            : 2 * PADDING_S + larghezza_testo(FONT_PULSANTE_S, b->testo);
-}
-
-static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) {
-    struct pulsante_barra *b = (struct pulsante_barra *)w;
-    struct widget *gruppo = pulsante_barra_gruppo(w);
-    int a_scelta = gruppo && ((struct pillola *)gruppo)->a_scelta;
-    int premuto = b->premuto && b->dentro;
-    int sopra = w->sopra && !w->disabilitato;
-    struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
-    /* il modo del colore d'icona (tema.h): nel gruppo secondario (la voce scelta, e sotto il
-     * puntatore in un gruppo a scelta, primario); fuori da un gruppo un ghost normale,
-     * primario; disabilitato attenuato. Il testo (pulsante_barra_testo) segue lo stesso modo:
-     * i colori sono gli stessi (Attenuato = TESTO_DISABILITATO...). */
-    int modo = w->disabilitato ? COLORE_ICONA_ATTENUATO
-             : gruppo ? COLORE_ICONA_SECONDARIO : COLORE_ICONA_PRIMARIO;
-
-    if (a_scelta && b->acceso) {
-        /* la voce scelta: SOLLEVATA dentro il binario. Le ombre non devono uscire dalla
-         * pillola (nel disegno il binario ritaglia): si ritaglia sul suo rettangolo. */
-        pennello_salva(p);
-        pennello_ritaglia(p, gruppo->x, gruppo->y, gruppo->l, gruppo->a);
-        if (!premuto) ombre_strati_fuori(p, &t, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
-        pennello_colore(p, SUPERFICIE_ELEVATA);
-        riempi_forma(p, &t);
-        if (!premuto) ombre_strati_dentro(p, &t, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
-        pennello_ripristina(p);
-        if (!w->disabilitato) modo = COLORE_ICONA_PRIMARIO;
-    } else if (!w->disabilitato && (premuto || sopra)) {
-        pennello_colore(p, premuto ? CONTROLLO_SFONDO_SOPRA : CONTROLLO_SFONDO_NUOVO);
-        riempi_forma(p, &t);
-        if (a_scelta) modo = COLORE_ICONA_PRIMARIO;
-    }
-    pennello_colore(p, COLORE_ICONA(modo));
-    int m = pillola_m(gruppo), lato = m ? ICONA_M : ICONA_S;
-    if (b->testo[0]) {
-        testo_centrato(p, m ? FONT_PULSANTE_M : FONT_PULSANTE_S, w->x + (m ? PADDING_M : PADDING_S), w->y,
-                       w->a, b->testo);
-        return;
-    }
-    icona(p, b->icona, lato, w->x + (w->l - lato) / 2, w->y + (w->a - lato) / 2);
-}
 
 /* LA PILLOLA: un gruppo di pulsanti, il "gruppo di pulsanti" del disegno. E' un binario
  * INCASSATO (contiene e riceve): fondo SUPERFICIE_INCASSATA con l'ombra "incassato" (la
@@ -1823,101 +746,31 @@ static inline void pulsante_barra_disegna(struct widget *w, struct pennello *p) 
  *   - a SCELTA: ne e' acceso uno solo, quello premuto per ultimo (griglia o lista), come
  *     le scelte singole; la voce accesa e' il pezzo mobile, SOLLEVATO dentro il binario. Il
  *     clic si fa sentire anche sul pulsante gia' acceso. */
-static inline void pillola_misura(struct widget *w, int *l, int *a) {
-    int visti = 0, largo = 0, m = pillola_m(w);
-    for (int i = 0; i < w->quanti_figli; i++) {
-        if (w->figli[i]->nascosto) continue;
-        int fl, fa;
-        widget_misura(w->figli[i], &fl, &fa);
-        largo += fl;
-        visti++;
-    }
-    *l = 2 * GRUPPO_PADDING + largo + (visti ? visti - 1 : 0) * (m ? GRUPPO_SPAZIO_M : PILLOLA_SPAZIO);
-    *a = m ? ALTEZZA_M : ALTEZZA_S;
-}
-
-static inline void pillola_disponi(struct widget *w) {
-    int m = pillola_m(w);
-    int x = w->x + GRUPPO_PADDING;
-    for (int i = 0; i < w->quanti_figli; i++) {
-        struct widget *f = w->figli[i];
-        if (f->nascosto) continue;
-        int fl, fa;
-        widget_misura(f, &fl, &fa);
-        f->x = x;
-        f->y = w->y + GRUPPO_PADDING;
-        f->l = fl;
-        f->a = m ? GRUPPO_ELEMENTO_M : GRUPPO_ELEMENTO;
-        x += fl + (m ? GRUPPO_SPAZIO_M : PILLOLA_SPAZIO);
-    }
-}
-
-static inline void pillola_disegna(struct widget *w, struct pennello *p) {
-    struct tondo t = tondo(w->x, w->y, w->l, w->a, w->a / 2);
-    ombre_strati_fuori(p, &t, OMBRA_TAB(incassato), OMBRA_N(incassato));
-    pennello_colore(p, SUPERFICIE_INCASSATA);
-    riempi_forma(p, &t);
-    ombre_strati_dentro(p, &t, OMBRA_TAB(incassato), OMBRA_N(incassato));
-}
-
-static const struct tipo_widget tipo_pillola = {
-    pillola_misura, pillola_disponi, pillola_disegna, 0, 0, 0, 0, 0, 0
-};
 
 /* Accende o spegne un pulsante; in una pillola a scelta, accenderlo spegne gli altri. */
-static inline void pulsante_barra_accendi(struct pulsante_barra *b, int acceso) {
-    struct widget *g = b->base.genitore;
-    if (acceso && g && g->tipo == &tipo_pillola && ((struct pillola *)g)->a_scelta)
-        for (int i = 0; i < g->quanti_figli; i++) {
-            struct pulsante_barra *altro = (struct pulsante_barra *)g->figli[i];
-            if (altro != b && altro->acceso) { altro->acceso = 0; widget_cambiato(&altro->base); }
-        }
-    b->acceso = acceso;
-    widget_cambiato(&b->base);
-}
+void pulsante_barra_accendi(struct pulsante_barra *b, int acceso);
 
-static inline void pulsante_barra_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct pulsante_barra *b = (struct pulsante_barra *)w;
-    if (!pressione(w, &b->premuto, &b->dentro, x, y, pulsanti)) return;
-    struct widget *g = w->genitore;
-    if (g && g->tipo == &tipo_pillola && ((struct pillola *)g)->a_scelta) pulsante_barra_accendi(b, 1);
-    if (b->al_clic) b->al_clic(b, b->dati);
-}
-
-static const struct tipo_widget tipo_pulsante_barra = {
-    pulsante_barra_misura, 0, pulsante_barra_disegna, pulsante_barra_puntatore, 0, 0, 0, 0, 1
-};
-
-static inline void pulsante_barra_prepara(struct pulsante_barra *b, int icona,
-                                          al_clic_pulsante_barra al_clic, void *dati) {
-    *b = (struct pulsante_barra){ .base = { .tipo = &tipo_pulsante_barra }, .icona = icona,
-                                  .al_clic = al_clic, .dati = dati };
-}
+/* Prepara un pulsante della barra con l'icona (ICONA_...). Il clic chiama 'al_clic' (se
+ * non e' 0) con 'dati'. */
+void pulsante_barra_prepara(struct pulsante_barra *b, int icona,
+                            al_clic_pulsante_barra al_clic, void *dati);
 
 /* Un pulsante della barra con un testo invece dell'icona: una scheda (vedi sopra). */
-static inline void pulsante_barra_testo(struct pulsante_barra *b, const char *testo,
-                                        al_clic_pulsante_barra al_clic, void *dati) {
-    pulsante_barra_prepara(b, NESSUNA_ICONA, al_clic, dati);
-    copia_testo(b->testo, testo, MAX_TESTO_WIDGET);
-}
+void pulsante_barra_testo(struct pulsante_barra *b, const char *testo,
+                          al_clic_pulsante_barra al_clic, void *dati);
 
 /* 'a_scelta': 1 se ne resta acceso uno solo (poi pulsante_barra_accendi per il primo).
  * Nasce S (32, quella della barra degli strumenti); pillola_dimensione la fa M. */
-static inline void pillola_prepara(struct pillola *p, int a_scelta) {
-    *p = (struct pillola){ .base = { .tipo = &tipo_pillola }, .a_scelta = a_scelta, .dimensione = MISURA_S };
-}
+void pillola_prepara(struct pillola *p, int a_scelta);
 
 /* La misura del gruppo (Figma "Gruppo", Dimensione): MISURA_S, alto ALTEZZA_S (32), voci di 24
  * con il testo del pulsante S; o MISURA_M, alto ALTEZZA_M (40), voci di 32 con PADDING_M ai lati
  * e il testo del pulsante M, attaccate (la scelta del tema in Impostazioni). Prima di aprire la
  * finestra. */
-static inline void pillola_dimensione(struct pillola *p, int dimensione) {
-    p->dimensione = dimensione == MISURA_M ? MISURA_M : MISURA_S;
-}
+void pillola_dimensione(struct pillola *p, int dimensione);
 
-static inline void pillola_aggiungi(struct pillola *p, struct pulsante_barra *b) {
-    widget_aggiungi(&p->base, &b->base);
-}
+/* Mette il pulsante 'b' in fondo alla pillola. */
+void pillola_aggiungi(struct pillola *p, struct pulsante_barra *b);
 
 /* IL PERCORSO: dove si e', come nel Finder. I nomi delle cartelle, dalla piu' esterna a
  * quella in cui si e', separati da una barra "/" (FONT_CORPO, TESTO_SECONDARIO), con
@@ -1951,150 +804,19 @@ struct percorso {
     void *dati;
 };
 
-static inline const struct font *percorso_font(const struct percorso *p, int i) {
-    return i == p->quanti - 1 ? FONT_CORPO_MEDIO : FONT_CORPO;
-}
-
-static inline int percorso_largo(const struct percorso *p, int i) {
-    return larghezza_testo(percorso_font(p, i), p->nomi[i].nome);
-}
-
-/* Il separatore tra un nome e l'altro, e quanto e' largo. */
-#define PERCORSO_SEPARATORE "/"
-static inline int percorso_separatore(void) { return larghezza_testo(FONT_CORPO, PERCORSO_SEPARATORE); }
-
-/* Al minimo: il nome dell'ultima cartella (ma non piu' di
- * PERCORSO_ULTIMO_MINIMO: un nome lunghissimo si taglia, invece di spingere fuori dalla
- * barra le cose dopo di lui). Il resto viene dall'elastico. */
-#define PERCORSO_ULTIMO_MINIMO 120
-
-static inline void percorso_misura(struct widget *w, int *l, int *a) {
-    struct percorso *p = (struct percorso *)w;
-    int ultimo = p->quanti ? percorso_largo(p, p->quanti - 1) : 0;
-    if (ultimo > PERCORSO_ULTIMO_MINIMO) ultimo = PERCORSO_ULTIMO_MINIMO;
-    *l = ultimo;
-    *a = ALTEZZA_S;
-}
-
-/* Da destra a sinistra: si mettono i nomi finche' ci stanno. (Il primo nome non ha uno
- * spazio davanti: l'inizio lo comprende gia'.) */
-static inline void percorso_disponi(struct widget *w) {
-    struct percorso *p = (struct percorso *)w;
-    int resta = w->l + PERCORSO_SPAZIO, primo = p->quanti;
-    for (int i = p->quanti - 1; i >= 0; i--) {
-        int serve = PERCORSO_SPAZIO + percorso_largo(p, i) +
-                    (i < p->quanti - 1 ? percorso_separatore() + PERCORSO_SPAZIO : 0);
-        if (serve > resta && i < p->quanti - 1) break;   /* l'ultimo resta sempre */
-        resta -= serve;
-        primo = i;
-    }
-    int x = w->x;
-    for (int i = 0; i < p->quanti; i++) {
-        struct widget *n = &p->nomi[i].base;
-        n->nascosto = i < primo;
-        if (n->nascosto) continue;
-        int largo = percorso_largo(p, i);
-        int fine = w->x + w->l;
-        n->x = x;
-        n->y = w->y;
-        n->l = x + largo > fine ? fine - x : largo;      /* l'ultimo, se non ci sta, si taglia */
-        n->a = w->a;
-        x += largo + PERCORSO_SPAZIO + percorso_separatore() + PERCORSO_SPAZIO;
-    }
-}
-
-/* I separatori; i nomi si disegnano da se'. */
-static inline void percorso_disegna(struct widget *w, struct pennello *p) {
-    struct percorso *pc = (struct percorso *)w;
-    pennello_colore(p, TESTO_SECONDARIO);
-    for (int i = 0; i < pc->quanti - 1; i++) {
-        struct widget *n = &pc->nomi[i].base;
-        if (n->nascosto) continue;
-        testo_centrato(p, FONT_CORPO, n->x + n->l + PERCORSO_SPAZIO, w->y, w->a, PERCORSO_SEPARATORE);
-    }
-}
-
-static const struct tipo_widget tipo_percorso = {
-    percorso_misura, percorso_disponi, percorso_disegna, 0, 0, 0, 0, 0, 0
-};
-
-static inline void nome_percorso_disegna(struct widget *w, struct pennello *p) {
-    struct nome_percorso *n = (struct nome_percorso *)w;
-    struct percorso *pc = (struct percorso *)w->genitore;
-    int qui = n->indice == pc->quanti - 1;
-    pennello_salva(p);
-    pennello_ritaglia(p, w->x, w->y, w->l, w->a);       /* l'ultimo puo' essere tagliato */
-    pennello_colore(p, qui || w->sopra ? TESTO_PRIMARIO : TESTO_SECONDARIO);
-    const struct font *f = percorso_font(pc, n->indice);
-    const char *testo = n->nome;
-    char tagliato[MAX_TESTO_WIDGET + 4];
-    if (larghezza_testo(f, n->nome) > w->l) {            /* non ci sta: finisce con tre punti (il font non ha il carattere dei puntini) */
-        int lungo = 0;                                   /* quante lettere del nome stanno, con i puntini */
-        for (int k = 0; n->nome[k]; k++) {
-            if (((unsigned char)n->nome[k] & 0xC0) == 0x80) continue;   /* in mezzo a una lettera UTF-8 */
-            for (int j = 0; j < k; j++) tagliato[j] = n->nome[j];
-            tagliato[k] = '.'; tagliato[k + 1] = '.'; tagliato[k + 2] = '.'; tagliato[k + 3] = 0;
-            if (larghezza_testo(f, tagliato) > w->l) break;
-            lungo = k;
-        }
-        for (int j = 0; j < lungo; j++) tagliato[j] = n->nome[j];
-        tagliato[lungo] = '.'; tagliato[lungo + 1] = '.'; tagliato[lungo + 2] = '.'; tagliato[lungo + 3] = 0;
-        testo = tagliato;
-    }
-    testo_centrato(p, f, w->x, w->y, w->a, testo);
-    pennello_ripristina(p);
-}
-
-static inline void nome_percorso_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct nome_percorso *n = (struct nome_percorso *)w;
-    struct percorso *pc = (struct percorso *)w->genitore;
-    if (pressione(w, &n->premuto, &n->dentro, x, y, pulsanti) && pc->al_clic)
-        pc->al_clic(pc, n->indice, pc->dati);
-}
-
-/* Due tipi: i nomi che si cliccano, e l'ultimo (dove si e') che non sente il puntatore. */
-static const struct tipo_widget tipo_nome_percorso = {
-    0, 0, nome_percorso_disegna, nome_percorso_puntatore, 0, 0, 0, 0, 0
-};
-static const struct tipo_widget tipo_nome_percorso_qui = {
-    0, 0, nome_percorso_disegna, 0, 0, 0, 0, 0, 0
-};
-
-static inline void percorso_prepara(struct percorso *p, al_clic_percorso al_clic, void *dati) {
-    *p = (struct percorso){ .base = { .tipo = &tipo_percorso, .elastico = 1 },
-                            .al_clic = al_clic, .dati = dati };
-}
+/* Prepara un percorso vuoto (i nomi con percorso_metti). Il clic su un nome chiama
+ * 'al_clic' (se non e' 0) con il numero del nome e 'dati'. */
+void percorso_prepara(struct percorso *p, al_clic_percorso al_clic, void *dati);
 
 /* Cambia il percorso: 'quanti' nomi, dal piu' esterno a quello in cui si e'. Si puo'
  * chiamare anche con la finestra aperta (per esempio dopo un clic su un nome). */
-static inline void percorso_metti(struct percorso *p, const char *const *nomi, int quanti) {
-    if (quanti > MAX_NOMI_PERCORSO) quanti = MAX_NOMI_PERCORSO;
-    p->base.quanti_figli = 0;
-    p->quanti = quanti;
-    for (int i = 0; i < quanti; i++) {
-        struct nome_percorso *n = &p->nomi[i];
-        *n = (struct nome_percorso){ .base = { .tipo = i == quanti - 1 ? &tipo_nome_percorso_qui
-                                                                       : &tipo_nome_percorso },
-                                     .indice = i };
-        copia_testo(n->nome, nomi[i], MAX_TESTO_WIDGET);
-        widget_aggiungi(&p->base, &n->base);
-    }
-    struct finestra_tk *f = widget_finestra(&p->base);
-    if (f->base.tipo == &tipo_finestra_tk) {   /* gia' in una finestra: si rifa' il suo posto */
-        /* i nomi sono stati rifatti da capo (spenti): UIKit deve riaccendere quello
-         * sotto il puntatore. (Il widget catturato, se era un nome, resta valido: i nomi
-         * stanno sempre negli stessi posti.) */
-        if (f->sotto && f->sotto->genitore == &p->base) f->sotto = 0;
-        percorso_disponi(&p->base);
-        widget_cambiato(&p->base);
-    }
-}
+void percorso_metti(struct percorso *p, const char *const *nomi, int quanti);
 
 /* --- lo scorrimento e la barra di scorrimento --- */
 
 /* Dove si e' in un contenuto piu' alto della sua vista, in pixel. Chi disegna il
  * contenuto lo sposta in su di 'posizione'; chi riceve un clic gliela somma. Gli ultimi
- * due campi servono alla rotella (scorrimento_rotella). */
+ * due campi servono alla rotella (barra_scorrimento_rotella). */
 struct scorrimento {
     int posizione;                     /* i pixel del contenuto passati sopra la vista */
     int totale;                        /* l'altezza di tutto il contenuto */
@@ -2103,45 +825,8 @@ struct scorrimento {
     int raffica;                       /* gli scatti della raffica in corso (col segno del verso) */
 };
 
-/* Fin dove si puo' scorrere: 0 se il contenuto ci sta tutto. */
-static inline int scorrimento_massimo(const struct scorrimento *s) {
-    return s->totale > s->vista ? s->totale - s->vista : 0;
-}
-
-/* Va a 'posizione' (dentro i limiti). 1 se si e' spostato. */
-static inline int scorrimento_metti(struct scorrimento *s, int posizione) {
-    int massimo = scorrimento_massimo(s);
-    if (posizione > massimo) posizione = massimo;
-    if (posizione < 0) posizione = 0;
-    if (posizione == s->posizione) return 0;
-    s->posizione = posizione;
-    return 1;
-}
-
 /* Il contenuto o la vista hanno cambiato altezza: la posizione resta dentro i limiti. */
-static inline void scorrimento_misure(struct scorrimento *s, int totale, int vista) {
-    s->totale = totale;
-    s->vista = vista;
-    scorrimento_metti(s, s->posizione);
-}
-
-/* La rotella ha girato di 'scatti' (positivi: in basso, o a destra): si scorre come sul
- * Mac, con l'accelerazione spiegata in stile.h (SCORRIMENTO_RIGA). Basta l'ora di ogni
- * scatto: niente attese, niente chiamate "ogni tanto". 1 se si e' spostato. */
-static inline int scorrimento_rotella(struct scorrimento *s, int scatti) {
-    if (!scatti) return 0;
-    int verso = scatti > 0 ? 1 : -1;
-    unsigned int ora = tempo();
-    if (ora - s->rotella_prima >= SCORRIMENTO_PAUSA || s->raffica * verso <= 0)
-        s->raffica = 0;                /* dopo una pausa, o girando al contrario: da capo */
-    s->rotella_prima = ora;
-    int pixel = 0;
-    for (int i = 0; i < scatti * verso; i++) {
-        if (s->raffica * verso < SCORRIMENTO_SLANCIO) s->raffica += verso;
-        pixel += s->raffica * SCORRIMENTO_RIGA;   /* il k-esimo scatto vale k righe */
-    }
-    return scorrimento_metti(s, s->posizione + pixel);
-}
+void scorrimento_misure(struct scorrimento *s, int totale, int vista);
 
 /* LA BARRA DI SCORRIMENTO, dal file Figma (il componente "Barra di scorrimento"). Sta
  * SOPRA il contenuto, in una striscia larga 14 pixel lungo il suo bordo destro, e:
@@ -2166,8 +851,6 @@ static inline int scorrimento_rotella(struct scorrimento *s, int scatti) {
  * (scorrimento_misure su b->scorrimento), e le passa la rotella
  * (barra_scorrimento_rotella). Disegnando, sposta il contenuto di b->scorrimento.posizione. */
 
-#define SCORRIMENTO_FOTOGRAMMA 20      /* ms tra un passo e l'altro dell'animazione */
-
 struct barra_scorrimento {
     struct widget base;
     struct scorrimento scorrimento;
@@ -2182,176 +865,12 @@ struct barra_scorrimento {
                                         * il padding del contenitore (barra_scorrimento_riserva) */
 };
 
-/* Il cursore: dove comincia (y) e quanto e' lungo. */
-static inline void barra_scorrimento_cursore(const struct barra_scorrimento *b, int *y, int *lungo) {
-    const struct scorrimento *s = &b->scorrimento;
-    int corsa = b->base.a - 2 * SCORRIMENTO_CURSORE_MARGINE;     /* dove il cursore si muove */
-    int l = s->totale > 0 ? (int)((long long)corsa * s->vista / s->totale) : corsa;
-    if (l < SCORRIMENTO_CURSORE_LUNGHEZZA) l = SCORRIMENTO_CURSORE_LUNGHEZZA;
-    if (l > corsa) l = corsa;
-    int massimo = scorrimento_massimo(s);
-    *lungo = l;
-    *y = b->base.y + SCORRIMENTO_CURSORE_MARGINE +
-         (massimo ? (int)((long long)(corsa - l) * s->posizione / massimo) : 0);
-}
-
-/* Come si disegna, dal componente "Barra di scorrimento" del Figma. Il CURSORE e' una pillola
- * di SCORRIMENTO_CURSORE_NUOVO (8) pixel, al centro della striscia di 14, nel colore
- * SCORRIMENTO_CURSORE (a riposo), _SOPRA (puntatore sopra la barra) o _TRASCINATO_NUOVO
- * (preso col mouse), con l'ombra "sollevato" ridotta a un velo (e' un pezzo che si sposta,
- * quindi SOLLEVATO, ma deve restare leggerissima: e' sottile). Il BINARIO e' INCASSATO (riceve
- * il cursore): una pillola di SCORRIMENTO_BINARIO (12) per tutta la lunghezza, fondo
- * SUPERFICIE_INCASSATA con l'ombra "incassato", senza bordo. Il cursore sta dentro con
- * SCORRIMENTO_CURSORE_MARGINE (2) per lato: 2 + 8 + 2 = 12, e' lo stesso posto di prima,
- * quindi quando il binario compare il cursore non si muove. Compare (b->spessore, 0-255, la
- * stessa animazione di prima) quando il puntatore e' sopra o si trascina; mentre si scorre
- * con la rotella c'e' SOLO il cursore. */
-static inline void barra_scorrimento_disegna(struct widget *w, struct pennello *p) {
-    struct barra_scorrimento *b = (struct barra_scorrimento *)w;
-    if (!b->opacita || !scorrimento_massimo(&b->scorrimento)) return;
-    pennello_opacita(p, b->opacita);
-    if (b->spessore) {                 /* il binario: tutta la striscia, compare sfumando */
-        pennello_salva(p);
-        pennello_opacita(p, b->spessore);
-        struct tondo binario = tondo(w->x + (w->l - SCORRIMENTO_BINARIO) / 2, w->y,
-                                     SCORRIMENTO_BINARIO, w->a, SCORRIMENTO_BINARIO / 2);
-        ombre_strati_fuori(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
-        pennello_colore(p, SUPERFICIE_INCASSATA);
-        riempi_forma(p, &binario);
-        ombre_strati_dentro(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
-        pennello_ripristina(p);
-    }
-    int y, lungo;
-    barra_scorrimento_cursore(b, &y, &lungo);
-    struct tondo cursore = tondo(w->x + (w->l - SCORRIMENTO_CURSORE_NUOVO) / 2, y,
-                                 SCORRIMENTO_CURSORE_NUOVO, lungo, SCORRIMENTO_CURSORE_NUOVO / 2);
-    pennello_salva(p);
-    pennello_opacita(p, 90);           /* l'ombra "sollevato" ridotta a un velo */
-    ombre_strati_fuori(p, &cursore, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
-    pennello_ripristina(p);
-    pennello_colore(p, b->trascinata ? SCORRIMENTO_CURSORE_TRASCINATO_NUOVO
-                                     : b->base.sopra ? SCORRIMENTO_CURSORE_SOPRA : SCORRIMENTO_CURSORE);
-    riempi_forma(p, &cursore);
-}
-
-/* Porta 'valore' verso 'obiettivo' (0 o 255) di quanto basta perche' tutta la strada
- * duri 'durata' ms; 'passati' sono i ms dall'ultima volta. */
-static inline int avvicina(int valore, int obiettivo, unsigned int passati, int durata) {
-    int passo = (int)(255 * passati / (unsigned int)durata);
-    if (passo < 1) passo = 1;
-    if (valore < obiettivo) return valore + passo > obiettivo ? obiettivo : valore + passo;
-    return valore - passo < obiettivo ? obiettivo : valore - passo;
-}
-
-static inline void barra_scorrimento_passo(struct finestra_tk *f, void *dati);
-
-/* La prossima chiamata tra 'ms' millisecondi (0: nessuna). */
-static inline void barra_scorrimento_richiama(struct barra_scorrimento *b, unsigned int ms) {
-    if (b->attesa == ms && ms == SCORRIMENTO_FOTOGRAMMA) return;   /* gia' in moto */
-    b->attesa = ms;
-    finestra_tk_ogni(widget_finestra(&b->base), ms, barra_scorrimento_passo, b);
-}
-
-/* Qualcosa e' cambiato (uno scatto, il puntatore sopra): l'animazione riparte. */
-static inline void barra_scorrimento_sveglia(struct barra_scorrimento *b) {
-    if (b->attesa != SCORRIMENTO_FOTOGRAMMA) b->passo_prima = tempo();
-    barra_scorrimento_richiama(b, SCORRIMENTO_FOTOGRAMMA);
-}
-
-/* Un passo dell'animazione: e' la chiamata "ogni tanto". */
-static inline void barra_scorrimento_passo(struct finestra_tk *f, void *dati) {
-    (void)f;
-    struct barra_scorrimento *b = dati;
-    unsigned int ora = tempo(), passati = ora - b->passo_prima;
-    b->passo_prima = ora;
-    int spessa = b->trascinata || b->base.sopra;
-    int fresca = (int)(ora - b->ultimo) < SCORRIMENTO_RESTA;
-    int vista = (spessa || fresca) && scorrimento_massimo(&b->scorrimento);
-    int opacita = avvicina(b->opacita, vista ? 255 : 0, passati,
-                           vista ? SCORRIMENTO_COMPARE : SCORRIMENTO_SVANISCE);
-    int spessore = avvicina(b->spessore, spessa ? 255 : 0, passati, SCORRIMENTO_ALLARGA);
-    if (opacita != b->opacita || spessore != b->spessore) {
-        b->opacita = opacita;
-        b->spessore = spessore;
-        widget_nascondi(&b->base, !opacita);   /* nascosta non si disegna e non prende i clic */
-    }
-    if (opacita != (vista ? 255 : 0) || spessore != (spessa ? 255 : 0))
-        barra_scorrimento_richiama(b, SCORRIMENTO_FOTOGRAMMA);              /* ancora in moto */
-    else if (vista && fresca && !spessa)
-        barra_scorrimento_richiama(b, SCORRIMENTO_RESTA - (ora - b->ultimo)); /* poi svanisce */
-    else
-        barra_scorrimento_richiama(b, 0);   /* ferma: la risveglia uno scatto o il puntatore */
-}
-
-/* Il contenuto e' stato scorso (rotella o trascinamento): la barra si mostra. */
-static inline void barra_scorrimento_usata(struct barra_scorrimento *b, int spostato) {
-    b->ultimo = tempo();
-    if (spostato) {                    /* si e' mosso il contenuto: tutto il widget che scorre */
-        widget_cambiato(&b->base);
-        if (b->base.genitore) widget_cambiato(b->base.genitore);
-    }
-    barra_scorrimento_sveglia(b);
-}
-
 /* La rotella sopra il contenuto: scorre di 'scatti' (positivi: in basso). 0 se il
  * contenuto ci sta tutto e non c'e' niente da scorrere. */
-static inline int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti) {
-    struct scorrimento *s = &b->scorrimento;
-    if (!scorrimento_massimo(s)) return 0;
-    barra_scorrimento_usata(b, scorrimento_rotella(s, scatti));
-    return 1;
-}
+int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti);
 
-/* Il cursore segue il puntatore, tenuto per il punto in cui lo si e' preso. */
-static inline void barra_scorrimento_segui(struct barra_scorrimento *b, int y) {
-    int inizio, lungo;
-    barra_scorrimento_cursore(b, &inizio, &lungo);
-    int corsa = b->base.a - 2 * SCORRIMENTO_CURSORE_MARGINE - lungo;
-    if (corsa <= 0) return;
-    int da_inizio = y - b->presa - (b->base.y + SCORRIMENTO_CURSORE_MARGINE);
-    int posizione = (int)((long long)da_inizio * scorrimento_massimo(&b->scorrimento) / corsa);
-    barra_scorrimento_usata(b, scorrimento_metti(&b->scorrimento, posizione));
-}
-
-/* Premuto sul cursore: lo si prende li'. Premuto sul binario: il centro del cursore
- * salta li', e lo si tiene per il centro. Poi segue il puntatore finche' non si lascia. */
-static inline void barra_scorrimento_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
-    struct barra_scorrimento *b = (struct barra_scorrimento *)w;
-    (void)x;
-    int giu = pulsanti & PULSANTE_SINISTRO;
-    if (giu && !b->trascinata) {
-        int inizio, lungo;
-        barra_scorrimento_cursore(b, &inizio, &lungo);
-        b->presa = y >= inizio && y < inizio + lungo ? y - inizio : lungo / 2;
-        b->trascinata = 1;
-        widget_cambiato(w);            /* il cursore cambia colore */
-        barra_scorrimento_segui(b, y);
-    } else if (giu) {
-        barra_scorrimento_segui(b, y);
-    } else if (b->trascinata) {
-        b->trascinata = 0;
-        widget_cambiato(w);
-        barra_scorrimento_usata(b, 0);  /* resta ancora un secondo, poi svanisce */
-    }
-}
-
-static inline void barra_scorrimento_su_rotella(struct widget *w, int sx, int sy) {
-    (void)sx;
-    barra_scorrimento_rotella((struct barra_scorrimento *)w, sy);
-}
-
-static inline void barra_scorrimento_sopra(struct widget *w) {
-    barra_scorrimento_sveglia((struct barra_scorrimento *)w);
-}
-
-static const struct tipo_widget tipo_barra_scorrimento = {
-    0, 0, barra_scorrimento_disegna, barra_scorrimento_puntatore, 0,
-    barra_scorrimento_su_rotella, barra_scorrimento_sopra, 0, 0
-};
-
-static inline void barra_scorrimento_prepara(struct barra_scorrimento *b) {
-    *b = (struct barra_scorrimento){ .base = { .tipo = &tipo_barra_scorrimento, .nascosto = 1 } };
-}
+/* Prepara una barra di scorrimento: ferma e nascosta, finche' non si scorre. */
+void barra_scorrimento_prepara(struct barra_scorrimento *b);
 
 /* LA CORSIA DELLA BARRA: la barra non va mai sopra il contenuto. Sta nella striscia di
  * SCORRIMENTO_ZONA (14) lungo il bordo destro del widget che scorre, e quella striscia deve
@@ -2364,119 +883,25 @@ static inline void barra_scorrimento_prepara(struct barra_scorrimento *b) {
  *     che manca: il padding a destra diventa di 14, e li' sta la barra.
  * Dice quanti pixel a destra del widget il contenuto non usa. Se il contenuto ci sta tutto
  * (la barra non c'e') resta solo 'fuori': il padding e' quello di sempre. */
-static inline int barra_scorrimento_riserva(const struct barra_scorrimento *b, int libero) {
-    int manca = SCORRIMENTO_ZONA - b->fuori - libero;
-    return b->fuori + (scorrimento_massimo(&b->scorrimento) && manca > 0 ? manca : 0);
-}
+int barra_scorrimento_riserva(const struct barra_scorrimento *b, int libero);
 
 /* La vista del contenuto e' il rettangolo (x, y, l, a): la barra va lungo il suo bordo
  * destro, nella corsia (barra_scorrimento_riserva). Da chiamare quando il widget che scorre
  * viene disposto. */
-static inline void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, int a) {
-    b->base.x = x + l - SCORRIMENTO_ZONA;
-    b->base.y = y;
-    b->base.l = SCORRIMENTO_ZONA;
-    b->base.a = a;
-}
+void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, int a);
 
 /* --- il ciclo degli eventi --- */
 
-/* Disegna tutta la finestra: l'albero e, sopra a tutto, l'avviso aperto (velo, ombra,
- * riquadro). La usa anche l'anteprima (strumenti/anteprima). */
-static inline void uikit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
-    widget_disegna(&f->base, p);
-    struct avviso *v = finestra_tk_avviso_aperto(f);
-    if (v) {
-        avviso_sotto(v, p, f->base.l, f->base.a);
-        widget_disegna(&v->base, p);
-    }
-}
-
-/* Ridisegna le zone cambiate e le mostra. L'immagine libera e' quella di due fotogrammi fa:
- * oltre alle zone cambiate adesso si rifanno quelle che le mancano (finestra_arretrate).
- * Ogni zona si ridisegna da capo, con il pennello ritagliato li': il fondo della finestra
- * comincia pulendo (pulisci), quindi rifare una zona da' gli stessi pixel di un ridisegno
- * intero. Al compositore si dicono solo le zone cambiate adesso. */
-static inline int uikit_ridisegna(struct finestra_tk *f) {
-    if (!f->tutta_cambiata && !f->quante_cambiate) { f->da_ridisegnare = 0; return 1; }
-    unsigned int *pixel = finestra_tela(&f->finestra);
-    if (!pixel) return 0;
-    struct tela t = { pixel, f->base.l, f->base.a };
-    struct pennello p;
-    struct zona_finestra zone[MAX_ZONE_MOSTRA];
-    int n = finestra_arretrate(&f->finestra, zone);
-    int tutta = f->tutta_cambiata || n < 0;
-    for (int k = 0; !tutta && k < f->quante_cambiate; k++)
-        zone_aggiungi(zone, &n, MAX_ZONE_MOSTRA, f->cambiate[k]);
-    if (tutta) {
-        pennello_prepara(&p, &t);
-        uikit_disegna_tutto(f, &p);
-    } else {
-        for (int k = 0; k < n; k++) {
-            pennello_prepara(&p, &t);
-            pennello_ritaglia(&p, zone[k].x, zone[k].y, zone[k].l, zone[k].a);
-            uikit_disegna_tutto(f, &p);
-        }
-    }
-    int fatto = (f->tutta_cambiata ? finestra_mostra(&f->finestra)
-                                   : finestra_mostra_zone(&f->finestra, f->cambiate, f->quante_cambiate)) >= 0;
-    f->da_ridisegnare = f->tutta_cambiata = f->quante_cambiate = 0;
-    return fatto;
-}
-
 /* Il puntatore sopra un widget nuovo (o su nessuno): si spegne il vecchio, si accende
  * il nuovo. */
-static inline void uikit_sotto(struct finestra_tk *f, struct widget *w) {
-    if (w == f->sotto) return;
-    struct widget *prima = f->sotto;
-    /* un widget che segue il puntatore pezzo per pezzo (ha 'movimento': una tabella, una
-     * griglia, un menu) accende le sue parti e ridisegna solo quelle: tutto il widget no */
-    if (prima) { prima->sopra = 0; if (!prima->tipo->movimento) widget_cambiato(prima); }
-    f->sotto = w;
-    if (w) { w->sopra = 1; if (!w->tipo->movimento) widget_cambiato(w); }
-    if (prima && prima->tipo->sopra_cambiato) prima->tipo->sopra_cambiato(prima);
-    if (w && w->tipo->sopra_cambiato) w->tipo->sopra_cambiato(w);
-}
+void uikit_sotto(struct finestra_tk *f, struct widget *w);
 
-/* Il widget sotto il puntatore, con l'avviso: prima i suoi pulsanti; se e' bloccante, fuori
- * dal riquadro non c'e' niente. */
-static inline struct widget *uikit_widget_sotto(struct finestra_tk *f, int x, int y) {
-    struct avviso *v = finestra_tk_avviso_aperto(f);
-    if (v) {
-        struct widget *w = widget_sotto(&v->base, x, y);
-        if (w || v->bloccante) return w;
-    }
-    return widget_sotto(&f->base, x, y);
-}
+/* Da' il fuoco della tastiera a 'w' (0: a nessuno); chi lo aveva lo perde. Tutti e due si
+ * ridisegnano. Di solito lo fa UIKit da sola, al clic su un widget che prende i tasti. */
+void uikit_fuoco(struct finestra_tk *f, struct widget *w);
 
-/* Il widget piu' interno sotto (x, y) che vuole la rotella, o 0. Come widget_sotto: un widget
- * messo sopra agli altri che la rotella non la vuole (l'avviso in basso di Files, grande
- * quanto il pannello ma disegnato solo in fondo) non la ferma, passa a quelli sotto. */
-static inline struct widget *widget_rotella_sotto(struct widget *w, int x, int y) {
-    if (w->disabilitato || w->nascosto || !widget_contiene(w, x, y)) return 0;
-    for (int i = w->quanti_figli - 1; i >= 0; i--) {
-        struct widget *trovato = widget_rotella_sotto(w->figli[i], x, y);
-        if (trovato) return trovato;
-    }
-    return w->tipo->rotella ? w : 0;
-}
-
-/* La rotella: al widget piu' interno sotto il puntatore che la vuole. */
-static inline void uikit_rotella(struct finestra_tk *f, int x, int y, int sx, int sy) {
-    if (y < testata_altezza(f) || finestra_tk_bloccata(f)) return;
-    struct widget *w = widget_rotella_sotto(&f->base, x, y);
-    if (w) w->tipo->rotella(w, sx, sy);
-}
-
-static inline void uikit_fuoco(struct finestra_tk *f, struct widget *w) {
-    if (w == f->con_fuoco) return;
-    if (f->con_fuoco) { f->con_fuoco->fuoco = 0; widget_cambiato(f->con_fuoco); }
-    f->con_fuoco = w;
-    if (w) { w->fuoco = 1; widget_cambiato(w); }
-}
-
-/* Il puntatore: un clic su "chiudi" chiude; sulla barra (o sul vuoto della barra degli
- * strumenti) e' un "trascinami"; nel contenuto e tra gli strumenti cattura il widget
+/* IL PUNTATORE, come lo consegna il ciclo degli eventi. Un clic su "chiudi" chiude; sulla
+ * barra (o sul vuoto della barra degli strumenti) e' un "trascinami"; nel contenuto e tra gli strumenti cattura il widget
  * sotto, che sentira' il puntatore finche' il pulsante non si lascia, e se prende i
  * tasti gli da' il fuoco.
  *
@@ -2487,206 +912,26 @@ static inline void uikit_fuoco(struct finestra_tk *f, struct widget *w) {
  *
  * Senza pulsanti premuti, il widget sotto il puntatore che lo vuole sapere riceve il
  * MOVIMENTO (il campo 'movimento' del suo tipo). */
-static inline void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pulsanti) {
-    const unsigned int cattura = PULSANTE_SINISTRO | PULSANTE_DESTRO;
-    int giu = pulsanti & cattura;
-    int appena_premuto = giu && !(f->pulsanti_prima & cattura);
-    int sinistro = pulsanti & PULSANTE_SINISTRO;
-    f->pulsanti_prima = pulsanti;
-
-    /* riduci e chiudi si accendono sotto il puntatore (non mentre si tiene premuto
-     * altrove, su un widget) */
-    int bloccata = finestra_tk_bloccata(f);   /* un avviso bloccante: niente comandi ne' trascinami */
-    int comando = f->catturato || bloccata ? 0 : su_comando(f, 1, x, y) ? 2 : su_comando(f, 0, x, y) ? 1 : 0;
-    if (comando != f->comando_sopra) { f->comando_sopra = comando; uikit_cambiata_testata(f); }
-
-    if (appena_premuto) {
-        if (comando == 2 && sinistro) { f->chiudi_premuto = 1; uikit_cambiata_testata(f); return; }
-        if (comando == 1 && sinistro) { f->riduci_premuto = 1; uikit_cambiata_testata(f); return; }
-        /* la barra del titolo, e lo spazio vuoto della barra degli strumenti: "trascinami" */
-        if (!bloccata && (y < testata_altezza(f) || barra_strumenti_vuota(f, x, y))) {
-            if (sinistro) finestra_trascinami(&f->finestra);
-            return;
-        }
-        f->catturato = uikit_widget_sotto(f, x, y);
-        uikit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
-    }
-    if (f->chiudi_premuto) {
-        if (!sinistro) {
-            f->chiudi_premuto = 0;
-            uikit_cambiata_testata(f);
-            if (su_comando(f, 1, x, y)) f->da_chiudere = 1;
-        }
-        return;
-    }
-    if (f->riduci_premuto) {                /* scatta quando si lascia, se si e' ancora sopra */
-        if (!sinistro) {
-            f->riduci_premuto = 0;
-            uikit_cambiata_testata(f);
-            if (su_comando(f, 0, x, y)) finestra_riducimi(&f->finestra);
-        }
-        return;
-    }
-    if (f->catturato) {
-        f->catturato->tipo->puntatore(f->catturato, x, y, pulsanti);
-        uikit_sotto(f, widget_contiene(f->catturato, x, y) ? f->catturato : 0);
-        if (giu) return;
-        f->catturato = 0;
-    }
-    uikit_sotto(f, uikit_widget_sotto(f, x, y));
-    if (!giu && f->sotto && f->sotto->tipo->movimento) f->sotto->tipo->movimento(f->sotto, x, y);
-}
-
-/* Apre l'avviso della finestra, al centro, e gli da' la tastiera (Invio, Esc). */
-static inline void avviso_apri(struct avviso *v) {
-    struct finestra_tk *f = widget_finestra(&v->base);
-    v->base.nascosto = 0;
-    v->annulla.premuto = v->conferma.premuto = 0;
-    avviso_sistema(v, f->base.l, f->base.a);
-    if (f->base.tipo == &tipo_finestra_tk) {
-        uikit_sotto(f, 0);
-        uikit_fuoco(f, &v->base);
-        uikit_cambiata_tutta(f);           /* il velo e l'ombra: tutta la finestra */
-    }
-}
-
-static inline void avviso_chiudi(struct avviso *v) {
-    struct finestra_tk *f = widget_finestra(&v->base);
-    v->base.nascosto = 1;
-    if (f->base.tipo == &tipo_finestra_tk) {
-        if (f->con_fuoco == &v->base || f->con_fuoco == &v->annulla.base ||
-            f->con_fuoco == &v->conferma.base) uikit_fuoco(f, 0);
-        if (f->sotto == &v->annulla.base || f->sotto == &v->conferma.base) uikit_sotto(f, 0);
-        uikit_cambiata_tutta(f);
-    }
-}
 
 /* --- la tastiera fisica: le scorciatoie (tasti.h) --- */
 
 /* Aggiunge un ascoltatore dei tasti fisici della finestra: lo sentira' prima di quelli
  * aggiunti prima di lui. Di nuovo la stessa funzione con gli stessi dati: niente. */
-static inline void finestra_tk_ascolta_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati) {
-    for (int i = 0; i < MAX_ASCOLTATORI; i++)
-        if (f->ascoltatori[i].funzione == funzione && f->ascoltatori[i].dati == dati) return;
-    for (int i = 0; i < MAX_ASCOLTATORI; i++)
-        if (!f->ascoltatori[i].funzione) { f->ascoltatori[i] = (struct ascoltatore_tk){ funzione, dati }; return; }
-}
+void finestra_tk_ascolta_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati);
 
-static inline void finestra_tk_smetti_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati) {
-    for (int i = 0; i < MAX_ASCOLTATORI; i++)
-        if (f->ascoltatori[i].funzione == funzione && f->ascoltatori[i].dati == dati) {
-            for (int k = i; k < MAX_ASCOLTATORI - 1; k++) f->ascoltatori[k] = f->ascoltatori[k + 1];
-            f->ascoltatori[MAX_ASCOLTATORI - 1] = (struct ascoltatore_tk){ 0, 0 };
-            return;
-        }
-}
-
-/* L'avviso aperto che sente la tastiera: quello bloccante, o quello che ha il fuoco (lui o
- * uno dei suoi pulsanti). 0 se nessuno. */
-static inline struct avviso *uikit_avviso_tastiera(const struct finestra_tk *f) {
-    struct avviso *v = finestra_tk_avviso_aperto(f);
-    if (!v || v->bloccante) return v;
-    for (struct widget *w = f->con_fuoco; w; w = w->genitore)
-        if (w == &v->base) return v;
-    return 0;
-}
-
-/* Un tasto fisico premuto o lasciato: i modificatori si contano; Esc su un avviso fa come
- * Annulla; un tasto premuto va agli ascoltatori, dall'ultimo al primo, finche' uno lo usa. */
-static inline void uikit_tasto_fisico(struct finestra_tk *f, unsigned int codice, int premuto) {
-    unsigned int mod = codice == TASTO_CTRL || codice == TASTO_CTRL_DX ? MOD_CTRL
-                     : codice == TASTO_MAIUSC || codice == TASTO_MAIUSC_DX ? MOD_MAIUSC
-                     : codice == TASTO_ALT ? MOD_ALT : 0;
-    if (mod) {
-        if (premuto) f->modificatori |= mod; else f->modificatori &= ~mod;
-        return;
-    }
-    if (!premuto) return;
-    struct avviso *v = codice == TASTO_ESC && !f->modificatori ? uikit_avviso_tastiera(f) : 0;
-    if (v) { avviso_rispondi(v, AVVISO_ANNULLA); return; }
-    if (finestra_tk_bloccata(f)) return;
-    for (int i = MAX_ASCOLTATORI - 1; i >= 0; i--) {
-        struct ascoltatore_tk a = f->ascoltatori[i];
-        if (a.funzione && a.funzione(f, codice, f->modificatori, a.dati)) return;
-    }
-}
+/* Toglie l'ascoltatore dei tasti fisici aggiunto con finestra_tk_ascolta_tasti (la stessa
+ * funzione con gli stessi dati). Se non c'e', niente. */
+void finestra_tk_smetti_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati);
 
 /* --- l'altra finestra (una mini finestra per le cose secondarie) --- */
 
-static inline void finestra_tk_chiudi_altra(struct finestra_tk *f);
+/* Chiude l'altra finestra (se c'e'): sparisce dallo schermo, la memoria torna libera. */
+void finestra_tk_chiudi_altra(struct finestra_tk *f);
 
 /* Misura 'altra' (preparata come ogni finestra: finestra_tk_prepara, di solito anche
  * finestra_tk_mini), la apre sullo schermo e la fa servire dal ciclo degli eventi di 'f'. Se
  * c'e' gia' un'altra finestra aperta, prima la si chiude. 0 se fatto, -1 se no. */
-static inline int finestra_tk_apri_altra(struct finestra_tk *f, struct finestra_tk *altra) {
-    if (f->altra) finestra_tk_chiudi_altra(f);
-    int l, a;
-    widget_misura(&altra->base, &l, &a);
-    altra->base.x = altra->base.y = 0;
-    altra->base.l = l;
-    altra->base.a = a;
-    widget_disponi(&altra->base);
-    altra->da_chiudere = 0;
-    altra->attiva = 1;
-    altra->quante_cambiate = 0;
-    uikit_cambiata_tutta(altra);
-    if (finestra_apri_come(&altra->finestra, l, a, altra->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0)
-        return -1;
-    finestra_tasti_fisici(&altra->finestra);
-    altra->aperta = 1;
-    f->altra = altra;
-    return uikit_ridisegna(altra) ? 0 : -1;
-}
-
-/* Chiude l'altra finestra (se c'e'): sparisce dallo schermo, la memoria torna libera. */
-static inline void finestra_tk_chiudi_altra(struct finestra_tk *f) {
-    struct finestra_tk *a = f->altra;
-    if (!a) return;
-    f->altra = 0;
-    a->aperta = 0;
-    chiudi(a->finestra.collegamento);
-    if (a->finestra.immagini[0]) togli(a->finestra.immagini[0]);
-    chiudi(a->finestra.foglio);
-    a->catturato = a->sotto = a->con_fuoco = 0;
-    a->modificatori = a->pulsanti_prima = 0;
-    a->chiudi_premuto = a->riduci_premuto = a->comando_sopra = 0;
-}
-
-/* Una notizia del compositore per la finestra 'f' (la principale o l'altra). */
-static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n) {
-    if (n->tipo == PUNTATORE) {
-        uikit_puntatore(f, n->x, n->y, n->pulsanti);
-    } else if (n->tipo == USCITO) {
-        /* il puntatore non e' piu' nostro (per esempio, il compositore ha cominciato
-         * a spostare la finestra): una pressione in corso si annulla, senza scattare */
-        if (f->catturato) f->catturato->tipo->puntatore(f->catturato, -1, -1, 0);
-        f->catturato = 0;
-        f->chiudi_premuto = 0;
-        f->riduci_premuto = 0;
-        f->pulsanti_prima = 0;
-        if (f->comando_sopra) { f->comando_sopra = 0; uikit_cambiata_testata(f); }
-        uikit_sotto(f, 0);
-    } else if (n->tipo == ROTELLA) {
-        uikit_rotella(f, n->x, n->y, n->scatti_x, n->scatti_y);
-    } else if (n->tipo == TASTO_FISICO) {
-        uikit_tasto_fisico(f, n->tasto, n->premuto);
-    } else if (n->tipo == TASTO && (f->modificatori & (MOD_CTRL | MOD_ALT))) {
-        /* Ctrl+D, Alt+...: e' una scorciatoia, non un carattere da scrivere */
-    } else if (n->tipo == TASTO && finestra_tk_bloccata(f)) {
-        avviso_tasto(&f->avviso->base, n->tasto);   /* sotto un avviso bloccante: solo lui */
-    } else if (n->tipo == TASTO && f->con_fuoco) {
-        f->con_fuoco->tipo->tasto(f->con_fuoco, n->tasto);
-    } else if (n->tipo == FUOCO) {
-        f->attiva = n->fuoco;
-        if (!n->fuoco) f->modificatori = 0;    /* i tasti lasciati altrove non li sentiremo */
-        uikit_cambiata_testata(f);             /* il fuoco cambia solo il titolo e i comandi */
-    } else if (n->tipo == TEMA_CAMBIATO) {
-        /* il tema e' cambiato (gkit/sistema/protocollo.h, IL TEMA): lo si rilegge e si ridisegna tutto. I colori
-         * i widget li chiedono quando disegnano (tema.h), quindi basta questo */
-        tema_leggi();
-        uikit_cambiata_tutta(f);
-    }
-}
+int finestra_tk_apri_altra(struct finestra_tk *f, struct finestra_tk *altra);
 
 /* CAMBIA IL TEMA DI TUTTO IL SISTEMA ("chiaro" o "scuro"): lo scrive nelle preferenze
  * (tema_salva) e chiede al compositore di dirlo a tutte le finestre e ai pannelli aperti
@@ -2694,37 +939,7 @@ static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n
  * TEMA_CAMBIATO, come le altre). Funziona solo per chi ha il permesso "impostazioni.sistema"
  * (Impostazioni): per gli altri il file cambia, ma il compositore non dice niente a nessuno.
  * 0, o -1. */
-static inline int uikit_cambia_tema(struct finestra_tk *f, const char *nome) {
-    if (tema_salva(nome) < 0) return -1;
-    return finestra_cambia_tema(&f->finestra) < 0 ? -1 : 0;
-}
-
-/* Consegna una notizia, ma i movimenti del puntatore li tiene da parte (in 'sospesa'): se
- * subito dopo ne arriva un altro con gli stessi pulsanti, quello prima non serve piu' (le
- * posizioni di mezzo non le vedrebbe nessuno). Le altre notizie passano dopo il movimento
- * tenuto da parte, nel loro ordine. */
-struct sospesa_tk {
-    struct finestra_tk *da;            /* 0: nessun movimento da parte */
-    struct notizia n;
-};
-
-static inline void uikit_consegna_sospesa(struct sospesa_tk *s) {
-    if (!s->da) return;
-    struct finestra_tk *da = s->da;
-    s->da = 0;
-    uikit_consegna(da, &s->n);
-}
-
-static inline void uikit_consegna_unendo(struct sospesa_tk *s, struct finestra_tk *da, const struct notizia *n) {
-    if (s->da && (n->tipo != PUNTATORE || s->da != da || s->n.pulsanti != n->pulsanti))
-        uikit_consegna_sospesa(s);
-    if (n->tipo == PUNTATORE) {
-        s->da = da;
-        s->n = *n;
-    } else {
-        uikit_consegna(da, n);
-    }
-}
+int uikit_cambia_tema(struct finestra_tk *f, const char *nome);
 
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il
  * compositore la chiude (1). Serve anche l'altra finestra, se c'e' (finestra_tk_apri_altra):
@@ -2739,77 +954,10 @@ static inline void uikit_consegna_unendo(struct sospesa_tk *s, struct finestra_t
  * ridisegnare costa. Poi da capo: si ridisegna una volta sola per tutto quello che e'
  * successo. Se le immagini sono tutte e due del compositore non le si aspetta: si continua a
  * servire le notizie finche' lui ne restituisce una (RILASCIATA). */
-static inline int uikit_esegui(struct finestra_tk *f) {
-    int l, a;
-    widget_misura(&f->base, &l, &a);
-    f->base.x = f->base.y = 0;
-    f->base.l = l;
-    f->base.a = a;
-    widget_disponi(&f->base);
-    if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);   /* aperto prima di avere una misura */
-    if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
-    finestra_tasti_fisici(&f->finestra);        /* per le scorciatoie (tasti.h) */
-    f->aperta = 1;
-    f->quante_cambiate = 0;
-    uikit_cambiata_tutta(f);
-
-    struct notizia n;
-    for (;;) {
-        if (f->da_ridisegnare && finestra_libera(&f->finestra) && !uikit_ridisegna(f)) return 1;
-        if (f->altra && f->altra->da_ridisegnare && finestra_libera(&f->altra->finestra) &&
-            !uikit_ridisegna(f->altra))
-            finestra_tk_chiudi_altra(f);
-
-        struct sospesa_tk sospesa = { 0 };
-        for (int servite = 0; servite < 64; servite++) {
-            /* prima le notizie messe da parte da finestra_tela, poi il compositore */
-            struct finestra_tk *da = f->finestra.quante ? f : f->altra && f->altra->finestra.quante ? f->altra : 0;
-            if (da) {
-                finestra_notizia(&da->finestra, &n);
-            } else {
-                int resta = 0;                    /* gia' servito qualcosa: non si aspetta piu' */
-                if (!servite) {
-                    struct chiamata_tk *prima = uikit_prima_chiamata(f);
-                    resta = prima ? (int)(prima->scadenza - tempo()) : -1;
-                    if (prima && resta < 0) resta = 0;
-                }
-                /* la finestra, l'altra (se c'e') e il descrittore guardato (se c'e') */
-                struct da_guardare g[3] = { { .descrittore = f->finestra.collegamento } };
-                int quanti = 1, altra = 0, guardato = 0;
-                if (f->altra) { altra = quanti; g[quanti++].descrittore = f->altra->finestra.collegamento; }
-                if (f->al_pronto) { guardato = quanti; g[quanti++].descrittore = f->guardato; }
-                int pronti = aspetta(g, quanti, resta);
-                if (pronti == 0) break;           /* niente (o e' scaduta una chiamata) */
-                if (pronti < 0) {                 /* interrotta: si riprova */
-                    if (servite) break;
-                    servite--;
-                    continue;
-                }
-                if (guardato && g[guardato].pronto) {
-                    f->al_pronto(f, f->dati_pronto);
-                    if (f->da_chiudere) break;
-                    if (!g[0].pronto && !(altra && g[altra].pronto)) continue;
-                }
-                da = g[0].pronto || !altra ? f : f->altra;
-                if (!finestra_ricevi(&da->finestra, &n)) {
-                    if (da == f) return 1;
-                    if (sospesa.da == da) sospesa.da = 0;
-                    finestra_tk_chiudi_altra(f);       /* il compositore ha chiuso l'altra */
-                    continue;
-                }
-                if (finestra_di_servizio(&n)) continue;   /* un'immagine tornata, un "ci sei?" */
-            }
-            uikit_consegna_unendo(&sospesa, da, &n);
-            if (f->da_chiudere || (f->altra && f->altra->da_chiudere)) break;
-        }
-        uikit_consegna_sospesa(&sospesa);
-        uikit_chiamate_scadute(f);
-        if (f->altra && f->altra->da_chiudere) finestra_tk_chiudi_altra(f);
-        if (f->da_chiudere) return 0;
-    }
-}
+int uikit_esegui(struct finestra_tk *f);
 
 /* I componenti che stanno ognuno nel suo file (vedi LIBRERIE.md). */
+#include "elemento_file.h"    /* l'elemento di un file (e testo_a_capo, che usano anche avviso e stato vuoto) */
 #include "oggetti.h"          /* le icone di file e cartelle (l'"Oggetto" di Figma) */
 #include "menu.h"             /* il menu: voce, intestazione, separatore, sottomenu */
 #include "barra_laterale.h"   /* la barra laterale e le sue voci */

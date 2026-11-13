@@ -20,6 +20,8 @@
 #ifndef OGGETTI_H
 #define OGGETTI_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 enum {
     OGGETTO_FILE, OGGETTO_CARTELLA,
     OGGETTO_TXT, OGGETTO_PDF, OGGETTO_PNG, OGGETTO_ZIP, OGGETTO_BIN,

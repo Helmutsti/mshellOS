@@ -20,12 +20,19 @@ USCITA=${3:-$QUI/out/$1.png}
 # cercare in risorse/ del repository invece che in /system/resources (MSHELL_RISORSE,
 # gkit_disegno.h). Di GKit servono anche gli strumenti di disegno e le zone cambiate
 # (gkit/interno/: il pennello, le forme, il testo, le immagini, le zone); la finestra, lo
-# schermo e le PNG no: qui non ci sono. Di UIKit si compila tutto il codice gia' fuori dagli
-# header (uikit/interno/: i temi, le ombre, i materiali...); il resto e' ancora in uikit.h.
+# schermo e le PNG no: qui non ci sono. Di UIKit si compila tutto il codice (uikit/interno/),
+# TRANNE il ciclo degli eventi (ciclo.c: apre la finestra e parla con il compositore), che qui
+# fa anteprima.c con la sua uikit_esegui. (I componenti ancora negli header arrivano con uikit.h.)
 G="$RADICE/utente/libreria/gkit/interno"
+SCENA=$1
+SCALA=${2:-1}
+set --                                   # i .c di UIKit, senza ciclo.c
+for f in "$RADICE"/utente/libreria/uikit/interno/*.c; do
+    [ "$(basename "$f")" = ciclo.c ] || set -- "$@" "$f"
+done
 clang -std=gnu11 -O1 -w -I"$RADICE/utente/libreria" -I"$QUI" \
-    -DSCENA="\"$QUI/scene/$1.c\"" "$QUI/anteprima.c" \
+    -DSCENA="\"$QUI/scene/$SCENA.c\"" "$QUI/anteprima.c" \
     "$G/pennello.c" "$G/forme.c" "$G/testo.c" "$G/immagini.c" "$G/zone.c" "$G/materiali_file.c" \
-    "$RADICE"/utente/libreria/uikit/interno/*.c \
-    -o "$QUI/out/.anteprima_$1"
-MSHELL_RISORSE="$RADICE/risorse" "$QUI/out/.anteprima_$1" "$USCITA" "${2:-1}"
+    "$@" \
+    -o "$QUI/out/.anteprima_$SCENA"
+MSHELL_RISORSE="$RADICE/risorse" "$QUI/out/.anteprima_$SCENA" "$USCITA" "$SCALA"

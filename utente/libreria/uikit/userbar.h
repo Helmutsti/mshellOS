@@ -42,6 +42,7 @@
 #define USERBAR_H
 
 #include "uikit.h"
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
 
 /* UN SOLO INTERRUTTORE tra le due maniere (vedi in cima): 1 icone tonde, 0 icona piccola nel
  * cerchio. Lo legge anche la scrivania per scegliere la misura della PNG da caricare. */

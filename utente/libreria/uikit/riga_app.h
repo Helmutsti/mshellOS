@@ -12,6 +12,8 @@
 #ifndef UIKIT_RIGA_APP_H
 #define UIKIT_RIGA_APP_H
 
+#include "interno/nucleo.h"   /* le funzioni interne del nucleo che usa (finche' e' tutto nell'header) */
+
 #define RIGA_APP_ICONA   32
 #define RIGA_APP_ALTEZZA (2 * SPAZIO_8 + RIGA_APP_ICONA + 4)   /* 52: i due testi (20 + 16) */
 
