@@ -20,6 +20,8 @@
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
+#   utente/comandi/    i comandi (programmi senza grafica, per la riga di comando: SISTEMA.md),
+#                      uno per file: <nome>.c diventa /system/bin/<nome> (oggi webask)
 #   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c, manifest.toml e resources/)
 #   utente/prove/      programmi che servono solo alle prove automatiche (test/): vanno
 #                      solo in disco_prove.img, mai nel disco normale
@@ -64,7 +66,7 @@
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
 #                                manifest.toml e resources/ (lo stesso contenuto del loro
 #                                pacchetto .app, scompattato)
-#       bin/                     i comandi (per ora nessuno)
+#       bin/                     i comandi: quelli di utente/comandi (webask) e la shell di prova
 #       lib/                     per le librerie condivise (per ora nessuna: vedi sotto)
 #       resources/               le risorse del sistema: fonts/ (i caratteri), icons/ (le
 #                                icone), wallpapers/ (gli sfondi). Sono i file di risorse/
@@ -378,6 +380,16 @@ for f in utente/programmi/*.c; do
         *)    posto=/system/services/$nome; SERVIZI="$SERVIZI $nome" ;;
     esac
     metti_file "$B/oggetti/$nome" "$posto" 755
+done
+
+# I comandi (utente/comandi, uno per file): <nome>.c diventa /system/bin/<nome>. Un comando
+# e' un programma senza grafica, che gira con i permessi di chi lo lancia (SISTEMA.md):
+# niente GKit e UIKit, solo CoreKit. Sono programmi: 755.
+for f in utente/comandi/*.c; do
+    nome=$(basename "$f" .c)
+    $CC $UTENTE -c "$f" -o "$B/oggetti/comando_$nome.o"
+    lega "$B/oggetti/comando_$nome" "$B/oggetti/comando_$nome.o" $COREKIT
+    metti_file "$B/oggetti/comando_$nome" "/system/bin/$nome" 755
 done
 
 # Le applicazioni (utente/applicazioni/<Nome>/). Per ognuna:

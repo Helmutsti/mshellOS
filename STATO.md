@@ -99,8 +99,15 @@ cartella), senza si cerca in `/system/bin` e poi in `/data/users/<uid>/bin`. Le 
 dividono agli spazi, `"tra virgolette"` è una parola sola (niente variabili, tubi, redirezioni).
 Il programma gira nella cartella della shell, con PWD e HOME=/home, in primo piano: ha lui il
 terminale (Ctrl-C arriva a lui), poi la shell se lo riprende e dice l'esito se non è 0. Ctrl-Z
-non mette da parte niente (il programma riparte subito). Comandi veri (busybox, toybox o nostri)
-ancora da decidere: la prova usa `utente/prove/argomenti.c`, nel disco `disco_shell.img`.
+non mette da parte niente (il programma riparte subito). La prova usa `utente/prove/argomenti.c`,
+nel disco `disco_shell.img`.
+
+**I comandi** sono fatti da noi, uno per file in `utente/comandi/<nome>.c`: `build.sh` (e la
+sandbox) li mette in `/system/bin/<nome>`, legati solo con CoreKit. Il primo è **`webask`**, un
+"curl" essenziale: `webask [-i] http://nome[:porta]/percorso` scrive il contenuto della pagina
+(`-i` anche stato e intestazioni). Solo HTTP, niente HTTPS (decisione della persona); i
+reindirizzamenti non si seguono, si dice dove porterebbero. Codici di uscita in `webask -h` e
+nel commento in testa al file. Nessun altro comando di base per ora (decisione della persona).
 
 Per usarla: nella finestra di QEMU apri la seriale, **View (Visualizza) -> serial0** (compare il
 registro dell'avvio e, in fondo, il prompt `/ # `; se non si vede, Invio). Per tornare allo
@@ -373,8 +380,8 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 - In futuro una vera libreria condivisa in `/system/lib`, invece di copiare lo stesso codice
   dentro ogni programma.
 - Terminale (più avanti): i comandi sono programmi, non app. L'app Terminale riceve un
-  permesso esplicito "accedere ai tuoi file", come su macOS. Da dove prendere la shell e i
-  comandi (toybox, busybox o fatti da noi) è ancora da decidere.
+  permesso esplicito "accedere ai tuoi file", come su macOS. I comandi li facciamo noi
+  (`utente/comandi/`, il primo è `webask`).
 - Terminale in finestra (app Terminale, si apre dal vassoio delle app): la shell dentro gira come
   **sistema** (uid 0), non come la persona, e **chiunque può chiederla** al launcher
   (`open_shell`, che le passa il terminale finto). Decisione della persona, provvisoria:

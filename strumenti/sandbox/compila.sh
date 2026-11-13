@@ -72,8 +72,12 @@ for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755;
 (cd utente/config && find . -type f | sort) | while read -r f; do
     metti_file "utente/config/${f#./}" "/system/config/${f#./}" 644
 done
-# i comandi: la shell di prova, come build.sh
+# i comandi, come build.sh: la shell di prova e quelli di utente/comandi
 for nome in shell; do metti_file "$O/bin/$nome" "/system/bin/$nome" 755; done
+for f in utente/comandi/*.c; do
+    nome=$(basename "$f" .c)
+    metti_file "$O/bin/comandi/$nome" "/system/bin/$nome" 755
+done
 
 # le applicazioni, come build.sh: il pacchetto (manifesto, code, resources); quelle di
 # DA_INSTALLARE solo come .app sulla Scrivania, le altre scompattate in /system/apps.

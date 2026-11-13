@@ -37,10 +37,12 @@ UIKIT    := $(O)/libuikit.a
 SCHERMO_SANDBOX := $(O)/strumenti/sandbox/schermo_sandbox.o
 
 PROGRAMMI := init compositore launcher scrivania network shell
+# i comandi (utente/comandi, uno per file), come build.sh: tutti quelli che ci sono
+COMANDI := $(basename $(notdir $(wildcard utente/comandi/*.c)))
 APP_CARTELLE := $(sort $(wildcard utente/applicazioni/*/ utente/prove/applicazioni/*/))
 minuscolo = $(shell echo '$(1)' | tr A-Z a-z)
 
-FATTI := $(addprefix $(O)/bin/,$(PROGRAMMI) eventi avvio prove/riempitivo prove/pacchetti prove/messaggi)
+FATTI := $(addprefix $(O)/bin/,$(PROGRAMMI) $(addprefix comandi/,$(COMANDI)) eventi avvio prove/riempitivo prove/pacchetti prove/messaggi)
 
 $(O)/%.o: %.c
 	@mkdir -p $(@D)
@@ -83,6 +85,9 @@ $(O)/bin/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(SCHERMO_SANDBOX) $(UI
 	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(UIKIT) $(GKIT) $(COREKIT))
 $(O)/bin/avvio: $(O)/strumenti/sandbox/avvio_sandbox.o
 	$(call lega,$@,$<)
+# i comandi: solo CoreKit, come build.sh
+$(O)/bin/comandi/%: $(O)/utente/comandi/%.o $(COREKIT)
+	$(call lega,$@,$< $(COREKIT))
 # i programmi delle prove (utente/prove)
 $(O)/bin/prove/%: $(O)/utente/prove/%.o $(UIKIT) $(GKIT) $(COREKIT)
 	$(call lega,$@,$< $(UIKIT) $(GKIT) $(COREKIT))
