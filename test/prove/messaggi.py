@@ -1,4 +1,4 @@
-"""messaggi: lo standard dei messaggi tra servizi e clienti (utente/libreria/messaggi.c).
+"""messaggi: lo standard dei messaggi tra servizi e clienti (utente/libreria/corekit/interno/messaggi.c).
 
 Si accende il disco della prova dei messaggi (disco_messaggi.img, vedi build.sh): in
 /data/tests c'e' il programma messaggi (utente/prove/messaggi.c), che init fa partire come

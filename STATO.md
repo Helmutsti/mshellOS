@@ -208,7 +208,7 @@ vassoio) il puntatore lo sentono sempre.
 
 | cartella | cosa c'è |
 |----------|----------|
-| `utente/libreria/` | la libreria dei programmi (`libreria.h`: file, processi, socket...) |
+| `utente/libreria/corekit/` | CoreKit, la libreria comune (vedi `LIBRERIE.md`): pubblico in `corekit/` (`corekit.h`: file, processi, socket...; `messaggi.h`), del sistema in `corekit/sistema/` (launcher, pacchetti, manifesti), il codice in `corekit/interno/`; si compila in `libcorekit.a` |
 | `utente/libreria/gkit/` | GKit, la grafica (vedi `LIBRERIE.md`): protocollo delle finestre, finestra dell'app e schermo (`gkit.h`), strumenti di disegno (`gkit_disegno.h`) |
 | `utente/libreria/uikit/` | UIKit, l'interfaccia: `uikit.h` (finestra, componenti, ciclo degli eventi: include tutto quello che serve a un'app), stile e temi (`stile.h` riprende le variabili del file Figma), materiali del sistema (`materiali.h`: font, icone e oggetti, caricati dai file in `/system/resources` la prima volta che servono; l'elenco in `materiali_elenco.h`), userbar, quello che serve al compositore (`uikit_compositore.h`) |
 | `utente/avvio/` | il programma dell'archivio di avvio |

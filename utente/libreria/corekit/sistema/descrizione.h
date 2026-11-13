@@ -1,4 +1,5 @@
-/* La descrizione di un'applicazione: il suo MANIFESTO, <cartella delle app>/<id>/manifest.toml.
+/* CoreKit, del sistema. La descrizione di un'applicazione: il suo MANIFESTO,
+ * <cartella delle app>/<id>/manifest.toml.
  *
  * LE CARTELLE DELLE APPLICAZIONI sono due, e si guardano in quest'ordine:
  *     /system/apps   quelle del sistema (nella partizione system, in sola lettura)
@@ -10,7 +11,7 @@
  *
  * IL MANIFESTO e' scritto in TOML: la guida, voce per voce, e' manifest-guida.toml nella
  * cartella principale del progetto; le regole sono in APPLICAZIONI.md. Lo legge tomlc99
- * (esterni/tomlc99, licenza MIT) in descrizione.c. Le voci:
+ * (esterni/tomlc99, licenza MIT) in interno/descrizione.c. Le voci:
  *     id, nome, versione, autore, descrizione       chi e' l'app
  *     processore, sistema_minimo                     per quale computer e sistema e' fatta
  *     programma                                      il file da far partire (di solito "code")
@@ -25,7 +26,7 @@
 #ifndef DESCRIZIONE_H
 #define DESCRIZIONE_H
 
-#include "chiamate.h"   /* MAX_PERCORSO_PROGRAMMA */
+#include "../chiamate.h"   /* MAX_PERCORSO_PROGRAMMA */
 
 /* LA VERSIONE DEL SISTEMA. Un'app dice nel manifesto la versione minima che le serve
  * (sistema_minimo): se e' piu' alta di questa, non si installa. Si alza quando il sistema

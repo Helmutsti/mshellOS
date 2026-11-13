@@ -1,4 +1,4 @@
-# mshell: le librerie della grafica (GKit e UIKit)
+# mshell: le librerie (CoreKit, GKit e UIKit)
 
 **Approvato** il 12 novembre 2026. Definisce il confine tra la libreria grafica
 che parla con il compositore e quella dei componenti (punto 13 delle cose da fare in STATO.md),
@@ -66,11 +66,34 @@ Costruita sopra GKit:
   menu, stato vuoto, avviso (due e tre scelte), userbar e vassoio;
 - **il ciclo degli eventi** dell'applicazione: fuoco, tastiera, ridisegno.
 
-## Fuori da tutte e due
+## CoreKit, la libreria comune (sotto tutte e due)
 
-La **libreria dei programmi** (oggi `libreria.h`, `file.c`, `comunicazione.c`, `libreria.c`,
-`chiamate.h`) e le parti delle app (`descrizione.h`, `pacchetto.h`, `launcher.h`) non sono
-grafica: restano dove sono, con il loro nome.
+**CoreKit** (`utente/libreria/corekit/`) è la libreria che usano tutti i programmi, anche quelli
+senza grafica: file e cartelle, processi, porte (i socket tra programmi), fogli di memoria
+condivisa, tempo, e lo standard dei messaggi tra servizi e clienti. Non è grafica: GKit e UIKit
+stanno sopra di lei. Come Foundation/CoreFoundation sul Mac, o la GLib su Linux. Le funzioni
+hanno i loro nomi italiani di sempre (`apri`, `manda`, `ricevi`, `foglio`...): è cambiato solo
+dove stanno i file.
+
+È divisa in **tre livelli**, pensando a un futuro SDK (gli header e la libreria compilata da dare
+a chi scrive un'app):
+
+| livello | cartella | cosa c'è | chi lo usa |
+|---|---|---|---|
+| **pubblico** | `corekit/` | `corekit.h` (l'header principale: file, processi, porte, fogli, tempo), `chiamate.h` (i tipi e le costanti che usa, lo include `corekit.h`), `messaggi.h` (lo standard `chiave=valore`, SISTEMA.md sezione 3) | ogni programma, app e comando |
+| **del sistema** | `corekit/sistema/` | `launcher.h` (il protocollo del launcher), `pacchetto.h` (i pacchetti `.app`), `descrizione.h` (il manifesto di un'app), `testo437.h` (da UTF-8 ai caratteri dei font del sistema) | solo i programmi del sistema e le app del sistema: come i "framework privati" del Mac, sono header ma possono cambiare senza avviso |
+| **interno** | `corekit/interno/` | il codice (`corekit.c`, `file.c`, `comunicazione.c`, `messaggi.c`, `descrizione.c`, `pacchetto.c`) e `interno.h`, che si dicono tra loro | solo CoreKit |
+
+Un programma scrive `#include "corekit/corekit.h"` (e `"corekit/messaggi.h"`,
+`"corekit/sistema/launcher.h"`... se gli servono). Gli header pubblici hanno solo dichiarazioni,
+tipi, costanti e i commenti per chi li usa; l'unico codice dentro sono due funzioni di una riga
+(`lunghezza`, `scrivi_testo`).
+
+**La libreria compilata.** `build.sh` compila i `.c` di `corekit/interno/`, con miniz e tomlc99
+(le librerie di altri che usa solo CoreKit), in una libreria statica, `build/<cpu>/libcorekit.a`,
+e ogni programma si lega a lei: dall'archivio entra solo quello che il programma usa. La sandbox
+fa lo stesso (`strumenti/sandbox/Makefile`). GKit e UIKit per ora restano oggetti sciolti; si
+riordineranno con lo stesso schema.
 
 ## Un punto che oggi attraversa il confine
 

@@ -25,8 +25,8 @@
  * Ogni passo importante lo scrive anche nella seriale ("store: ..."): lo guardano le prove
  * (test/prove/store.py). */
 #include "uikit/uikit.h"
-#include "launcher.h"
-#include "testo437.h"
+#include "corekit/sistema/launcher.h"
+#include "corekit/sistema/testo437.h"
 
 #define QUANTI(v) ((int)(sizeof(v) / sizeof((v)[0])))
 

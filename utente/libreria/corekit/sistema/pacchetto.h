@@ -1,4 +1,5 @@
-/* I PACCHETTI DELLE APPLICAZIONI: leggere, controllare e installare un file .app.
+/* CoreKit, del sistema. I PACCHETTI DELLE APPLICAZIONI: leggere, controllare e installare un
+ * file .app. Lo usano il launcher, il compositore e lo Store (tramite launcher.h).
  *
  * Un'app si distribuisce come un file unico con estensione .app: un archivio ZIP (le
  * regole sono in APPLICAZIONI.md, sezioni 3 e 4) con dentro

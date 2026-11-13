@@ -1,5 +1,6 @@
-/* Il protocollo del launcher: aprire le applicazioni, aprire un file, e (per lo Store)
- * descrivere, installare e aggiornare i pacchetti .app.
+/* CoreKit, del sistema: il protocollo del launcher. Aprire le applicazioni, aprire un file,
+ * e (per lo Store) descrivere, installare e aggiornare i pacchetti .app. Lo usano i
+ * programmi e le app del sistema; non e' per le app normali (vedi corekit.h).
  *
  * Il launcher e' il servizio del sistema che fa partire le applicazioni (come
  * LaunchServices sul Mac, o systemd per GNOME). Non ha finestre: chi vuole qualcosa (la
@@ -12,7 +13,7 @@
  *
  *   APRI_APPLICAZIONE   applicazione = il suo id (la sua cartella in /system/apps o
  *                       /data/apps); argomento = un testo per lei ("": niente), che trova
- *                       in main (argomenti[1], vedi avvia_come_con in libreria.h): per Files
+ *                       in main (argomenti[1], vedi avvia_come_con in corekit.h): per Files
  *                       e' la cartella da aprire. Risposta: esito 0 e il numero del compito,
  *                       o LAUNCHER_NON_INSTALLATA se non c'e'. Si aprono SOLO le app
  *                       installate.
@@ -83,7 +84,7 @@
 #ifndef LAUNCHER_H
 #define LAUNCHER_H
 
-#include "libreria.h"
+#include "../corekit.h"
 #include "pacchetto.h"
 
 #define NOME_LAUNCHER "launcher"

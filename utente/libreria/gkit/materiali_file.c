@@ -13,7 +13,7 @@
  * si scrive perche' sullo standard error (il registro del programma) e si da' qualcosa che
  * si disegna senza pericolo (vedi ogni funzione).
  *
- * Usa solo le funzioni di Linux (open, fstat, mmap): niente libreria dei programmi, cosi'
+ * Usa solo le funzioni di Linux (open, fstat, mmap): niente CoreKit, cosi'
  * gira anche fuori da mshell (l'anteprima, sul Mac). */
 #include <fcntl.h>
 #include <stdlib.h>

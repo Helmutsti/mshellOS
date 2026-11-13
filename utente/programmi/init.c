@@ -19,9 +19,9 @@
  * le ha mai lasciate, nel frattempo nessun altro ha potuto prenderle: lo schermo non
  * torna alla console, il nome resta occupato, e le applicazioni che si collegano proprio
  * in quel momento aspettano in fila, invece di trovare la porta chiusa. */
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include "gkit/gkit.h"
-#include "launcher.h"
+#include "corekit/sistema/launcher.h"
 #include <fcntl.h>
 #include <unistd.h>
 

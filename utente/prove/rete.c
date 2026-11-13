@@ -11,7 +11,7 @@
  *   2. apre una connessione TCP alla porta 80;
  *   3. manda una richiesta HTTP HEAD e scrive la prima riga della risposta.
  * Alla fine "rete: tutto bene", oppure "rete: fallita" con il passo. */
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include <netdb.h>
 #include <string.h>
 #include <unistd.h>

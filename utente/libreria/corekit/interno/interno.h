@@ -1,5 +1,6 @@
-/* Le cose che i pezzi della libreria (libreria.c, file.c, comunicazione.c, gkit/schermo.c)
- * si dicono tra loro. I programmi non lo includono: per loro c'e' libreria.h. */
+/* CoreKit, interno: le cose che i pezzi di CoreKit (corekit.c, file.c, comunicazione.c) si
+ * dicono tra loro. Nessun programma lo include, e nemmeno GKit e UIKit: per loro c'e'
+ * corekit.h. */
 #ifndef INTERNO_H
 #define INTERNO_H
 
@@ -19,7 +20,7 @@ int percorso_vero(const char *percorso, char *vero);
 int errore_file(int numero);
 
 /* ricevi su un descrittore che non e' un socket: una cartella, un file, un processo
- * (file.c e libreria.c). */
+ * (file.c e corekit.c). */
 int ricevi_non_socket(int d, void *dove, unsigned int byte);
 
 /* Se d e' una cartella aperta con apri, la dimentica (chiudi). */

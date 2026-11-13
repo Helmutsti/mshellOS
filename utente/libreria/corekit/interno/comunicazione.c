@@ -1,4 +1,4 @@
-/* La libreria dei programmi, sopra Linux: parlare con gli altri programmi.
+/* CoreKit, sopra Linux: parlare con gli altri programmi (corekit.h).
  *
  *   ascolta, collega, accetta   socket AF_UNIX di tipo SOCK_SEQPACKET (a pacchetti: ogni
  *                               messaggio arriva intero), con il nome come file in
@@ -16,7 +16,7 @@
  *
  * Tutti i descrittori nascono O_CLOEXEC ("da chiudere all'execve"): un programma che ne
  * fa partire un altro non gli lascia niente per sbaglio. Quelli da prestare si passano
- * con avvia_con (libreria.c). */
+ * con avvia_con (corekit.c). */
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -29,7 +29,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "libreria.h"
+#include "../corekit.h"
 #include "interno.h"
 
 /* --- i nomi --- */

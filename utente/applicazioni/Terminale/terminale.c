@@ -35,7 +35,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
-#include "launcher.h"
+#include "corekit/sistema/launcher.h"
 #include "uikit/uikit.h"
 
 #define SHELL "/system/bin/shell"

@@ -28,7 +28,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "libreria.h"
+#include "corekit/corekit.h"
 
 #ifdef __aarch64__
 #define TERMINALE "/dev/ttyAMA0"

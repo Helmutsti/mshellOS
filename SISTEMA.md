@@ -44,14 +44,15 @@ Linux, launchd e XPC sul Mac.
 ## 3. Le porte
 
 Una **porta** è il punto dove un servizio riceve le richieste. Il meccanismo lo dà il kernel e la
-nostra libreria lo usa già (`utente/libreria/comunicazione.c`):
+nostra libreria lo usa già (CoreKit, `utente/libreria/corekit/interno/comunicazione.c`):
 - una "presa" Unix con un nome, come file in `/run/mshell/<nome>` (`ascolta`, `collega`, `accetta`);
 - a messaggi interi (ogni messaggio arriva tutto insieme);
 - può portare con sé un descrittore aperto (un foglio di memoria, un file);
 - il kernel dice al servizio chi c'è dall'altra parte: processo e utente (`chi`).
 
 Oggi il compositore e il launcher hanno ciascuno un **formato dei messaggi suo**
-(`chiamate.h`, `launcher.h`). Lo standard serve a non farne uno nuovo per ogni servizio.
+(il compositore in `gkit/gkit.h`, gli eventi in `corekit/chiamate.h`, il launcher in
+`corekit/sistema/launcher.h`). Lo standard serve a non farne uno nuovo per ogni servizio.
 
 ### Lo standard (piccolissimo)
 
@@ -65,7 +66,7 @@ configurazione.
 
 Due parti:
 1. **la regola scritta**, qui;
-2. **il codice**, nella libreria che tutti i programmi già usano (`utente/libreria/`): un file per la busta e una funzione per il controllo dei permessi.
+2. **il codice**, nella libreria che tutti i programmi già usano (CoreKit, `utente/libreria/corekit/`): un file per la busta e una funzione per il controllo dei permessi.
 
 Cosa deve dire:
 - **la busta**, uguale per tutti: quale richiesta, un numero per riconoscere la risposta, l'esito (fatto, non hai il permesso, richiesta sbagliata...), e i dati della richiesta;
@@ -74,7 +75,7 @@ Cosa deve dire:
 
 Il primo a usarlo sarà il servizio network. Compositore e launcher si allineeranno più avanti.
 
-**Dove sta il codice:** `utente/libreria/messaggi.h` e `messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
+**Dove sta il codice:** in CoreKit, `utente/libreria/corekit/messaggi.h` (pubblico) e `corekit/interno/messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
 - costruire: `messaggio_inizia`, `messaggio_aggiungi`, `messaggio_aggiungi_numero`, `messaggio_risposta` (la busta della risposta: stesso `id`, `result`);
 - leggere: `messaggio_valore`, `messaggio_prossimo` (per le chiavi ripetute), `messaggio_numero`, `messaggio_vale`;
 - mandare e ricevere, con un descrittore allegato facoltativo: `messaggio_manda`, `messaggio_ricevi`;

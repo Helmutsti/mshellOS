@@ -45,7 +45,7 @@
 
 #define PARTIZIONE_SISTEMA "system"   /* i nomi delle partizioni nella tabella GPT */
 #define PARTIZIONE_DATI "data"
-#define REGISTRO 8             /* dove i programmi trovano la console (libreria/interno.h) */
+#define REGISTRO 8             /* dove i programmi trovano la console (corekit/interno/interno.h) */
 #define ATTESA_DISCO 100       /* volte da 100 ms: 10 secondi al massimo */
 
 static void di(const char *s) {
@@ -204,7 +204,7 @@ int main(void) {
         ferma();
     }
 
-    /* 6. il registro: la console, per tutti i programmi (libreria/interno.h) */
+    /* 6. il registro: la console, per tutti i programmi (corekit/interno/interno.h) */
     dup2(1, REGISTRO);
     char *argomenti[] = { "/system/init", 0 };
     char *ambiente[] = { 0 };

@@ -18,9 +18,13 @@ define lega
 ld.lld -static --gc-sections -s -o $(1) $(LIBC)/crt1.o $(LIBC)/crti.o $(2) -L$(LIBC) -lc $(RT) $(LIBC)/crtn.o
 endef
 
-# la libreria (con GKit e UIKit) e le librerie di altri (miniz, tomlc99, stb_image), come build.sh
-LIBRERIA := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/*.c utente/libreria/gkit/*.c utente/libreria/uikit/*.c)))
-ESTERNI  := $(O)/esterni/miniz.o $(O)/esterni/toml.o $(O)/esterni/stb_image.o
+# CoreKit, come build.sh: i suoi .c e le librerie di altri che usa solo lei (miniz, tomlc99)
+# in una libreria statica, libcorekit.a, che nel comando di lega va dopo gli oggetti
+COREKIT_OGGETTI := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/corekit/interno/*.c))) $(O)/esterni/miniz.o $(O)/esterni/toml.o
+COREKIT  := $(O)/libcorekit.a
+# GKit e UIKit, oggetti sciolti, e stb_image (le PNG di GKit), come build.sh
+LIBRERIA := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/gkit/*.c utente/libreria/uikit/*.c)))
+ESTERNI  := $(O)/esterni/stb_image.o
 # per i programmi del sistema: lo schermo della sandbox al posto del DRM
 LIBRERIA_SANDBOX := $(filter-out $(O)/utente/libreria/gkit/schermo.o,$(LIBRERIA)) $(O)/strumenti/sandbox/schermo_sandbox.o
 
@@ -42,6 +46,11 @@ $(O)/strumenti/sandbox/%.o: strumenti/sandbox/%.c
 	@mkdir -p $(@D)
 	$(CC) $(UTENTE) -Istrumenti/sandbox $(DIP) -c $< -o $@
 
+# l'archivio si rifa' da capo: un oggetto tolto non ci deve restare
+$(COREKIT): $(COREKIT_OGGETTI)
+	@rm -f $@
+	ar rcs $@ $^
+
 ESTERNI_ARG := -w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES
 $(O)/esterni/miniz.o: utente/libreria/esterni/miniz/miniz.c
 	@mkdir -p $(@D)
@@ -54,21 +63,21 @@ $(O)/esterni/stb_image.o: utente/libreria/esterni/stb/stb_image.c
 	$(CC) $(ESTERNI_ARG) $(DIP) -c $< -o $@
 
 # i programmi del sistema
-$(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIBRERIA_SANDBOX) $(ESTERNI)
-	$(call lega,$@,$(LIBRERIA_SANDBOX) $(ESTERNI) $<)
-$(O)/bin/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(LIBRERIA_SANDBOX) $(ESTERNI)
-	$(call lega,$@,$(LIBRERIA_SANDBOX) $(ESTERNI) $<)
+$(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIBRERIA_SANDBOX) $(ESTERNI) $(COREKIT)
+	$(call lega,$@,$(LIBRERIA_SANDBOX) $(ESTERNI) $< $(COREKIT))
+$(O)/bin/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(LIBRERIA_SANDBOX) $(ESTERNI) $(COREKIT)
+	$(call lega,$@,$(LIBRERIA_SANDBOX) $(ESTERNI) $< $(COREKIT))
 $(O)/bin/avvio: $(O)/strumenti/sandbox/avvio_sandbox.o
 	$(call lega,$@,$<)
 # i programmi delle prove (utente/prove)
-$(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIA) $(ESTERNI)
-	$(call lega,$@,$(LIBRERIA) $(ESTERNI) $<)
+$(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIA) $(ESTERNI) $(COREKIT)
+	$(call lega,$@,$(LIBRERIA) $(ESTERNI) $< $(COREKIT))
 
 # le applicazioni: $(O)/app/<id>/code, con la libreria vera (come build.sh)
 define APP
 $(2)_OGGETTI := $$(patsubst %.c,$(O)/%.o,$$(sort $$(wildcard $(1)*.c)))
-$(O)/app/$(2)/code: $$($(2)_OGGETTI) $$(LIBRERIA) $$(ESTERNI)
-	$$(call lega,$$@,$$(LIBRERIA) $$(ESTERNI) $$($(2)_OGGETTI))
+$(O)/app/$(2)/code: $$($(2)_OGGETTI) $$(LIBRERIA) $$(ESTERNI) $$(COREKIT)
+	$$(call lega,$$@,$$(LIBRERIA) $$(ESTERNI) $$($(2)_OGGETTI) $$(COREKIT))
 FATTI += $(O)/app/$(2)/code
 endef
 $(foreach c,$(APP_CARTELLE),$(eval $(call APP,$(c),$(call minuscolo,$(notdir $(patsubst %/,%,$(c)))))))

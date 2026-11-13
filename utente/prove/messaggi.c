@@ -25,7 +25,7 @@
  *      controlla test/prove/messaggi.py).
  * Ogni passo lo scrive nella seriale ("messaggi: ... -> esito"). Alla fine "messaggi:
  * tutto bene", oppure "messaggi: fallita". */
-#include "messaggi.h"
+#include "corekit/messaggi.h"
 #include <sys/wait.h>
 #include <unistd.h>
 

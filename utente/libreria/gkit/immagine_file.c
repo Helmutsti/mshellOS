@@ -4,7 +4,7 @@
  * programmi; i byte li decodifica stb_image (esterni/stb, di altri, pubblico dominio o MIT),
  * che da' i pixel in RGBA non premoltiplicati. Qui si passano al formato delle tele di GKit:
  * 0xAARRGGBB premoltiplicati (vedi gkit_disegno.h). */
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include "gkit_disegno.h"
 
 /* Le due funzioni di stb_image che servono (esterni/stb/stb_image.h): dichiarate qui, per

@@ -11,10 +11,11 @@
 # 3.24 (lo stesso container in cui gira questo script); sopra, dal processo numero 1 in
 # su, solo i nostri programmi: niente programmi di una distribuzione, niente shell.
 #
-#   utente/libreria/   la libreria dei programmi (libreria.h): le nostre funzioni, fatte
-#                      con le chiamate di sistema di Linux e la libreria C musl. Dentro,
-#                      le due librerie della grafica (LIBRERIE.md): gkit/ (le finestre, lo
-#                      schermo e il disegno) e uikit/ (lo stile, i materiali e i componenti)
+#   utente/libreria/   le nostre librerie (LIBRERIE.md): corekit/ (CoreKit, la libreria
+#                      comune: file, processi, porte, messaggi, fatti con le chiamate di
+#                      sistema di Linux e la libreria C musl; si compila in libcorekit.a),
+#                      e le due librerie della grafica: gkit/ (le finestre, lo schermo e il
+#                      disegno) e uikit/ (lo stile, i materiali e i componenti)
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
@@ -28,6 +29,7 @@
 #   strumenti/         programmi che girano qui, sul computer che compila (la grafica)
 #   build/<cpu>/       il compilato (si puo' cancellare, viene rifatto):
 #       linux          il kernel (per il PC: bzImage; per ARM: Image)
+#       libcorekit.a   CoreKit compilata (una libreria statica), legata in ogni programma
 #       avvio.img      l'archivio di avvio (initramfs: cpio compresso con gzip)
 #       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
 #                      UEFI (una "UKI", Unified Kernel Image)
@@ -156,9 +158,9 @@ MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev 
 # --- 0. gli attrezzi e i pacchetti di Alpine ---
 SCARICO=/w/build/scarico
 mkdir -p "$SCARICO/host" "$SCARICO/$ARCH"
-# e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
+# binutils: ar, che mette insieme libcorekit.a (passo 2); e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
 # FAT della partizione di avvio, scritta senza montarla
-apk add --cache-dir "$SCARICO/host" clang lld e2fsprogs sfdisk mtools zip $ATTREZZI_CPU >/dev/null
+apk add --cache-dir "$SCARICO/host" clang lld binutils e2fsprogs sfdisk mtools zip $ATTREZZI_CPU >/dev/null
 
 # LA RADICE DI ALPINE PER LA CPU: un albero con i pacchetti di Alpine PER QUELLA CPU
 # (apk --arch, anche se il container e' x86_64), da cui si prendono:
@@ -199,14 +201,9 @@ lega() {   # lega USCITA OGGETTI...
     ld.lld -static --gc-sections -s -o "$_uscita" "$LIBC/crt1.o" "$LIBC/crti.o" "$@" -L"$LIBC" -lc $_rt "$LIBC/crtn.o"
 }
 
-# --- 2. i programmi: la libreria, i programmi del sistema e le applicazioni ---
+# --- 2. i programmi: le librerie, i programmi del sistema e le applicazioni ---
 UTENTE="-Iutente/libreria"
-# (anche GKit e UIKit, nelle loro cartelle: i nomi dei file .c sono tutti diversi)
-for f in utente/libreria/*.c utente/libreria/gkit/*.c utente/libreria/uikit/*.c; do
-    $CC $UTENTE -c "$f" -o "$B/oggetti/libreria/$(basename "$f" .c).o"
-done
-# Le librerie di altri (utente/libreria/esterni/, ognuna con la sua LICENSE), legate nella
-# libreria come i nostri file (--gc-sections ne tiene solo quello che un programma usa):
+# Le librerie di altri (utente/libreria/esterni/, ognuna con la sua LICENSE):
 #   miniz 3.0.2 (MIT), la release "amalgamata": leggere gli ZIP (i pacchetti .app).
 #     Senza le funzioni sui FILE della libreria C e senza i nomi di zlib (pacchetto.c fa
 #     le stesse scelte).
@@ -215,8 +212,29 @@ done
 #     app), per immagine_carica di GKit. Solo PNG e senza FILE (esterni/stb/stb_image.c).
 # Non sono nostre: i loro avvisi del compilatore si spengono (-w), per non coprire i nostri.
 ESTERNI="-w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES"
-$CC $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/libreria/miniz.o"
-$CC $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/libreria/toml.o"
+
+# COREKIT, la libreria comune (utente/libreria/corekit/, LIBRERIE.md): i suoi .c (in
+# corekit/interno/) e le due librerie di altri che usa solo lei (miniz per i pacchetti,
+# tomlc99 per i manifesti) diventano UNA libreria statica, libcorekit.a: un archivio di
+# oggetti (ar). Chi lega un programma prende dall'archivio solo gli oggetti che gli
+# servono. Nel comando di lega l'archivio va DOPO gli oggetti del programma e di GKit e
+# UIKit (che usano le sue funzioni) e prima della libreria C (che usa lei).
+mkdir -p "$B/oggetti/corekit"
+for f in utente/libreria/corekit/interno/*.c; do
+    $CC $UTENTE -c "$f" -o "$B/oggetti/corekit/$(basename "$f" .c).o"
+done
+$CC $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/corekit/miniz.o"
+$CC $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/corekit/toml.o"
+rm -f "$B/libcorekit.a"
+ar rcs "$B/libcorekit.a" "$B"/oggetti/corekit/*.o
+COREKIT="$B/libcorekit.a"
+
+# GKit e UIKit, nelle loro cartelle (i nomi dei file .c sono tutti diversi), con
+# stb_image: oggetti sciolti, legati in ogni programma (--gc-sections ne tiene solo quello
+# che il programma usa).
+for f in utente/libreria/gkit/*.c utente/libreria/uikit/*.c; do
+    $CC $UTENTE -c "$f" -o "$B/oggetti/libreria/$(basename "$f" .c).o"
+done
 $CC $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/libreria/stb_image.o"
 LIBRERIA="$B/oggetti/libreria/*.o"
 
@@ -334,7 +352,7 @@ APPS=""
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
-    lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o"
+    lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o" $COREKIT
     case "$nome" in
         init) posto=/system/init ;;
         shell) posto=/system/bin/$nome ;;   # la shell di prova
@@ -378,7 +396,7 @@ for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
         $CC $UTENTE -I"$cartella" -c "$f" -o "$o"
         oggetti="$oggetti $o"
     done
-    lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti
+    lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti $COREKIT
 
     manifesto="${cartella}manifest.toml"
     [ -f "$manifesto" ] || { echo "build.sh: manca $manifesto"; exit 1; }
@@ -438,7 +456,7 @@ for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
 
 # La persona (per ora una sola, 1000: le applicazioni girano con il suo uid). La sua
 # cartella e' sua e di nessun altro (700), e dentro:
-#   home              i suoi file; i programmi la vedono come /home (libreria.c). Dentro
+#   home              i suoi file; i programmi la vedono come /home (CoreKit: corekit.c). Dentro
 #                     c'e' Scrivania, e quello che c'e' in file/ nel repository
 #   bin               i suoi comandi, cercati dopo /system/bin (quando ci sara' una shell)
 #   appsdata/<app>    i dati di ogni applicazione
@@ -477,7 +495,7 @@ mkdir -p "$B/oggetti/prove"
 for f in utente/prove/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
-    lega "$B/oggetti/prove/$nome" $LIBRERIA "$B/oggetti/prove/$nome.o"
+    lega "$B/oggetti/prove/$nome" $LIBRERIA "$B/oggetti/prove/$nome.o" $COREKIT
 done
 RIEMPITIVI=6
 

@@ -1,10 +1,10 @@
-/* La libreria dei programmi: i pacchetti .app (pacchetto.h).
+/* CoreKit: i pacchetti .app (sistema/pacchetto.h).
  *
  * Lo ZIP lo legge miniz (esterni/miniz: release 3.0.2, licenza MIT), direttamente dal file
  * aperto con pread: si legge l'indice (il "central directory", in fondo all'archivio) e, di
  * ogni file, solo quello che serve. Il manifesto lo legge descrizione.c (tomlc99).
  *
- * Usa solo la libreria C e le chiamate di Linux, non libreria.h: cosi' si compila anche
+ * Usa solo la libreria C e le chiamate di Linux, non corekit.h: cosi' si compila anche
  * sul computer che compila, per le prove (test/pacchetti/).
  *
  * SICUREZZA DELLO SCOMPATTAMENTO ("zip slip"). Un archivio puo' contenere nomi come
@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <dirent.h>
 
-#include "pacchetto.h"
+#include "../sistema/pacchetto.h"
 /* miniz senza le funzioni sui FILE della libreria C e senza i nomi di zlib: le stesse
  * scelte con cui build.sh compila esterni/miniz/miniz.c */
 #define MINIZ_NO_STDIO

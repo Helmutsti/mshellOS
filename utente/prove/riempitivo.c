@@ -10,7 +10,7 @@
  * Attivita' ognuna si vede con il suo nome). Init, all'accensione, fa partire tutto
  * quello che trova in quella cartella, se c'e'. Le prove che vogliono i riempitivi
  * accendono il sistema con quel disco (DISCO in test/prove/). */
-#include "libreria.h"
+#include "corekit/corekit.h"
 
 int main(void) {
     for (;;) dormi(60 * 60 * 1000);   /* un'ora alla volta, per sempre */

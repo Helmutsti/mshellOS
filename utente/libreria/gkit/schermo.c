@@ -31,7 +31,6 @@
 #include <drm/drm_mode.h>
 
 #include "gkit.h"
-#include "interno.h"
 
 #define LARGHEZZA_VOLUTA 1280
 #define ALTEZZA_VOLUTA    800

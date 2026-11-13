@@ -30,7 +30,7 @@
 #include <unistd.h>
 #include <linux/input.h>
 
-#include "libreria.h"
+#include "corekit/corekit.h"
 
 #define D_TUBO 0            /* prestato da init: qui si scrivono gli eventi */
 #define MAX_DISPOSITIVI 16

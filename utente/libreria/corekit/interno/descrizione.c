@@ -1,4 +1,4 @@
-/* La libreria dei programmi: leggere il manifesto di un'applicazione (descrizione.h).
+/* CoreKit: leggere il manifesto di un'applicazione (sistema/descrizione.h).
  *
  * Il manifesto e' TOML; lo legge tomlc99 (esterni/tomlc99: cktan/tomlc99, commit
  * 62ce93c, licenza MIT), che da' le voci come tabelle, elenchi e valori. Qui si copiano
@@ -6,14 +6,14 @@
  * del tipo sbagliato (un numero al posto di un testo) o troppo lunga, la si segna in
  * 'sbagliate', cosi' chi controlla il pacchetto (pacchetto.c) puo' spiegarlo.
  *
- * Usa solo la libreria C e le chiamate di Linux (open, read), non libreria.h: cosi' si
+ * Usa solo la libreria C e le chiamate di Linux (open, read), non corekit.h: cosi' si
  * compila anche sul computer che compila, per le prove (test/pacchetti/). */
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "descrizione.h"
+#include "../sistema/descrizione.h"
 #include "esterni/tomlc99/toml.h"
 
 const char *cartelle_applicazioni[QUANTE_CARTELLE_APPLICAZIONI] = { "/system/apps", "/data/apps" };

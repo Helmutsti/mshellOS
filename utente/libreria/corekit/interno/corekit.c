@@ -1,6 +1,6 @@
-/* La libreria dei programmi, sopra Linux: i programmi, il tempo, i processi.
+/* CoreKit, sopra Linux: i programmi, il tempo, i processi.
  *
- * Ogni funzione di libreria.h fa le chiamate di sistema di Linux che servono, attraverso
+ * Ogni funzione di corekit.h fa le chiamate di sistema di Linux che servono, attraverso
  * la libreria C musl. Ecco dove sta ogni servizio che una volta dava mkernel:
  *
  *   scrivi                     write sul REGISTRO, la console del kernel (interno.h)
@@ -32,7 +32,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "libreria.h"
+#include "../corekit.h"
 #include "interno.h"
 
 /* --- il registro --- */

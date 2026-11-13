@@ -86,7 +86,7 @@
  * Scrive nel registro righe brevi, come gli altri servizi, per esempio:
  *   network: firewall attivo (ingresso bloccato, uscita libera, inoltro bloccato, ping ammesso)
  *   network: eth0 10.0.2.15/24, gateway 10.0.2.2, dns 10.0.2.3 */
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>

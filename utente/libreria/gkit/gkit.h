@@ -15,7 +15,7 @@
 #ifndef GKIT_H
 #define GKIT_H
 
-#include "libreria.h"
+#include "corekit/corekit.h"
 
 /* =====================================================================================
  * 1. IL PROTOCOLLO DELLE FINESTRE

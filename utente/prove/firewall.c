@@ -13,7 +13,7 @@
  *     qui non arriva niente, e il PC non riceve la riga;
  *   - con incoming=allow (disco_firewall_aperto.img) arriva: qui si scrive
  *     "firewall: connessione arrivata da ..." e il PC riceve la riga. */
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>

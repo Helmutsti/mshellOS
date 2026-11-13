@@ -6,8 +6,8 @@
  * l'altra, le cose che domani fara' lo Store con contatore.app (sulla Scrivania della
  * persona), e scrive nella seriale come va ogni passo. Alla fine "pacchetti: tutto bene",
  * oppure "pacchetti: fallita" con il passo. */
-#include "libreria.h"
-#include "launcher.h"
+#include "corekit/corekit.h"
+#include "corekit/sistema/launcher.h"
 
 #define PACCHETTO "/data/users/1000/home/Scrivania/contatore.app"
 #define NON_PACCHETTO "/data/users/1000/home/leggimi.txt"

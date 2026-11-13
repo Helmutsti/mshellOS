@@ -1,10 +1,10 @@
-/* La libreria dei programmi, sopra Linux: i file e le cartelle.
+/* CoreKit, sopra Linux: i file e le cartelle (corekit.h).
  *
  * Le partizioni del disco sono ext4 (system, "/", in sola lettura; data, /data, che si
  * scrive: vedi chiamate.h), che Linux legge e scrive: le funzioni qui sono quasi
  * sempre una chiamata di Linux sola (open, read, write, stat, statvfs, mkdir, unlink,
  * rename, chmod, chown), con i percorsi controllati da percorso_vero e gli errori tradotti da
- * errore_file (libreria.c).
+ * errore_file (corekit.c).
  *
  * LE CARTELLE. Linux da' le voci di una cartella in un ordine suo (per ext4, quello di una
  * tabella "hash": in pratica a caso). I programmi invece le vogliono sempre nello stesso
@@ -25,7 +25,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 
-#include "libreria.h"
+#include "../corekit.h"
 #include "interno.h"
 
 /* --- le cartelle aperte --- */

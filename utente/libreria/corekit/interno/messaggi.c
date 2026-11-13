@@ -1,4 +1,4 @@
-/* La libreria dei programmi: i messaggi tra i servizi e i loro clienti.
+/* CoreKit: i messaggi tra i servizi e i loro clienti (messaggi.h).
  *
  * PERCHE'. Un servizio (network, domani il firewall, gli account...) riceve richieste dai
  * suoi clienti (le app, la shell, la scrivania) sulla sua PORTA: un socket con un nome in
@@ -88,7 +88,7 @@
  * sempre si' (vedi sotto, accanto al suo codice). */
 #include <string.h>
 
-#include "messaggi.h"
+#include "../messaggi.h"
 
 /* --- costruire --- */
 

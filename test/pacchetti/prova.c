@@ -1,4 +1,4 @@
-/* prova.c: le prove della libreria dei pacchetti (utente/libreria/pacchetto.c), sul
+/* prova.c: le prove dei pacchetti di CoreKit (utente/libreria/corekit/interno/pacchetto.c), sul
  * computer che compila, dentro il container di Alpine (vedi prova.sh).
  *
  * Le cartelle delle app e delle persone si spostano in /tmp/prova (cartelle_applicazioni e
@@ -15,7 +15,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "pacchetto.h"
+#include "corekit/sistema/pacchetto.h"
 
 #define RADICE "/tmp/prova"
 static const char *pacchetti;
@@ -103,7 +103,7 @@ static void prova_togli(void) {
     char msg[MAX_MESSAGGIO_TOGLI];
     /* i dati si cancellano con l'identita' della persona: le sue cartelle devono essere sue */
     system("chown 1000:1000 " RADICE "/data/users/1000 " DATI);
-    /* come nel launcher (libreria.c): i figli finiti spariscono da soli */
+    /* come nel launcher (corekit.c): i figli finiti spariscono da soli */
     signal(SIGCHLD, SIG_IGN);
 
     /* percorsi pericolosi: rifiutati, niente cancellato */

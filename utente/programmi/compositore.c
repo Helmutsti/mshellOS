@@ -54,11 +54,11 @@
  * poche cose del design che deve disegnare lui (la barra di emergenza, uguale a quella delle
  * applicazioni, e l'ombra e il vetro delle finestre) gliele da' UIKit, con le sole funzioni
  * di uikit_compositore.h. */
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
 #include "uikit/uikit_compositore.h"
-#include "pacchetto.h"   /* chi puo' cambiare il tema (CAMBIA_TEMA) */
+#include "corekit/sistema/pacchetto.h"   /* chi puo' cambiare il tema (CAMBIA_TEMA) */
 
 /* Le risorse che init gli passa gia' aperte (vedi sopra). */
 #define D_SCHERMO 0

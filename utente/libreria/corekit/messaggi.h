@@ -1,5 +1,6 @@
-/* I messaggi tra i servizi e i loro clienti: lo standard di SISTEMA.md (sezione 3, "Le
- * porte"). Il perche' e il come, con un esempio di scambio, sono in testa a messaggi.c.
+/* CoreKit, pubblico: i messaggi tra i servizi e i loro clienti, lo standard di SISTEMA.md
+ * (sezione 3, "Le porte"). Il perche' e il come, con un esempio di scambio, sono in testa a
+ * interno/messaggi.c.
  *
  * In breve: un messaggio e' testo, righe "chiave=valore" separate da a capo; una chiave
  * puo' ripetersi; le chiavi sono in inglese minuscolo. Le chiavi della busta, uguali per
@@ -9,11 +10,11 @@
  *     result    nella risposta: ok, denied, invalid, error, timeout (ESITO_... qui sotto)
  * Il resto delle chiavi lo decide ogni servizio, e lo scrive accanto al suo codice.
  * Un messaggio viaggia come UN pacchetto sulle porte (ascolta, collega, accetta in
- * libreria.h), con al massimo un descrittore allegato. */
+ * corekit.h), con al massimo un descrittore allegato. */
 #ifndef MESSAGGI_H
 #define MESSAGGI_H
 
-#include "libreria.h"
+#include "corekit.h"
 
 /* Le chiavi della busta. */
 #define CHIAVE_RICHIESTA "request"

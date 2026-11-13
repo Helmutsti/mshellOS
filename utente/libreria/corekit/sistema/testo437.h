@@ -1,11 +1,12 @@
-/* testo437.h: da UTF-8 alla tabella di caratteri dei font del sistema (code page 437).
+/* CoreKit, del sistema. testo437.h: da UTF-8 alla tabella di caratteri dei font del sistema
+ * (code page 437).
  *
  * I testi che arrivano dal launcher (le frasi dei problemi, i messaggi) e quelli dei
  * manifesti (nome, autore, descrizione) sono in UTF-8; i font del sistema oggi hanno solo
  * i caratteri della code page 437 (gkit_disegno.h, glifo_di). Qui si traduce: le lettere
  * accentate che la 437 ha diventano le sue, le virgolette e i trattini "tipografici"
  * diventano quelli semplici, il resto diventa "?". Le virgolette basse (U+00AB, U+00BB) la 437 le ha,
- * ma i font del sistema no: diventano ". Era dello Store; ora sta nella libreria perche' la
+ * ma i font del sistema no: diventano ". Era dello Store; ora sta in CoreKit perche' la
  * usa anche la scrivania (i nomi delle app nel vassoio). */
 #ifndef TESTO437_H
 #define TESTO437_H

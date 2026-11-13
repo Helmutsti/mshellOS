@@ -50,7 +50,7 @@
  * launcher.h: aprire una cartella, anche dalla scrivania, vuol dire far partire Files su
  * di lei); senza, la casa (/home). */
 #include "uikit/uikit.h"
-#include "launcher.h"     /* aprire un pacchetto .app: lo chiede al launcher */
+#include "corekit/sistema/launcher.h"     /* aprire un pacchetto .app: lo chiede al launcher */
 
 #define MAX_ELEMENTI 256
 #define MAX_LUNGO    MAX_PERCORSO   /* un percorso in Files */

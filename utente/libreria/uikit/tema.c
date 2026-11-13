@@ -18,7 +18,7 @@
  * il tema giusto fin dal primo disegno. (Si puo' richiamare a mano per rileggere il file.) */
 #include <string.h>
 
-#include "libreria.h"
+#include "corekit/corekit.h"
 #include "tema.h"
 
 #define FILE_TEMA "/data/users/1000/preferences/tema"

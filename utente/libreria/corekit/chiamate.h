@@ -1,13 +1,13 @@
-/* I servizi del sistema visti dai programmi: i numeri, i tipi e le regole che usano la
- * libreria (libreria.h) e i programmi.
+/* CoreKit, pubblico: i servizi del sistema visti dai programmi. I numeri, i tipi e le
+ * regole che usano corekit.h (che lo include) e i programmi.
  *
  * Sotto c'e' il kernel Linux. Un programma gli chiede le cose con le CHIAMATE DI SISTEMA
  * di Linux (open, read, socket, mmap...), attraverso la libreria C musl. I programmi pero'
- * non le usano direttamente: usano le funzioni di libreria.h (apri, manda, ricevi,
+ * non le usano direttamente: usano le funzioni di corekit.h (apri, manda, ricevi,
  * foglio...), che le fanno per loro. Le funzioni sono le stesse di quando sotto c'era
  * mkernel, il kernel didattico (che vive nel ramo "mykernel"): e' cambiato solo il "come",
- * dentro la libreria (libreria.c, comunicazione.c e, per lo schermo, gkit/schermo.c). Qui
- * sotto c'e' il "cosa": il contratto tra la libreria e i programmi. */
+ * dentro la libreria (corekit/interno/: corekit.c, file.c, comunicazione.c; per lo schermo
+ * gkit/schermo.c). Qui sotto c'e' il "cosa": il contratto tra la libreria e i programmi. */
 #ifndef CHIAMATE_H
 #define CHIAMATE_H
 

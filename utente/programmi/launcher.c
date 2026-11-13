@@ -26,10 +26,10 @@
  * launcher cade, nessun altro puo' prenderlo, e chi chiede nel frattempo aspetta.
  * Le richieste si servono una alla volta: un'installazione grossa fa aspettare gli altri
  * per il tempo di scompattarla. */
-#include "libreria.h"
-#include "launcher.h"
-#include "descrizione.h"
-#include "pacchetto.h"
+#include "corekit/corekit.h"
+#include "corekit/sistema/launcher.h"
+#include "corekit/sistema/descrizione.h"
+#include "corekit/sistema/pacchetto.h"
 
 #define D_ASCOLTO 0      /* prestato da init */
 #define MAX_CLIENTI 8

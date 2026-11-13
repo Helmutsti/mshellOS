@@ -63,7 +63,7 @@ from qemu import ErroreProva, PUNTO_VUOTO, pixel_diversi  # noqa: E402
 
 LARGHEZZA, ALTEZZA = 1280, 800
 IMMAGINE = __import__("os").environ.get("SANDBOX_IMMAGINE", "mshell-sandbox")
-ATTREZZI = "mshell-sandbox-attrezzi"
+ATTREZZI = "mshell-sandbox-attrezzi-2"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
 OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", "mshell-sandbox-oggetti")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
@@ -118,7 +118,7 @@ def prepara_attrezzi():
         return
     print("sandbox: preparo gli attrezzi (una volta sola) ...", flush=True)
     nome = f"{ATTREZZI}-{os.getpid()}"
-    comando = ("apk add --cache-dir /w/build/scarico/host clang lld make zip tar >/dev/null && "
+    comando = ("apk add --cache-dir /w/build/scarico/host clang lld binutils make zip tar >/dev/null && "
                "apk --arch x86_64 --root /radice --initdb --no-scripts "
                "--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/x86_64 "
                "--cache-dir /w/build/scarico/x86_64 add musl-dev linux-headers compiler-rt >/dev/null")
