@@ -94,6 +94,13 @@ poi la correggiamo"). È una shell stupida, `utente/programmi/shell.c`, con solo
 finisce con `exit`. La shell abbassa da sé il livello dei messaggi del kernel (equivalente di
 `dmesg -n 1`), così non si mescolano con quello che si scrive. La riga la corregge il kernel
 (la seriale è un terminale normale: eco e backspace); Ctrl-D come `exit`.
+Ogni altra parola fa partire un **programma**: con `/` è un percorso (assoluto o relativo alla
+cartella), senza si cerca in `/system/bin` e poi in `/data/users/<uid>/bin`. Le parole si
+dividono agli spazi, `"tra virgolette"` è una parola sola (niente variabili, tubi, redirezioni).
+Il programma gira nella cartella della shell, con PWD e HOME=/home, in primo piano: ha lui il
+terminale (Ctrl-C arriva a lui), poi la shell se lo riprende e dice l'esito se non è 0. Ctrl-Z
+non mette da parte niente (il programma riparte subito). Comandi veri (busybox, toybox o nostri)
+ancora da decidere: la prova usa `utente/prove/argomenti.c`, nel disco `disco_shell.img`.
 
 Per usarla: nella finestra di QEMU apri la seriale, **View (Visualizza) -> serial0** (compare il
 registro dell'avvio e, in fondo, il prompt `/ # `; se non si vede, Invio). Per tornare allo

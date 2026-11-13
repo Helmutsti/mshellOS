@@ -4,14 +4,38 @@
  *   - nel TERMINALE (utente/programmi/terminale.c, l'icona "Shell" della scrivania), come
  *     SISTEMA (uid 0): la fa partire il launcher (APRI_SHELL), con il terminale finto (pty)
  *     del terminale come 0, 1 e 2.
- * Quale dei due lo dice il descrittore 0: se e' un terminale si usa lui, se no la seriale.
+ * Quale dei due lo dice il descrittore 0: se e' un terminale si usa lui, se no la seriale,
+ * che la shell apre e mette lei ai posti 0, 1 e 2. Da li' in poi i due casi sono uguali.
  *
- * Sa fare solo muoversi tra le cartelle e guardarle:
+ * I comandi interni, che hanno la precedenza:
  *     pwd           la cartella in cui siamo
  *     cd [cartella] ci si sposta ("cd" da solo: la radice, "cd .." sale)
  *     ls [-l] [percorso]   cosa c'e' dentro; -l: tipo, permessi, proprietario, misura
  *     help          l'elenco dei comandi
  *     exit          finisce (init la rifa' partire)
+ * Ogni altra parola e' un PROGRAMMA da far partire (un comando e' un programma, non
+ * un'app: SISTEMA.md). Una parola con '/' e' un percorso, assoluto o relativo alla
+ * cartella in cui siamo, e si esegue quello. Una senza '/' si cerca PRIMA in /system/bin,
+ * POI in /data/users/<uid>/bin (uid di chi esegue la shell): niente sovrapposizioni di
+ * cartelle, il primo che c'e' vince.
+ *
+ * LE PAROLE: la riga si divide agli spazi; tra virgolette doppie anche gli spazi fanno parte
+ * della parola ("due tre" e' una parola sola, le virgolette si tolgono). Nient'altro: niente
+ * variabili, niente tubi (|), niente redirezioni (>, <). Se serviranno, si decidono.
+ *
+ * FAR PARTIRE UN PROGRAMMA (esegui_programma): fork fa una copia della shell, la copia va
+ * nella cartella in cui siamo e con fexecve diventa il programma, con le parole come
+ * argomenti e un ambiente minimo (PWD e HOME, vedi sotto). La shell aspetta che finisca e
+ * dice l'esito se non e' 0 ("uscito con 2", "chiuso dal segnale 2 ..."). Il file del
+ * programma e la cartella li apre la shell con le funzioni di CoreKit (che conoscono
+ * /home), prima di fork: il figlio usa solo i loro descrittori (fexecve, fchdir).
+ *
+ * IL TERMINALE AL COMANDO: la shell e' a capo di una sessione sua, di cui il terminale
+ * (seriale o pty) e' il terminale di controllo. Ogni programma parte in un gruppo di
+ * processi suo (setpgid) e la shell gli da' il terminale (tcsetpgrp): cosi' Ctrl-C (SIGINT)
+ * arriva al programma e non a lei. Quando finisce, la shell si riprende il terminale e
+ * rimette i suoi modi (se il programma li aveva cambiati). Ctrl-Z ferma il programma, ma la
+ * shell non sa ancora tenere da parte i programmi fermati: lo rimette subito in moto.
  *
  * LA RIGA la legge e la corregge il kernel: la seriale e' un terminale in modo normale,
  * che fa da se' l'eco di quello che si scrive e il tasto di cancellazione (backspace); a
@@ -20,12 +44,16 @@
  * La cartella in cui siamo la tiene la shell (non il kernel): i percorsi si rendono
  * assoluti qui, e poi si danno alle funzioni della libreria, che vogliono solo percorsi
  * assoluti. "/home" e' la casa di chi chiede: sulla seriale (uid 0) /data/users/0/home,
- * anche nel terminale (la shell e' sistema in tutti e due i posti). */
+ * anche nel terminale (la shell e' sistema in tutti e due i posti). Ai programmi la
+ * cartella arriva gia' tradotta (fchdir), ma PWD e HOME sono scritti come li vede la shell
+ * (HOME=/home): un programma che non usa CoreKit non sa che /home va tradotta. */
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "corekit/corekit.h"
@@ -37,9 +65,11 @@
 #endif
 
 #define MAX_RIGA 4200
-#define MAX_PAROLE 8
+#define MAX_PAROLE 64
 
-static int tty = -1;                    /* il terminale: si legge e si scrive qui */
+static const int tty = 0;               /* il terminale: si legge e si scrive qui (anche 1 e 2) */
+static int terminale_nostro;            /* 1: e' il terminale di controllo della nostra sessione,
+                                         * e lo si puo' dare ai programmi (tcsetpgrp) */
 static int a_colori;                    /* nel terminale della finestra: colori e grassetto */
 static char cartella[MAX_PERCORSO] = "/";
 
@@ -342,6 +372,11 @@ static void comando_help(void) {
         riga_help("ls -l", "elenca con permessi e dimensioni");
         riga_help("help", "mostra questo elenco");
         riga_help("exit", "chiude il terminale");
+        sgr(GRIGIO);
+        dici("Ogni altro nome e' un programma: si cerca in /system/bin, poi in /data/users/");
+        dici_numero(getuid(), 0);
+        dici("/bin.\nUn percorso (con /) fa partire quel file.\n");
+        sgr(NORMALE);
         return;
     }
     dici("comandi:\n"
@@ -349,14 +384,215 @@ static void comando_help(void) {
          "  cd [cartella]        si sposta (da solo: la radice; cd .. sale)\n"
          "  ls [-l] [percorso]   cosa c'e' dentro (-l: tipo, permessi, proprietario, misura)\n"
          "  help                 questo elenco\n"
-         "  exit                 finisce (sulla seriale init la rifa' partire)\n");
+         "  exit                 finisce (sulla seriale init la rifa' partire)\n"
+         "  nome [argomenti]     fa partire il programma: si cerca in /system/bin, poi in\n"
+         "                       /data/users/");
+    dici_numero(getuid(), 0);
+    dici("/bin; con '/' e' un percorso\n"
+         "le parole si dividono agli spazi; \"tra virgolette\" e' una parola sola\n");
+}
+
+/* --- far partire i programmi --- */
+
+static char *metti(char *d, const char *s) { while (*s) *d++ = *s++; *d = 0; return d; }
+
+static char *metti_numero(char *d, unsigned long long n) {
+    char c[24];
+    int k = 0;
+    do { c[k++] = (char)('0' + n % 10); n /= 10; } while (n);
+    while (k) *d++ = c[--k];
+    *d = 0;
+    return d;
+}
+
+static int ha_barra(const char *s) {
+    for (; *s; s++) if (*s == '/') return 1;
+    return 0;
+}
+
+/* Dove sta il programma 'nome', in 'percorso' (assoluto, come lo vuole la libreria).
+ * Con una '/' e' gia' un percorso; senza, si cerca in /system/bin e poi in
+ * /data/users/<uid>/bin: il primo file che c'e' vince. 0, o un ERRORE_... */
+static int trova_programma(const char *nome, char *percorso) {
+    if (ha_barra(nome)) return rendi_assoluto(nome, percorso);
+    if (lunghezza(nome) > MAX_NOME_FILE - 1) return ERRORE_NOME;
+    for (int dove = 0; dove < 2; dove++) {
+        char *d = percorso;
+        if (dove == 0) d = metti(d, "/system/bin/");
+        else d = metti(metti_numero(metti(d, "/data/users/"), getuid()), "/bin/");
+        metti(d, nome);
+        struct info_file i;
+        if (info(percorso, &i) == 0 && i.tipo == TIPO_FILE) return 0;
+    }
+    return ERRORE_NON_TROVATO;
+}
+
+/* "nome: perche'", in rosso, con il perche' da un ERRORE_... */
+static void errore_programma(const char *nome, int e) {
+    sgr(ROSSO);
+    dici(nome); dici(": "); dici(errore_in_parole(e, "non trovato"));
+    sgr(NORMALE);
+    dici("\n");
+}
+
+/* Perche' execve non e' riuscito, in parole. */
+static const char *errore_esecuzione(int e) {
+    switch (e) {
+    case ENOENT:  return ": non trovato (o manca il programma che lo deve leggere)";
+    case EACCES:
+    case EPERM:   return ": permesso negato";
+    case ENOEXEC: return ": non e' un programma che si possa eseguire";
+    case ENOMEM:  return ": memoria finita";
+    case E2BIG:   return ": argomenti troppo lunghi";
+    default:      return ": non si puo' eseguire";
+    }
+}
+
+/* Il nome di un segnale, in parole: quelli che chiudono un programma. */
+static const char *nome_segnale(int s) {
+    switch (s) {
+    case SIGHUP:  return " (terminale chiuso)";
+    case SIGINT:  return " (interrotto, Ctrl-C)";
+    case SIGQUIT: return " (uscita, Ctrl-\\)";
+    case SIGILL:  return " (istruzione non valida)";
+    case SIGABRT: return " (si e' interrotto da solo)";
+    case SIGBUS:  return " (errore di bus)";
+    case SIGFPE:  return " (errore di calcolo)";
+    case SIGKILL: return " (terminato a forza)";
+    case SIGSEGV: return " (accesso alla memoria non valido)";
+    case SIGPIPE: return " (tubo chiuso)";
+    case SIGTERM: return " (terminato)";
+    default:      return "";
+    }
+}
+
+/* I segnali che la shell tratta a modo suo: SIGINT lo prende (al_ctrl_c), gli altri li
+ * ignora (Ctrl-\, Ctrl-Z, e quelli che il kernel manda a chi usa il terminale senza
+ * averlo). Un programma nuovo deve trovarli come li trova chiunque, e execve lascia
+ * ignorato quello che era ignorato: il figlio li rimette a posto. */
+static const int segnali_della_shell[] = { SIGINT, SIGQUIT, SIGTSTP, SIGTTIN, SIGTTOU };
+#define QUANTI_SEGNALI ((int)(sizeof segnali_della_shell / sizeof segnali_della_shell[0]))
+
+/* Fa partire il programma parola[0], con le parole come argomenti (parola[] finisce con
+ * 0), gli da' il terminale e aspetta che finisca. */
+static void esegui_programma(char **parola) {
+    const char *nome = parola[0];
+    char percorso[MAX_PERCORSO];
+    struct info_file i;
+    int e = trova_programma(nome, percorso);
+    if (e == ERRORE_NON_TROVATO && !ha_barra(nome)) {
+        dici_errore(nome, ": comando sconosciuto (scrivi help)", "");
+        return;
+    }
+    if (e == 0) e = info(percorso, &i);
+    if (e < 0) { errore_programma(nome, e); return; }
+    if (i.tipo == TIPO_CARTELLA) { dici_errore(nome, ": e' una cartella", ""); return; }
+    if (i.tipo != TIPO_FILE || !(i.permessi & 0111)) {
+        dici_errore(nome, ": non si puo' eseguire (non e' un programma)", "");
+        return;
+    }
+    /* il file e la cartella si aprono qui, con la libreria (che sa cos'e' /home): il
+     * figlio usa solo i descrittori. Tutti e due si chiudono da soli all'execve. */
+    int programma = apri(percorso, APRI_LEGGERE);
+    if (programma < 0) { errore_programma(nome, programma); return; }
+    int qui = apri(cartella, APRI_LEGGERE);
+    if (qui < 0) { chiudi(programma); errore(nome, cartella, qui); return; }
+    /* l'ambiente: la cartella e la casa, come le vede la shell */
+    static char pwd[MAX_PERCORSO + 8];
+    metti(metti(pwd, "PWD="), cartella);
+    char *ambiente[] = { pwd, "HOME=/home", 0 };
+
+    /* i modi del terminale, da rimettere se il programma li cambia e non li rimette */
+    struct termios modi;
+    int modi_salvati = tcgetattr(tty, &modi) == 0;
+    /* come lancia in CoreKit: se execve non riesce, il figlio lo dice da un tubo che, se
+     * invece riesce, si chiude da solo (O_CLOEXEC) e la shell legge 0 byte */
+    int tubo[2];
+    if (pipe2(tubo, O_CLOEXEC) < 0) {
+        chiudi(programma); chiudi(qui);
+        dici_errore(nome, ": non si puo' eseguire (troppi file aperti)", "");
+        return;
+    }
+    pid_t figlio = fork();
+    if (figlio == 0) {
+        /* --- il figlio --- */
+        int errore_figlio = 0;
+        if (terminale_nostro) {
+            /* un gruppo suo, e il terminale a lui. Lo fanno tutti e due, figlio e shell,
+             * perche' non si sa chi arriva prima. SIGTTOU qui e' ancora ignorato: chiedere
+             * il terminale da un gruppo che non lo ha non ci ferma. */
+            setpgid(0, 0);
+            tcsetpgrp(tty, getpid());
+        }
+        struct sigaction normale = { .sa_handler = SIG_DFL };
+        for (int k = 0; k < QUANTI_SEGNALI; k++) sigaction(segnali_della_shell[k], &normale, 0);
+        if (fchdir(qui) < 0) errore_figlio = errno;
+        if (!errore_figlio) {
+            fexecve(programma, parola, ambiente);
+            errore_figlio = errno;
+        }
+        ssize_t scritti = write(tubo[1], &errore_figlio, sizeof errore_figlio);
+        (void)scritti;
+        _exit(127);
+    }
+    /* --- la shell --- */
+    close(tubo[1]);
+    chiudi(programma);
+    chiudi(qui);
+    if (figlio < 0) {
+        close(tubo[0]);
+        dici_errore(nome, ": non si puo' eseguire (fork non riuscito)", "");
+        return;
+    }
+    if (terminale_nostro) {
+        setpgid(figlio, figlio);
+        tcsetpgrp(tty, figlio);
+    }
+    int errore_figlio = 0;
+    ssize_t letti;
+    do letti = read(tubo[0], &errore_figlio, sizeof errore_figlio); while (letti < 0 && errno == EINTR);
+    close(tubo[0]);
+    int stato = 0;
+    for (;;) {
+        pid_t r = waitpid(figlio, &stato, WUNTRACED);
+        if (r < 0 && errno == EINTR) continue;
+        if (r > 0 && WIFSTOPPED(stato)) {
+            /* Ctrl-Z: la shell non sa tenere da parte un programma fermato; lo rimette
+             * subito in moto (il terminale e' ancora suo) */
+            kill(-figlio, SIGCONT);
+            continue;
+        }
+        if (r < 0) stato = 0;
+        break;
+    }
+    /* il terminale torna alla shell, con i suoi modi */
+    if (terminale_nostro) tcsetpgrp(tty, getpgrp());
+    if (modi_salvati) tcsetattr(tty, TCSADRAIN, &modi);
+
+    if (letti > 0) { dici_errore(nome, errore_esecuzione(errore_figlio), ""); return; }
+    if (WIFEXITED(stato) && WEXITSTATUS(stato) != 0) {
+        sgr(ROSSO);
+        dici(nome); dici(": uscito con ");
+        dici_numero((unsigned long long)WEXITSTATUS(stato), 0);
+        sgr(NORMALE);
+        dici("\n");
+    } else if (WIFSIGNALED(stato)) {
+        if (WTERMSIG(stato) == SIGINT) dici("\n");   /* dopo il ^C che il terminale ha scritto */
+        sgr(ROSSO);
+        dici(nome); dici(": chiuso dal segnale ");
+        dici_numero((unsigned long long)WTERMSIG(stato), 0);
+        dici(nome_segnale(WTERMSIG(stato)));
+        sgr(NORMALE);
+        dici("\n");
+    }
 }
 
 /* --- la riga --- */
 
-/* Ctrl-C nel terminale: il kernel manda SIGINT a chi lo usa, cioe' a noi. Non deve farci
- * finire: interrompe solo la lettura della riga (read torna con EINTR) e si ricomincia
- * con un prompt nuovo, come fanno le shell vere. */
+/* Ctrl-C mentre la shell aspetta una riga: il kernel manda SIGINT a chi ha il terminale,
+ * cioe' a noi. Non deve farci finire: interrompe solo la lettura della riga (read torna con
+ * EINTR) e si ricomincia con un prompt nuovo, come fanno le shell vere. Mentre gira un
+ * programma il terminale e' suo, e Ctrl-C arriva a lui. */
 static void al_ctrl_c(int segnale) { (void)segnale; }
 
 
@@ -365,17 +601,39 @@ static int uguali(const char *a, const char *b) {
     return *a == *b;
 }
 
+/* Divide la riga in parole, sul posto: spazi e tab separano; tra virgolette doppie no, e le
+ * virgolette si tolgono (a"b c"d e' la parola "ab cd"). Quante parole, -1 se sono troppe,
+ * -2 se una virgoletta non e' chiusa. Dopo l'ultima parola, in parola[] c'e' 0. */
+static int dividi(char *riga, char **parola) {
+    int quante = 0;
+    char *s = riga, *w = riga;           /* si legge da s e si scrive in w, che non lo supera */
+    for (;;) {
+        while (*s == ' ' || *s == '\t') s++;
+        if (!*s) break;
+        if (quante == MAX_PAROLE) return -1;
+        parola[quante++] = w;
+        while (*s && *s != ' ' && *s != '\t') {
+            if (*s == '"') {
+                for (s++; *s && *s != '"';) *w++ = *s++;
+                if (!*s) return -2;
+                s++;
+            } else {
+                *w++ = *s++;
+            }
+        }
+        if (*s) s++;                     /* prima si passa lo spazio, poi si chiude la parola */
+        *w++ = 0;
+    }
+    parola[quante] = 0;
+    return quante;
+}
+
 /* Un comando. Restituisce 1 per exit. */
 static int esegui(char *riga) {
-    char *parola[MAX_PAROLE];
-    int quante = 0;
-    for (char *s = riga; *s;) {
-        while (*s == ' ' || *s == '\t') *s++ = 0;
-        if (!*s) break;
-        if (quante == MAX_PAROLE) { dici_errore("troppe parole", "", ""); return 0; }
-        parola[quante++] = s;
-        while (*s && *s != ' ' && *s != '\t') s++;
-    }
+    char *parola[MAX_PAROLE + 1];
+    int quante = dividi(riga, parola);
+    if (quante == -1) { dici_errore("troppe parole", "", ""); return 0; }
+    if (quante == -2) { dici_errore("virgolette non chiuse", "", ""); return 0; }
     if (quante == 0) return 0;
     const char *c = parola[0];
     if (uguali(c, "pwd") || uguali(c, "help") || uguali(c, "exit")) {
@@ -399,7 +657,7 @@ static int esegui(char *riga) {
         }
         comando_ls(dove ? dove : ".", lungo);
     } else {
-        dici_errore(c, ": comando sconosciuto (scrivi help)", "");
+        esegui_programma(parola);         /* non e' un comando interno: un programma */
     }
     return 0;
 }
@@ -415,24 +673,34 @@ static void silenzia_kernel(void) {
 
 int main(void) {
     if (isatty(0)) {
-        /* il terminale della finestra: diventa il NOSTRO terminale (una sessione nuova, di
-         * cui lui e' il terminale di controllo), cosi' Ctrl-C arriva a noi come SIGINT */
-        tty = 0;
-        a_colori = 1;
-        setsid();
-        ioctl(0, TIOCSCTTY, 0);
-        struct sigaction sa = { .sa_handler = al_ctrl_c };   /* senza SA_RESTART: read si ferma */
-        sigaction(SIGINT, &sa, 0);
+        a_colori = 1;                          /* il terminale della finestra: e' gia' 0, 1 e 2 */
     } else {
-        tty = open(TERMINALE, O_RDWR | O_NOCTTY | O_CLOEXEC);
-        if (tty < 0) {
+        /* la seriale: la si mette ai posti 0, 1 e 2, come il pty nel terminale (li' la
+         * cercano i programmi che facciamo partire). La shell parte senza niente in quei
+         * posti: open da' il primo libero. */
+        int d = open(TERMINALE, O_RDWR | O_NOCTTY);
+        if (d < 0) {
             scrivi_testo("shell: non riesco ad aprire " TERMINALE "\n");
             dormi(5000);                       /* init ci fa ripartire: non a raffica */
             return 1;
         }
+        for (int k = 0; k < 3; k++) if (d != k) dup2(d, k);
+        if (d > 2) close(d);
         silenzia_kernel();
-        dici("\n");                            /* dopo i messaggi dell'avvio */
     }
+    /* il terminale diventa il NOSTRO terminale: una sessione nuova, di cui lui e' il
+     * terminale di controllo. Cosi' Ctrl-C arriva a noi come SIGINT, e possiamo darlo ai
+     * programmi che facciamo partire (tcsetpgrp). Se non riesce, i programmi partono lo
+     * stesso, ma Ctrl-C non li ferma. */
+    setsid();
+    terminale_nostro = ioctl(tty, TIOCSCTTY, 0) == 0;
+    struct sigaction sa = { .sa_handler = al_ctrl_c };   /* senza SA_RESTART: read si ferma */
+    sigaction(SIGINT, &sa, 0);
+    /* Ctrl-\ e Ctrl-Z non fermano la shell; e quando si riprende il terminale (tcsetpgrp)
+     * da un gruppo che non lo ha, il kernel non deve fermarla (SIGTTOU) */
+    struct sigaction ignora = { .sa_handler = SIG_IGN };
+    for (int k = 1; k < QUANTI_SEGNALI; k++) sigaction(segnali_della_shell[k], &ignora, 0);
+    if (!a_colori) dici("\n");                 /* sulla seriale: dopo i messaggi dell'avvio */
     if (a_colori && getuid() == 0) {            /* il terminale, come sistema: l'avviso del disegno */
         sgr(GRASSETTO(GIALLO)); dici("Attenzione:");
         sgr(SOLO(GIALLO)); dici(" questa shell ha i permessi di super amministratore.\n");

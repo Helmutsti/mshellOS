@@ -734,8 +734,21 @@ rm -f "$(vero /data/tests)"/rete "$(vero /data/tests)"/firewall
 metti_file "$B/oggetti/prove/messaggi" "/data/tests/messaggi" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_messaggi.img" $((MISURA_DATI * MB / 4096))
-rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco_messaggi.img pronto: con il programma messaggi in /data/tests"
+
+# IL DISCO DELLA PROVA DELLA SHELL: come disco_app.img, con in piu' il programma argomenti
+# (utente/prove/argomenti.c) tra i comandi del sistema, in /data/users/0/bin (dove la shell
+# cerca i comandi di uid 0, dopo /system/bin). Non in /data/tests: non deve partire da solo.
+# La prova si fa a mano sulla seriale, in QEMU, come spiegato in argomenti.c.
+cp "$B/disco_app.img" "$B/disco_shell.img"
+rm -f "$(vero /data/tests)"/messaggi
+rmdir "$(vero /data/tests)"
+metti_cartella /data/users/0 0 700 >/dev/null
+metti_file "$B/oggetti/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_shell.img" $((MISURA_DATI * MB / 4096))
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+echo "$B/disco_shell.img pronto: con il programma argomenti in /data/users/0/bin"
 
 rm -rf "$B/oggetti"
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"
