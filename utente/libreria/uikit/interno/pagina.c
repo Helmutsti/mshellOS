@@ -191,6 +191,8 @@ void pagina_aggiungi(struct pagina *g, struct widget *figlio) {
 }
 
 void pagina_svuota(struct pagina *g) {
+    for (int i = 0; i < g->base.quanti_figli - 1; i++)   /* l'ultimo e' la barra: resta */
+        widget_esce(g->base.figli[i]);
     g->base.figli[0] = &g->barra.base;
     g->base.quanti_figli = 1;
     g->barra.scorrimento.posizione = 0;
@@ -199,6 +201,7 @@ void pagina_svuota(struct pagina *g) {
 }
 
 void contenitore_svuota(struct contenitore *c) {
+    for (int i = 0; i < c->base.quanti_figli; i++) widget_esce(c->base.figli[i]);
     c->base.quanti_figli = 0;
     widget_cambiato(&c->base);
 }

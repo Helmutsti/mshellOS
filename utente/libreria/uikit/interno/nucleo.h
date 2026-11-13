@@ -18,8 +18,12 @@
 
 /* --- widget.c --- */
 
-/* Nascondere un widget (widget_nascondi) lo toglie da sotto il puntatore, se c'era lui o uno
- * dei suoi figli: lo fa widget.c con uikit_sotto (finestra_tk.c). */
+/* 'w' (con quello che contiene) sta per uscire dall'albero della finestra: se il widget sotto
+ * il puntatore o quello con il fuoco e' lui o sta dentro di lui, si spengono (uikit_sotto,
+ * uikit_fuoco). Da chiamare PRIMA di staccarlo; la chiamano tutti quelli che tolgono figli
+ * (pagina_svuota, contenitore_svuota, percorso_metti). Nascondere un widget (widget_nascondi)
+ * gli toglie invece solo il puntatore. */
+void widget_esce(struct widget *w);
 
 /* Il widget piu' interno sotto (x, y) che vuole sentire il puntatore, o 0. I widget
  * disabilitati (e quello che c'e' dentro) non si trovano. */

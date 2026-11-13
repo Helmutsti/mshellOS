@@ -309,6 +309,7 @@ void percorso_prepara(struct percorso *p, al_clic_percorso al_clic, void *dati) 
 
 void percorso_metti(struct percorso *p, const char *const *nomi, int quanti) {
     if (quanti > MAX_NOMI_PERCORSO) quanti = MAX_NOMI_PERCORSO;
+    for (int i = 0; i < p->base.quanti_figli; i++) widget_esce(p->base.figli[i]);   /* rifatti da capo */
     p->base.quanti_figli = 0;
     p->quanti = quanti;
     for (int i = 0; i < quanti; i++) {
@@ -321,10 +322,9 @@ void percorso_metti(struct percorso *p, const char *const *nomi, int quanti) {
     }
     struct finestra_tk *f = widget_finestra(&p->base);
     if (f->base.tipo == &tipo_finestra_tk) {   /* gia' in una finestra: si rifa' il suo posto */
-        /* i nomi sono stati rifatti da capo (spenti): UIKit deve riaccendere quello
-         * sotto il puntatore. (Il widget catturato, se era un nome, resta valido: i nomi
-         * stanno sempre negli stessi posti.) */
-        if (f->sotto && f->sotto->genitore == &p->base) f->sotto = 0;
+        /* il nome sotto il puntatore si e' spento prima di rifarli (widget_esce): lo
+         * riaccende il ciclo degli eventi. (Il widget catturato, se era un nome, resta
+         * valido: i nomi stanno sempre negli stessi posti.) */
         percorso_disponi(&p->base);
         widget_cambiato(&p->base);
     }

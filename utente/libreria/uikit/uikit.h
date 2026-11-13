@@ -904,7 +904,8 @@ void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, i
  *
  * IL WIDGET SOTTO IL PUNTATORE lo segue UIKit da sola, anche quando l'app cambia cosa si vede:
  * un widget nascosto (widget_nascondi), o dentro uno nascosto, smette di essere sotto il
- * puntatore e si spegne; quello nuovo si accende al prossimo movimento. */
+ * puntatore e si spegne; quello nuovo si accende al prossimo movimento. Un widget tolto dalla
+ * finestra (pagina_svuota, contenitore_svuota) perde anche il fuoco. */
 void finestra_tk_dai_fuoco(struct finestra_tk *f, struct widget *w);
 
 /* IL PUNTATORE, come lo consegna il ciclo degli eventi. Un clic su "chiudi" chiude; sulla

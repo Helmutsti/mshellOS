@@ -69,18 +69,37 @@ void widget_disabilita(struct widget *w, int disabilitato) {
     widget_cambiato(w);
 }
 
+/* UN WIDGET CHE SPARISCE. La finestra ricorda due widget: quello sotto il puntatore (acceso)
+ * e quello con il fuoco della tastiera. Se uno dei due e' 'w', o sta dentro 'w', e 'w' sparisce,
+ * la finestra non deve piu' ricordarlo: si spegne qui, in un posto solo.
+ *   - NASCOSTO (widget_nascondi): resta nell'albero, ma non si vede. Perde il puntatore; il
+ *     fuoco no (una vista nascosta che lo aveva lo ritrova quando ricompare, come prima).
+ *   - TOLTO dall'albero (widget_esce: pagina_svuota, contenitore_svuota, i nomi del percorso
+ *     rifatti): non e' piu' nella finestra. Perde il puntatore e il fuoco.
+ * Il widget nuovo sotto il puntatore lo trova il ciclo degli eventi al prossimo movimento. Il
+ * widget catturato (premuto) no: il ciclo lo usa ancora finche' il pulsante non si lascia, e
+ * poi lo dimentica da solo. Solo in una finestra: un widget preparato ma non ancora messo in
+ * una finestra non e' sotto niente. Va chiamato PRIMA di staccare 'w' (la finestra si trova
+ * risalendo da lui). */
+static int sta_in(const struct widget *w, const struct widget *in) {
+    for (; w; w = w->genitore)
+        if (w == in) return 1;
+    return 0;
+}
+
+static void spegni_in(struct widget *w, int anche_fuoco) {
+    struct finestra_tk *f = widget_finestra(w);
+    if (f->base.tipo != &tipo_finestra_tk) return;
+    if (sta_in(f->sotto, w)) uikit_sotto(f, 0);
+    if (anche_fuoco && sta_in(f->con_fuoco, w)) uikit_fuoco(f, 0);
+}
+
+void widget_esce(struct widget *w) { spegni_in(w, 1); }
+
 void widget_nascondi(struct widget *w, int nascosto) {
     w->nascosto = nascosto;
     if (!w->genitore || widget_visibile(w->genitore)) widget_segna(w);
-    /* se il puntatore era sopra di lui (o sopra uno dei suoi figli), non lo e' piu': si spegne
-     * subito, e non resta acceso da nascosto. Il widget nuovo sotto il puntatore lo trova il
-     * ciclo degli eventi al prossimo movimento. Solo in una finestra (un widget preparato ma
-     * non ancora messo in una finestra non e' sotto niente). */
-    if (!nascosto) return;
-    struct finestra_tk *f = widget_finestra(w);
-    if (f->base.tipo != &tipo_finestra_tk || !f->sotto) return;
-    for (const struct widget *s = f->sotto; s; s = s->genitore)
-        if (s == w) { uikit_sotto(f, 0); return; }
+    if (nascosto) spegni_in(w, 0);
 }
 
 int ombra_sporgenza(const struct strato_ombra *strati, int n) {
