@@ -1,6 +1,7 @@
 /* UIKit, i componenti piccoli: il messaggio in linea (un avviso, un errore o un'informazione
  * dentro la finestra). Le dichiarazioni e il disegno sono in messaggio.h. */
 #include "uikit/uikit.h"
+#include "uikit/interno/nucleo.h"
 
 /* Divide la spiegazione nelle righe che stanno nel messaggio largo 'largo' (tolti i margini e
  * il simbolo). Se la larghezza non si sa ancora (o e' troppo poca) non va a capo. Restituisce

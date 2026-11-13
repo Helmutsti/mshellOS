@@ -557,7 +557,7 @@ struct finestra_tk {
     char titolo[MAX_TITOLO];
     int l_fissa, a_fissa;              /* 0: la misura la decide il contenuto */
     int aree;                          /* 1: corpo a aree, padding CORPO_PADDING (finestra_tk_aree) */
-    int senza_margine;                 /* 1: il contenuto arriva fino ai bordi (finestra_tk_bordo) */
+    int senza_margine;                 /* 1: il contenuto arriva fino ai bordi (finestra_tk_bordo, interna) */
     struct finestra finestra;          /* il collegamento con il compositore */
     int attiva;                        /* ha il fuoco: e' in primo piano */
     int da_ridisegnare;                /* c'e' qualcosa da ridisegnare: le zone qui sotto */
@@ -635,10 +635,6 @@ void finestra_tk_barra(struct finestra_tk *f, struct widget *strumenti);
  * un'area (Files: a destra della barra laterale) la mette nel suo contenuto, in una colonna a
  * CORPO_GAP. Prima di uikit_esegui. */
 void finestra_tk_aree(struct finestra_tk *f);
-
-/* Il contenuto senza nessun margine, fino ai bordi della finestra: solo per chi disegna tutto
- * da se' (le scene dell'anteprima). Le applicazioni usano finestra_tk_aree. */
-void finestra_tk_bordo(struct finestra_tk *f);
 
 /* Cambia il titolo della finestra (per esempio, la cartella in cui si e'). Lo disegna la
  * finestra stessa, nella sua barra: basta ridisegnarla. */
@@ -899,13 +895,17 @@ void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, i
 
 /* --- il ciclo degli eventi --- */
 
-/* Il puntatore sopra un widget nuovo (o su nessuno): si spegne il vecchio, si accende
- * il nuovo. */
-void uikit_sotto(struct finestra_tk *f, struct widget *w);
-
-/* Da' il fuoco della tastiera a 'w' (0: a nessuno); chi lo aveva lo perde. Tutti e due si
- * ridisegnano. Di solito lo fa UIKit da sola, al clic su un widget che prende i tasti. */
-void uikit_fuoco(struct finestra_tk *f, struct widget *w);
+/* IL FUOCO DELLA TASTIERA. Di solito lo decide UIKit da sola: al clic, lo prende il widget sotto
+ * il puntatore, se prende i tasti. Questa e' per quando lo decide l'applicazione: all'apertura
+ * (il Terminale: i tasti vanno subito alla griglia) o quando comincia a scrivere qualcosa
+ * (Files: un nome nuovo). Da' il fuoco a 'w', un widget della finestra 'f' che prende i tasti
+ * (ha 'tasto' nel suo tipo); con 0 non lo ha piu' nessuno. Chi lo aveva lo perde, e tutti e
+ * due si ridisegnano. Un widget che non prende i tasti non lo riceve: niente cambia.
+ *
+ * IL WIDGET SOTTO IL PUNTATORE lo segue UIKit da sola, anche quando l'app cambia cosa si vede:
+ * un widget nascosto (widget_nascondi), o dentro uno nascosto, smette di essere sotto il
+ * puntatore e si spegne; quello nuovo si accende al prossimo movimento. */
+void finestra_tk_dai_fuoco(struct finestra_tk *f, struct widget *w);
 
 /* IL PUNTATORE, come lo consegna il ciclo degli eventi. Un clic su "chiudi" chiude; sulla
  * barra (o sul vuoto della barra degli strumenti) e' un "trascinami"; nel contenuto e tra gli strumenti cattura il widget

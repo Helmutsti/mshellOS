@@ -72,6 +72,15 @@ void widget_disabilita(struct widget *w, int disabilitato) {
 void widget_nascondi(struct widget *w, int nascosto) {
     w->nascosto = nascosto;
     if (!w->genitore || widget_visibile(w->genitore)) widget_segna(w);
+    /* se il puntatore era sopra di lui (o sopra uno dei suoi figli), non lo e' piu': si spegne
+     * subito, e non resta acceso da nascosto. Il widget nuovo sotto il puntatore lo trova il
+     * ciclo degli eventi al prossimo movimento. Solo in una finestra (un widget preparato ma
+     * non ancora messo in una finestra non e' sotto niente). */
+    if (!nascosto) return;
+    struct finestra_tk *f = widget_finestra(w);
+    if (f->base.tipo != &tipo_finestra_tk || !f->sotto) return;
+    for (const struct widget *s = f->sotto; s; s = s->genitore)
+        if (s == w) { uikit_sotto(f, 0); return; }
 }
 
 int ombra_sporgenza(const struct strato_ombra *strati, int n) {

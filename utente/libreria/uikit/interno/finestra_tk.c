@@ -353,6 +353,11 @@ void uikit_fuoco(struct finestra_tk *f, struct widget *w) {
     if (w) { w->fuoco = 1; widget_cambiato(w); }
 }
 
+void finestra_tk_dai_fuoco(struct finestra_tk *f, struct widget *w) {
+    if (w && !w->tipo->tasto) return;      /* non prende i tasti: il fuoco non e' suo */
+    uikit_fuoco(f, w);
+}
+
 void finestra_tk_ascolta_tasti(struct finestra_tk *f, ascolta_tasti_tk funzione, void *dati) {
     for (int i = 0; i < MAX_ASCOLTATORI; i++)
         if (f->ascoltatori[i].funzione == funzione && f->ascoltatori[i].dati == dati) return;

@@ -17,7 +17,8 @@
  * C'e' anche il CAMPO DEL NOME NUOVO (lo stato "Rinomina" dell'icona, che il disegno elenca tra
  * quelli da aggiungere): un campo di testo incassato con il fuoco, come campo_disegna, che
  * prende il posto del nome nel tile o nella riga. Lo usano solo la tabella e la griglia: e'
- * dichiarato in interno/nucleo.h. Il codice e' in interno/oggetti.c. */
+ * dichiarato in interno/nucleo.h, come il testo tagliato con "..." (testo_tagliato) che usano le
+ * righe e le voci dei componenti. Il codice e' in interno/oggetti.c. */
 #ifndef OGGETTI_H
 #define OGGETTI_H
 
@@ -59,14 +60,5 @@ int oggetto_di_file(const char *nome);
  * Scrivania, Documenti, Immagini, Download; le cartelle delle applicazioni) hanno il loro
  * simbolo, le altre sono la cartella semplice. */
 int oggetto_di_cartella(const char *percorso);
-
-/* --- il testo tagliato --- */
-
-/* Un testo su una riga, tagliato con "..." se e' piu' largo di 'largo' (il font non ha "…"),
- * centrato in verticale nel rettangolo alto 'a'. Allineato a destra (finisce in x + largo) se
- * 'destra'. Lo usano le righe e le voci che hanno "text-ellipsis" nel disegno (la tabella, il
- * menu, la barra laterale, le informazioni). */
-void testo_tagliato(struct pennello *p, const struct font *f, int x, int y, int a, int largo,
-                    const char *s, int destra);
 
 #endif

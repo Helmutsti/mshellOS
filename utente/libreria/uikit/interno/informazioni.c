@@ -3,6 +3,7 @@
  * (informazioni_mostra) e' in informazioni_mostra.c, perche' parla con il ciclo degli eventi.
  * Le dichiarazioni e il disegno sono in informazioni.h. */
 #include "uikit/uikit.h"
+#include "uikit/interno/nucleo.h"
 
 static void informazioni_misura(struct widget *w, int *l, int *a) {
     struct informazioni_tk *in = (struct informazioni_tk *)w;

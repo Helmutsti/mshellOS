@@ -15,21 +15,15 @@
  * disegna, cosi' il paragrafo segue il tema anche quando cambia (TEMA_CAMBIATO).
  *
  * Il testo e' gia' nella code page 437 del font (come per l'etichetta). Il codice e' in
- * interno/paragrafo.c. */
+ * interno/paragrafo.c; il taglio in righe (paragrafo_a_capo), che usano anche il messaggio e la
+ * riga di permesso, e' dichiarato in interno/nucleo.h. */
 #ifndef UIKIT_PARAGRAFO_H
 #define UIKIT_PARAGRAFO_H
 
 #define PARAGRAFO_TESTO 400                /* lettere al massimo, compreso lo 0 */
 #define PARAGRAFO_RIGHE 6                  /* righe al massimo: oltre, l'ultima finisce con "..." */
-#define PARAGRAFO_RIGA  200                /* lettere di una riga, compreso lo 0 */
 
 enum { PARAGRAFO_SINISTRA, PARAGRAFO_CENTRO, PARAGRAFO_DESTRA };
-
-/* Come testo_a_capo (dentro UIKit), ma con righe lunghe fino a PARAGRAFO_RIGA lettere (quella
- * e' fatta per i nomi dei file, e spezza dopo 92): spezza 'testo' in righe larghe al massimo
- * 'largo' pixel, al massimo 'massimo' righe, andando a capo dopo uno spazio o un trattino; se non
- * ci sta tutto, l'ultima riga finisce con "...". Quante righe. */
-int paragrafo_a_capo(const struct font *f, const char *testo, int largo, char righe[][PARAGRAFO_RIGA], int massimo);
 
 struct paragrafo {
     struct widget base;

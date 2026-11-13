@@ -2,6 +2,7 @@
  * l'etichetta di stato). Le dichiarazioni e il disegno sono in riga_permesso.h; l'etichetta la
  * disegna etichetta_stato.c (interno/componenti_piccoli.h). */
 #include "uikit/uikit.h"
+#include "uikit/interno/nucleo.h"
 #include "uikit/interno/componenti_piccoli.h"
 
 /* Quanto spazio resta ai testi nella riga larga 'largo': tolti il simbolo e, se c'e',

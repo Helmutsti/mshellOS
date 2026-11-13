@@ -535,7 +535,7 @@ static void comincia_rinomina(int e) {
     if (e < 0) return;
     rinominato = scelto = e;
     copia_testo(nome_nuovo, elementi[e].nome, MAX_NOME_FILE);
-    uikit_fuoco(&finestra, vista_attiva());      /* i tasti vanno al nome */
+    finestra_tk_dai_fuoco(&finestra, vista_attiva());   /* i tasti vanno al nome */
     sincronizza();
 }
 

@@ -5,8 +5,8 @@
  *   - i .c del nucleo, che se li dicono tra loro (per esempio la finestra segna le zone da
  *     ridisegnare, il ciclo degli eventi le ridisegna);
  *   - i .c dei componenti (menu.c, tabella.c, griglia.c...), che usano quelle del nucleo e
- *     se ne dicono alcune tra loro (in fondo: il testo che va a capo, il campo del nome nuovo,
- *     l'intestazione di un gruppo);
+ *     se ne dicono alcune tra loro (in fondo: il testo che va a capo o si taglia con "...", il
+ *     campo del nome nuovo, l'intestazione di un gruppo);
  *   - l'anteprima (strumenti/anteprima), che fa al posto del ciclo degli eventi: misura,
  *     dispone e disegna la finestra una volta.
  *
@@ -17,6 +17,9 @@
 #include "../uikit.h"
 
 /* --- widget.c --- */
+
+/* Nascondere un widget (widget_nascondi) lo toglie da sotto il puntatore, se c'era lui o uno
+ * dei suoi figli: lo fa widget.c con uikit_sotto (finestra_tk.c). */
 
 /* Il widget piu' interno sotto (x, y) che vuole sentire il puntatore, o 0. I widget
  * disabilitati (e quello che c'e' dentro) non si trovano. */
@@ -105,6 +108,22 @@ int finestra_tk_bloccata(const struct finestra_tk *f);
 /* La finestra in cui sta un widget: la radice del suo albero. */
 struct finestra_tk *widget_finestra(struct widget *w);
 
+/* Il puntatore sopra un widget nuovo (o su nessuno): si spegne il vecchio, si accende il
+ * nuovo. La chiamano il ciclo degli eventi, e i componenti che aprono, chiudono o nascondono
+ * qualcosa sotto il puntatore (l'avviso, il menu, widget_nascondi). Un'app non la usa: UIKit
+ * segue il puntatore da sola. */
+void uikit_sotto(struct finestra_tk *f, struct widget *w);
+
+/* Da' il fuoco della tastiera a 'w' (0: a nessuno), senza guardare se prende i tasti; chi lo
+ * aveva lo perde. Tutti e due si ridisegnano. La usano il ciclo degli eventi (al clic) e
+ * l'avviso; per le app c'e' finestra_tk_dai_fuoco (uikit.h). */
+void uikit_fuoco(struct finestra_tk *f, struct widget *w);
+
+/* Il contenuto senza nessun margine, fino ai bordi della finestra: solo per chi disegna tutto
+ * da se' (le scene dell'anteprima, che includono questo file). Le applicazioni usano
+ * finestra_tk_aree. */
+void finestra_tk_bordo(struct finestra_tk *f);
+
 /* Tutta la finestra (l'impaginazione e' cambiata, o il tema). */
 void uikit_cambiata_tutta(struct finestra_tk *f);
 
@@ -160,7 +179,25 @@ static inline int larghezza_pezzo(const struct font *f, const char *s, int da, i
 int testo_a_capo(const struct font *f, const char *testo, int largo,
                  char righe[][MAX_RIGA_NOME], int massimo);
 
+/* --- paragrafo.c --- */
+
+#define PARAGRAFO_RIGA  200                /* lettere di una riga, compreso lo 0 */
+
+/* Come testo_a_capo, ma con righe lunghe fino a PARAGRAFO_RIGA lettere (quella e' fatta per i
+ * nomi dei file, e spezza dopo 92): spezza 'testo' in righe larghe al massimo 'largo' pixel, al
+ * massimo 'massimo' righe, andando a capo dopo uno spazio o un trattino; se non ci sta tutto,
+ * l'ultima riga finisce con "...". Quante righe. Lo usano il paragrafo, il messaggio in linea e
+ * la riga di permesso. */
+int paragrafo_a_capo(const struct font *f, const char *testo, int largo, char righe[][PARAGRAFO_RIGA], int massimo);
+
 /* --- oggetti.c --- */
+
+/* Un testo su una riga, tagliato con "..." se e' piu' largo di 'largo' (il font non ha "…"),
+ * centrato in verticale nel rettangolo alto 'a'. Allineato a destra (finisce in x + largo) se
+ * 'destra'. Lo usano le righe e le voci che hanno "text-ellipsis" nel disegno (la tabella, il
+ * menu, la barra laterale, le informazioni). */
+void testo_tagliato(struct pennello *p, const struct font *f, int x, int y, int a, int largo,
+                    const char *s, int destra);
 
 #define RINOMINA_DENTRO   SPAZIO_8     /* nel campo, ai lati del testo (nel tile: SPAZIO_4) */
 #define RINOMINA_CURSORE  2            /* la larghezza del cursore */

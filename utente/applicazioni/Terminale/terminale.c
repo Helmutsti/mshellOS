@@ -294,7 +294,7 @@ int main(void) {
     schermo_misura(&schermo.base, &l, &a);
     finestra_tk_dimensione(&finestra, l + intorno, finestra_tk_corpo(&finestra) + a + intorno);
     finestra_tk_ascolta_tasti(&finestra, scorciatoie, 0);
-    uikit_fuoco(&finestra, &schermo.base);    /* la tastiera va alla griglia da subito */
+    finestra_tk_dai_fuoco(&finestra, &schermo.base);   /* la tastiera va alla griglia da subito */
     if (avvia_shell() == 0) {
         finestra_tk_guarda(&finestra, padrone, dalla_shell, 0);
     } else {

@@ -657,7 +657,6 @@ static void mostra_elenco_app(struct messaggio *esito_in_cima) {
     widget_nascondi(&strumenti.base, 1);
     widget_nascondi(&pg_dettaglio.base, 1);
     widget_nascondi(&pg_elenco.base, 0);
-    uikit_sotto(&finestra, 0);
     ridisponi();
 }
 
@@ -690,7 +689,6 @@ static void mostra_dettaglio(struct messaggio *esito_in_cima) {
     widget_nascondi(&strumenti.base, 0);
     widget_nascondi(&pg_elenco.base, 1);
     widget_nascondi(&pg_dettaglio.base, 0);
-    uikit_sotto(&finestra, 0);
     ridisponi();
 }
 
