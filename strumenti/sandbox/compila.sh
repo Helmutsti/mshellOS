@@ -150,6 +150,7 @@ find "$CASA_VERA" -exec touch -d "2025-12-31 18:02:00" {} +
 metti_file $O/bin/avvio /.sandbox/avvio 755
 metti_file $O/bin/prove/riempitivo /.sandbox/prove/riempitivo 755
 metti_file $O/bin/prove/pacchetti /.sandbox/prove/pacchetti 755
+metti_file $O/bin/prove/messaggi /.sandbox/prove/messaggi 755
 
 mkdir -p /w/build/sandbox
 (cd "$A" && tar -cf /w/build/sandbox/radice.tar --numeric-owner .)

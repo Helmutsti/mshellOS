@@ -56,7 +56,9 @@ int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int
 /* Un descrittore del programma 'numero': aspetta lo vede pronto quando e' finito. */
 int processo(int numero);
 
-/* --- i socket: parlare con gli altri programmi (vedi chiamate.h) --- */
+/* --- i socket: parlare con gli altri programmi (vedi chiamate.h) ---
+ * Lo standard dei messaggi tra i servizi e i loro clienti (righe chiave=valore, la
+ * busta request/id/result) e' sopra queste funzioni, in messaggi.h. */
 
 int ascolta(const char *nome);
 int collega(const char *nome);

@@ -11,7 +11,8 @@
  *     TEMA   "chiaro" (come il disco delle prove: il file del tema non c'e') o "scuro"
  *            (si scrive /data/users/1000/preferences/tema)
  *     PROVE  "nessuna" (disco.img), "riempitivi" (disco_prove.img: 6 riempitivi in
- *            /data/tests) o "pacchetti" (disco_pacchetti.img: il programma pacchetti)
+ *            /data/tests), "pacchetti" (disco_pacchetti.img: il programma pacchetti) o
+ *            "messaggi" (disco_messaggi.img: il programma messaggi)
  *
  * LE DATE DELLA CASA. In QEMU l'orologio e' fermo al 1/1/2026 e i file della casa sono del
  * 31/12/2025 alle 18:02: Files scrive "ieri, 18:02". Il container ha l'orologio vero (non
@@ -86,13 +87,13 @@ int main(int quanti, char **argomenti) {
         }
     }
 
-    if (!strcmp(prove, "riempitivi") || !strcmp(prove, "pacchetti")) {
+    if (!strcmp(prove, "riempitivi") || !strcmp(prove, "pacchetti") || !strcmp(prove, "messaggi")) {
         mkdir("/data/tests", 0755);
         chmod("/data/tests", 0755);
         if (!strcmp(prove, "riempitivi"))
             for (char nome[] = "riempitivo-1"; nome[11] <= '6'; nome[11]++) metti_prova("riempitivo", nome);
         else
-            metti_prova("pacchetti", "pacchetti");
+            metti_prova(prove, prove);      /* un programma solo, con lo stesso nome */
     }
 
     time_t ora = time(0);

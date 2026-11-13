@@ -74,6 +74,15 @@ Cosa deve dire:
 
 Il primo a usarlo sarà il servizio network. Compositore e launcher si allineeranno più avanti.
 
+**Dove sta il codice:** `utente/libreria/messaggi.h` e `messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
+- costruire: `messaggio_inizia`, `messaggio_aggiungi`, `messaggio_aggiungi_numero`, `messaggio_risposta` (la busta della risposta: stesso `id`, `result`);
+- leggere: `messaggio_valore`, `messaggio_prossimo` (per le chiavi ripetute), `messaggio_numero`, `messaggio_vale`;
+- mandare e ricevere, con un descrittore allegato facoltativo: `messaggio_manda`, `messaggio_ricevi`;
+- chi chiede: `chiedi` (mette l'`id` e aspetta la risposta con lo stesso `id`);
+- il servizio: `chi_chiede` (uid e programma dall'altra parte). Il controllo dei permessi si aggancerà lì, ancora da fare.
+
+Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
+
 ## 4. Domande aperte
 
 - **Comandi distribuiti dalla persona.** Già deciso: i comandi della persona stanno in `/data/users/<uid>/bin`, cercati dopo `/system/bin`. Da decidere: come si distribuiscono (un'app che li dichiara nel manifesto, un pacchetto di soli comandi, o solo copia a mano) e con quali poteri girano. Oggi un comando ha tutti i permessi della persona, come su Linux e Mac: va bene per i propri, è un rischio per quelli di altri.

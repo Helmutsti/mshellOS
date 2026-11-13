@@ -28,7 +28,7 @@ PROGRAMMI := init compositore launcher scrivania network shell
 APP_CARTELLE := $(sort $(wildcard utente/applicazioni/*/ utente/prove/applicazioni/*/))
 minuscolo = $(shell echo '$(1)' | tr A-Z a-z)
 
-FATTI := $(addprefix $(O)/bin/,$(PROGRAMMI) eventi avvio prove/riempitivo prove/pacchetti)
+FATTI := $(addprefix $(O)/bin/,$(PROGRAMMI) eventi avvio prove/riempitivo prove/pacchetti prove/messaggi)
 
 $(O)/%.o: %.c
 	@mkdir -p $(@D)

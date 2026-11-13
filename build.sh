@@ -38,6 +38,7 @@
 #       disco_prove.img  il disco delle prove automatiche: lo stesso, con in piu' i
 #                      programmi di utente/prove in /data/tests (vedi in fondo al passo 6)
 #       disco_rete.img   per la prova della rete, in QEMU: il programma rete in /data/tests
+#       disco_messaggi.img  per la prova dei messaggi tra servizi: il programma messaggi
 #   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
@@ -662,8 +663,18 @@ cp "$B/disco_app.img" "$B/disco_rete.img"
 rm -f "$(vero /data/tests)"/pacchetti
 metti_file "$B/oggetti/prove/rete" "/data/tests/rete" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_rete.img" $((MISURA_DATI * MB / 4096))
-rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco_rete.img pronto: con il programma rete in /data/tests"
+
+# IL DISCO DELLA PROVA DEI MESSAGGI: lo stesso, ma in /data/tests c'e' solo il programma
+# messaggi (utente/prove/messaggi.c), che prova lo standard dei messaggi tra servizi e
+# clienti (messaggi.h) facendo da servizio finto e da cliente. Lo usa test/prove/messaggi.py.
+cp "$B/disco_app.img" "$B/disco_messaggi.img"
+rm -f "$(vero /data/tests)"/rete
+metti_file "$B/oggetti/prove/messaggi" "/data/tests/messaggi" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_messaggi.img" $((MISURA_DATI * MB / 4096))
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+echo "$B/disco_messaggi.img pronto: con il programma messaggi in /data/tests"
 
 rm -rf "$B/oggetti"
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"
