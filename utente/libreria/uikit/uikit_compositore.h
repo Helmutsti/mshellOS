@@ -10,7 +10,7 @@
  *     mini finestra ('mini' = 1: piu' bassa, con il titolo piccolo e il solo chiudi);
  *   - L'OMBRA E IL VETRO SMERIGLIATO intorno e sotto le finestre: sono del design (il token
  *     "ombra/finestra", diverso nei temi Chiaro e Scuro), anche se stanno fuori dalla finestra;
- *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia (CAMBIA_TEMA, gkit.h)
+ *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia (CAMBIA_TEMA, gkit/sistema/protocollo.h)
  *     il compositore lo rilegge dalle preferenze.
  *
  * Qui ci sono solo le dichiarazioni, con i tipi di GKit; il codice sta in

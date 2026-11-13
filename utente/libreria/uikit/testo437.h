@@ -1,6 +1,7 @@
-/* GKit. testo437.h: da UTF-8 alla tabella di caratteri dei font del sistema (code page 437).
- * Sta in GKit perche' riguarda i caratteri che i font sanno disegnare (gkit_disegno.h,
- * glifo_di), non i file o i processi: e' un pezzo della grafica, accanto a chi disegna.
+/* UIKit. testo437.h: da UTF-8 alla tabella di caratteri dei font del sistema (code page 437).
+ * Sta in UIKit perche' riguarda i FONT DEL SISTEMA (uikit/materiali.h), cioe' cosa si
+ * disegna: GKit sa scrivere con qualunque font gli si dia (gkit_disegno.h, glifo_di) e non
+ * sa niente di quali caratteri hanno i font del sistema. Lo usano lo Store e la scrivania.
  *
  * I testi che arrivano dal launcher (le frasi dei problemi, i messaggi) e quelli dei
  * manifesti (nome, autore, descrizione) sono in UTF-8; i font del sistema oggi hanno solo

@@ -7,7 +7,7 @@
  * foglio...), che le fanno per loro. Le funzioni sono le stesse di quando sotto c'era
  * mkernel, il kernel didattico (che vive nel ramo "mykernel"): e' cambiato solo il "come",
  * dentro la libreria (corekit/interno/: corekit.c, file.c, comunicazione.c; per lo schermo
- * gkit/schermo.c). Qui sotto c'e' il "cosa": il contratto tra la libreria e i programmi. */
+ * gkit/interno/schermo.c). Qui sotto c'e' il "cosa": il contratto tra la libreria e i programmi. */
 #ifndef CHIAMATE_H
 #define CHIAMATE_H
 

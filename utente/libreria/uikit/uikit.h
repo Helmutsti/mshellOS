@@ -2647,7 +2647,7 @@ static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n
         if (!n->fuoco) f->modificatori = 0;    /* i tasti lasciati altrove non li sentiremo */
         uikit_cambiata_testata(f);             /* il fuoco cambia solo il titolo e i comandi */
     } else if (n->tipo == TEMA_CAMBIATO) {
-        /* il tema e' cambiato (gkit.h, IL TEMA): lo si rilegge e si ridisegna tutto. I colori
+        /* il tema e' cambiato (gkit/sistema/protocollo.h, IL TEMA): lo si rilegge e si ridisegna tutto. I colori
          * i widget li chiedono quando disegnano (tema.h), quindi basta questo */
         tema_leggi();
         uikit_cambiata_tutta(f);
@@ -2656,7 +2656,7 @@ static inline void uikit_consegna(struct finestra_tk *f, const struct notizia *n
 
 /* CAMBIA IL TEMA DI TUTTO IL SISTEMA ("chiaro" o "scuro"): lo scrive nelle preferenze
  * (tema_salva) e chiede al compositore di dirlo a tutte le finestre e ai pannelli aperti
- * (CAMBIA_TEMA, gkit.h): ognuno rilegge il tema e si ridisegna, anche questa finestra (con
+ * (CAMBIA_TEMA, gkit/sistema/protocollo.h): ognuno rilegge il tema e si ridisegna, anche questa finestra (con
  * TEMA_CAMBIATO, come le altre). Funziona solo per chi ha il permesso "impostazioni.sistema"
  * (Impostazioni): per gli altri il file cambia, ma il compositore non dice niente a nessuno.
  * 0, o -1. */

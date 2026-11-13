@@ -3,7 +3,7 @@
  * Come in un sistema vero, il kernel non disegna finestre: presta lo schermo a un solo
  * programma, questo, e gli consegna gli eventi di tastiera e mouse. Le applicazioni si
  * collegano al socket "compositore" e parlano con il protocollo delle finestre
- * (gkit.h): ognuna disegna da sola la sua finestra in un foglio di memoria
+ * (gkit/sistema/protocollo.h): ognuna disegna da sola la sua finestra in un foglio di memoria
  * condivisa, e dice "mostra". Il compositore:
  *   - COMPONE, a strati: lo sfondo (una superficie della scrivania), le finestre dal
  *     fondo al primo piano, ognuna con la sua ombra morbida intorno, i pannelli (la
@@ -49,7 +49,8 @@
  * "chiudi" rosso, che chiude il programma (termina). Se invece ricomincia a rispondere,
  * torna normale. Come GNOME e il Mac.
  *
- * LA GRAFICA. Il compositore usa solo GKit (vedi LIBRERIE.md): il protocollo e lo schermo
+ * LA GRAFICA. Il compositore usa solo GKit (vedi LIBRERIE.md): il protocollo, lo schermo e i
+ * conti per pixel (gkit/sistema/: protocollo.h, schermo.h, pixel.h), la finestra e le zone
  * (gkit.h) e gli strumenti di disegno (gkit_disegno.h). Non vede lo stile del sistema: le
  * poche cose del design che deve disegnare lui (la barra di emergenza, uguale a quella delle
  * applicazioni, e l'ombra e il vetro delle finestre) gliele da' UIKit, con le sole funzioni
@@ -57,6 +58,9 @@
 #include "corekit/corekit.h"
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
+#include "gkit/sistema/protocollo.h"   /* i messaggi delle finestre, i ruoli speciali */
+#include "gkit/sistema/schermo.h"      /* lo schermo (il DRM) */
+#include "gkit/sistema/pixel.h"        /* i conti per pixel: comporre le finestre */
 #include "uikit/uikit_compositore.h"
 #include "corekit/sistema/pacchetto.h"   /* chi puo' cambiare il tema (CAMBIA_TEMA) */
 
@@ -65,7 +69,7 @@
 #define D_EVENTI  1
 #define D_ASCOLTO 2
 
-#define MAX_LARGHEZZA 1280  /* la modalita' che chiede GKit (gkit/schermo.c) */
+#define MAX_LARGHEZZA 1280  /* la modalita' che chiede GKit (gkit/interno/schermo.c) */
 #define MAX_ALTEZZA   800
 
 static struct info_schermo schermo;
@@ -992,7 +996,7 @@ static void porta_davanti(int pannello, unsigned int numero) {
     }
 }
 
-/* CAMBIA_TEMA (gkit.h, IL TEMA): solo dal sistema o da un'app del sistema con il permesso
+/* CAMBIA_TEMA (gkit/sistema/protocollo.h, IL TEMA): solo dal sistema o da un'app del sistema con il permesso
  * "impostazioni.sistema" (lo dice il kernel: il programma all'altro capo). Il tema nuovo e' gia'
  * nelle preferenze: lo si rilegge, si rifanno le ombre di tutte le finestre (dipendono dal
  * tema) e tutto il fotogramma, e lo si dice a tutte le finestre e ai pannelli, che si

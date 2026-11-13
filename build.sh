@@ -15,7 +15,8 @@
 #                      comune: file, processi, porte, messaggi, fatti con le chiamate di
 #                      sistema di Linux e la libreria C musl; si compila in libcorekit.a),
 #                      e le due librerie della grafica: gkit/ (le finestre, lo schermo e il
-#                      disegno) e uikit/ (lo stile, i materiali e i componenti)
+#                      disegno; si compila in libgkit.a) e uikit/ (lo stile, i materiali e i
+#                      componenti)
 #   utente/avvio/      avvio, il programma dell'archivio di avvio (initramfs): carica i
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
@@ -30,6 +31,7 @@
 #   build/<cpu>/       il compilato (si puo' cancellare, viene rifatto):
 #       linux          il kernel (per il PC: bzImage; per ARM: Image)
 #       libcorekit.a   CoreKit compilata (una libreria statica), legata in ogni programma
+#       libgkit.a      GKit compilata (la grafica), come libcorekit.a
 #       avvio.img      l'archivio di avvio (initramfs: cpio compresso con gzip)
 #       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
 #                      UEFI (una "UKI", Unified Kernel Image)
@@ -229,13 +231,24 @@ rm -f "$B/libcorekit.a"
 ar rcs "$B/libcorekit.a" "$B"/oggetti/corekit/*.o
 COREKIT="$B/libcorekit.a"
 
-# GKit e UIKit, nelle loro cartelle (i nomi dei file .c sono tutti diversi), con
-# stb_image: oggetti sciolti, legati in ogni programma (--gc-sections ne tiene solo quello
-# che il programma usa).
-for f in utente/libreria/gkit/*.c utente/libreria/uikit/*.c; do
+# GKIT, la grafica (utente/libreria/gkit/, LIBRERIE.md), come CoreKit: i suoi .c (in
+# gkit/interno/) e stb_image (le PNG: la usa solo GKit) diventano libgkit.a. Nel comando
+# di lega va dopo UIKit e gli oggetti del programma (che usano le sue funzioni) e prima di
+# libcorekit.a (che usa lei): UIKit, il programma, GKit, CoreKit, la libreria C.
+mkdir -p "$B/oggetti/gkit"
+for f in utente/libreria/gkit/interno/*.c; do
+    $CC $UTENTE -c "$f" -o "$B/oggetti/gkit/$(basename "$f" .c).o"
+done
+$CC $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/gkit/stb_image.o"
+rm -f "$B/libgkit.a"
+ar rcs "$B/libgkit.a" "$B"/oggetti/gkit/*.o
+GKIT="$B/libgkit.a"
+
+# UIKit: per ora oggetti sciolti, legati in ogni programma (--gc-sections ne tiene solo
+# quello che il programma usa).
+for f in utente/libreria/uikit/*.c; do
     $CC $UTENTE -c "$f" -o "$B/oggetti/libreria/$(basename "$f" .c).o"
 done
-$CC $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/libreria/stb_image.o"
 LIBRERIA="$B/oggetti/libreria/*.o"
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
@@ -322,7 +335,7 @@ done
 # Le risorse del sistema: i file di risorse/ (preparati da strumenti/grafica/genera.py: i
 # caratteri e le icone gia' disegnati, misura per misura, e lo sfondo) vanno tali e quali in
 # /system/resources (fonts/, icons/, wallpapers/). Non sono dentro i programmi: GKit li
-# legge dal disco (gkit/materiali_file.c) e UIKit carica i suoi la prima volta che servono
+# legge dal disco (gkit/interno/materiali_file.c) e UIKit carica i suoi la prima volta che servono
 # (uikit/materiali.h). Sono di tutti da leggere: 644.
 (cd risorse && find . -type f | sort) | while read -r f; do
     metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
@@ -352,7 +365,7 @@ APPS=""
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
-    lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o" $COREKIT
+    lega "$B/oggetti/$nome" $LIBRERIA "$B/oggetti/$nome.o" $GKIT $COREKIT
     case "$nome" in
         init) posto=/system/init ;;
         shell) posto=/system/bin/$nome ;;   # la shell di prova
@@ -396,7 +409,7 @@ for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
         $CC $UTENTE -I"$cartella" -c "$f" -o "$o"
         oggetti="$oggetti $o"
     done
-    lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti $COREKIT
+    lega "$B/oggetti/applicazioni/$nome/code" $LIBRERIA $oggetti $GKIT $COREKIT
 
     manifesto="${cartella}manifest.toml"
     [ -f "$manifesto" ] || { echo "build.sh: manca $manifesto"; exit 1; }
@@ -495,7 +508,7 @@ mkdir -p "$B/oggetti/prove"
 for f in utente/prove/*.c; do
     nome=$(basename "$f" .c)
     $CC $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
-    lega "$B/oggetti/prove/$nome" $LIBRERIA "$B/oggetti/prove/$nome.o" $COREKIT
+    lega "$B/oggetti/prove/$nome" $LIBRERIA "$B/oggetti/prove/$nome.o" $GKIT $COREKIT
 done
 RIEMPITIVI=6
 

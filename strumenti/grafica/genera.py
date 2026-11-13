@@ -9,7 +9,7 @@ Gira sul computer che compila, dentro il container alpine (vedi genera.sh), e sc
 Quali materiali ci sono e come si chiamano i file: materiali.py. I materiali sono di UIKit
 (vedi LIBRERIE.md), che li carica la prima volta che servono; i tipi (struct font, struct
 icona, struct immagine) e il codice che li legge e li disegna sono di GKit
-(gkit/gkit_disegno.h, gkit/materiali_file.c). I programmi di mshell non sanno leggere un
+(gkit/gkit_disegno.h, gkit/interno/materiali_file.c). I programmi di mshell non sanno leggere un
 file TrueType o un SVG: qui li si trasforma una volta per tutte in pixel.
 
   - I FONT: Inter e IBM Plex Sans (licenza SIL OFL) in ogni misura e peso che usa

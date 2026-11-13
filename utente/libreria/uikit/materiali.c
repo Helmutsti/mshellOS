@@ -1,5 +1,5 @@
 /* UIKit: i materiali del sistema, caricati dai file la prima volta che servono (vedi
- * materiali.h). I file li legge GKit (gkit/materiali_file.c); qui c'e' solo quale file e'
+ * materiali.h). I file li legge GKit (gkit/interno/materiali_file.c); qui c'e' solo quale file e'
  * di quale materiale, e il ricordo di quelli gia' caricati. */
 #include "materiali.h"
 

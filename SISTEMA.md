@@ -51,7 +51,7 @@ nostra libreria lo usa già (CoreKit, `utente/libreria/corekit/interno/comunicaz
 - il kernel dice al servizio chi c'è dall'altra parte: processo e utente (`chi`).
 
 Oggi il compositore e il launcher hanno ciascuno un **formato dei messaggi suo**
-(il compositore in `gkit/gkit.h`, gli eventi in `corekit/chiamate.h`, il launcher in
+(il compositore in `gkit/sistema/protocollo.h`, gli eventi in `corekit/chiamate.h`, il launcher in
 `corekit/sistema/launcher.h`). Lo standard serve a non farne uno nuovo per ogni servizio.
 
 ### Lo standard (piccolissimo)

@@ -18,29 +18,52 @@ cosa ha un nome che viene da Figma (Pulsante, Barra laterale, superficie/elevata
 
 ## GKit
 
-Due livelli. **La base non dipende da niente; gli strumenti di disegno dipendono solo dalla base;
-UIKit dipende da tutte e due.** Un programma prende solo quello che gli serve: un gioco fatto
-pixel per pixel usa solo la base.
+Due parti. **La base non dipende da niente (sotto c'è solo CoreKit); gli strumenti di disegno
+non dipendono nemmeno dalla base; UIKit dipende da tutte e due.** Un programma prende solo quello
+che gli serve: un gioco fatto pixel per pixel usa la finestra e, se vuole, gli strumenti.
 
-### La base (`gkit.h`)
+Come CoreKit, è divisa in **tre livelli** (il commento in testa a `gkit/gkit.h` li spiega):
 
-- **Il protocollo delle finestre** (oggi `protocollo.h`): cosa si dicono un'applicazione e il
-  compositore, condiviso tra i due lati.
-- **Il lato applicazione** (oggi `finestra.h`): apre una finestra, dà la tela (un pezzo di memoria
-  dove ogni pixel è un numero), la fa mostrare, consegna mouse e tastiera. Qui nascono i **tipi di
-  finestra** come li vede il compositore: normale, e **blank** (una finestra vera, senza barra del
-  titolo; si sposta e si chiude solo se chi programma le aggancia una barra, anche invisibile).
-- **Il lato compositore** dello schermo (oggi `schermo.c`, il DRM): lo usa solo il compositore.
+| livello | cartella | cosa c'è | chi lo usa |
+|---|---|---|---|
+| **pubblico** | `gkit/` | `gkit.h` (la finestra, il lato dell'applicazione: aprirla, la tela, mostrarla, le notizie, le zone cambiate), `gkit_disegno.h` (gli strumenti di disegno, i materiali letti da un file) | ogni programma che disegna: UIKit, le app, Doom |
+| **del sistema** | `gkit/sistema/` | `protocollo.h` (i messaggi tra la finestra e il compositore, i ruoli speciali e i pannelli della scrivania), `schermo.h` (lo schermo, il DRM: `apri_schermo`, `mappa_schermo`, `schermo_cambiato`), `pixel.h` (i conti per pixel: comporre un colore sopra un altro, la distanza dal bordo di una forma arrotondata, la sfumatura delle ombre) | il compositore, la scrivania, init; `pixel.h` anche il codice di GKit |
+| **interno** | `gkit/interno/` | il codice (`finestra.c`, `zone.c`, `pennello.c`, `forme.c`, `testo.c`, `immagini.c`, `immagine_file.c`, `materiali_file.c`, `schermo.c`) e `interno.h`, i passi di ogni disegno che i `.c` si dicono tra loro | solo GKit |
+
+Gli header pubblici hanno solo dichiarazioni, tipi, costanti e i commenti per chi li usa. Le
+uniche funzioni scritte dentro gli header sono i conti di ogni pixel (`sistema/pixel.h`,
+`interno/interno.h`), `static inline`: si chiamano milioni di volte per immagine, e una chiamata
+vera costerebbe più del conto.
+
+**La libreria compilata.** `build.sh` compila i `.c` di `gkit/interno/`, con stb_image (le PNG:
+la usa solo GKit), in `build/<cpu>/libgkit.a`. Nel comando di lega l'ordine è: UIKit, il
+programma, `libgkit.a`, `libcorekit.a`, la libreria C. Nella sandbox i programmi del sistema
+hanno in più lo schermo della sandbox (`strumenti/sandbox/schermo_sandbox.c`) come oggetto
+sciolto: le tre funzioni dello schermo si trovano lì, e dall'archivio non si prende `schermo.o`.
+L'anteprima sul Mac (`strumenti/anteprima/anteprima.sh`) compila con sé solo gli strumenti di
+disegno e le zone (`zone.c`): la finestra e lo schermo lì non ci sono.
+
+### La base (`gkit.h`, e `sistema/` per il lato del compositore)
+
+- **Il protocollo delle finestre** (`sistema/protocollo.h`): cosa si dicono un'applicazione e il
+  compositore. Un'app non lo vede: per lei c'è la finestra.
+- **Il lato applicazione** (`gkit.h`, codice in `interno/finestra.c`): apre una finestra, dà la
+  tela (un pezzo di memoria dove ogni pixel è un numero), la fa mostrare, consegna mouse e
+  tastiera. Qui nascono i **tipi di finestra** come li vede il compositore: normale, e **blank**
+  (una finestra vera, senza barra del titolo; si sposta e si chiude solo se chi programma le
+  aggancia una barra, anche invisibile).
+- **Il lato compositore** dello schermo (`sistema/schermo.h`, codice in `interno/schermo.c`, il
+  DRM): lo usano solo il compositore e init.
 
 ### Gli strumenti di disegno (`gkit_disegno.h`)
 
-Oggi `disegno.h`. **Come** si disegna, senza nessun gusto: rettangoli anche arrotondati, linee,
+**Come** si disegna, senza nessun gusto: rettangoli anche arrotondati, linee,
 sfumature, ritagli, testo **con il font che riceve**, immagini e icone **che riceve**. Non sa cosa
 sia una cartella né quale sia il font del sistema. Sa caricare un'immagine PNG da un file su
-disco (`immagine_carica`, in `gkit/immagine_file.c`, con stb_image): la usa la scrivania per le
+disco (`immagine_carica`, in `gkit/interno/immagine_file.c`, con stb_image): la usa la scrivania per le
 icone delle app. E sa leggere da un file un font, un'icona o un'immagine gia' disegnati, nei
 formati di `strumenti/grafica/formato.py` (`font_da_file`, `icona_da_file`, `immagine_da_file`,
-in `gkit/materiali_file.c`): il file si mette in memoria in sola lettura (mmap), e se manca o
+in `gkit/interno/materiali_file.c`): il file si mette in memoria in sola lettura (mmap), e se manca o
 è rovinato lo si scrive nel registro e si dà un sostituto che si disegna senza pericolo. Dove
 stanno le risorse del sistema lo dice `percorso_risorsa` (`/system/resources`, o la variabile
 `MSHELL_RISORSE` per gli attrezzi fuori da mshell).
@@ -88,15 +111,15 @@ Un programma scrive `#include "corekit/corekit.h"` (e `"corekit/messaggi.h"`,
 `"corekit/apertura.h"`... se gli servono). Oggi Files, Attività e la scrivania usano solo
 `apertura.h`; lo Store (installare, aggiornare, togliere le app) e il Terminale (aprire la shell
 come sistema) usano `sistema/launcher.h`. `testo437.h` (da UTF-8 ai caratteri dei font del
-sistema) riguarda i font: sta in GKit, `gkit/testo437.h`. Gli header pubblici hanno solo dichiarazioni,
+sistema) riguarda i font del sistema: sta in UIKit, `uikit/testo437.h`. Gli header pubblici hanno solo dichiarazioni,
 tipi, costanti e i commenti per chi li usa; l'unico codice dentro sono due funzioni di una riga
 (`lunghezza`, `scrivi_testo`).
 
 **La libreria compilata.** `build.sh` compila i `.c` di `corekit/interno/`, con miniz e tomlc99
 (le librerie di altri che usa solo CoreKit), in una libreria statica, `build/<cpu>/libcorekit.a`,
 e ogni programma si lega a lei: dall'archivio entra solo quello che il programma usa. La sandbox
-fa lo stesso (`strumenti/sandbox/Makefile`). GKit e UIKit per ora restano oggetti sciolti; si
-riordineranno con lo stesso schema.
+fa lo stesso (`strumenti/sandbox/Makefile`). GKit segue lo stesso schema (`libgkit.a`, sopra);
+UIKit per ora resta di oggetti sciolti e si riordinerà allo stesso modo.
 
 ## Un punto che oggi attraversa il confine
 

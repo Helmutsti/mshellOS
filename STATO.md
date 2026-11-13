@@ -188,7 +188,7 @@ né seriale: per una shell si entra nel container con `docker exec -it <nome> sh
     (dove l'ombra non c'è) non si guarda;
   - i conti della sfocatura sono più svelti (le somme dei colori insieme, la divisione già fatta,
     l'ingrandimento in due tempi) e le immagini delle finestre si mescolano due byte alla volta
-    (`sopra_a_riga` e `sopra_a_vero` in `gkit_disegno.h`).
+    (`sopra_a_riga` e `sopra_a_vero` in `gkit/sistema/pixel.h`).
   I movimenti del mouse arrivati durante una composizione erano già messi insieme (si compone una
   volta con l'ultima posizione), e si rifà solo il posto di prima e quello di adesso.
   Tempi nella sandbox, a passo: Files sulla scrivania 6,9 → 2,5 ms; Impostazioni in parte sopra
@@ -209,7 +209,7 @@ vassoio) il puntatore lo sentono sempre.
 | cartella | cosa c'è |
 |----------|----------|
 | `utente/libreria/corekit/` | CoreKit, la libreria comune (vedi `LIBRERIE.md`): pubblico in `corekit/` (`corekit.h`: file, processi, socket...; `messaggi.h`), del sistema in `corekit/sistema/` (launcher, pacchetti, manifesti), il codice in `corekit/interno/`; si compila in `libcorekit.a` |
-| `utente/libreria/gkit/` | GKit, la grafica (vedi `LIBRERIE.md`): protocollo delle finestre, finestra dell'app e schermo (`gkit.h`), strumenti di disegno (`gkit_disegno.h`) |
+| `utente/libreria/gkit/` | GKit, la grafica (vedi `LIBRERIE.md`): pubblico in `gkit/` (`gkit.h`: la finestra dell'app; `gkit_disegno.h`: gli strumenti di disegno), del sistema in `gkit/sistema/` (protocollo delle finestre, schermo, conti per pixel), il codice in `gkit/interno/`; si compila in `libgkit.a` |
 | `utente/libreria/uikit/` | UIKit, l'interfaccia: `uikit.h` (finestra, componenti, ciclo degli eventi: include tutto quello che serve a un'app), stile e temi (`stile.h` riprende le variabili del file Figma), materiali del sistema (`materiali.h`: font, icone e oggetti, caricati dai file in `/system/resources` la prima volta che servono; l'elenco in `materiali_elenco.h`), userbar, quello che serve al compositore (`uikit_compositore.h`) |
 | `utente/avvio/` | il programma dell'archivio di avvio |
 | `utente/programmi/` | init, eventi, compositore, launcher, scrivania |
@@ -261,7 +261,7 @@ vassoio) il puntatore lo sentono sempre.
   piano); nel vassoio le app sono in ordine (prima quelle del sistema, poi le altre, per nome);
   mentre il vassoio è aperto il pulsante App resta premuto. Il compositore dà a ogni pannello
   l'ombra del suo tipo (la userbar "barra", il vassoio "sovrapposto", `PANNELLO_BARRA` e
-  `PANNELLO_SOPRA` in `gkit.h`); le finestre si aprono a scala da x 140 (le prime da x 60 se la
+  `PANNELLO_SOPRA` in `gkit/sistema/protocollo.h`); le finestre si aprono a scala da x 140 (le prime da x 60 se la
   scrivania ripartisse): mai sotto la userbar (x 8..48). Non c'è una "finestra ingrandita".
 
 **Le prove**
@@ -652,7 +652,7 @@ i componenti di UIKit.
   o generico) e "Chiudi". Pacchetto illeggibile: "Impossibile leggere il pacchetto". Dopo
   l'installazione: "<nome> è installata", con "Chiudi" e "Apri <nome>".
 - I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
-  Store li traduce (`gkit/testo437.h`, ora nella libreria perché serve anche alla scrivania).
+  Store li traduce (`uikit/testo437.h`, ora nella libreria perché serve anche alla scrivania).
 - Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
   e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
   persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati

@@ -1,11 +1,11 @@
-/* GKit: un'immagine da un file su disco (le dichiarazioni sono in gkit_disegno.h).
+/* GKit: un'immagine da un file su disco (le dichiarazioni sono in gkit/gkit_disegno.h).
  *
  * Per ora solo le PNG. Il file lo legge questo codice, con le funzioni della libreria dei
  * programmi; i byte li decodifica stb_image (esterni/stb, di altri, pubblico dominio o MIT),
  * che da' i pixel in RGBA non premoltiplicati. Qui si passano al formato delle tele di GKit:
  * 0xAARRGGBB premoltiplicati (vedi gkit_disegno.h). */
 #include "corekit/corekit.h"
-#include "gkit_disegno.h"
+#include "gkit/gkit_disegno.h"
 
 /* Le due funzioni di stb_image che servono (esterni/stb/stb_image.h): dichiarate qui, per
  * non tirare dentro gli header della libreria C. */

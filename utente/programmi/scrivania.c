@@ -2,7 +2,7 @@
  *
  * E' un programma del sistema (uid 0), sorvegliato da init come il compositore. Per il
  * compositore e' un'applicazione come le altre, ma siccome e' del sistema puo' chiedere
- * delle SUPERFICI SPECIALI (vedi gkit.h):
+ * delle SUPERFICI SPECIALI (vedi gkit/sistema/protocollo.h):
  *   - lo SFONDO, grande come lo schermo, sotto tutte le finestre, per ora senza icone
  *     (le app si aprono dal vassoio);
  *   - la USERBAR, un PANNELLO (una barra) sul bordo sinistro, centrato in altezza, sopra
@@ -41,10 +41,11 @@
  * Un clic nel vassoio lo chiude. Il vassoio si chiude anche premendo sullo sfondo o quando
  * un'altra finestra prende il fuoco. */
 #include "gkit/gkit.h"
+#include "gkit/sistema/protocollo.h"   /* i pannelli, lo sfondo, PORTA_DAVANTI */
 #include "uikit/userbar.h"
 #include "corekit/sistema/descrizione.h"
 #include "corekit/apertura.h"
-#include "gkit/testo437.h"
+#include "uikit/testo437.h"
 
 /* --- le applicazioni installate --- */
 

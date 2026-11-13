@@ -32,7 +32,7 @@
  *   0 (il vecchio): l'icona piccola (16 nella userbar, 20 nel vassoio) dentro il pulsante tondo.
  *
  * LE OMBRE ESTERNE. Sulla scrivania la userbar e il vassoio sono pannelli del compositore
- * (gkit.h), che disegna lui le ombre fuori dalla forma, come per le finestre: userbar_disegna
+ * (gkit/sistema/protocollo.h), che disegna lui le ombre fuori dalla forma, come per le finestre: userbar_disegna
  * e vassoio_disegna disegnano solo la forma e quello che c'e' dentro (con le ombre interne).
  * Chi li disegna su una tela sua (l'anteprima) chiama prima userbar_ombra e vassoio_ombra.
  *

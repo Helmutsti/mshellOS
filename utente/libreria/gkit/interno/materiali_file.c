@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "gkit_disegno.h"
+#include "gkit/gkit_disegno.h"
 
 #define VERSIONE_MATERIALI 1
 #define FONT_TESTA         272     /* lettere, versione, misure, conti, indice[256] */

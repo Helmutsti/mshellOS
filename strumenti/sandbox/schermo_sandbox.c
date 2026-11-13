@@ -1,10 +1,10 @@
-/* GKit, il lato del compositore, nella SANDBOX: al posto di gkit/schermo.c (il DRM).
+/* GKit, il lato del compositore, nella SANDBOX: al posto di gkit/interno/schermo.c (il DRM).
  *
  * Lo schermo e' un file in /run (tmpfs, in memoria), grande come lo schermo di QEMU:
  * 1280x800, 4 byte per pixel (XRGB8888, 0x00RRGGBB), le righe una dopo l'altra. Init lo
  * apre (apri_schermo) e lo presta al compositore, come fa con il DRM; il compositore lo
  * mette nella sua memoria (mappa_schermo) e ci disegna. eventi_sandbox lo legge quando
- * chi fa le prove chiede una foto. Le funzioni sono quelle di gkit.h, con lo stesso
+ * chi fa le prove chiede una foto. Le funzioni sono quelle di gkit/sistema/schermo.h, con lo stesso
  * comportamento visto dal compositore: lo schermo parte nero, e "cosa e' cambiato" non
  * serve a nessuno (come con le schede video vere). */
 #define _GNU_SOURCE
@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "gkit/gkit.h"
+#include "gkit/sistema/schermo.h"
 #include "sandbox.h"
 
 int apri_schermo(void) {

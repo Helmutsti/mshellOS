@@ -1,6 +1,6 @@
 """I formati su disco dei materiali gia' calcolati: font, icone, immagini (versione 1).
 
-Li scrive genera.py; li legge GKit (gkit/materiali_file.c: font_da_file, icona_da_file,
+Li scrive genera.py; li legge GKit (gkit/interno/materiali_file.c: font_da_file, icona_da_file,
 immagine_da_file), che li mette in memoria con mmap, in sola lettura: i programmi che usano
 lo stesso file ne condividono le pagine. Tutti i numeri sono little-endian (come x86_64 e
 arm64), e ogni parte comincia a un multiplo di 4 byte, cosi' GKit usa i dati dove stanno,

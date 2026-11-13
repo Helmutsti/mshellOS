@@ -20,7 +20,8 @@
  * torna alla console, il nome resta occupato, e le applicazioni che si collegano proprio
  * in quel momento aspettano in fila, invece di trovare la porta chiusa. */
 #include "corekit/corekit.h"
-#include "gkit/gkit.h"
+#include "gkit/sistema/protocollo.h"   /* NOME_COMPOSITORE */
+#include "gkit/sistema/schermo.h"      /* apri_schermo */
 #include "corekit/sistema/launcher.h"
 #include <fcntl.h>
 #include <unistd.h>

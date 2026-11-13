@@ -18,8 +18,13 @@ USCITA=${3:-$QUI/out/$1.png}
 # I materiali del sistema (font, icone, oggetti) sono file su disco: si compilano anche chi li
 # legge (GKit, materiali_file.c) e chi sa quali sono (UIKit, materiali.c), e li si fa cercare
 # in risorse/ del repository invece che in /system/resources (MSHELL_RISORSE, gkit_disegno.h).
+# Di GKit servono anche gli strumenti di disegno e le zone cambiate (gkit/interno/: il
+# pennello, le forme, il testo, le immagini, le zone); la finestra, lo schermo e le PNG no:
+# qui non ci sono.
+G="$RADICE/utente/libreria/gkit/interno"
 clang -std=gnu11 -O1 -w -I"$RADICE/utente/libreria" -I"$QUI" \
     -DSCENA="\"$QUI/scene/$1.c\"" "$QUI/anteprima.c" \
-    "$RADICE/utente/libreria/gkit/materiali_file.c" "$RADICE/utente/libreria/uikit/materiali.c" \
+    "$G/pennello.c" "$G/forme.c" "$G/testo.c" "$G/immagini.c" "$G/zone.c" "$G/materiali_file.c" \
+    "$RADICE/utente/libreria/uikit/materiali.c" \
     -o "$QUI/out/.anteprima_$1"
 MSHELL_RISORSE="$RADICE/risorse" "$QUI/out/.anteprima_$1" "$USCITA" "${2:-1}"

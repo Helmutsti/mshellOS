@@ -2,7 +2,7 @@
  *
  * Girano i programmi veri (init, compositore, launcher, scrivania, le app), compilati come
  * in build.sh. Cambiano solo i due capi "di hardware":
- *   - lo schermo (gkit/schermo.c, il DRM) diventa un file in memoria, FILE_SCHERMO, grande
+ *   - lo schermo (gkit/interno/schermo.c, il DRM) diventa un file in memoria, FILE_SCHERMO, grande
  *     come lo schermo di QEMU: schermo_sandbox.c;
  *   - eventi (che legge /dev/input) diventa eventi_sandbox.c: riceve gli eventi di Linux
  *     (struct input_event) da una presa TCP, li passa allo stesso codice di eventi.c, e

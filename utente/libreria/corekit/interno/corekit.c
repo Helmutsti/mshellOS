@@ -17,7 +17,7 @@
  *   stato_memoria              /proc/meminfo
  *   apri, leggi, info...       open, read, stat, mkdir, rename... (file.c)
  *   socket e fogli, aspetta    socket AF_UNIX, memfd, mmap, poll (comunicazione.c)
- *   lo schermo                 il DRM di Linux, /dev/dri/card0 (gkit/schermo.c)
+ *   lo schermo                 il DRM di Linux, /dev/dri/card0 (gkit/interno/schermo.c)
  *   gli eventi                 /dev/input, letti dal servizio eventi
  *                              (utente/programmi/eventi.c)
  *   malloc e free              quelle di musl (prima: memoria.c, sopra "rottura") */
