@@ -459,7 +459,10 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 18. **Il servizio eventi**: cosa succede se si blocca o si chiude.
 19. **Libreria condivisa** in `/system/lib`.
 20. **Terminale** e la scelta di shell e comandi.
-21. **Internet**.
+21. **Internet**: c'è il servizio `network` (accende `eth0`, indirizzo con DHCP o fisso da
+    `/system/config/network/network.conf`, DNS in `/run/network/resolv.conf`; prova con
+    `disco_rete.img` in QEMU). Mancano la configurazione della persona in `/data`, la porta di
+    controllo e il firewall.
 22. **Sistema in sola lettura** come immagine erofs + dm-verity, con aggiornamenti A/B.
 23. **Prove più veloci su Windows**: accelerazione WHPX; con `-smp 4` QEMU su Windows si blocca
     con la finestra (le prove senza finestra usano già 4 processori).

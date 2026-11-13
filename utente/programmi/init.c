@@ -3,7 +3,8 @@
  * Lo fa partire avvio (utente/avvio/avvio.c), il programma dell'archivio di avvio, dopo
  * aver montato il disco: init prende il suo posto, con lo stesso numero 1, come sistema
  * (uid 0). E' lui a far nascere i servizi del sistema: eventi (che legge tastiera e
- * mouse), il compositore, il launcher (che fa partire le applicazioni) e la scrivania.
+ * mouse), il compositore, il launcher (che fa partire le applicazioni), la scrivania e
+ * network (che accende la rete e la tiene accesa: vedi network.c).
  * Le applicazioni non le fa partire lui: le apre il launcher, quando la scrivania lo
  * chiede.
  *
@@ -27,7 +28,9 @@
 /* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Eventi riceve
  * in prestito il capo del tubo su cui scrive; il compositore lo schermo, l'altro capo del
  * tubo e il suo nome; il launcher il suo nome; la scrivania niente (si collega al
- * compositore come le applicazioni). L'ordine conta: prima eventi e il compositore. */
+ * compositore come le applicazioni); network niente (la configurazione se la legge da
+ * solo, e gira come sistema perche' Linux gli lasci cambiare le schede di rete). L'ordine
+ * conta: prima eventi e il compositore. */
 struct servizio {
     const char *percorso;
     const int *risorse;      /* i descrittori da prestargli, ai posti 0, 1, 2... */
@@ -45,6 +48,9 @@ static struct servizio servizi[] = {
     { "/system/services/compositore", risorse_compositore, 3, -1 },
     { "/system/services/launcher", risorse_launcher, 1, -1 },
     { "/system/services/scrivania", 0, 0, -1 },
+    /* la rete. Se la sua scheda non c'e', non e' init a saperlo (la scheda e' scritta
+     * nella configurazione della rete): il servizio lo dice e aspetta, senza finire */
+    { "/system/services/network", 0, 0, -1 },
     /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere.
      * Parte solo se la seriale c'e' (come la getty sulla seriale di Linux): nella sandbox
      * Docker non c'e', e la shell ripartirebbe ogni 5 secondi senza poter fare niente. */

@@ -37,6 +37,7 @@
 #                      partizioni (vedi IL DISCO qui sotto)
 #       disco_prove.img  il disco delle prove automatiche: lo stesso, con in piu' i
 #                      programmi di utente/prove in /data/tests (vedi in fondo al passo 6)
+#       disco_rete.img   per la prova della rete, in QEMU: il programma rete in /data/tests
 #   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
@@ -49,7 +50,9 @@
 # Com'e' fatto il sistema che ne viene fuori:
 #   /system                      (sola lettura) i programmi del sistema
 #       init                     il primo programma (il processo 1)
-#       services/<servizio>      i servizi: eventi, compositore, launcher, scrivania
+#       services/<servizio>      i servizi: eventi, compositore, launcher, scrivania, network
+#       config/<servizio>/       la configurazione predefinita dei servizi, da leggere (644):
+#                                i file di utente/config/ (oggi network/network.conf)
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
 #                                manifest.toml e resources/ (lo stesso contenuto del loro
 #                                pacchetto .app, scompattato)
@@ -72,8 +75,12 @@
 #       system/                  identita', utenti, permessi, applicazioni installate: solo
 #                                del sistema (0, 700)
 #       services/<servizio>      lo stato e i registri di ogni servizio, suoi
+#   /etc/resolv.conf             un collegamento simbolico a /run/network/resolv.conf: i
+#                                server dei nomi (DNS) per musl, che li cerca in /etc; il file
+#                                vero lo scrive il servizio network (in /etc non si scrive)
 #   /dev /proc /sys              di Linux (li monta avvio)
-#   /run /tmp                    in memoria (tmpfs): i nomi dei socket stanno in /run/mshell
+#   /run /tmp                    in memoria (tmpfs): i nomi dei socket stanno in /run/mshell,
+#                                il DNS del servizio network in /run/network
 #
 # LE VARIABILI D'AMBIENTE (tutte facoltative):
 #   USCITA   un'altra cartella dove scrivere, per compilare in parallelo senza pestarsi i
@@ -133,7 +140,10 @@ RIGA_KERNEL="$CONSOLE vt.global_cursor_default=0 firmware_class.path=/system/fir
 #   xhci-pci, usbhid,      il controllore USB 3, e tastiera e mouse USB ("HID")
 #   hid-generic
 #   evdev                  i file /dev/input/event*, da cui il servizio eventi li legge
-MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev"
+#   virtio_net             la scheda di rete virtuale (virtio-net-pci in QEMU)
+#   af_packet              i pacchetti "grezzi": servono per chiedere l'indirizzo (DHCP)
+#                          quando la scheda non ne ha ancora uno
+MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev virtio_net af_packet"
 
 # --- 0. gli attrezzi e i pacchetti di Alpine ---
 SCARICO=/w/build/scarico
@@ -291,6 +301,21 @@ done
 (cd risorse && find . -type f | sort) | while read -r f; do
     metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
 done
+
+# La configurazione predefinita dei servizi: i file di utente/config/ tali e quali in
+# /system/config (oggi network/network.conf, letto dal servizio network). Di tutti da
+# leggere: 644. Quella della persona, quando ci sara', stara' in /data.
+(cd utente/config && find . -type f | sort) | while read -r f; do
+    metti_file "utente/config/${f#./}" "/system/config/${f#./}" 644
+done
+
+# /etc/resolv.conf: musl ci cerca i server dei nomi (DNS), ma "/" e' in sola lettura. Come
+# fa systemd-resolved, e' un collegamento simbolico a un file in memoria, che il servizio
+# network scrive quando sa quali sono (/run/network/resolv.conf).
+metti_cartella /etc 0 755
+ln -s /run/network/resolv.conf "$(vero /etc/resolv.conf)"
+printf '  %-40s -> /run/network/resolv.conf
+' /etc/resolv.conf
 
 SERVIZI=""
 APPS=""
@@ -627,8 +652,18 @@ rm -f "$(vero /data/tests)"/riempitivo-*
 metti_file "$B/oggetti/prove/pacchetti" "/data/tests/pacchetti" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_pacchetti.img" $((MISURA_DATI * MB / 4096))
-rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco_pacchetti.img pronto: con il programma pacchetti in /data/tests"
+
+# IL DISCO DELLA PROVA DELLA RETE: come disco_pacchetti.img, ma in /data/tests c'e' solo il
+# programma rete (utente/prove/rete.c), che risolve un nome e apre una connessione HTTP, e
+# scrive sulla seriale come va. Serve QEMU con la scheda di rete (-nic user,...): si accende
+# a mano, come spiegato in rete.c.
+cp "$B/disco_app.img" "$B/disco_rete.img"
+rm -f "$(vero /data/tests)"/pacchetti
+metti_file "$B/oggetti/prove/rete" "/data/tests/rete" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_rete.img" $((MISURA_DATI * MB / 4096))
+rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
+echo "$B/disco_rete.img pronto: con il programma rete in /data/tests"
 
 rm -rf "$B/oggetti"
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"

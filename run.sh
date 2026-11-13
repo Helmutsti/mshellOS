@@ -21,6 +21,9 @@
 #   virtio-vga / virtio-gpu-pci : la scheda video, a 1280x800 (sul PC "-vga" perche'
 #       anche il firmware UEFI ci sa disegnare)
 #   qemu-xhci : il controllore USB 3
+#   virtio-net-pci (-nic user) : la scheda di rete. "user" e' la rete di QEMU stessa: un
+#       router finto (10.0.2.2) che da' l'indirizzo con DHCP (10.0.2.15), risponde ai nomi
+#       (DNS 10.0.2.3) ed esce su Internet attraverso il computer, senza configurare niente
 #   usb-kbd, usb-tablet : tastiera e tavoletta USB. La tavoletta dice DOVE e' il
 #       puntatore (non di quanto si e' mosso): il mouse non va catturato, e il
 #       puntatore di mshell e' sempre sotto quello del Mac

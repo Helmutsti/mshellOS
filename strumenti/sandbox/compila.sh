@@ -63,8 +63,15 @@ done
     metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
 done
 metti_file $O/bin/init /system/init 755
-SERVIZI="compositore eventi launcher scrivania"
+SERVIZI="compositore eventi launcher scrivania network"
 for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755; done
+# la configurazione predefinita dei servizi, come build.sh. Il collegamento
+# /etc/resolv.conf invece no: nel container quel file lo mette Docker. Il servizio network
+# qui non tocca niente: Docker non gli da' il permesso di cambiare le schede, e lui lo dice
+# e resta fermo (la rete del container la prepara Docker).
+(cd utente/config && find . -type f | sort) | while read -r f; do
+    metti_file "utente/config/${f#./}" "/system/config/${f#./}" 644
+done
 # i comandi: la shell di prova, come build.sh
 for nome in shell; do metti_file "$O/bin/$nome" "/system/bin/$nome" 755; done
 

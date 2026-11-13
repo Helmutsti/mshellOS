@@ -20,6 +20,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 #   il suo driver in Linux); bootindex=1: il primo (l'unico) da cui il firmware prova a partire
 # -vga none -device virtio-vga : la scheda video virtio, a 1280x800
 # -rtc base=localtime : l'orologio del PC virtuale segna l'ora di casa (non quella di Greenwich)
+# -nic user,model=virtio-net-pci : la scheda di rete virtio. "user" e' la rete di QEMU
+#   stessa: un router finto (10.0.2.2) che da' l'indirizzo con DHCP (10.0.2.15), risponde ai
+#   nomi (DNS 10.0.2.3) ed esce su Internet attraverso il computer, senza configurare niente
 # qemu-xhci, usb-kbd, usb-tablet : il controllore USB 3, con tastiera e tavoletta USB. La
 #   tavoletta dice DOVE e' il puntatore: il mouse non va catturato, e il puntatore e'
 #   sempre sotto quello di Windows
@@ -28,4 +31,5 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     -drive "if=none,id=disco,file=$qui\build\x86_64\disco.img,format=raw" `
     -device "virtio-blk-pci,drive=disco,bootindex=1" `
     -vga none -device "virtio-vga,xres=1280,yres=800" `
+    -nic "user,model=virtio-net-pci" `
     -device qemu-xhci -device usb-kbd -device usb-tablet
