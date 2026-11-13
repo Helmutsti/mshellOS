@@ -14,7 +14,15 @@
  *      result=ok, gli stessi dati, cosa c'era nel foglio, e chi chiede (uid e programma);
  *   3. manda a mano un pacchetto che non segue lo standard (una chiave maiuscola, una riga
  *      senza =): il servizio risponde result=invalid, senza id;
- *   4. chiede una richiesta che il servizio non conosce: result=invalid, con l'id.
+ *   4. chiede una richiesta che il servizio non conosce: result=invalid, con l'id;
+ *   5. il tempo massimo: chiede "slow" con chiedi_entro e 300 ms; il servizio risponde
+ *      solo dopo 800 ms. chiedi deve dare CHIEDI_SCADUTO dopo circa 300 ms, con
+ *      result=timeout. Poi chiede "ping" sulla stessa connessione: la risposta tardiva a
+ *      "slow" arriva prima, e chiedi deve buttarla (id vecchio) e dare quella di ping;
+ *   6. i permessi provvisori: nella risposta a echo il servizio dice cosa ha risposto
+ *      ha_permesso("test.example") (sempre si'), e la riga "permesso test.example a
+ *      /data/tests/messaggi (uid 0): concesso (provvisorio)" va nel registro (la
+ *      controlla test/prove/messaggi.py).
  * Ogni passo lo scrive nella seriale ("messaggi: ... -> esito"). Alla fine "messaggi:
  * tutto bene", oppure "messaggi: fallita". */
 #include "messaggi.h"
@@ -71,12 +79,21 @@ static void servizio(int porta) {
                 }
                 chiudi(q.allegato);
             }
-            /* chi chiede */
+            /* chi chiede, e se ha il permesso (provvisorio: sempre si') */
             struct chi_chiede c;
             if (chi_chiede(d, &c) == 0) {
                 messaggio_aggiungi_numero(&r, "uid", c.uid);
                 messaggio_aggiungi(&r, "program", c.programma);
+                messaggio_aggiungi(&r, "permission", ha_permesso(&c, "test.example") ? "yes" : "no");
             }
+        } else if (messaggio_vale(&q, CHIAVE_RICHIESTA, "slow")) {
+            /* un servizio vivo ma lento: risponde dopo il tempo massimo di chi chiede */
+            dormi(800);
+            messaggio_risposta(&r, &q, ESITO_OK);
+            messaggio_aggiungi(&r, "late", "1");
+        } else if (messaggio_vale(&q, CHIAVE_RICHIESTA, "ping")) {
+            messaggio_risposta(&r, &q, ESITO_OK);
+            messaggio_aggiungi(&r, "pong", "1");
         } else {
             messaggio_risposta(&r, &q, ESITO_NON_VALIDO);
         }
@@ -148,6 +165,28 @@ static void echo(int d) {
     passo("il foglio allegato e' arrivato", uguali(messaggio_valore(&r, "attachment"), "ciao"));
     passo("chi chiede: uid 0", messaggio_vale(&r, "uid", "0"));
     passo("chi chiede: il programma", uguali(messaggio_valore(&r, "program"), "/data/tests/messaggi"));
+    passo("permesso provvisorio: concesso", messaggio_vale(&r, "permission", "yes"));
+}
+
+static void tempo_massimo(int d) {
+    struct messaggio q, r;
+    messaggio_inizia(&q);
+    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, "slow");
+    unsigned int prima = tempo();
+    int e = chiedi_entro(d, &q, &r, 300);
+    unsigned int passati = tempo() - prima;
+    passo("slow: chiedi_entro 300 ms da' CHIEDI_SCADUTO", e == CHIEDI_SCADUTO);
+    passo("slow: scaduto tra 250 e 700 ms", passati >= 250 && passati <= 700);
+    passo("slow: result=timeout, con l'id della richiesta",
+          messaggio_vale(&r, CHIAVE_ESITO, ESITO_SCADUTO) && uguali(messaggio_valore(&q, CHIAVE_ID), messaggio_valore(&r, CHIAVE_ID)));
+
+    /* la risposta tardiva a slow arriva prima di quella di ping: chiedi deve buttarla */
+    messaggio_inizia(&q);
+    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, "ping");
+    passo("ping dopo il timeout: chiedi", chiedi(d, &q, &r) == 0);
+    passo("ping: result=ok, pong, non la risposta tardiva",
+          messaggio_vale(&r, CHIAVE_ESITO, ESITO_OK) && messaggio_vale(&r, "pong", "1") && !messaggio_valore(&r, "late") &&
+          uguali(messaggio_valore(&q, CHIAVE_ID), messaggio_valore(&r, CHIAVE_ID)));
 }
 
 static void non_valido(int d) {
@@ -184,6 +223,7 @@ int main(void) {
     if (d >= 0) {
         echo(d);
         non_valido(d);
+        tempo_massimo(d);
         chiudi(d);
     }
     if (figlio > 0) waitpid(figlio, 0, 0);

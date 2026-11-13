@@ -6,7 +6,7 @@
  * tutti i servizi, sono:
  *     request   quale richiesta (la mette chi chiede)
  *     id        un numero scelto da chi chiede; la risposta lo ripete (lo mette chiedi)
- *     result    nella risposta: ok, denied, invalid, error (ESITO_... qui sotto)
+ *     result    nella risposta: ok, denied, invalid, error, timeout (ESITO_... qui sotto)
  * Il resto delle chiavi lo decide ogni servizio, e lo scrive accanto al suo codice.
  * Un messaggio viaggia come UN pacchetto sulle porte (ascolta, collega, accetta in
  * libreria.h), con al massimo un descrittore allegato. */
@@ -25,6 +25,8 @@
 #define ESITO_NEGATO     "denied"    /* chi chiede non ha il permesso */
 #define ESITO_NON_VALIDO "invalid"   /* la richiesta e' sbagliata: non si capisce, manca un dato... */
 #define ESITO_ERRORE     "error"     /* la richiesta era giusta, ma non e' andata */
+#define ESITO_SCADUTO    "timeout"   /* il servizio non ha risposto in tempo: non lo manda mai
+                                      * il servizio, lo mette chiedi nella risposta */
 
 /* Le misure. Un messaggio, mandato, e' al massimo MAX_MESSAGGIO byte (chiamate.h: e' gia'
  * il limite di manda). Una chiave e' al massimo MAX_CHIAVE lettere, compreso lo 0 finale. */
@@ -99,12 +101,23 @@ int messaggio_ricevi(int d, struct messaggio *m);
 
 /* --- chi chiede --- */
 
+/* Il tempo massimo che chiedi aspetta una risposta, uguale per tutti: 5 secondi. */
+#define TEMPO_CHIEDI 5000
+
+/* Il valore di chiedi quando il tempo e' scaduto. */
+#define CHIEDI_SCADUTO (-2)
+
 /* Manda 'richiesta' sul collegamento 'd' con un id nuovo (lo aggiunge chiedi: la
- * richiesta non deve averlo gia'), e aspetta la risposta con lo stesso id; le risposte
- * con un altro id si buttano. 0 se la risposta e' arrivata (il suo esito e' in result),
- * -1 se no (la richiesta era guasta, o il servizio ha chiuso). Dorme senza limite: un
- * servizio che non risponde ferma chi chiede. */
+ * richiesta non deve averlo gia'), e aspetta la risposta con lo stesso id, al massimo
+ * TEMPO_CHIEDI millisecondi; le risposte con un altro id (anche quelle arrivate tardi a
+ * una richiesta di prima) si buttano. 0 se la risposta e' arrivata (il suo esito e' in
+ * result); CHIEDI_SCADUTO se il tempo e' finito: allora *risposta ha l'id della richiesta
+ * e result=timeout; -1 se no (la richiesta era guasta, o il servizio ha chiuso). */
 int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta);
+
+/* Come chiedi, aspettando al massimo 'ms' millisecondi invece di TEMPO_CHIEDI: per una
+ * richiesta che si sa lenta. */
+int chiedi_entro(int d, struct messaggio *richiesta, struct messaggio *risposta, int ms);
 
 /* --- il servizio: chi c'e' dall'altra parte --- */
 
@@ -116,5 +129,10 @@ struct chi_chiede {
 
 /* Riempie *c per il collegamento 'd'. 0, o -1 se il kernel non lo sa (non e' un socket). */
 int chi_chiede(int d, struct chi_chiede *c);
+
+/* Chi chiede (riempito da chi_chiede) ha il permesso 'nome' (es. "network.configure")?
+ * 1 si', 0 no. PROVVISORIO: oggi risponde sempre si' e scrive la domanda nel registro;
+ * cosa fara' quando sara' vera e' spiegato accanto al codice, in messaggi.c. */
+int ha_permesso(const struct chi_chiede *c, const char *nome);
 
 #endif

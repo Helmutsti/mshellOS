@@ -418,6 +418,11 @@ persona sono nella sezione 8.
 chieda al launcher (`APRI_SHELL`, `utente/programmi/launcher.c`): decisione provvisoria della
 persona, "poi lo proteggiamo" (chi può chiederla, e con quale permesso).
 
+**I permessi delle porte rispondono sempre sì (provvisorio): da accendere.** La funzione dei
+permessi dei servizi (`ha_permesso`, `utente/libreria/messaggi.c`) oggi non controlla niente e
+scrive ogni domanda nel registro con "provvisorio"; va resa vera (sistema / app con i permessi
+concessi / comando della persona).
+
 **Fatti per ultimi** (12/11/2026): i tasti speciali (l'errore era nella tabella dei tasti di
 Doom; Esc ora chiude gli avvisi) e le risorse su disco (`/system/resources`, sezione 4). Restano
 da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.

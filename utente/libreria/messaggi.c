@@ -15,7 +15,8 @@
  *     primo, quello dopo la chiave);
  *   - la BUSTA, uguale per tutti: request (quale richiesta), id (un numero scelto da chi
  *     chiede, che la risposta ripete), result (l'esito, nella risposta: ok, denied,
- *     invalid, error);
+ *     invalid, error; e timeout, che non manda il servizio ma mette chiedi quando il
+ *     servizio non risponde in tempo);
  *   - un descrittore aperto (un file, un foglio di memoria) puo' viaggiare ACCANTO al
  *     messaggio, uno al massimo, come fa gia' manda_foglio;
  *   - un messaggio = un pacchetto: le porte sono SOCK_SEQPACKET, ogni messaggio arriva
@@ -72,14 +73,19 @@
  * Un messaggio vuoto non si manda: su SOCK_SEQPACKET un pacchetto di 0 byte, ricevuto,
  * sembra un collegamento chiuso (recvmsg da' 0 in tutti e due i casi).
  *
+ * IL TEMPO MASSIMO. Chi chiede non aspetta per sempre: se il servizio e' vivo ma non
+ * risponde (bloccato, o molto lento), chiedi smette dopo TEMPO_CHIEDI (5 secondi, uguale
+ * per tutti), mette nella risposta result=timeout e da' CHIEDI_SCADUTO. Per una richiesta
+ * che si sa lenta c'e' chiedi_entro, con un tempo suo. Se invece il servizio cade, il
+ * kernel chiude il collegamento e chiedi lo sa subito (-1), senza aspettare. Una risposta
+ * che arriva dopo il tempo massimo resta nel collegamento: la butta la chiedi successiva,
+ * perche' ha l'id vecchio, come ogni risposta con un id che non e' il suo.
+ *
  * CHI CHIEDE. Il servizio sa chi c'e' dall'altra parte da chi_chiede: l'uid e il programma,
  * che dice il kernel (SO_PEERCRED e /proc/<numero>/exe: chi e programma_di in
- * comunicazione.c), e quindi non si possono fingere. QUI SI AGGANCERA' IL CONTROLLO DEI
- * PERMESSI (non c'e' ancora): dal programma si risale a chi e' (un'app, /system/apps/<id>/
- * o /data/apps/<id>/, con i permessi che la persona le ha concesso; un programma del
- * sistema; un comando della persona), e il servizio chiedera' solo "ha il permesso X?",
- * con una funzione accanto a chi_chiede che legge struct chi_chiede, e rispondera'
- * ESITO_NEGATO se no. Oggi ogni servizio decide da solo guardando l'uid. */
+ * comunicazione.c), e quindi non si possono fingere. Poi chiede "ha il permesso X?" con
+ * ha_permesso, e se no risponde ESITO_NEGATO. Oggi ha_permesso e' PROVVISORIA: risponde
+ * sempre si' (vedi sotto, accanto al suo codice). */
 #include <string.h>
 
 #include "messaggi.h"
@@ -234,21 +240,40 @@ int messaggio_ricevi(int d, struct messaggio *m) {
 
 /* --- chi chiede --- */
 
-int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta) {
+int chiedi_entro(int d, struct messaggio *richiesta, struct messaggio *risposta, int ms) {
     /* l'id: un numero che cresce, diverso per ogni richiesta di questo programma */
     static long ultimo;
     long id = ++ultimo;
     if (messaggio_valore(richiesta, CHIAVE_ID) || messaggio_aggiungi_numero(richiesta, CHIAVE_ID, id) < 0 ||
         messaggio_manda(d, richiesta) < 0)
         return -1;
+    /* il tempo massimo vale per tutta l'attesa: ogni risposta buttata (id sbagliato) ha gia'
+     * consumato una parte del tempo, e il giro dopo aspetta solo quello che resta */
+    unsigned int partenza = tempo();
+    if (ms < 0) ms = 0;
     for (;;) {
+        unsigned int passati = tempo() - partenza;
+        int resta = passati >= (unsigned int)ms ? 0 : ms - (int)passati;
+        struct da_guardare g = { d, 0 };
+        int pronti = aspetta(&g, 1, resta);
+        if (pronti < 0) return -1;
+        if (pronti == 0) {
+            /* il servizio non ha risposto in tempo: la busta della risposta la fa chiedi */
+            messaggio_risposta(risposta, richiesta, ESITO_SCADUTO);
+            return CHIEDI_SCADUTO;
+        }
         int e = messaggio_ricevi(d, risposta);
         if (e == 0 || e == -1) return -1;
         long ricevuto;
         if (e == 1 && messaggio_numero(risposta, CHIAVE_ID, &ricevuto) == 0 && ricevuto == id) return 0;
-        /* una risposta che non e' per questa richiesta (o non si legge): si butta */
+        /* una risposta che non e' per questa richiesta (o non si legge, o arrivata tardi a
+         * una richiesta di prima): si butta */
         if (risposta->allegato >= 0) chiudi(risposta->allegato);
     }
+}
+
+int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta) {
+    return chiedi_entro(d, richiesta, risposta, TEMPO_CHIEDI);
 }
 
 /* --- il servizio: chi c'e' dall'altra parte --- */
@@ -258,4 +283,45 @@ int chi_chiede(int d, struct chi_chiede *c) {
     if (c->uid < 0) return -1;
     if (programma_di(d, c->programma) < 0) c->programma[0] = 0;
     return 0;
+}
+
+/* I PERMESSI, PROVVISORI. Oggi questa funzione NON CONTROLLA NIENTE: risponde sempre si'.
+ * Scrive pero' ogni domanda nel registro, con la parola "provvisorio", es.
+ *     permesso network.configure a /system/apps/settings/code (uid 1000): concesso (provvisorio)
+ * cosi' si vede chi chiede cosa, e quando si accendera' si sapra' gia' quali permessi
+ * servono e a chi.
+ *
+ * QUANDO SARA' VERA, dal programma (che dice il kernel, non si puo' fingere) e dall'uid
+ * risalira' a chi e':
+ *   - un programma del SISTEMA (/system/services/..., /system/bin/... come uid 0): ha
+ *     tutti i permessi;
+ *   - un'APP (/system/apps/<id>/ o /data/apps/<id>/): ha il permesso solo se il suo
+ *     manifesto lo dichiara E la persona gliel'ha concesso (i permessi concessi, salvati
+ *     per ogni app: APPLICAZIONI.md, le sezioni sui permessi);
+ *   - un COMANDO della persona (/data/users/<uid>/bin): parte dai permessi della persona
+ *     che lo lancia (SISTEMA.md, domande aperte).
+ * E rispondera' 0 quando il permesso non c'e': il servizio allora manda ESITO_NEGATO. */
+int ha_permesso(const struct chi_chiede *c, const char *nome) {
+    /* la riga intera in un pezzo solo, con una sola scrivi: cosi' non si mescola con le
+     * righe degli altri programmi */
+    char riga[64 + MAX_CHIAVE + MAX_PERCORSO_PROGRAMMA + 64];
+    int n = 0;
+    const char *pezzi[] = { "permesso ", nome, " a ", c->programma[0] ? c->programma : "un programma sconosciuto",
+                            " (uid ", 0, "): concesso (provvisorio)\n" };
+    for (unsigned int i = 0; i < sizeof pezzi / sizeof pezzi[0]; i++) {
+        if (!pezzi[i]) {
+            /* l'uid in cifre */
+            char cifre[12];
+            int k = sizeof cifre;
+            unsigned int u = c->uid < 0 ? 0 : (unsigned int)c->uid;
+            do cifre[--k] = (char)('0' + u % 10); while (u /= 10);
+            while (k < (int)sizeof cifre && n < (int)sizeof riga - 1) riga[n++] = cifre[k++];
+            continue;
+        }
+        /* un nome troppo lungo si taglia: la riga e' solo per il registro */
+        for (const char *p = pezzi[i]; *p && n < (int)sizeof riga - 1; p++) riga[n++] = *p;
+    }
+    riga[n - 1] = '\n';   /* anche se si e' tagliata, la riga finisce con l'a capo */
+    scrivi(riga, n);
+    return 1;
 }

@@ -59,7 +59,7 @@ Deciso il 13 novembre 2026: **i messaggi sono testo `chiave=valore`**, come i fi
 configurazione.
 - Un messaggio = righe `chiave=valore`, separate da a capo. Una chiave può ripetersi (es. più `dns=`).
 - Chiavi in inglese minuscolo, come nei file di configurazione.
-- Chiavi della busta, uguali per tutti: `request` (quale richiesta), `id` (numero scelto da chi chiede, la risposta lo ripete), `result` (nella risposta: `ok`, `denied`, `invalid`, `error`...).
+- Chiavi della busta, uguali per tutti: `request` (quale richiesta), `id` (numero scelto da chi chiede, la risposta lo ripete), `result` (nella risposta: `ok`, `denied`, `invalid`, `error`, e `timeout` se il servizio non risponde in tempo).
 - Il resto delle chiavi lo decide ogni servizio, e lo scrive accanto al suo codice.
 - Un descrittore allegato (file, foglio di memoria) viaggia accanto al messaggio, come oggi.
 
@@ -79,7 +79,18 @@ Il primo a usarlo sarà il servizio network. Compositore e launcher si allineera
 - leggere: `messaggio_valore`, `messaggio_prossimo` (per le chiavi ripetute), `messaggio_numero`, `messaggio_vale`;
 - mandare e ricevere, con un descrittore allegato facoltativo: `messaggio_manda`, `messaggio_ricevi`;
 - chi chiede: `chiedi` (mette l'`id` e aspetta la risposta con lo stesso `id`);
-- il servizio: `chi_chiede` (uid e programma dall'altra parte). Il controllo dei permessi si aggancerà lì, ancora da fare.
+- il servizio: `chi_chiede` (uid e programma dall'altra parte) e `ha_permesso` (sotto).
+
+**Tempo massimo.** `chiedi` aspetta al massimo 5 secondi, uguale per tutti; per una richiesta
+lenta c'è `chiedi_entro`, con un tempo dato da chi chiede. Se scade, la risposta ha
+`result=timeout` (lo mette `chiedi`, non il servizio) e `chiedi` dà un valore suo. Una risposta
+arrivata tardi ha l'`id` vecchio e la butta la richiesta successiva. Se il servizio cade, il
+collegamento si chiude e chi chiede lo sa subito.
+
+**Permessi (provvisori).** Il servizio chiede `ha_permesso(chi chiede, "nome.permesso")` (es.
+`network.configure`). **Oggi risponde sempre sì** e scrive la domanda nel registro, con la parola
+"provvisorio". Quando sarà vera riconoscerà sistema, app (manifesto e permessi concessi) e
+comando della persona: il commento in `messaggi.c` dice come. Nessun servizio la usa ancora.
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
 
