@@ -18,6 +18,7 @@
  *     stato       accesa (collegata)
  *     modo        dhcp, prestito 23 h 12 min
  *     indirizzo   10.0.2.15/24
+ *     subnet      10.0.2.0/24 (255.255.255.0)
  *     gateway     10.0.2.2
  *     dns         10.0.2.3
  *     firewall    attivo: entrata blocca, uscita permetti, inoltro blocca, ping permetti
@@ -31,8 +32,10 @@
  *     3  permesso negato
  *     4  non si riesce a scrivere sullo standard output */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 #include "corekit/corekit.h"
 #include "corekit/sistema/network.h"
@@ -112,6 +115,25 @@ static void scrivi_durata(char *d, unsigned int misura, long s) {
     else            snprintf(d, misura, "%ld s", sec);
 }
 
+/* La subnet di un indirizzo "a.b.c.d/n": la rete e la maschera, "10.0.2.0/24 (255.255.255.0)".
+ * Se l'indirizzo non c'e' o non e' IPv4 con il prefisso, d resta vuoto. */
+static void scrivi_subnet(char *d, unsigned int misura, const char *indirizzo) {
+    char ip[RETE_MAX_TESTO];
+    d[0] = 0;
+    const char *barra = strchr(indirizzo, '/');
+    if (!barra || barra - indirizzo >= (long)sizeof ip) return;
+    memcpy(ip, indirizzo, (size_t)(barra - indirizzo));
+    ip[barra - indirizzo] = 0;
+    char *fine;
+    long n = strtol(barra + 1, &fine, 10);
+    struct in_addr a;
+    if (*fine || n < 0 || n > 32 || inet_pton(AF_INET, ip, &a) != 1) return;
+    unsigned int maschera = n ? 0xFFFFFFFFu << (32 - n) : 0;
+    unsigned int rete = ntohl(a.s_addr) & maschera;
+    snprintf(d, misura, "%u.%u.%u.%u/%ld (%u.%u.%u.%u)", rete >> 24, rete >> 16 & 255, rete >> 8 & 255,
+             rete & 255, n, maschera >> 24, maschera >> 16 & 255, maschera >> 8 & 255, maschera & 255);
+}
+
 /* --- le richieste --- */
 
 static void controlla(int esito) {
@@ -143,6 +165,8 @@ static int stato(void) {
     riga("modo", v);
 
     riga("indirizzo", s.indirizzo);
+    scrivi_subnet(v, sizeof v, s.indirizzo);
+    riga("subnet", v);
     riga("gateway", s.gateway);
 
     v[0] = 0;
