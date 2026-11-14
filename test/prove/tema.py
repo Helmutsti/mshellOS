@@ -16,6 +16,7 @@ from qemu import PUNTO_VUOTO
 NOME = "tema"
 ORDINE = 55
 DESCRIZIONE = "Impostazioni cambia il tema dal vivo: Impostazioni, Files e userbar"
+DISCO = "disco_app.img"   # la userbar con Esempio, come nelle altre prove (scrivania.APP)
 
 
 def _luce(foto, rettangolo):
