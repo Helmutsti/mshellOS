@@ -48,6 +48,14 @@ def esegui(p):
     p.controlla("launcher: installata contatore" in seriale, "il launcher non dice 'installata contatore'")
     x, y = s.angolo(0)
     l, _ = s.MISURE["Contatore"]
-    s.aspetta_zona(m, p.scrivania, (x, y, x + l, y + s.BARRA), uguale=False, attesa=15.0,
-                   cosa="la finestra di Contatore (installata) aperta")
+    # Non si confronta con la foto della scrivania vuota (p.scrivania): il programma pacchetti
+    # parte con il sistema e, su una macchina veloce (arm64 con hvf), apre Contatore prima che
+    # quella foto sia fatta, quindi la finestra ci sarebbe gia' dentro e la zona risulterebbe
+    # sempre uguale. Si guarda la finestra stessa: il corpo e' una superficie chiara e piena,
+    # mentre lo sfondo, in quel punto, e' blu e viola scuro.
+    def finestra_aperta(foto):
+        rgb = foto.convert("RGB")
+        punti = [(x + 12, y + 12), (x + 12, y + s.BARRA + 40), (x + l - 12, y + s.BARRA + 40)]
+        return all(min(rgb.getpixel(q)) > 170 for q in punti)
+    m.aspetta_che(finestra_aperta, 15.0, cosa="la finestra di Contatore (installata) aperta")
     m.foto("contatore_installata")
