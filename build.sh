@@ -34,7 +34,7 @@
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
 #   utente/comandi/    i comandi (programmi senza grafica, per la riga di comando: SISTEMA.md),
-#                      uno per file: <nome>.c diventa /system/bin/<nome> (oggi webask e network)
+#                      uno per file: <nome>.c diventa /system/bin/<nome> (oggi network)
 #   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c, manifest.toml e resources/)
 #   utente/prove/      programmi che servono solo alle prove automatiche (test/): vanno
 #                      solo in disco_prove.img, mai nel disco normale
@@ -48,6 +48,8 @@
 #       libcorekit.a   CoreKit compilata (una libreria statica), legata in ogni programma
 #       libgkit.a      GKit compilata (la grafica), come libcorekit.a
 #       libuikit.a     UIKit compilata (l'interfaccia), come libcorekit.a
+#       curl           il comando curl, compilato dai sorgenti ufficiali (strumenti/
+#                      compilazione/curl.sh): si rifa' solo se cambia la versione o la radice
 #       avvio.img      l'archivio di avvio (initramfs: cpio compresso con gzip)
 #       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
 #                      UEFI (una "UKI", Unified Kernel Image)
@@ -62,7 +64,8 @@
 #                      (vedi in fondo)
 #       disco_messaggi.img  per la prova dei messaggi tra servizi: il programma messaggi
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
-#   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
+#   build/scarico/     i pacchetti di Alpine e i sorgenti di curl scaricati, tenuti per la
+#                      prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
 # nome nella tabella (il "PARTLABEL", che avvio usa per trovarle):
@@ -80,7 +83,7 @@
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
 #                                manifest.toml e resources/ (lo stesso contenuto del loro
 #                                pacchetto .app, scompattato)
-#       bin/                     i comandi: quelli di utente/comandi (webask, network) e la shell di prova
+#       bin/                     i comandi: quelli di utente/comandi (network), curl e la shell di prova
 #       lib/                     per le librerie condivise (per ora nessuna: vedi sotto)
 #       resources/               le risorse del sistema: fonts/ (i caratteri), icons/ (le
 #                                icone), wallpapers/ (gli sfondi). Sono i file di risorse/
@@ -201,7 +204,7 @@ apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = 
 #   - il kernel, i suoi moduli (linux-virt) e il firmware;
 #   - musl-dev: la libreria C (libc.a) e i suoi header, da legare dentro i programmi;
 #   - linux-headers: gli header del kernel (input, DRM...);
-#   - mbedtls-dev, mbedtls-static: mbedTLS, la libreria per HTTPS (la lega dentro webask);
+#   - mbedtls-dev, mbedtls-static: mbedTLS, la libreria per HTTPS (la lega dentro curl);
 #   - ca-certificates-bundle: i certificati radice (le autorita' di cui ci si fida per HTTPS),
 #     che vanno in /etc/ssl/certs/ca-certificates.crt.
 # Le firme dei pacchetti si controllano con le chiavi di Alpine per quella CPU.
@@ -233,6 +236,11 @@ P="$B/oggetti"
 make -s -f strumenti/compilazione/programmi.mk -j"$(nproc)" \
     ARCH="$ARCH" CPU="$CPU" RADICE="$RADICE" O="$P"
 echo "programmi compilati in $P"
+
+# curl, il comando per scaricare dal web (/system/bin/curl): non e' nostro, si compila dai
+# sorgenti ufficiali, con la versione fissata e controllata (strumenti/compilazione/curl.sh,
+# che dice perche' e come). Si rifa' solo se serve.
+sh strumenti/compilazione/curl.sh "$ARCH" "$RADICE" "$SCARICO" "$B/curl"
 
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
@@ -347,7 +355,7 @@ metti_cartella /etc 0 755
 ln -s /run/network/resolv.conf "$(vero /etc/resolv.conf)"
 printf '  %-40s -> /run/network/resolv.conf
 ' /etc/resolv.conf
-# i certificati radice per HTTPS (ca-certificates-bundle di Alpine, nella RADICE): webask li
+# i certificati radice per HTTPS (ca-certificates-bundle di Alpine, nella RADICE): curl li
 # cerca nel posto solito di Linux. Si aggiornano rifacendo il build.
 metti_file "$RADICE/etc/ssl/certs/ca-certificates.crt" /etc/ssl/certs/ca-certificates.crt 644
 
@@ -374,6 +382,8 @@ for f in utente/comandi/*.c; do
     nome=$(basename "$f" .c)
     metti_file "$P/bin/comandi/$nome" "/system/bin/$nome" 755
 done
+# curl, compilato a parte (vedi sopra): un comando come gli altri
+metti_file "$B/curl" /system/bin/curl 755
 
 # Le applicazioni (utente/applicazioni/<Nome>/): il pacchetto di ognuna lo prepara
 # programmi.mk (con strumenti/compilazione/impacchetta.sh): scompattato in P/pacchetti/<id>/

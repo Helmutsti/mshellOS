@@ -122,8 +122,7 @@ $(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIB
 	$(call lega,$@,$< $(LIBRERIE))
 # i comandi: programmi senza grafica, solo CoreKit (SISTEMA.md)
 # Un comando che usa una libreria di Alpine la dice in LIBRERIE_<nome> (legata dentro il
-# programma, dopo CoreKit). webask: mbedTLS, per HTTPS (pacchetto mbedtls-static).
-LIBRERIE_webask := -lmbedtls -lmbedx509 -lmbedcrypto
+# programma, dopo CoreKit). Oggi nessuno.
 $(addprefix $(O)/bin/comandi/,$(COMANDI)): $(O)/bin/comandi/%: $(O)/utente/comandi/%.o $(COREKIT)
 	$(call lega,$@,$< $(COREKIT) -L$(LIBC) $(LIBRERIE_$*))
 # i programmi delle prove (utente/prove): solo nei dischi delle prove

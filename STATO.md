@@ -108,11 +108,11 @@ non mette da parte niente (il programma riparte subito). La prova usa `utente/pr
 nel disco `disco_shell.img`.
 
 **I comandi** sono fatti da noi, uno per file in `utente/comandi/<nome>.c`: `build.sh` (e la
-sandbox) li mette in `/system/bin/<nome>`, legati solo con CoreKit. Il primo è **`webask`**, un
-"curl" essenziale: `webask [-i] http[s]://nome[:porta]/percorso` scrive il contenuto della pagina
-(`-i` anche stato e intestazioni). HTTP e HTTPS (mbedTLS, vedi sotto); i
-reindirizzamenti non si seguono, si dice dove porterebbero. Codici di uscita in `webask -h` e
-nel commento in testa al file. Nessun altro comando di base per ora (decisione della persona).
+sandbox) li mette in `/system/bin/<nome>`, legati solo con CoreKit (oggi `network`). In più c'è
+**`curl`** (`/system/bin/curl`), che non è nostro: `build.sh` lo compila dai sorgenti ufficiali,
+versione fissata e controllata con sha256 (`strumenti/compilazione/curl.sh`, oggi 8.23.0, la
+stessa di Alpine 3.24), statico, con HTTPS tramite mbedTLS di Alpine (vedi sotto) e nessun'altra
+libreria. Nella sandbox non c'è. Nessun altro comando di base per ora (decisione della persona).
 
 Per usarla: nella finestra di QEMU apri la seriale, **View (Visualizza) -> serial0** (compare il
 registro dell'avvio e, in fondo, il prompt `/ # `; se non si vede, Invio). Per tornare allo
@@ -386,7 +386,7 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
   dentro ogni programma.
 - Terminale (più avanti): i comandi sono programmi, non app. L'app Terminale riceve un
   permesso esplicito "accedere ai tuoi file", come su macOS. I comandi li facciamo noi
-  (`utente/comandi/`, il primo è `webask`).
+  (`utente/comandi/`), più `curl` dai sorgenti ufficiali.
 - Terminale in finestra (app Terminale, si apre dal vassoio delle app): la shell dentro gira come
   **sistema** (uid 0), non come la persona, e **chiunque può chiederla** al launcher
   (`open_shell`, che le passa il terminale finto). Decisione della persona, provvisoria:
@@ -550,7 +550,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 31. **La shell**: Ctrl-Z ferma un programma ma la shell non sa tenerlo da parte (lo fa ripartire);
     Ctrl-C provato solo sulla seriale, non nel Terminale; la prova `test/shell.py` aspetta
     "cartella non trovata" ma la shell scrive "cartella inesistente" (già prima).
-32. **HTTPS** per `webask`: fatto con mbedTLS 4 di Alpine (legato dentro webask) e i certificati radice di Alpine in `/etc/ssl/certs/ca-certificates.crt`. Il certificato si controlla sempre (anche la data): su un computer vero servirà la sincronizzazione dell'ora. Le prove automatiche tengono l'orologio al 1° gennaio 2026, quindi lì i certificati più recenti risultano "non ancora validi".
+32. **HTTPS** per `curl`: fatto con mbedTLS 4 di Alpine (legato dentro curl) e i certificati radice di Alpine in `/etc/ssl/certs/ca-certificates.crt`. Il certificato si controlla sempre (anche la data): su un computer vero servirà la sincronizzazione dell'ora. Le prove automatiche tengono l'orologio al 1° gennaio 2026, quindi lì i certificati più recenti risultano "non ancora validi".
 33. **Il servizio di rete**: la porta di controllo c'e' (status, restart, stop; in sola lettura, `corekit/sistema/network.h`):
     il comando `network` la usa (`utente/comandi/network.c`: status, restart, stop); manca la pagina della rete. Da fare: API del firewall (controllo pieno per
     l'app del ruolo firewall; richiesta di accettare connessioni in entrata per le altre app): prima vanno

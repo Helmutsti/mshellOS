@@ -43,7 +43,8 @@ NOME                                          UID   PERM.    DESCRIZIONE
 │   ├── bin/                                  0     755      i comandi del sistema
 │   │   ├── shell                             0     755      la shell di prova (da
                                                              utente/programmi/shell.c)
-│   │   └── webask                            0     755      comando: webask (da utente/comandi)
+│   │   └── curl                              0     755      comando: curl (dai sorgenti ufficiali,
+                                                             strumenti/compilazione/curl.sh)
 │   ├── apps/                                 0     755      le applicazioni del sistema, una
                                                              cartella ciascuna
 │   │   ├── <app>/                            0     755      una app: lo stesso contenuto del suo

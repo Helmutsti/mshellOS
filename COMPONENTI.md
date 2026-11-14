@@ -17,7 +17,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 | network (servizio) | servizio | init | sistema (uid 0) | sì |
 | shell | comando/servizio di prova | init (seriale) o launcher (Terminale) | sistema (uid 0) | sì |
 | network (comando) | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
-| webask | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
+| curl | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
 | Files | app | launcher | persona (uid 1000) | no |
 | Attività | app | launcher | persona (uid 1000) | no |
 | Impostazioni | app | launcher | persona (uid 1000) | no (ha "settings.system") |
@@ -99,7 +99,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Cosa fa**: shell semplice per le prove. Comandi interni (pwd, cd, ls, help, exit); ogni altra parola è un programma, cercato prima in `/system/bin` poi in `/data/users/<uid>/bin`. Niente variabili, tubi o redirezioni.
 - **Tipo**: comando di prova (provvisorio); usata come programma del sistema.
 - **Lanciato da**: init (sulla seriale) oppure il launcher (richiesta APRI_SHELL, dentro il Terminale).
-- **Lancia**: i comandi digitati (con `fexecve`), quindi per esempio network e webask.
+- **Lancia**: i comandi digitati (con `fexecve`), quindi per esempio network e curl.
 - **Gira come**: sistema (uid 0), in entrambi i casi. Non cambia uid ai comandi che lancia.
 - **Poteri**: super sì (uid 0). Nessun controllo di permessi; il permesso "system.shell" è controllato dal launcher (provvisorio, aperto a chiunque).
 
@@ -115,8 +115,8 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Gira come**: chi lo lancia; oggi, dalla shell, uid 0. Non imposta uid.
 - **Poteri**: no. Il controllo è nel servizio: "network.use" (stato), "network.settings" (riavvia, ferma), provvisorio (sempre sì). Non chiaro dal codice se sia previsto un manifesto per i comandi.
 
-### webask (`utente/comandi/webask.c`)
-- **Cosa fa**: scarica una pagina web (HTTP e HTTPS con mbedTLS) e ne scrive il contenuto; con `-i` anche le intestazioni. Simile a un curl essenziale.
+### curl (`strumenti/compilazione/curl.sh`)
+- **Cosa fa**: il curl di sempre (non è nostro: sorgenti ufficiali, versione fissata, compilato statico da build.sh). Scarica dal web, HTTP e HTTPS con mbedTLS; controlla i certificati con quelli di Alpine in `/etc/ssl/certs/ca-certificates.crt`.
 - **Tipo**: comando.
 - **Lanciato da**: la shell.
 - **Lancia**: nessuno.
@@ -223,7 +223,7 @@ Programmi di prova, solo per i test automatici, non fanno parte del sistema: `ar
 
 ## Cose non chiare
 
-- Se i comandi (network, webask) avranno un manifesto con permessi: oggi non ne hanno; nel codice di webask non c'è alcun permesso.
+- Se i comandi (network, curl) avranno un manifesto con permessi: oggi non ne hanno; curl non controlla alcun permesso.
 - Con quali permessi gira un comando lanciato dalla shell: oggi la shell è uid 0 e non cambia uid ai comandi (SISTEMA.md lo lascia tra le domande aperte).
 - Permessi dichiarati ma non controllati da nessun servizio: "files.write" (Files), "processes.stop" (Attività). Per "files.write" e "processes.stop" resta solo il limite Unix.
 - Il commento in testa al compositore e al Terminale cita `utente/programmi/terminale.c`: oggi il Terminale è in `utente/applicazioni/Terminale/terminale.c`.

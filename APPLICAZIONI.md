@@ -160,7 +160,7 @@ recinto tocca quasi ogni pezzo:
    il servizio di rete deve sapere "collegami a questo nome e porta" e consegnare la connessione;
    per ricevere connessioni da fuori c'è la richiesta al firewall (sezione 7).
 8. **I comandi non sono nel recinto.** Un comando lanciato dalla persona ha tutti i suoi poteri
-   (come su Linux e Mac): `webask` usa la rete direttamente. Due modelli diversi convivono; come si
+   (come su Linux e Mac): `curl` usa la rete direttamente. Due modelli diversi convivono; come si
    distribuiscono e con quali poteri girano i comandi degli altri è già una domanda aperta
    (`SISTEMA.md`).
 9. **I permessi `apps.open` e `system.shell`**: da capire come gestirli (sezione 12).
