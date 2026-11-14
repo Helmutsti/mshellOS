@@ -12,7 +12,7 @@
  *      utente/config/network/network.conf; build.sh lo mette nel disco). Una cosa per riga,
  *      "chiave=valore": quale scheda (interface=eth0) e come avere l'indirizzo (mode=dhcp,
  *      chiesto alla rete, oppure mode=static, con address, gateway e dns scritti li').
- *      Oggi c'e' solo questa, del sistema; quella della persona in /data verra' dopo;
+ *      E' solo questa, quella del sistema: il servizio non ne ha una della persona (e' in sola lettura, vedi LA PORTA DI CONTROLLO);
  *   2. mette il firewall, con le regole di /system/config/network/firewall.conf (vedi IL
  *      FIREWALL, sotto). PRIMA di accendere le schede: la rete non e' mai accesa senza.
  *      Se il kernel non accetta le regole, lo scrive e lascia la rete spenta;
@@ -83,10 +83,25 @@
  * monta avvio). Il file si scrive accanto e poi si rinomina, cosi' chi lo legge non lo
  * trova mai a meta'.
  *
+ * LA PORTA DI CONTROLLO. Il servizio ascolta sul nome "network" (corekit/sistema/network.h,
+ * dove c'e' il contratto): si puo' chiedere lo stato (status) e, con il permesso, riavviarlo
+ * (restart) o spegnere la scheda (stop). E' in SOLA LETTURA: la configurazione non si cambia
+ * da li', resta quella dei file. Per rispondere mentre fa il resto (aspettare il DHCP, il
+ * rinnovo...) il servizio non dorme mai con dormi: ogni attesa passa da servi(), che
+ * aspetta il momento dato (o che arrivi qualcosa dalla presa del DHCP) e intanto serve le
+ * richieste della porta. Un restart risponde e poi si rilancia da solo (execv): rilegge i
+ * file e rifa' tutto da capo, e l'indirizzo vecchio lo toglie prima. Uno stop toglie
+ * indirizzo e strada e mette la scheda giu', lascia il firewall (un computer senza rete ma
+ * protetto) e da li' non torna piu' al lavoro di prima: resta a servire la porta, in attesa
+ * di un restart. Cosi' chi lo ferma non deve "srotolare" l'attesa in cui si trova.
+ *
  * Scrive nel registro righe brevi, come gli altri servizi, per esempio:
  *   network: firewall attivo (ingresso bloccato, uscita libera, inoltro bloccato, ping ammesso)
  *   network: eth0 10.0.2.15/24, gateway 10.0.2.2, dns 10.0.2.3 */
 #include "corekit/corekit.h"
+#include "corekit/messaggi.h"
+#include "corekit/sistema/servizi.h"     /* chi_chiede, ha_permesso */
+#include "corekit/sistema/network.h"     /* il contratto della porta */
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -162,10 +177,41 @@ static long long adesso(void) {
     return (long long)t.tv_sec * 1000 + t.tv_nsec / 1000000;
 }
 
+/* Aspetta fino al momento 'fino' (ms, come adesso()) e intanto serve la porta di controllo;
+ * se 'fd' non e' -1, torna 1 appena c'e' qualcosa da leggere su fd, altrimenti 0 allo
+ * scadere. E' l'unico modo in cui il servizio aspetta (vedi LA PORTA DI CONTROLLO). */
+static int servi(long long fino, int fd);
+#define PER_SEMPRE 0x7fffffffffffffffLL
+
+/* Lo stato per la porta: starting, up, stopped, failed (network.h) e, se failed, perche'. */
+static const char *fase = RETE_STATO_AVVIO;
+static char frase_guasto[160];
+
 /* Resta fermo per sempre: quando non c'e' piu' niente da fare, ma il servizio non deve
- * finire (init lo farebbe ripartire). */
+ * finire (init lo farebbe ripartire). Risponde alla porta. */
 static void __attribute__((noreturn)) resta_fermo(void) {
-    for (;;) dormi(60 * 60 * 1000);
+    for (;;) servi(PER_SEMPRE, -1);
+}
+
+/* Un errore da cui non si esce da soli: la riga in corso (senza il "network: " davanti)
+ * diventa la frase di state=failed, si scrive nel registro e si resta fermi. */
+static void __attribute__((noreturn)) guasto(void) {
+    const int davanti = (int)strlen("network: ");
+    int n = lunga - davanti;
+    if (n < 0) n = 0;
+    if (n > (int)sizeof frase_guasto - 1) n = (int)sizeof frase_guasto - 1;
+    memcpy(frase_guasto, riga + davanti, (size_t)n);
+    frase_guasto[n] = 0;
+    fase = RETE_STATO_GUASTA;
+    fine_riga();
+    resta_fermo();
+}
+
+/* Come di(), ma e' un guasto: vedi guasto(). */
+static void __attribute__((noreturn)) di_guasto(const char *s) {
+    metti("network: ");
+    metti(s);
+    guasto();
 }
 
 /* --- 1. la configurazione --- */
@@ -270,8 +316,8 @@ static int leggi_configurazione(struct configurazione *c) {
 
 /* --- 3. le schede --- */
 
-/* Accende la scheda (IFF_UP). 0, o -errno. */
-static int accendi(const char *nome) {
+/* Accende (IFF_UP) o spegne la scheda. 0, o -errno. */
+static int imposta_su(const char *nome, int su) {
     int s = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
     if (s < 0) return -errno;
     struct ifreq r;
@@ -279,12 +325,29 @@ static int accendi(const char *nome) {
     strncpy(r.ifr_name, nome, IF_NAMESIZE - 1);
     int esito = 0;
     if (ioctl(s, SIOCGIFFLAGS, &r) < 0) esito = -errno;
-    else if (!(r.ifr_flags & IFF_UP)) {
-        r.ifr_flags |= IFF_UP;
+    else if (!!(r.ifr_flags & IFF_UP) != su) {
+        if (su) r.ifr_flags |= IFF_UP;
+        else r.ifr_flags &= ~IFF_UP;
         if (ioctl(s, SIOCSIFFLAGS, &r) < 0) esito = -errno;
     }
     close(s);
     return esito;
+}
+
+static int accendi(const char *nome) { return imposta_su(nome, 1); }
+
+/* La scheda e' accesa e ha il collegamento (IFF_UP e IFF_RUNNING: quest'ultimo e' il
+ * "carrier" del kernel, il cavo)? 0 anche se la scheda non c'e'. */
+static int scheda_collegata(const char *nome) {
+    if (!nome[0]) return 0;
+    int s = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+    if (s < 0) return 0;
+    struct ifreq r;
+    memset(&r, 0, sizeof r);
+    strncpy(r.ifr_name, nome, IF_NAMESIZE - 1);
+    int si = ioctl(s, SIOCGIFFLAGS, &r) == 0 && (r.ifr_flags & IFF_UP) && (r.ifr_flags & IFF_RUNNING);
+    close(s);
+    return si;
 }
 
 /* L'indirizzo fisico (MAC) della scheda, 6 byte. 0, o -errno. */
@@ -309,8 +372,7 @@ static void __attribute__((noreturn)) fermo(const char *cosa, const char *nome, 
     metti(": ");
     metti(strerror(-errore));
     metti(", resto fermo");
-    fine_riga();
-    resta_fermo();
+    guasto();
 }
 
 /* Linux ci lascia cambiare le schede (CAP_NET_ADMIN) e mandare pacchetti grezzi
@@ -328,7 +390,7 @@ static int permessi_di_rete(void) {
 static int presa_kernel = -1;
 static unsigned int sequenza;
 
-union messaggio {
+union msg_netlink {
     struct nlmsghdr h;
     char byte[512];
 };
@@ -352,7 +414,7 @@ static int chiedi_al_kernel(struct nlmsghdr *h) {
     struct sockaddr_nl kernel = { .nl_family = AF_NETLINK };
     if (sendto(presa_kernel, h, h->nlmsg_len, 0, (struct sockaddr *)&kernel, sizeof kernel) < 0)
         return -errno;
-    union messaggio risposta;
+    union msg_netlink risposta;
     for (;;) {
         ssize_t letti = recv(presa_kernel, risposta.byte, sizeof risposta.byte, 0);
         if (letti < 0) {
@@ -372,7 +434,7 @@ static uint32_t maschera(int prefisso) {
 
 /* Da' (RTM_NEWADDR) o toglie (RTM_DELADDR) un indirizzo alla scheda. 0, o -errno. */
 static int indirizzo(int tipo, int scheda, uint32_t ip, int prefisso) {
-    union messaggio m;
+    union msg_netlink m;
     memset(&m, 0, sizeof m);
     m.h.nlmsg_len = NLMSG_LENGTH(sizeof(struct ifaddrmsg));
     m.h.nlmsg_type = (unsigned short)tipo;
@@ -393,7 +455,7 @@ static int indirizzo(int tipo, int scheda, uint32_t ip, int prefisso) {
 
 /* La strada predefinita (0.0.0.0/0) verso il gateway, dalla scheda. 0, o -errno. */
 static int strada_predefinita(int scheda, uint32_t gateway, int da_dhcp) {
-    union messaggio m;
+    union msg_netlink m;
     memset(&m, 0, sizeof m);
     m.h.nlmsg_len = NLMSG_LENGTH(sizeof(struct rtmsg));
     m.h.nlmsg_type = RTM_NEWROUTE;
@@ -479,7 +541,7 @@ static void chiudi_messaggio(void) {
     corrente = 0;
 }
 
-static void messaggio(int tipo, int flag, int famiglia, int sottosistema) {
+static void messaggio_netlink(int tipo, int flag, int famiglia, int sottosistema) {
     chiudi_messaggio();
     if (pieno + (int)NLMSG_SPACE(sizeof(struct nfgenmsg)) > (int)sizeof lotto) { troppo = 1; pieno = 0; }
     corrente = (struct nlmsghdr *)(lotto + pieno);
@@ -497,7 +559,7 @@ static void messaggio(int tipo, int flag, int famiglia, int sottosistema) {
 
 /* un messaggio di nf_tables, nella nostra famiglia (inet: IPv4 e IPv6 insieme) */
 static void messaggio_nft(int tipo, int flag) {
-    messaggio(NFNL_SUBSYS_NFTABLES << 8 | tipo, flag | NLM_F_ACK, NFPROTO_INET, 0);
+    messaggio_netlink(NFNL_SUBSYS_NFTABLES << 8 | tipo, flag | NLM_F_ACK, NFPROTO_INET, 0);
 }
 
 static struct nlattr *aggiungi(int tipo, const void *dati, int byte) {
@@ -708,7 +770,7 @@ static int metti_firewall(const struct firewall *f) {
     corrente = 0;
     da_confermare = 0;
     troppo = 0;
-    messaggio(NFNL_MSG_BATCH_BEGIN, 0, AF_UNSPEC, NFNL_SUBSYS_NFTABLES);
+    messaggio_netlink(NFNL_MSG_BATCH_BEGIN, 0, AF_UNSPEC, NFNL_SUBSYS_NFTABLES);
     messaggio_nft(NFT_MSG_NEWTABLE, NLM_F_CREATE);
     aggiungi_testo(NFTA_TABLE_NAME, TABELLA);
     messaggio_nft(NFT_MSG_DELTABLE, 0);
@@ -741,7 +803,7 @@ static int metti_firewall(const struct firewall *f) {
     /* l'inoltro non ha regole: il computer non fa da router, e con forward=block la
      * politica scarta tutto */
     if (!f->uscita) regole_di_base("output", 0);
-    messaggio(NFNL_MSG_BATCH_END, 0, AF_UNSPEC, NFNL_SUBSYS_NFTABLES);
+    messaggio_netlink(NFNL_MSG_BATCH_END, 0, AF_UNSPEC, NFNL_SUBSYS_NFTABLES);
     return manda_lotto();
 }
 
@@ -918,8 +980,7 @@ static int aspetta_risposta(long long scadenza, struct prestito *p) {
     for (;;) {
         long long resta = scadenza - adesso();
         if (resta <= 0) return 0;
-        struct pollfd q = { presa_dhcp, POLLIN, 0 };
-        if (poll(&q, 1, (int)resta) <= 0) continue;
+        if (!servi(scadenza, presa_dhcp)) continue;   /* intanto serve la porta */
         int n = (int)recv(presa_dhcp, b, sizeof b, 0);
         if (n < (int)(sizeof(struct intestazione_ip) + sizeof(struct intestazione_udp))) continue;
         int lung_ip = (b[0] & 15) * 4;
@@ -984,9 +1045,20 @@ static int rinnova(const struct prestito *vecchio, struct prestito *p) {
 
 static const char *nome_scheda;
 
+/* Quello che la scheda ha adesso, per la porta di controllo (status): l'indirizzo e il resto
+ * (attuale, solo se ha_indirizzo), e quando scade il prestito del DHCP (scade_il, come
+ * adesso(); solo con dhcp). */
+static struct prestito attuale;
+static int ha_indirizzo;
+static long long scade_il;
+
 /* Da' alla scheda indirizzo, strada e DNS, e lo scrive nel registro se e' cambiato
  * qualcosa rispetto a 'prima' (0: la prima volta). */
 static void applica(const struct prestito *p, const struct prestito *prima, int da_dhcp) {
+    attuale = *p;
+    ha_indirizzo = 1;
+    scade_il = da_dhcp && p->durata != 0xffffffffu ? adesso() + (long long)p->durata * 1000 : 0;
+    fase = RETE_STATO_ACCESA;
     int cambiato = !prima || prima->indirizzo != p->indirizzo || prima->prefisso != p->prefisso ||
                    prima->gateway != p->gateway || prima->quanti_dns != p->quanti_dns ||
                    memcmp(prima->dns, p->dns, sizeof p->dns) != 0;
@@ -1025,12 +1097,172 @@ static void applica(const struct prestito *p, const struct prestito *prima, int 
 static void togli_indirizzo(const struct prestito *p) {
     indirizzo(RTM_DELADDR, scheda, p->indirizzo, p->prefisso);
     scrivi_dns(0, 0);
+    ha_indirizzo = 0;
+    fase = RETE_STATO_AVVIO;
 }
 
-/* Aspetta fino al momento 'quando' (ms). */
+/* Aspetta fino al momento 'quando' (ms), servendo la porta. */
 static void aspetta_fino(long long quando) {
-    for (long long resta; (resta = quando - adesso()) > 0;)
-        dormi(resta > 60 * 60 * 1000 ? 60 * 60 * 1000 : (unsigned int)resta);
+    servi(quando, -1);
+}
+
+/* --- 7. la porta di controllo --- */
+
+static struct configurazione cfg;   /* quella letta dal file */
+static struct firewall fw;          /* idem */
+static int firewall_attivo;         /* le regole sono nel kernel */
+static int porta = -1;              /* il descrittore di ascolta("network") */
+
+#define MAX_CLIENTI 8
+#define SERVIZIO "/system/services/network"
+
+/* Un valore di firewall.conf, come lo scrive il file. */
+static const char *allow_block(int si) { return si ? "allow" : "block"; }
+
+/* Un indirizzo con il prefisso, "10.0.2.15/24", in 'dove'. */
+static void testo_indirizzo(char *dove, int byte, uint32_t ip, int prefisso) {
+    char ip_testo[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ip, ip_testo, sizeof ip_testo);
+    snprintf(dove, (size_t)byte, "%s/%d", ip_testo, prefisso);
+}
+
+/* status: la risposta con tutto quello che si sa. */
+static void stato(struct messaggio *r, const struct messaggio *q) {
+    messaggio_risposta(r, q, ESITO_OK);
+    messaggio_aggiungi(r, RETE_CHIAVE_SCHEDA, cfg.interfaccia);
+    messaggio_aggiungi(r, RETE_CHIAVE_STATO, fase);
+    messaggio_aggiungi(r, RETE_CHIAVE_COLLEGATA, scheda_collegata(cfg.interfaccia) ? "yes" : "no");
+    messaggio_aggiungi(r, RETE_CHIAVE_MODO, cfg.statica ? "static" : "dhcp");
+    if (ha_indirizzo) {
+        char t[INET_ADDRSTRLEN + 8];
+        testo_indirizzo(t, sizeof t, attuale.indirizzo, attuale.prefisso);
+        messaggio_aggiungi(r, RETE_CHIAVE_INDIRIZZO, t);
+        if (attuale.gateway) {
+            inet_ntop(AF_INET, &attuale.gateway, t, sizeof t);
+            messaggio_aggiungi(r, RETE_CHIAVE_GATEWAY, t);
+        }
+        for (int i = 0; i < attuale.quanti_dns; i++) {
+            inet_ntop(AF_INET, &attuale.dns[i], t, sizeof t);
+            messaggio_aggiungi(r, RETE_CHIAVE_DNS, t);
+        }
+        if (!cfg.statica) {
+            if (attuale.durata == 0xffffffffu) messaggio_aggiungi(r, RETE_CHIAVE_PRESTITO, "infinite");
+            else {
+                long long resta = (scade_il - adesso()) / 1000;
+                messaggio_aggiungi_numero(r, RETE_CHIAVE_PRESTITO, resta > 0 ? (long)resta : 0);
+            }
+        }
+    }
+    messaggio_aggiungi(r, RETE_CHIAVE_FIREWALL, firewall_attivo ? "active" : "inactive");
+    if (firewall_attivo) {
+        messaggio_aggiungi(r, RETE_CHIAVE_F_ENTRATA, allow_block(fw.ingresso));
+        messaggio_aggiungi(r, RETE_CHIAVE_F_INOLTRO, allow_block(fw.inoltro));
+        messaggio_aggiungi(r, RETE_CHIAVE_F_USCITA, allow_block(fw.uscita));
+        messaggio_aggiungi(r, RETE_CHIAVE_F_PING, allow_block(fw.ping || fw.ingresso));
+    }
+    if (fase == RETE_STATO_GUASTA) messaggio_aggiungi(r, RETE_CHIAVE_FRASE, frase_guasto);
+}
+
+/* Cosa fare DOPO aver risposto (la risposta deve partire prima: restart si rilancia, e
+ * il collegamento con chi chiede morirebbe senza risposta). */
+enum azione { NIENTE, RIAVVIA, FERMA };
+
+/* Una richiesta e la sua risposta, sul collegamento 'd'. */
+static enum azione rispondi(int d) {
+    struct messaggio q, r;
+    enum azione dopo = NIENTE;
+    int e = messaggio_ricevi(d, &q);
+    if (e == 0 || e == -1) return NIENTE;
+    if (e == MESSAGGIO_NON_VALIDO) {
+        messaggio_risposta(&r, 0, ESITO_NON_VALIDO);
+    } else {
+        struct chi_chiede c;
+        if (chi_chiede(d, &c) < 0) {   /* il kernel non lo sa: nessuno */
+            c.uid = -1;
+            c.programma[0] = 0;
+        }
+        const char *richiesta = messaggio_valore(&q, CHIAVE_RICHIESTA);
+        if (!richiesta) richiesta = "";
+        if (!strcmp(richiesta, RETE_RICHIESTA_STATO)) {
+            if (ha_permesso(&c, PERMESSO_RETE_USARE)) stato(&r, &q);
+            else messaggio_risposta(&r, &q, ESITO_NEGATO);
+        } else if (!strcmp(richiesta, RETE_RICHIESTA_RIAVVIA) || !strcmp(richiesta, RETE_RICHIESTA_FERMA)) {
+            if (ha_permesso(&c, PERMESSO_RETE_IMPOSTAZIONI)) {
+                messaggio_risposta(&r, &q, ESITO_OK);
+                dopo = !strcmp(richiesta, RETE_RICHIESTA_RIAVVIA) ? RIAVVIA : FERMA;
+            } else messaggio_risposta(&r, &q, ESITO_NEGATO);
+        } else {
+            messaggio_risposta(&r, &q, ESITO_NON_VALIDO);   /* una richiesta che non conosco */
+        }
+        if (q.allegato >= 0) chiudi(q.allegato);
+    }
+    /* il collegamento e' nuovo e porta solo questa richiesta: la risposta ci sta nella
+     * casella del kernel, e messaggio_manda non dorme */
+    messaggio_manda(d, &r);
+    if (r.allegato >= 0) chiudi(r.allegato);
+    return dopo;
+}
+
+/* restart: toglie l'indirizzo (se la nuova configurazione ne da' un altro, il vecchio non
+ * deve restare) e si rilancia: rilegge i file e rifa' tutto da capo, firewall compreso.
+ * Il nome "network" lo libera la chiusura dei descrittori (sono tutti CLOEXEC), e il nuovo
+ * lo riprende. Se execv non riesce lo dice e il servizio continua com'e'. */
+static void riavvia(void) {
+    di("riavvio richiesto, rileggo la configurazione");
+    if (ha_indirizzo) togli_indirizzo(&attuale);
+    char *argomenti[] = { (char *)SERVIZIO, 0 };
+    execv(SERVIZIO, argomenti);
+    metti("network: non riesco a rilanciarmi: ");
+    metti(strerror(errno));
+    fine_riga();
+}
+
+/* stop: indirizzo e DNS via, scheda giu'; il firewall resta (vedi network.h). Il servizio
+ * poi serve solo la porta: non torna al lavoro di prima. */
+static void __attribute__((noreturn)) ferma(void) {
+    if (fase == RETE_STATO_FERMA) resta_fermo();
+    if (ha_indirizzo) togli_indirizzo(&attuale);
+    if (presa_dhcp >= 0) { close(presa_dhcp); presa_dhcp = -1; }
+    if (scheda) imposta_su(nome_scheda, 0);
+    fase = RETE_STATO_FERMA;
+    di("scheda spenta su richiesta, il firewall resta");
+    resta_fermo();
+}
+
+static int servi(long long fino, int fd) {
+    static int clienti[MAX_CLIENTI];
+    static int quanti;
+    for (;;) {
+        long long resta = fino - adesso();
+        if (resta <= 0) return 0;
+        struct da_guardare g[2 + MAX_CLIENTI];
+        int n = 0;
+        int i_fd = -1, i_porta = -1;
+        if (fd >= 0) { i_fd = n; g[n++].descrittore = fd; }
+        if (porta >= 0) { i_porta = n; g[n++].descrittore = porta; }
+        int primo_cliente = n;
+        for (int i = 0; i < quanti; i++) g[n++].descrittore = clienti[i];
+        int ms = resta > 60 * 60 * 1000 ? 60 * 60 * 1000 : (int)resta;
+        if (aspetta(g, n, ms) <= 0) continue;
+
+        /* le richieste: una per collegamento, poi lo si chiude */
+        enum azione dopo = NIENTE;
+        for (int i = quanti - 1; i >= 0; i--) {
+            if (!g[primo_cliente + i].pronto) continue;
+            enum azione a = rispondi(clienti[i]);
+            if (a != NIENTE) dopo = a;
+            chiudi(clienti[i]);
+            clienti[i] = clienti[--quanti];
+        }
+        if (i_porta >= 0 && g[i_porta].pronto) {
+            int d = accetta(porta);
+            if (d >= 0 && quanti < MAX_CLIENTI) clienti[quanti++] = d;
+            else if (d >= 0) chiudi(d);
+        }
+        if (dopo == FERMA) ferma();
+        if (dopo == RIAVVIA) riavvia();
+        if (i_fd >= 0 && g[i_fd].pronto) return 1;
+    }
 }
 
 /* Con dhcp: chiede, mette, rinnova, per sempre. */
@@ -1056,7 +1288,7 @@ static void __attribute__((noreturn)) con_dhcp(void) {
                 fine_riga();
                 detto = 1;
             }
-            dormi(10 * 1000);
+            aspetta_fino(adesso() + 10 * 1000);
             continue;
         }
         detto = 0;
@@ -1094,44 +1326,36 @@ static void __attribute__((noreturn)) con_dhcp(void) {
 }
 
 int main(void) {
-    struct configurazione c;
-    if (leggi_configurazione(&c) < 0) {
-        di("manca " CONFIGURAZIONE ", resto fermo");
-        resta_fermo();
-    }
-    if (!c.interfaccia[0]) {
-        di("in " CONFIGURAZIONE " manca interface=, resto fermo");
-        resta_fermo();
-    }
-    if (c.statica && !c.indirizzo) {
-        di("con mode=static serve address=, resto fermo");
-        resta_fermo();
-    }
-    nome_scheda = c.interfaccia;
-    if (!permessi_di_rete()) {
-        di("Linux non mi lascia gestire le schede di rete (CAP_NET_ADMIN, CAP_NET_RAW), resto fermo");
-        resta_fermo();
-    }
+    /* la porta SUBITO, prima di tutto il resto: anche se poi il servizio resta fermo per
+     * un guasto, si puo' chiedere come sta (state=failed) */
+    porta = ascolta(NOME_NETWORK);
+    if (porta < 0) di("non riesco a mettermi in ascolto sul nome " NOME_NETWORK ", niente porta di controllo");
+
+    if (leggi_configurazione(&cfg) < 0) di_guasto("manca " CONFIGURAZIONE ", resto fermo");
+    if (!cfg.interfaccia[0]) di_guasto("in " CONFIGURAZIONE " manca interface=, resto fermo");
+    if (cfg.statica && !cfg.indirizzo) di_guasto("con mode=static serve address=, resto fermo");
+    nome_scheda = cfg.interfaccia;
+    if (!permessi_di_rete())
+        di_guasto("Linux non mi lascia gestire le schede di rete (CAP_NET_ADMIN, CAP_NET_RAW), resto fermo");
 
     /* il firewall, PRIMA di accendere le schede: la rete non e' mai accesa senza */
-    struct firewall f;
-    leggi_firewall(&f);
-    int e = metti_firewall(&f);
+    leggi_firewall(&fw);
+    int e = metti_firewall(&fw);
     if (e < 0) {
         metti("network: non riesco a mettere il firewall: ");
         metti(strerror(-e));
         metti(", lascio la rete spenta");
-        fine_riga();
-        resta_fermo();
+        guasto();
     }
+    firewall_attivo = 1;
     metti("network: firewall attivo (ingresso ");
-    metti(f.ingresso ? "libero" : "bloccato");
+    metti(fw.ingresso ? "libero" : "bloccato");
     metti(", uscita ");
-    metti(f.uscita ? "libera" : "bloccata");
+    metti(fw.uscita ? "libera" : "bloccata");
     metti(", inoltro ");
-    metti(f.inoltro ? "libero" : "bloccato");
+    metti(fw.inoltro ? "libero" : "bloccato");
     metti(", ping ");
-    metti(f.ping || f.ingresso ? "ammesso" : "bloccato");
+    metti(fw.ping || fw.ingresso ? "ammesso" : "bloccato");
     metti(")");
     fine_riga();
 
@@ -1148,20 +1372,20 @@ int main(void) {
             fine_riga();
             detto = 1;
         }
-        dormi(5000);
+        aspetta_fino(adesso() + 5000);
     }
     if ((e = accendi(nome_scheda)) < 0) fermo("non riesco ad accendere", nome_scheda, e);
     if ((e = indirizzo_fisico(nome_scheda, mac)) < 0) fermo("non trovo l'indirizzo fisico di", nome_scheda, e);
 
-    if (!c.statica) con_dhcp();
+    if (!cfg.statica) con_dhcp();
 
     struct prestito p;
     memset(&p, 0, sizeof p);
-    p.indirizzo = c.indirizzo;
-    p.prefisso = c.prefisso;
-    p.gateway = c.gateway;
-    memcpy(p.dns, c.dns, sizeof p.dns);
-    p.quanti_dns = c.quanti_dns;
+    p.indirizzo = cfg.indirizzo;
+    p.prefisso = cfg.prefisso;
+    p.gateway = cfg.gateway;
+    memcpy(p.dns, cfg.dns, sizeof p.dns);
+    p.quanti_dns = cfg.quanti_dns;
     applica(&p, 0, 0);
     resta_fermo();
 }
