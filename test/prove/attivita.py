@@ -155,7 +155,7 @@ def esegui(p):
                 "servizi nascosti: la prima riga ha una freccia (e' init, PID 1, invece della scrivania?)")
     m.clic(x + INTERRUTTORE[0], y + INTERRUTTORE[1])
     m.muovi(*PUNTO_VUOTO)
-    f = m.aspetta_che(lambda f: righe_piene(f, x, y) == nascosti + 4, 5.0,
+    f = m.aspetta_che(lambda f: righe_piene(f, x, y) == min(nascosti + 4, RIGHE_IN_VISTA), 5.0,
                       cosa="acceso l'interruttore, 4 righe in piu' (init, eventi, compositore, launcher)")
     time.sleep(0.3)
     f = m.foto("servizi_visibili")
@@ -167,7 +167,7 @@ def esegui(p):
     m.foto("ramo_chiuso")
     m.clic(x + (FRECCIA[0] + FRECCIA[1]) // 2, y + PRIMA_RIGA)     # e lo riapre
     m.muovi(*PUNTO_VUOTO)
-    m.aspetta_che(lambda f: righe_piene(f, x, y) == nascosti + 4, 5.0, cosa="riaperto il ramo di init")
+    m.aspetta_che(lambda f: righe_piene(f, x, y) == min(nascosti + 4, RIGHE_IN_VISTA), 5.0, cosa="riaperto il ramo di init")
     # --- terminare Esempio ---
     m.clic(x + 300, y + PRIMA_RIGA + PASSO * RIGA_ESEMPIO)
     time.sleep(0.3)
