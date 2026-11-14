@@ -18,12 +18,14 @@ solo i capi "di hardware" (strumenti/sandbox/sandbox.h): lo schermo e' un file i
 sistema), /data scrivibile (un volume che sparisce alla fine), /run e /tmp in memoria.
 
 LE IMMAGINI DOCKER
-    mshell-sandbox-attrezzi   alpine con clang, lld, make, zip e la radice di musl (come
-                              build.sh, con la stessa cartella di pacchetti build/scarico):
+    mshell-sandbox-attrezzi-2-<arch>   alpine con clang, lld, make, zip e la radice di musl (come
+                              build.sh, con la stessa cartella di pacchetti build/scarico/<arch>):
                               si fa una volta sola
     mshell-sandbox            il sistema: FROM scratch, con dentro solo l'albero di
                               build/sandbox/radice.tar (fatto da compila.sh)
-    mshell-sandbox-oggetti    un volume con gli oggetti compilati (per ricompilare poco)
+    mshell-sandbox-oggetti-<arch>    un volume con gli oggetti compilati (per ricompilare poco)
+
+<arch> e' aarch64 sul Mac ARM e x86_64 sul PC: si lavora sempre nativi, mai emulati.
 
 PER LE PROVE. La classe Sandbox ha gli stessi metodi di Macchina in test/qemu.py
 (accendi, aspetta_scrivania, foto, aspetta_schermo_fermo, aspetta_che, muovi, pulsante,
@@ -42,6 +44,7 @@ import argparse
 import importlib.util
 import math
 import os
+import platform
 import shutil
 import socket
 import struct
@@ -63,8 +66,24 @@ from qemu import ErroreProva, PUNTO_VUOTO, pixel_diversi  # noqa: E402
 
 LARGHEZZA, ALTEZZA = 1280, 800
 IMMAGINE = __import__("os").environ.get("SANDBOX_IMMAGINE", "mshell-sandbox")
-ATTREZZI = "mshell-sandbox-attrezzi-2"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
-OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", "mshell-sandbox-oggetti")
+
+
+def processore():
+    """Il processore del computer che lancia la sandbox: (cpu, arch di Alpine, piattaforma Docker).
+    Si lavora sempre nativi: Mac ARM -> arm64, PC Windows -> x86_64. Niente emulazione."""
+    m = platform.machine().lower()
+    if m in ("arm64", "aarch64"):
+        return "arm64", "aarch64", "linux/arm64"
+    if m in ("x86_64", "amd64"):
+        return "x86_64", "x86_64", "linux/amd64"
+    raise ErroreProva(f"processore non supportato: {m}")
+
+
+CPU, ARCH, PIATTAFORMA = processore()
+# attrezzi e oggetti compilati sono per processore: non si mescolano (l'immagine "mshell-sandbox"
+# no, e' una sola e si rifa' a ogni compilazione)
+ATTREZZI = f"mshell-sandbox-attrezzi-2-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
+OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", f"mshell-sandbox-oggetti-{ARCH}")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
 # i dischi delle prove di build.sh, e cosa vuol dire per la sandbox (avvio_sandbox.c)
@@ -119,12 +138,12 @@ def prepara_attrezzi():
     print("sandbox: preparo gli attrezzi (una volta sola) ...", flush=True)
     nome = f"{ATTREZZI}-{os.getpid()}"
     comando = ("apk add --cache-dir /w/build/scarico/host clang lld binutils make zip tar >/dev/null && "
-               "apk --arch x86_64 --root /radice --initdb --no-scripts "
-               "--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/x86_64 "
-               "--cache-dir /w/build/scarico/x86_64 add musl-dev linux-headers compiler-rt >/dev/null")
+               f"apk --arch {ARCH} --root /radice --initdb --no-scripts "
+               f"--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/{ARCH} "
+               f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt >/dev/null")
     (REPO / "build" / "scarico" / "host").mkdir(parents=True, exist_ok=True)
-    (REPO / "build" / "scarico" / "x86_64").mkdir(parents=True, exist_ok=True)
-    r = subprocess.run(["docker", "run", "--name", nome, "--platform", "linux/amd64",
+    (REPO / "build" / "scarico" / ARCH).mkdir(parents=True, exist_ok=True)
+    r = subprocess.run(["docker", "run", "--name", nome, "--platform", PIATTAFORMA,
                         "-v", f"{REPO}:/w", "alpine:3.24", "sh", "-c", comando])
     try:
         if r.returncode:
@@ -139,7 +158,8 @@ def compila():
     l'immagine del sistema. Torna i secondi."""
     inizio = time.time()
     prepara_attrezzi()
-    r = subprocess.run(["docker", "run", "--rm", "--platform", "linux/amd64",
+    r = subprocess.run(["docker", "run", "--rm", "--platform", PIATTAFORMA,
+                        "-e", f"CPU={CPU}", "-e", f"ARCH={ARCH}",
                         "-v", f"{REPO}:/w", "-v", f"{OGGETTI}:/o", ATTREZZI,
                         "sh", "/w/strumenti/sandbox/compila.sh"])
     if r.returncode:
@@ -182,7 +202,7 @@ class Sandbox:
         self.foto_fatte = 0
         self.ultimo_puntatore = (0, 0)
         self.ram = 0                  # la RAM e' quella del computer: le prove sulla memoria non valgono
-        self.cpu = "x86_64"
+        self.cpu = CPU
 
     # -- accendere e spegnere --
 
@@ -193,7 +213,7 @@ class Sandbox:
         # SYS_PTRACE: il compositore legge /proc/<numero>/exe delle app (programma_di, per
         # sapere di chi e' una finestra); per un processo di un altro uid Linux lo permette
         # solo con questo permesso, che il root vero ha e Docker toglie.
-        comando = ["docker", "run", "--rm", "--name", self.nome, "--platform", "linux/amd64",
+        comando = ["docker", "run", "--rm", "--name", self.nome, "--platform", PIATTAFORMA,
                    "--cap-add", "SYS_PTRACE", "--read-only", "--tmpfs", "/run:rw,nosuid,nodev,mode=755",
                    "--tmpfs", "/tmp:rw,nosuid,nodev,mode=1777", "-v", "/data",
                    "-p", f"127.0.0.1::{PORTA}", IMMAGINE, self.tema, DISCHI[self.disco]]
@@ -474,7 +494,7 @@ def comando_prova(args):
         shutil.rmtree(cartella, ignore_errors=True)
         cartella.mkdir(parents=True)
         sb = Sandbox(tema=args.tema, disco=getattr(modulo, "DISCO", "disco.img"), lavoro=cartella)
-        p = collaudo.Prova(nome, "x86_64", sb, cartella, args.riferimenti)
+        p = collaudo.Prova(nome, CPU, sb, cartella, args.riferimenti)
         inizio = time.time()
         esito = "OK"
         try:

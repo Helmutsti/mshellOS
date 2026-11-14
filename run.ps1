@@ -8,7 +8,7 @@
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 
-docker run --rm --platform linux/amd64 -v "${qui}:/w" alpine:3.24 sh /w/build.sh x86_64
+docker run --rm -v "${qui}:/w" alpine:3.24 sh /w/build.sh x86_64
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # -machine pc -m 2048 : un PC con 2 GB di RAM (si puo' dare di piu': -m 8192), con un solo

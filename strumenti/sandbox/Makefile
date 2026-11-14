@@ -1,11 +1,11 @@
-# La sandbox: compilare i programmi come build.sh (PC x86_64), ma solo quello che e' cambiato.
+# La sandbox: compilare i programmi come build.sh (sul processore del computer: ARCH e' aarch64 o x86_64), ma solo quello che e' cambiato.
 # La usa compila.sh, dentro il container degli attrezzi, nella cartella del repo (/w);
 # gli oggetti stanno in O (un volume di Docker: restano da una volta all'altra).
 #
 # IL COMPILATORE E' QUELLO DI build.sh, con gli stessi argomenti (passo 1 di build.sh):
 # se li si cambia la', vanno cambiati anche qui. -MMD -MP scrivono accanto a ogni oggetto
 # da quali file .h dipende (non cambiano il codice compilato): cosi' make sa cosa rifare.
-CC     := clang --target=x86_64-alpine-linux-musl --sysroot=/radice -O2 -Wall -Wextra -ffunction-sections -fdata-sections
+CC     := clang --target=$(ARCH)-alpine-linux-musl --sysroot=/radice -O2 -Wall -Wextra -ffunction-sections -fdata-sections
 DIP    := -MMD -MP
 UTENTE := -Iutente/libreria
 LIBC   := /radice/usr/lib

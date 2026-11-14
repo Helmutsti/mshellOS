@@ -498,7 +498,9 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
     con la finestra (le prove senza finestra usano già 4 processori).
 24. **Integrazione a pannelli**; **ragionare sulla barra del titolo**; pulsante a griglia nel
     launcher (rimandato).
-25. **ARM**: alla fine, tutte le prove sul Mac (sezione 10).
+25. **Si lavora sul processore del computer** (decisione della persona, 14/11/2026): sul Mac
+    tutto in arm64, sul PC Windows tutto in x86_64, niente emulazione. Da adattare
+    compilazione, sandbox e prove; le prove ARM sul Mac (sezione 10) diventano quelle normali.
 
 **Rimandati per il futuro** (decisione della persona, 13/11/2026)
 26. **Il compositore sullo standard dei messaggi.** Per ora tiene il suo formato a dati fissi

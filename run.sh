@@ -1,7 +1,7 @@
 #!/bin/sh
 # Compila tutto con Docker e avvia mshell in QEMU (macOS / Linux).
-#   ./run.sh         oppure  ./run.sh x86_64 : il PC a 64 bit, avviato da UEFI
-#   ./run.sh arm64                           : ARM a 64 bit (la seriale e' questo terminale)
+#   ./run.sh   : il processore del computer. Sul PC x86_64, avviato da UEFI; sul Mac con
+#                chip Apple arm64 (la seriale e' questo terminale)
 #
 # Il disco e' uno solo, build/<cpu>/disco.img, con una tabella delle partizioni GPT e tre
 # partizioni (vedi build.sh): avvio (la partizione EFI, FAT32), system (ext4: "/", in sola
@@ -31,10 +31,17 @@
 #   dell'avvio e, in fondo, la shell di prova.
 set -e
 qui="$(cd "$(dirname "$0")" && pwd)"
-cpu="${1:-x86_64}"
-[ "$cpu" = x86 ] && cpu=x86_64
+# Si lavora sul processore del computer (CLAUDE.md): sul Mac con chip Apple arm64, sul PC
+# x86_64. Docker gira nativo (senza --platform) e build.sh rifa' solo quello che e' cambiato.
+case "$(uname -m)" in
+    arm64|aarch64) cpu=arm64 ;;
+    *)             cpu=x86_64 ;;
+esac
+if [ -n "$1" ] && [ "$1" != "$cpu" ] && ! { [ "$1" = x86 ] && [ "$cpu" = x86_64 ]; }; then
+    echo "run.sh: si lavora sul processore del computer ($cpu), non $1"; exit 1
+fi
 
-docker run --rm --platform linux/amd64 -v "$qui:/w" alpine:3.24 sh /w/build.sh "$cpu"
+docker run --rm -v "$qui:/w" alpine:3.24 sh /w/build.sh "$cpu"
 
 if [ "$cpu" = arm64 ]; then
     # -M virt     : la macchina ARM "virtuale" di QEMU

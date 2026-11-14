@@ -2,9 +2,10 @@
 # requires-python = ">=3.10"
 # dependencies = ["pillow"]
 # ///
-"""collaudo.py: le prove automatiche di mshell, sul PC (x86_64, UEFI) e su ARM64.
+"""collaudo.py: le prove automatiche di mshell, sul processore del computer (CLAUDE.md):
+sul Mac con chip Apple ARM64 (QEMU con hvf, nativo), sul PC x86_64 (UEFI). Niente emulazione.
 
-    uv run test/collaudo.py                       tutte le prove, su tutte e due le CPU
+    uv run test/collaudo.py                       tutte le prove, sul processore del computer
     uv run test/collaudo.py --cpu x86_64          solo sul PC ("x86" vale lo stesso)
     uv run test/collaudo.py --ram 8192            il PC con 8 GB di RAM (2048 se non si dice)
     uv run test/collaudo.py --solo avvio mouse    solo quelle prove
@@ -37,6 +38,7 @@ sulla successiva. Se sono occupate (un altro QEMU, un'altra prova) se ne scelgon
 import argparse
 import importlib.util
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -55,6 +57,9 @@ PROVE = QUI / "prove"
 RIFERIMENTI = QUI / "riferimenti"
 RISULTATI = QUI / "risultati"
 CPU_TUTTE = ["x86_64", "arm64"]
+# il processore del computer: l'unico su cui si compila e si prova
+CPU_COMPUTER = {"arm64": "arm64", "aarch64": "arm64",
+                "x86_64": "x86_64", "AMD64": "x86_64"}.get(platform.machine())
 ALIAS_CPU = {"x86": "x86_64"}            # come build.sh e run.sh
 
 # Le righe che nella seriale non devono MAI comparire (in qualsiasi prova).
@@ -149,7 +154,7 @@ def compila(cpu_scelte, build):
     for cpu in cpu_scelte:
         uscita = f"{relativa.as_posix()}/{cpu}"
         print(f"compilo per {cpu} in {uscita} ...", flush=True)
-        r = subprocess.run(["docker", "run", "--rm", "--platform", "linux/amd64",
+        r = subprocess.run(["docker", "run", "--rm",
                             "-e", f"USCITA={uscita}", "-v", f"{REPO}:/w",
                             "alpine:3.24", "sh", "/w/build.sh", cpu])
         if r.returncode:
@@ -202,8 +207,9 @@ def esegui_una(modulo, cpu, args):
 
 def main():
     a = argparse.ArgumentParser(description="Le prove automatiche di mshell")
-    a.add_argument("--cpu", choices=[*CPU_TUTTE, *ALIAS_CPU, "tutte"], default="tutte",
-                   help="x86_64 (il PC; anche x86), arm64, o tutte (se non si dice)")
+    a.add_argument("--cpu", choices=[*CPU_TUTTE, *ALIAS_CPU], default=CPU_COMPUTER,
+                   help="il processore del computer (se non si dice): x86_64 (anche x86) "
+                        "o arm64; un altro non si puo' (niente emulazione)")
     a.add_argument("--ram", type=int, default=2048, metavar="MB",
                    help="la RAM del PC in MB (2048 se non si dice); ARM64 ha sempre 512")
     a.add_argument("--build", type=Path, default=REPO / "build",
@@ -235,7 +241,10 @@ def main():
     elif args.riferimenti:
         prove = [p for p in prove if getattr(p, "RIFERIMENTI", False)]
 
-    cpu_scelte = CPU_TUTTE if args.cpu == "tutte" else [ALIAS_CPU.get(args.cpu, args.cpu)]
+    cpu_scelte = [ALIAS_CPU.get(args.cpu, args.cpu)]
+    if cpu_scelte != [CPU_COMPUTER]:
+        sys.exit(f"collaudo: si prova sul processore del computer ({CPU_COMPUTER}), "
+                 f"non {cpu_scelte[0]} (CLAUDE.md)")
     if args.compila:
         compila(cpu_scelte, args.build)
 

@@ -1,11 +1,20 @@
 #!/bin/sh
 # Compila tutto. Gira dentro un container Docker alpine con la cartella montata in /w:
-#   docker run --rm --platform linux/amd64 -v "<questa cartella>:/w" alpine:3.24 sh /w/build.sh <cpu>
+#   docker run --rm -v "<questa cartella>:/w" alpine:3.24 sh /w/build.sh
 #   (run.sh e run.ps1 lo fanno da soli; da Git Bash su Windows: MSYS_NO_PATHCONV=1 e $(pwd -W))
 #
-#   sh build.sh        oppure  sh build.sh x86_64  : il PC a 64 bit (avviato da UEFI)
-#                                                    ("x86" vale lo stesso)
-#   sh build.sh arm64                              : ARM a 64 bit (QEMU "virt", UTM sul Mac)
+# SI COMPILA SUL PROCESSORE DEL COMPUTER (CLAUDE.md): il container gira nativo (Docker senza
+# --platform) e il sistema che ne esce e' per lo stesso processore. Sul Mac con chip Apple:
+# arm64; sul PC: x86_64. Niente compilazione da un processore all'altro, niente emulazione.
+#   sh build.sh          il processore del computer
+#   sh build.sh x86_64   lo stesso, detto per nome ("x86" vale lo stesso); arm64 per ARM.
+#                        Se non e' quello del computer, il build si ferma.
+#
+# SI RIFA SOLO QUELLO CHE E' CAMBIATO: gli oggetti compilati (build/<cpu>/oggetti) restano da
+# una volta all'altra, e un .c si ricompila solo se lui, uno dei .h che include o il comando
+# di compilazione (argomenti, pacchetti di Alpine) sono cambiati (vedi compila, passo 1).
+# Tutto il resto (programmi legati, archivio di avvio, dischi) si rifa' ogni volta: costa
+# pochi secondi. Per ricompilare tutto da zero: cancellare build/<cpu>/oggetti.
 #
 # IL SISTEMA. Sotto c'e' il kernel Linux, preso cosi' com'e' dai pacchetti di Alpine Linux
 # 3.24 (lo stesso container in cui gira questo script); sopra, dal processo numero 1 in
@@ -103,8 +112,18 @@
 #            scrive il build alla fine, per poterle rifissare.
 set -e
 cd /w
-CPU=${1:-x86_64}
+case "$(uname -m)" in
+    aarch64|arm64) CPU_COMPUTER=arm64 ;;
+    x86_64)        CPU_COMPUTER=x86_64 ;;
+    *)             echo "build.sh: processore del computer sconosciuto: $(uname -m)"; exit 1 ;;
+esac
+CPU=${1:-$CPU_COMPUTER}
 [ "$CPU" = x86 ] && CPU=x86_64
+if [ "$CPU" != "$CPU_COMPUTER" ]; then
+    echo "build.sh: si compila sul processore del computer ($CPU_COMPUTER), non $CPU (CLAUDE.md)."
+    echo "  Docker deve girare nativo: senza --platform."
+    exit 1
+fi
 NUCLEO=${NUCLEO:-virt}
 
 # --- le cose di ogni CPU ---
@@ -161,11 +180,13 @@ RIGA_KERNEL="$CONSOLE vt.global_cursor_default=0 firmware_class.path=/system/fir
 MODULI="virtio_pci virtio_blk ext4 virtio-gpu xhci-pci usbhid hid-generic evdev virtio_net af_packet nf_tables nf_conntrack nft_ct"
 
 # --- 0. gli attrezzi e i pacchetti di Alpine ---
+# Un solo posto per processore: gli attrezzi (clang...) e i pacchetti del sistema sono dello
+# stesso processore, quello del computer.
 SCARICO=/w/build/scarico
-mkdir -p "$SCARICO/host" "$SCARICO/$ARCH"
+mkdir -p "$SCARICO/$ARCH"
 # binutils: ar, che mette insieme libcorekit.a (passo 2); e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
 # FAT della partizione di avvio, scritta senza montarla
-apk add --cache-dir "$SCARICO/host" clang lld binutils e2fsprogs sfdisk mtools zip $ATTREZZI_CPU >/dev/null
+apk add --cache-dir "$SCARICO/$ARCH" clang lld binutils e2fsprogs sfdisk mtools zip $ATTREZZI_CPU >/dev/null
 
 # LA RADICE DI ALPINE PER LA CPU: un albero con i pacchetti di Alpine PER QUELLA CPU
 # (apk --arch, anche se il container e' x86_64), da cui si prendono:
@@ -182,10 +203,11 @@ apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \
 VERSIONE_K=$(ls "$RADICE/lib/modules")
 MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
 
-# si ripulisce la cartella d'uscita (mai build/ intera: dentro ci sono le altre CPU)
+# si ripulisce la cartella d'uscita (mai build/ intera: dentro ci sono le altre CPU), ma
+# non gli oggetti compilati: si ricompila solo quello che e' cambiato (vedi compila)
 [ "$B" = build ] && { echo "build.sh: USCITA=build cancellerebbe tutto"; exit 1; }
-rm -rf "$B"
 mkdir -p "$B/oggetti"
+find "$B" -mindepth 1 -maxdepth 1 ! -name oggetti -exec rm -rf {} +
 
 # --- 1. il compilatore ---
 # clang compila per la CPU scelta (--target) con gli header e le librerie della radice di
@@ -197,6 +219,40 @@ mkdir -p "$B/oggetti"
 # chiamano main e poi exit), i nostri file, e la libreria C (-lc).
 CC="clang --target=$ARCH-alpine-linux-musl --sysroot=$RADICE -O2 -Wall -Wextra -ffunction-sections -fdata-sections"
 LIBC="$RADICE/usr/lib"
+# compila ARGOMENTI_DI_CC... -o OGGETTO: come $CC, ma solo se serve. Accanto all'oggetto
+# restano OGGETTO.d (i file da cui dipende: il .c e i .h che include, scritti da clang con
+# -MMD -MP) e OGGETTO.cmd (il comando con cui e' stato fatto, con l'impronta dei pacchetti
+# di Alpine installati nella radice). Si ricompila se manca uno dei tre, se il comando e'
+# diverso, o se uno dei file da cui dipende manca o e' piu' nuovo dell'oggetto.
+FIRMA_RADICE=$(md5sum < "$RADICE/lib/apk/db/installed" | cut -d' ' -f1)
+COMPILATI=0
+compila() {
+    _o=""
+    _prima=""
+    for _a in "$@"; do
+        [ "$_prima" = -o ] && _o=$_a
+        _prima=$_a
+    done
+    _cmd="$CC $* radice=$FIRMA_RADICE"
+    if [ -f "$_o" ] && [ -f "$_o.d" ] && [ "$(cat "$_o.cmd" 2>/dev/null)" = "$_cmd" ] &&
+       aggiornato "$_o"; then
+        return 0
+    fi
+    $CC -MMD -MP -MF "$_o.d" "$@"
+    printf '%s' "$_cmd" > "$_o.cmd"
+    COMPILATI=$((COMPILATI + 1))
+}
+# aggiornato OGGETTO: vero se nessuno dei file in OGGETTO.d manca o e' piu' nuovo. Nel .d
+# la prima riga e' "oggetto: sorgente intestazioni... \", poi le righe che continuano e le
+# regole vuote "intestazione:" (di -MP), che si saltano.
+aggiornato() {
+    for _f in $(sed -e '/:$/d' -e 's/^[^:]*://' -e 's/\\$//' "$1.d"); do
+        [ -e "$_f" ] || return 1
+        [ "$_f" -nt "$1" ] && return 1
+    done
+    return 0
+}
+
 lega() {   # lega USCITA OGGETTI...
     _uscita=$1
     shift
@@ -225,13 +281,17 @@ ESTERNI="-w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES"
 # servono. Nel comando di lega l'archivio va DOPO gli oggetti del programma e di GKit e
 # UIKit (che usano le sue funzioni) e prima della libreria C (che usa lei).
 mkdir -p "$B/oggetti/corekit"
+oggetti_lib=""
 for f in utente/libreria/corekit/interno/*.c; do
-    $CC $UTENTE -c "$f" -o "$B/oggetti/corekit/$(basename "$f" .c).o"
+    compila $UTENTE -c "$f" -o "$B/oggetti/corekit/$(basename "$f" .c).o"
+    oggetti_lib="$oggetti_lib $B/oggetti/corekit/$(basename "$f" .c).o"
 done
-$CC $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/corekit/miniz.o"
-$CC $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/corekit/toml.o"
+compila $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/corekit/miniz.o"
+oggetti_lib="$oggetti_lib $B/oggetti/corekit/miniz.o"
+compila $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/corekit/toml.o"
+oggetti_lib="$oggetti_lib $B/oggetti/corekit/toml.o"
 rm -f "$B/libcorekit.a"
-ar rcs "$B/libcorekit.a" "$B"/oggetti/corekit/*.o
+ar rcs "$B/libcorekit.a" $oggetti_lib
 COREKIT="$B/libcorekit.a"
 
 # GKIT, la grafica (utente/libreria/gkit/, LIBRERIE.md), come CoreKit: i suoi .c (in
@@ -239,12 +299,15 @@ COREKIT="$B/libcorekit.a"
 # di lega va dopo gli oggetti del programma e UIKit (che usano le sue funzioni) e prima di
 # libcorekit.a (che usa lei): il programma, UIKit, GKit, CoreKit, la libreria C.
 mkdir -p "$B/oggetti/gkit"
+oggetti_lib=""
 for f in utente/libreria/gkit/interno/*.c; do
-    $CC $UTENTE -c "$f" -o "$B/oggetti/gkit/$(basename "$f" .c).o"
+    compila $UTENTE -c "$f" -o "$B/oggetti/gkit/$(basename "$f" .c).o"
+    oggetti_lib="$oggetti_lib $B/oggetti/gkit/$(basename "$f" .c).o"
 done
-$CC $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/gkit/stb_image.o"
+compila $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/gkit/stb_image.o"
+oggetti_lib="$oggetti_lib $B/oggetti/gkit/stb_image.o"
 rm -f "$B/libgkit.a"
-ar rcs "$B/libgkit.a" "$B"/oggetti/gkit/*.o
+ar rcs "$B/libgkit.a" $oggetti_lib
 GKIT="$B/libgkit.a"
 
 # UIKIT, l'interfaccia (utente/libreria/uikit/, LIBRERIE.md), come GKit: i suoi .c (in
@@ -252,11 +315,13 @@ GKIT="$B/libgkit.a"
 # programma (che usano le sue funzioni) e prima di libgkit.a e libcorekit.a (che usa lei):
 # il programma, UIKit, GKit, CoreKit, la libreria C.
 mkdir -p "$B/oggetti/uikit"
+oggetti_lib=""
 for f in utente/libreria/uikit/interno/*.c; do
-    $CC $UTENTE -c "$f" -o "$B/oggetti/uikit/$(basename "$f" .c).o"
+    compila $UTENTE -c "$f" -o "$B/oggetti/uikit/$(basename "$f" .c).o"
+    oggetti_lib="$oggetti_lib $B/oggetti/uikit/$(basename "$f" .c).o"
 done
 rm -f "$B/libuikit.a"
-ar rcs "$B/libuikit.a" "$B"/oggetti/uikit/*.o
+ar rcs "$B/libuikit.a" $oggetti_lib
 UIKIT="$B/libuikit.a"
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
@@ -372,7 +437,7 @@ APPS=""
 # riconosce nell'elenco dei processi). Sono programmi: 755.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
-    $CC $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
+    compila $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
     lega "$B/oggetti/$nome" "$B/oggetti/$nome.o" $UIKIT $GKIT $COREKIT
     case "$nome" in
         init) posto=/system/init ;;
@@ -387,7 +452,7 @@ done
 # niente GKit e UIKit, solo CoreKit. Sono programmi: 755.
 for f in utente/comandi/*.c; do
     nome=$(basename "$f" .c)
-    $CC $UTENTE -c "$f" -o "$B/oggetti/comando_$nome.o"
+    compila $UTENTE -c "$f" -o "$B/oggetti/comando_$nome.o"
     lega "$B/oggetti/comando_$nome" "$B/oggetti/comando_$nome.o" $COREKIT
     metti_file "$B/oggetti/comando_$nome" "/system/bin/$nome" 755
 done
@@ -424,7 +489,7 @@ for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
     oggetti=""
     for f in "$cartella"*.c; do
         o="$B/oggetti/applicazioni/$nome/$(basename "$f" .c).o"
-        $CC $UTENTE -I"$cartella" -c "$f" -o "$o"
+        compila $UTENTE -I"$cartella" -c "$f" -o "$o"
         oggetti="$oggetti $o"
     done
     lega "$B/oggetti/applicazioni/$nome/code" $oggetti $UIKIT $GKIT $COREKIT
@@ -525,7 +590,7 @@ echo "programmi pronti"
 mkdir -p "$B/oggetti/prove"
 for f in utente/prove/*.c; do
     nome=$(basename "$f" .c)
-    $CC $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
+    compila $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
     lega "$B/oggetti/prove/$nome" "$B/oggetti/prove/$nome.o" $UIKIT $GKIT $COREKIT
 done
 RIEMPITIVI=6
@@ -536,7 +601,8 @@ RIEMPITIVI=6
 ARCHIVIO=/tmp/archivio-avvio
 rm -rf "$ARCHIVIO"
 mkdir -p "$ARCHIVIO/moduli" "$ARCHIVIO/dev" "$ARCHIVIO/proc" "$ARCHIVIO/sys"
-$CC -c utente/avvio/avvio.c -o "$B/oggetti/avvio.o"
+compila -c utente/avvio/avvio.c -o "$B/oggetti/avvio.o"
+echo "compilati: $COMPILATI file (gli altri erano gia' a posto)"
 lega "$ARCHIVIO/init" "$B/oggetti/avvio.o"
 mknod -m 600 "$ARCHIVIO/dev/console" c 5 1
 
@@ -762,7 +828,7 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
 rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco_shell.img pronto: con il programma argomenti in /data/users/0/bin"
 
-rm -rf "$B/oggetti"
+# gli oggetti compilati restano: alla prossima volta si ricompila solo quello che e' cambiato
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"
 
 # DA IMPLEMENTARE

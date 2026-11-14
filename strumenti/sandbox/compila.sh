@@ -15,10 +15,11 @@
 #    (FROM scratch: dentro c'e' solo questo albero). L'immagine la fa sandbox.py.
 set -e
 cd /w
+# CPU e ARCH arrivano da sandbox.py (il processore del computer: arm64 o x86_64)
+: "${CPU:?}" "${ARCH:?}"
 O=/o
-make -s -f strumenti/sandbox/Makefile -j"$(nproc)" O=$O
+make -s -f strumenti/sandbox/Makefile -j"$(nproc)" O=$O ARCH=$ARCH
 
-CPU=x86_64
 A=/tmp/albero
 rm -rf "$A"
 mkdir -p "$A"

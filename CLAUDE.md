@@ -6,7 +6,7 @@
 - Sistema operativo proprio: kernel Linux (pacchetti Alpine 3.24, linux-virt per QEMU) + userland nostro da PID 1 in su (init, compositore, scrivania, launcher, librerie GKit/UIKit, app). musl, programmi statici. Niente lavoro sul kernel: i bisogni si mappano su meccanismi Linux (evdev, DRM/KMS, memfd + SCM_RIGHTS, namespaces).
 - Il vecchio kernel didattico (mkernel) è congelato nel ramo `mykernel`.
 - Documenti di riferimento, da leggere solo nella parte che serve: `STATO.md` (stato e cose da fare), `APPLICAZIONI.md` (app, pacchetti, permessi: è la fonte di verità), `SISTEMA.md` (ruoli di init, servizi, app e comandi; porte e standard dei messaggi), `LIBRERIE.md` (librerie grafiche), `disegni/<App>/descrizione.md` (disegno di ogni app).
-- **Solo x86_64.** ARM si lascia alla fine: niente build, prove o controlli ARM finché la persona non lo dice.
+- **Si lavora sul processore del computer.** Sul Mac (ARM) si compila, si prova e si usa la versione arm64; sul PC Windows la versione x86_64. Niente compilazione da un processore all'altro e niente emulazione: Docker e QEMU girano nativi.
 - Struttura cartelle decisa (da applicare quando si ristruttura il disco): GPT con avvio (FAT32), system (ext4, montato in sola lettura come `/`), data (`/data`, scrivibile). Nomi su disco in inglese minuscolo. I comandi dell'utente stanno in `/data/users/<uid>/bin` e si cercano DOPO `/system/bin`, mai overlay. Niente dati scrivibili sotto `/system`.
 
 ## Lavorare risparmiando
