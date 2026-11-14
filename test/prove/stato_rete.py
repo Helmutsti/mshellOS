@@ -15,7 +15,7 @@ from qemu import ErroreProva
 
 NOME = "stato_rete"
 ORDINE = 91
-DESCRIZIONE = "porta del servizio network: status, richiesta sconosciuta, stop, restart"
+DESCRIZIONE = "porta del servizio network: status, richiesta sconosciuta, stop, restart; il comando network"
 DISCO = "disco_stato_rete.img"
 RETE = True
 SOLO_QEMU = "la rete (scheda, DHCP, firewall) nella sandbox Docker non la gestisce il servizio"
