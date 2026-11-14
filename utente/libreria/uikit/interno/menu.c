@@ -10,6 +10,9 @@ void intestazione_menu_disegna(struct pennello *p, int x, int y, const char *tit
                    INTERLINEA_ETICHETTA, titolo);
 }
 
+static void menu_scegli(struct menu_tk *m, int id);
+static void menu_accendi(struct menu_tk *m, int id);
+
 static int menu_voce_alta(const struct menu_tk *m) { return m->misura == MISURA_M ? ALTEZZA_M : ALTEZZA_S; }
 
 /* Il padding sopra (dipende da cosa c'e' in cima) e sotto il menu. */
@@ -172,27 +175,14 @@ static void menu_puntatore(struct widget *w, int x, int y, unsigned int pulsanti
     int premuta = m->premuta;
     m->premuta = -1;
     if (id < 0 || id != premuta) return;
-    const struct voce_menu_tk *v = menu_voce_di(m, id);
-    if (!menu_voce_attiva(m, v->azione)) return;
-    if (v->sottomenu) {
-        menu_segna(m);
-        menu_apri_sottomenu(m, id % 100);
-        menu_segna(m);
-        return;
-    }
-    int azione = v->azione;
-    menu_chiudi(m);
-    if (m->al_scelta) m->al_scelta(m, azione, m->dati);
+    menu_scegli(m, id);
 }
 
-/* Il puntatore sopra le voci: si accendono; sopra una voce con il sottomenu lo si apre, sopra
- * un'altra voce del menu lo si chiude. */
-static void menu_movimento(struct widget *w, int x, int y) {
-    struct menu_tk *m = (struct menu_tk *)w;
-    int id = menu_voce_in(m, x, y);
-    if (id < -1) id = -1;
+/* Accende la voce 'id' (pannello * 100 + voce, o -1 nessuna): la voce accesa e, se c'e', il
+ * sottomenu con la voce che lo apre. Sopra una voce con il sottomenu lo apre, sopra un'altra
+ * voce del menu lo chiude. */
+static void menu_accendi(struct menu_tk *m, int id) {
     if (id == m->sopra) return;
-    /* prima: la voce accesa e, se c'e', il sottomenu con la voce che lo apre */
     int prima_quanti = m->quanti, prima_da = m->aperta_da;
     struct pannello_menu_tk prima_sotto = m->pannelli[1];
     menu_segna_voce(m, m->sopra);
@@ -213,6 +203,14 @@ static void menu_movimento(struct widget *w, int x, int y) {
         menu_segna_pannello(m, &m->pannelli[1]);
         menu_segna_voce(m, m->aperta_da);
     }
+}
+
+/* Il puntatore sopra le voci: si accendono. */
+static void menu_movimento(struct widget *w, int x, int y) {
+    struct menu_tk *m = (struct menu_tk *)w;
+    int id = menu_voce_in(m, x, y);
+    if (id < -1) id = -1;
+    menu_accendi(m, id);
 }
 
 /* Il puntatore e' uscito dal menu (dalla finestra, o la finestra ha perso il fuoco): la voce
@@ -242,12 +240,72 @@ void menu_aggiungi(struct finestra_tk *f, struct menu_tk *m) {
 
 int menu_aperto(const struct menu_tk *m) { return m->quanti > 0; }
 
-/* Esc chiude il menu (lo ascolta solo mentre e' aperto). */
+/* La prossima voce che si puo' scegliere nel pannello 'n', da 'da' (escluso) nel verso 'passo'
+ * (1 o -1), con il giro; -1 se non ce n'e'. */
+static int menu_prossima(const struct menu_tk *m, int n, int da, int passo) {
+    const struct pannello_menu_tk *pn = &m->pannelli[n];
+    for (int k = 1; k <= pn->quante; k++) {
+        int i = ((da + passo * k) % pn->quante + pn->quante) % pn->quante;
+        if (pn->voci[i].azione >= 0 && menu_voce_attiva(m, pn->voci[i].azione)) return i;
+    }
+    return -1;
+}
+
+/* Scegliere la voce 'id': il suo sottomenu si apre, altrimenti il menu si chiude e si avvisa. */
+static void menu_scegli(struct menu_tk *m, int id) {
+    const struct voce_menu_tk *v = menu_voce_di(m, id);
+    if (!v || !menu_voce_attiva(m, v->azione)) return;
+    if (v->sottomenu) {
+        menu_segna(m);
+        menu_apri_sottomenu(m, id % 100);
+        menu_segna(m);
+        return;
+    }
+    int azione = v->azione;
+    menu_chiudi(m);
+    if (m->al_scelta) m->al_scelta(m, azione, m->dati);
+}
+
+void menu_seleziona(struct menu_tk *m, int indice) {
+    if (!m->quanti || indice < 0 || indice >= m->pannelli[0].quante) return;
+    const struct voce_menu_tk *v = &m->pannelli[0].voci[indice];
+    if (v->azione >= 0 && menu_voce_attiva(m, v->azione)) menu_accendi(m, indice);
+}
+
+/* I tasti, finche' il menu e' aperto: Esc lo chiude; su e giu' scorrono le voci (nel
+ * sottomenu, se l'ultima voce accesa e' li'); Invio sceglie; destra apre il sottomenu della
+ * voce accesa e ne accende la prima voce; sinistra lo richiude. */
 static int menu_tasto(struct finestra_tk *f, unsigned int codice, unsigned int modificatori, void *dati) {
     (void)f; (void)modificatori;
     struct menu_tk *m = dati;
     if (!menu_aperto(m)) return 0;
+    int n = m->sopra >= 0 ? m->sopra / 100 : 0, i = m->sopra >= 0 ? m->sopra % 100 : -1;
     if (codice == TASTO_ESC) { menu_chiudi(m); return 1; }
+    if (codice == TASTO_GIU || codice == TASTO_SU) {
+        int passo = codice == TASTO_GIU ? 1 : -1;
+        int da = i >= 0 ? i : (passo > 0 ? -1 : 0);
+        int j = menu_prossima(m, n, da, passo);
+        if (j >= 0) menu_accendi(m, n * 100 + j);
+    } else if (codice == TASTO_INVIO) {
+        if (m->sopra >= 0) menu_scegli(m, m->sopra);
+    } else if (codice == TASTO_DESTRA) {
+        if (n == 0 && i >= 0 && m->pannelli[0].voci[i].sottomenu) {
+            menu_scegli(m, m->sopra);
+            int j = m->quanti > 1 ? menu_prossima(m, 1, -1, 1) : -1;
+            if (j >= 0) menu_accendi(m, 100 + j);
+        }
+    } else if (codice == TASTO_SINISTRA) {
+        if (n == 1) {
+            int da = m->aperta_da;
+            menu_segna(m);
+            m->quanti = 1;
+            m->aperta_da = -1;
+            menu_segna_voce(m, m->sopra);
+            m->sopra = da;
+            menu_segna_voce(m, da);
+            menu_segna(m);
+        }
+    }
     return 1;                                  /* con il menu aperto, le scorciatoie non arrivano sotto */
 }
 
@@ -284,4 +342,5 @@ void menu_chiudi(struct menu_tk *m) {
         finestra_tk_smetti_tasti(f, menu_tasto, m);
         uikit_sotto(f, 0);                     /* il puntatore e' ancora li': si ritrova il widget sotto */
     }
+    if (m->alla_chiusura) m->alla_chiusura(m, m->dati_chiusura);
 }

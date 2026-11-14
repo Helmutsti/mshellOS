@@ -464,7 +464,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 4. **La scrivania legge le app solo all'avvio**: un'app installata o tolta compare o sparisce solo
    quando riparte.
 5. **La conferma di eliminazione in Files** non è disegnata in Figma (testo scelto dall'agente).
-6. **Pezzi della libreria che mancano**: interruttore, menu a tendina, suggerimento al passaggio
+6. **Pezzi della libreria che mancano**: interruttore, suggerimento al passaggio
    del puntatore, barra di scorrimento orizzontale, gruppo di azioni, forme del puntatore
    (collegamento, testo, non disponibile, attesa), testo con spaziatura delle lettere.
 7. **Togliere la vecchia grafica** (vetro scuro, Inter) da codice e Figma.

@@ -24,7 +24,8 @@
  *
  * COME SI USA. Il menu e' un widget che si aggiunge per ultimo alla finestra (sta sopra a
  * tutto); nascosto finche' non lo si apre. Aperto, copre tutta la finestra: un clic fuori lo
- * chiude (e il clic finisce li', come sul Mac). Esc lo chiude. Scegliere una voce lo chiude e
+ * chiude (e il clic finisce li', come sul Mac). Esc lo chiude. Da tastiera: su e giu' scorrono
+ * le voci che si possono scegliere, Invio sceglie, destra apre il sottomenu, sinistra lo chiude. Scegliere una voce lo chiude e
  * chiama 'al_scelta' con la sua azione. Se una voce si puo' scegliere, e se ha la spunta, lo
  * chiede a 'attiva' e 'spuntata' (0: sempre attiva, mai spuntata).
  *
@@ -93,6 +94,10 @@ struct menu_tk {
     domanda_menu attiva, spuntata;
     al_scelta_menu al_scelta;
     void *dati;
+    /* Facoltativa, la mette chi lo possiede (il menu a tendina): chiamata ogni volta che il
+     * menu si chiude, per scelta, Esc o clic fuori, DOPO la chiusura e PRIMA di 'al_scelta'. */
+    void (*alla_chiusura)(struct menu_tk *m, void *dati);
+    void *dati_chiusura;
 };
 
 /* Prepara il menu, chiuso e nascosto: voci di misura 'misura' (MISURA_S o MISURA_M), largo
@@ -111,6 +116,10 @@ int menu_aperto(const struct menu_tk *m);
 /* Apre il menu con l'angolo nel punto (x, y) della finestra (dove si e' cliccato), spostandolo
  * quanto basta perche' stia tutto nella finestra (sotto la testata). */
 void menu_apri(struct menu_tk *m, const struct voce_menu_tk *voci, int quante, int x, int y);
+
+/* Accende la voce 'indice' del menu (la prima, 0), come se il puntatore le fosse sopra: serve
+ * a chi lo apre da tastiera. Una voce che non si puo' scegliere non si accende. */
+void menu_seleziona(struct menu_tk *m, int indice);
 
 /* Chiude il menu (e il sottomenu) senza scegliere niente; se e' gia' chiuso non fa niente. */
 void menu_chiudi(struct menu_tk *m);
