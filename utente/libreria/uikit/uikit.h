@@ -59,7 +59,7 @@
  *      oggetti, elemento_file, pagina, paragrafo, pannello; userbar (della scrivania) ha
  *      l'header in sistema/. Quello che si dicono solo tra loro (il testo che va a capo, il campo
  *      del nome nuovo, l'intestazione di un gruppo) e' in interno/nucleo.h.
- *   4. FATTO: i componenti piccoli. grafico.h, etichetta_stato.h, messaggio.h, icona_app.h,
+ *   4. FATTO: i componenti piccoli. grafico.h, etichetta_stato.h, messagebox.h, icona_app.h,
  *      riga_permesso.h, riga_app.h e informazioni.h hanno solo dichiarazioni; il codice e' in
  *      interno/, un .c per header (informazioni_mostra.c a parte: apre la mini finestra con il
  *      ciclo degli eventi, e l'anteprima la lascia fuori come ciclo.c). Quello che un
@@ -944,7 +944,7 @@ int finestra_tk_apri_altra(struct finestra_tk *f, struct finestra_tk *altra);
 /* CAMBIA IL TEMA DI TUTTO IL SISTEMA ("chiaro" o "scuro"): lo scrive nelle preferenze
  * (tema_salva) e chiede al compositore di dirlo a tutte le finestre e ai pannelli aperti
  * (CAMBIA_TEMA, gkit/sistema/protocollo.h): ognuno rilegge il tema e si ridisegna, anche questa finestra (con
- * TEMA_CAMBIATO, come le altre). Funziona solo per chi ha il permesso "impostazioni.sistema"
+ * TEMA_CAMBIATO, come le altre). Funziona solo per chi ha il permesso "settings.system"
  * (Impostazioni): per gli altri il file cambia, ma il compositore non dice niente a nessuno.
  * 0, o -1. */
 int uikit_cambia_tema(struct finestra_tk *f, const char *nome);
@@ -979,7 +979,7 @@ int uikit_esegui(struct finestra_tk *f);
 #include "schede.h"
 #include "grafico.h"
 #include "etichetta_stato.h"
-#include "messaggio.h"
+#include "messagebox.h"
 #include "icona_app.h"
 #include "riga_permesso.h"
 #include "riga_app.h"

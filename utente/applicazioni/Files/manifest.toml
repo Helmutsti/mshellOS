@@ -14,7 +14,7 @@ sistema_minimo = 1
 
 programma = "code"
 
-permessi = ["file.scrivere"]
+permessi = ["files.write"]
 deviazioni = []
 funzioni = ["file.apri_cartella", "file.mostra"]
 

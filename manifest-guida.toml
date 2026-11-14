@@ -82,17 +82,17 @@ nella_barra = true
 # finestra "Apri"/"Salva" del sistema. Spesso non serve chiedere altro.
 #
 # Permessi normali (li concede la persona):
-#   "file.leggere"   leggere tutti i file della persona
-#   "file.scrivere"  leggere e modificare tutti i file della persona
-#   "notifiche"      mandare notifiche
-#   "rete"           usare la rete e internet
+#   "files.read"   leggere tutti i file della persona
+#   "files.write"  leggere e modificare tutti i file della persona
+#   "notifications"      mandare notifiche
+#   "network"           usare la rete e internet
 #   "audio"          riprodurre suoni
 # Permessi di sistema (oggi solo per le app del sistema):
-#   "processi", "impostazioni.sistema", "spegnimento", "app.gestire"
+#   "processes", "settings.system", "system.power", "apps.manage"
 #
 # L'elenco completo e le regole sono in APPLICAZIONI.md (sezione 9).
 
-permessi = ["file.leggere", "notifiche"]
+permessi = ["files.read", "notifications"]
 
 
 # --- Deviazioni dallo standard -----------------------------------------------

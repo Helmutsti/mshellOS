@@ -160,10 +160,10 @@ quello che tocca le cose della persona o il sistema intero.
 
 | Permesso | Cosa permette |
 |---|---|
-| `file.leggere` | leggere tutti i file della persona (la sua Home) |
-| `file.scrivere` | leggere e modificare tutti i file della persona (comprende `file.leggere`) |
-| `notifiche` | mandare notifiche |
-| `rete` | usare la rete e internet (oggi l'app non vede nessuna rete) |
+| `files.read` | leggere tutti i file della persona (la sua Home) |
+| `files.write` | leggere e modificare tutti i file della persona (comprende `files.read`) |
+| `notifications` | mandare notifiche |
+| `network` | usare la rete e internet (oggi l'app non vede nessuna rete) |
 | `audio` | riprodurre suoni (quando il sistema avrà l'audio) |
 
 ### Permessi di sistema: poteri sul sistema intero
@@ -174,21 +174,21 @@ autorizzato ("chiavi a due livelli").
 
 | Permesso | Cosa permette | Chi lo usa oggi |
 |---|---|---|
-| `processi` | vedere i programmi in esecuzione e fermarli | Attività |
-| `impostazioni.sistema` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
-| `spegnimento` | spegnere e riavviare il computer | (scrivania) |
-| `app.gestire` | installare, aggiornare e togliere app | Store |
+| `processes` | vedere i programmi in esecuzione e fermarli | Attività |
+| `settings.system` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
+| `system.power` | spegnere e riavviare il computer | (scrivania) |
+| `apps.manage` | installare, aggiornare e togliere app | Store |
 
 ### Permessi che i servizi chiedono dalla porta (provvisorio: oggi sempre concesso)
 
 I servizi che usano lo standard dei messaggi (`SISTEMA.md`, sezione 3) chiedono a
 `ha_permesso` se chi chiede ha un permesso. Oggi la risposta è **sempre sì** e la domanda finisce
 nel registro con la parola "provvisorio"; quando sarà vera, questi nomi si legheranno ai permessi
-del manifesto qui sopra (per esempio `apps.manage` ad `app.gestire`).
+del manifesto qui sopra (per esempio `apps.manage` ad `apps.manage`).
 
 | Permesso | Servizio | Cosa permette | Note |
 |---|---|---|---|
-| `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | provvisorio: oggi sempre concesso; il launcher controlla in più, come prima, che sia il sistema o un'app del sistema con `app.gestire` (lo Store) |
+| `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | provvisorio: oggi sempre concesso; il launcher controlla in più, come prima, che sia il sistema o un'app del sistema con `apps.manage` (lo Store) |
 | `programs.open` | launcher | far partire un programma di `/system/bin` come la persona | provvisorio: oggi sempre concesso; oggi non lo chiede nessuno |
 | `system.shell` | launcher | aprire la shell come sistema (il Terminale) | provvisorio: oggi sempre concesso (terminale come sistema aperto a chiunque, `STATO.md`) |
 
@@ -223,10 +223,10 @@ finestra come pannello di controllo. Non sono nell'elenco finché non esiste que
 
 | App | Permessi | Deviazioni | Ruoli |
 |---|---|---|---|
-| Files | `file.scrivere` | — | file |
-| Attività | `processi` (di sistema) | — | — |
-| Impostazioni | `impostazioni.sistema` (di sistema) | — | — |
-| Store | `app.gestire` (di sistema) | — | — |
+| Files | `files.write` | — | file |
+| Attività | `processes` (di sistema) | — | — |
+| Impostazioni | `settings.system` (di sistema) | — | — |
+| Store | `apps.manage` (di sistema) | — | — |
 | Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |
 | Contatore, Esempio (solo per le prove: `utente/prove/applicazioni/`) | — | — | — |
 
@@ -283,7 +283,7 @@ bisogno. Il primo candidato è il "filtro della rete", per il firewall.
 
 ## 11. Lo Store
 
-Un'app del sistema (`store`, con il permesso `app.gestire`) per **installare** un'app aprendo un file
+Un'app del sistema (`store`, con il permesso `apps.manage`) per **installare** un'app aprendo un file
 `.app`, **aggiornarla** aprendo un file `.app` più nuovo, **vedere** le app installate con la loro
 scheda e **togliere** un'app installata dalla persona (le app del sistema non si possono togliere).
 Il disegno è sulla pagina "App – Store" di Figma.

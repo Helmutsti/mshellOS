@@ -14,9 +14,9 @@ sistema_minimo = 1
 
 programma = "code"
 
-# app.gestire: installare, aggiornare e togliere app (un permesso di sistema: lo Store e'
+# apps.manage: installare, aggiornare e togliere app (un permesso di sistema: lo Store e'
 # un'app del sistema, in /system/apps/store). Il launcher lo controlla a ogni richiesta.
-permessi = ["app.gestire"]
+permessi = ["apps.manage"]
 deviazioni = []
 funzioni = []
 

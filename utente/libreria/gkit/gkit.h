@@ -249,7 +249,7 @@ int finestra_riducimi(struct finestra *f);
 
 /* Chiede al compositore di dire a tutte le finestre che il tema e' cambiato (TEMA_CAMBIATO):
  * il tema nuovo va scritto PRIMA nelle preferenze. Lo puo' chiedere solo il sistema o un'app
- * con il permesso "impostazioni.sistema" nel manifesto; per gli altri non succede niente.
+ * con il permesso "settings.system" nel manifesto; per gli altri non succede niente.
  * 0 se il messaggio e' partito, -1 se no. */
 int finestra_cambia_tema(struct finestra *f);
 

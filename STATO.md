@@ -518,7 +518,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
     ridisegna da sola). Oggi ci sono la sandbox (foto) e l'anteprima (tre scene rotte).
 
 **Da riprendere** (lasciati qui il 13/11/2026)
-28. **Nomi dei permessi in inglese** (deciso dalla persona): `app.gestire` → `apps.manage`,
+28. ~~**Nomi dei permessi in inglese**~~ FATTO il 14/11/2026 (deciso dalla persona): `app.gestire` → `apps.manage`,
     `file.leggere` → `files.read`, `file.scrivere` → `files.write`, `notifiche` →
     `notifications`, `rete` → `network`, `processi` → `processes`, `impostazioni.sistema` →
     `settings.system`, `spegnimento` → `system.power`, `audio` resta. Ovunque: manifesti,
@@ -526,7 +526,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
     (una sola tabella: oggi il launcher controlla sia `apps.manage` sia `app.gestire`). I testi
     per la persona restano in italiano; le chiavi del manifesto (`permessi`, `programma`...) non
     sono state decise. Un lavoro iniziato è rimasto a metà sul ramo dell'agente, non unito.
-29. **Il componente UIKit "messaggio" diventa `alert`** (deciso dalla persona): `uikit/alert.h`,
+29. ~~**Il componente UIKit "messaggio"**~~ FATTO il 14/11/2026: si chiama `messagebox` (deciso dalla persona): `uikit/alert.h`,
     `interno/alert.c`, `struct alert`, `alert_*`. Oggi ha lo stesso nome di `struct messaggio`
     dello standard dei messaggi (`corekit/messaggi.h`), e un'app grafica non può includerli
     insieme. Serve prima della pagina della rete nelle Impostazioni.

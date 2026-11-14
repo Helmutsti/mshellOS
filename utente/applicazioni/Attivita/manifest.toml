@@ -14,7 +14,7 @@ sistema_minimo = 1
 
 programma = "code"
 
-permessi = ["processi"]
+permessi = ["processes"]
 deviazioni = []
 funzioni = []
 

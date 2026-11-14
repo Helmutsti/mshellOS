@@ -110,13 +110,13 @@ struct elenco_app {
 int pacchetto_elenco(struct elenco_app *e);
 
 /* 1 se il programma 'programma' (il percorso completo, come lo da' programma_di) e' quello
- * di un'app del sistema che nel manifesto chiede il permesso "app.gestire" (installare e
+ * di un'app del sistema che nel manifesto chiede il permesso "apps.manage" (installare e
  * aggiornare app): per ora, solo cosi' un'app puo' chiedere di installare. */
 int pacchetto_puo_gestire(const char *programma);
 
 /* 1 se il programma 'programma' (il percorso completo, come lo da' programma_di) e' quello
  * di un'app del sistema che nel manifesto chiede il permesso di sistema 'permesso' (per
- * esempio "impostazioni.sistema": solo cosi' un'app puo' cambiare il tema di tutti, gkit/sistema/protocollo.h). */
+ * esempio "settings.system": solo cosi' un'app puo' cambiare il tema di tutti, gkit/sistema/protocollo.h). */
 int pacchetto_ha_permesso(const char *programma, const char *permesso);
 
 /* --- togliere un'app e svuotarne i dati --- */

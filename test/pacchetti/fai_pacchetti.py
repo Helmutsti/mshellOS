@@ -82,8 +82,8 @@ def main():
     zip_(d / "arm.app", base(manifesto(processore="arm64")))
     zip_(d / "futuro.app", base(manifesto(sistema=2)))
     zip_(d / "sistema.app", base(manifesto(id="files")))
-    zip_(d / "permesso-ignoto.app", base(manifesto(permessi='["file.leggere", "telecamera"]')))
-    zip_(d / "permesso-sistema.app", base(manifesto(id="prova-sis", permessi='["processi"]',
+    zip_(d / "permesso-ignoto.app", base(manifesto(permessi='["files.read", "telecamera"]')))
+    zip_(d / "permesso-sistema.app", base(manifesto(id="prova-sis", permessi='["processes"]',
                                                      deviazioni='["sottofondo"]', funzioni='["testo.apri"]')))
     zip_(d / "deviazione-ignota.app", base(manifesto(deviazioni='["invisibile"]')))
     zip_(d / "funzione-ignota.app", base(manifesto(funzioni='["caffe.fai"]')))

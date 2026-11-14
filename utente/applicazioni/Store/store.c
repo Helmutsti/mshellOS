@@ -10,7 +10,7 @@
  *     RICHIESTA DI INSTALLAZIONE o di AGGIORNAMENTO, oppure perche' non si puo' installare.
  *
  * Il lavoro vero lo fa il launcher (launcher.h): lo Store chiede e mostra. Puo' chiedere di
- * installare, togliere e svuotare perche' e' un'app del sistema con il permesso "app.gestire".
+ * installare, togliere e svuotare perche' e' un'app del sistema con il permesso "apps.manage".
  *
  * L'ASPETTO e' quello della pagina "App - Store" del file Figma, fatto con i componenti di UIKit:
  * la finestra a aree, la pagina (il pannello chiaro incassato, che scorre), il paragrafo, la riga dell'app, la riga di
@@ -66,15 +66,15 @@ static void con_nome(char *dove, int massimo, const char *a, const char *nome, c
 /* --- i nomi del sistema, spiegati (APPLICAZIONI.md, sezione 9; i testi dal disegno) --- */
 
 static const struct { const char *nome, *titolo, *cosa; int simbolo; } permessi_noti[] = {
-    { "file.leggere", "Leggere i tuoi file", "Leggere tutti i file della tua Home", ICONA_FOLDER },
-    { "file.scrivere", "Modificare i tuoi file", "Leggere e modificare tutti i file della tua Home", ICONA_FOLDER },
-    { "notifiche", "Notifiche", "Mandare notifiche", ICONA_BELL },
-    { "rete", "Rete", "Usare la rete e internet", ICONA_GLOBE },
+    { "files.read", "Leggere i tuoi file", "Leggere tutti i file della tua Home", ICONA_FOLDER },
+    { "files.write", "Modificare i tuoi file", "Leggere e modificare tutti i file della tua Home", ICONA_FOLDER },
+    { "notifications", "Notifiche", "Mandare notifiche", ICONA_BELL },
+    { "network", "Rete", "Usare la rete e internet", ICONA_GLOBE },
     { "audio", "Audio", "Riprodurre suoni", ICONA_VOLUME_2 },
-    { "processi", "Processi", "Vedere i programmi in esecuzione e fermarli", ICONA_ACTIVITY },
-    { "impostazioni.sistema", "Impostazioni del sistema", "Cambiare tema, lingua e schermo per tutti", ICONA_SETTINGS },
-    { "spegnimento", "Spegnimento", "Spegnere e riavviare il computer", ICONA_POWER },
-    { "app.gestire", "Gestire le app", "Installare, aggiornare e togliere app", ICONA_PACKAGE },
+    { "processes", "Processi", "Vedere i programmi in esecuzione e fermarli", ICONA_ACTIVITY },
+    { "settings.system", "Impostazioni del sistema", "Cambiare tema, lingua e schermo per tutti", ICONA_SETTINGS },
+    { "system.power", "Spegnimento", "Spegnere e riavviare il computer", ICONA_POWER },
+    { "apps.manage", "Gestire le app", "Installare, aggiornare e togliere app", ICONA_PACKAGE },
 };
 
 static const struct { const char *nome, *titolo, *cosa; int simbolo; } deviazioni_note[] = {
@@ -254,7 +254,7 @@ static struct pagina pg_richiesta, pg_azioni;
 static struct contenitore riga_azioni;
 static struct spazio spinta;
 static struct pulsante p_annulla, p_installa, p_aggiorna, p_apri, p_chiudi;
-static struct messaggio avvisi[4], errore;
+static struct messagebox avvisi[4], errore;
 static struct stato_vuoto esito;
 static char testo_apri[MAX_TESTO_WIDGET];
 
@@ -301,10 +301,10 @@ static const char *titolo_errore(const struct problema *p) {
     return "Non si pu\xc3\xb2 installare";
 }
 
-static void messaggio_utf8(struct messaggio *m, int tipo, const char *titolo, const char *testo) {
-    messaggio_prepara(m, tipo, titolo, testo);
+static void messagebox_utf8(struct messagebox *m, int tipo, const char *titolo, const char *testo) {
+    messagebox_prepara(m, tipo, titolo, testo);
     in_437_qui(m->titolo, (int)sizeof m->titolo);
-    in_437_qui(m->spiegazione, MESSAGGIO_TESTO);
+    in_437_qui(m->spiegazione, MESSAGEBOX_TESTO);
 }
 
 /* Lo stato vuoto con testi in UTF-8, in mezzo alla pagina. */
@@ -397,7 +397,7 @@ static void mostra_richiesta(void) {
         for (int i = 0; i < r->quanti && n < QUANTI(avvisi); i++) {
             const struct problema *p = &r->problemi[i];
             if (!p->blocca || !da_mostrare(p, gia)) continue;
-            messaggio_utf8(&avvisi[n], MESSAGGIO_ERRORE, titolo_errore(p), p->testo);
+            messagebox_utf8(&avvisi[n], MESSAGEBOX_ERRORE, titolo_errore(p), p->testo);
             pagina_aggiungi(&pg_richiesta, &avvisi[n++].base);
         }
         mostra_pulsanti(0, 0, 0, 0, 1);
@@ -409,7 +409,7 @@ static void mostra_richiesta(void) {
                  ": non c'\xc3\xa8 niente da aggiornare.");
         char titolo[120];
         con_nome(titolo, sizeof titolo, "", nome, " \xc3\xa8 gi\xc3\xa0 installata");
-        messaggio_utf8(&avvisi[0], MESSAGGIO_INFORMAZIONE, titolo, riga);
+        messagebox_utf8(&avvisi[0], MESSAGEBOX_INFORMAZIONE, titolo, riga);
         pagina_aggiungi(&pg_richiesta, &avvisi[0].base);
         con_nome(testo_apri, MAX_TESTO_WIDGET, "Apri ", nome, "");
         in_437_qui(testo_apri, MAX_TESTO_WIDGET);
@@ -435,12 +435,12 @@ static void mostra_richiesta(void) {
         if (descrizione_uguali(p->voce, "icone") && r->svg_presente[0] != r->svg_presente[1]) {
             if (icone_dette++) continue;
             int manca_scuro = !r->svg_presente[1];
-            messaggio_utf8(&avvisi[n], MESSAGGIO_AVVISO,
+            messagebox_utf8(&avvisi[n], MESSAGEBOX_AVVISO,
                            manca_scuro ? "Manca l'icona per il tema scuro" : "Manca l'icona per il tema chiaro",
                            manca_scuro ? "L'app si installa lo stesso. In tema scuro vedrai l'icona chiara."
                                        : "L'app si installa lo stesso. In tema chiaro vedrai l'icona scura.");
         } else {
-            messaggio_utf8(&avvisi[n], MESSAGGIO_AVVISO, "Da sapere", p->testo);
+            messagebox_utf8(&avvisi[n], MESSAGEBOX_AVVISO, "Da sapere", p->testo);
         }
         pagina_aggiungi(&pg_richiesta, &avvisi[n++].base);
     }
@@ -485,7 +485,7 @@ static void premi_installa(struct pulsante *b, void *dati) {
                        : "Il sistema non ha risposto: riprova tra poco.";
     for (int i = 0; i < resoconto.quanti; i++)
         if (resoconto.problemi[i].blocca) { perche = resoconto.problemi[i].testo; break; }
-    messaggio_utf8(&errore, MESSAGGIO_ERRORE, titolo, perche);
+    messagebox_utf8(&errore, MESSAGEBOX_ERRORE, titolo, perche);
     pagina_svuota(&pg_richiesta);
     pagina_aggiungi(&pg_richiesta, &testa_app.base);
     pagina_aggiungi(&pg_richiesta, &errore.base);
@@ -565,7 +565,7 @@ static int richiesta(const char *percorso) {
 static struct barra_strumenti strumenti;
 static struct pulsante p_indietro, p_gestisci, p_svuota, p_togli;
 static struct pagina pg_elenco, pg_dettaglio;
-static struct messaggio esito_elenco, esito_dettaglio;
+static struct messagebox esito_elenco, esito_dettaglio;
 static struct avviso avviso;                   /* uno solo: lo si prepara a ogni domanda */
 static int scelta = -1;                        /* l'app del dettaglio (indice in 'installate') */
 
@@ -621,7 +621,7 @@ static void sezione_elenco_riga(struct sezione_elenco *s, int i, int *in_blocco)
 }
 
 /* Rilegge le app dal launcher e rifa' l'elenco; 'esito' (o 0) e' il messaggio in cima. */
-static void mostra_elenco_app(struct messaggio *esito_in_cima) {
+static void mostra_elenco_app(struct messagebox *esito_in_cima) {
     if (elenco_app_installate(&installate) != LAUNCHER_FATTO) installate.quante = 0;
     int tue = 0;
     for (int i = 0; i < installate.quante; i++) tue += !installate.app[i].di_sistema;
@@ -661,7 +661,7 @@ static void mostra_elenco_app(struct messaggio *esito_in_cima) {
 }
 
 /* Il dettaglio dell'app 'scelta', con in cima (se c'e') l'esito dell'ultima azione. */
-static void mostra_dettaglio(struct messaggio *esito_in_cima) {
+static void mostra_dettaglio(struct messagebox *esito_in_cima) {
     const struct app_installata *a = &installate.app[scelta];
     const struct manifesto *m = &a->m;
     char riga[200];
@@ -750,9 +750,9 @@ static void scelta_svuota(struct avviso *a, int risposta, void *dati) {
     char testo[200];
     if (fatto) {
         con_nome(testo, sizeof testo, "Al prossimo avvio ", nome_di(m), " ripartir\xc3\xa0 da zero.");
-        messaggio_utf8(&esito_dettaglio, MESSAGGIO_INFORMAZIONE, "Dati svuotati", testo);
+        messagebox_utf8(&esito_dettaglio, MESSAGEBOX_INFORMAZIONE, "Dati svuotati", testo);
     } else {
-        messaggio_utf8(&esito_dettaglio, MESSAGGIO_ERRORE, "I dati non sono stati svuotati",
+        messagebox_utf8(&esito_dettaglio, MESSAGEBOX_ERRORE, "I dati non sono stati svuotati",
                        perche[0] ? perche : "Non si \xc3\xa8 riusciti a svuotare i dati.");
     }
     mostra_dettaglio(&esito_dettaglio);
@@ -772,19 +772,19 @@ static void scelta_togli(struct avviso *a, int risposta, void *dati) {
     char titolo[120];
     if (esito_launcher != LAUNCHER_FATTO && esito_launcher != LAUNCHER_ERRORE) {   /* c'e' ancora: si resta li' */
         con_nome(titolo, sizeof titolo, "\"", nome, "\" non \xc3\xa8 stata tolta");
-        messaggio_utf8(&esito_dettaglio, MESSAGGIO_ERRORE, titolo,
+        messagebox_utf8(&esito_dettaglio, MESSAGEBOX_ERRORE, titolo,
                        perche[0] ? perche : "Non si \xc3\xa8 riusciti a togliere l'app.");
         mostra_dettaglio(&esito_dettaglio);
         return;
     }
     if (esito_launcher == LAUNCHER_FATTO) {
         con_nome(titolo, sizeof titolo, "\"", nome, "\" \xc3\xa8 stata tolta");
-        messaggio_utf8(&esito_elenco, MESSAGGIO_INFORMAZIONE, titolo,
+        messagebox_utf8(&esito_elenco, MESSAGEBOX_INFORMAZIONE, titolo,
                        tieni_dati ? "I dati che aveva salvato per te restano: se la reinstalli, li ritrover\xc3\xa0."
                                   : "Anche i dati che aveva salvato per te sono stati cancellati.");
     } else {
         con_nome(titolo, sizeof titolo, "\"", nome, "\" forse non \xc3\xa8 stata tolta del tutto");
-        messaggio_utf8(&esito_elenco, MESSAGGIO_ERRORE, titolo,
+        messagebox_utf8(&esito_elenco, MESSAGEBOX_ERRORE, titolo,
                        perche[0] ? perche : "Non si \xc3\xa8 riusciti a togliere l'app.");
     }
     mostra_elenco_app(&esito_elenco);

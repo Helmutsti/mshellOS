@@ -53,8 +53,8 @@
  *
  * IL TEMA (Chiaro o Scuro) DI TUTTO IL SISTEMA. Chi lo cambia (Impostazioni) lo scrive nelle
  * preferenze e chiede CAMBIA_TEMA al compositore; il compositore controlla che possa (il sistema,
- * uid 0, o un'app del sistema con il permesso "impostazioni.sistema" nel manifesto: lo chiede al
- * kernel quale programma c'e' all'altro capo, come il launcher per "app.gestire"), rilegge lui
+ * uid 0, o un'app del sistema con il permesso "settings.system" nel manifesto: lo chiede al
+ * kernel quale programma c'e' all'altro capo, come il launcher per "apps.manage"), rilegge lui
  * stesso il tema (le ombre intorno alle finestre sono sue) e manda TEMA_CAMBIATO a tutte le
  * finestre e a tutti i pannelli aperti. Chi lo riceve rilegge il tema dalle preferenze e si
  * ridisegna: le app di UIKit lo fanno da sole, la scrivania ricarica anche le icone delle app.
@@ -92,7 +92,7 @@
                              * davanti a tutte, con il fuoco */
 #define CAMBIA_TEMA     9   /* "il tema nelle preferenze e' cambiato: dillo a tutti" (vedi
                              * IL TEMA, sopra). Solo il sistema o un'app con il permesso
-                             * "impostazioni.sistema"; dagli altri si ignora */
+                             * "settings.system"; dagli altri si ignora */
 
 /* I ruoli speciali (RUOLO_FINESTRA, la finestra normale, e' in gkit.h) */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */

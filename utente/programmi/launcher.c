@@ -26,7 +26,7 @@
  * I permessi: per ogni richiesta che ne vuole uno (launcher.h) il launcher chiede a
  * ha_permesso (servizi.h), che oggi dice sempre si' e lo scrive nel registro
  * (PROVVISORIO). Per installare, aggiornare, togliere e svuotare resta in piu' il controllo
- * vero di prima: il sistema, o un'app del sistema con "app.gestire" nel manifesto.
+ * vero di prima: il sistema, o un'app del sistema con "apps.manage" nel manifesto.
  *
  * Il suo nome, "launcher", lo tiene init, che glielo presta al descrittore 0: se il
  * launcher cade, nessun altro puo' prenderlo, e chi chiede nel frattempo aspetta.
@@ -159,7 +159,7 @@ static void apri_la_shell(const struct chi_chiede *c, const struct messaggio *q,
 
 /* Chi chiede puo' installare, aggiornare, togliere e svuotare i dati? Prima la domanda a
  * ha_permesso (provvisoria: oggi si', e la scrive nel registro); poi il controllo vero di
- * oggi: il sistema, o un'app del sistema con il permesso "app.gestire" nel manifesto. */
+ * oggi: il sistema, o un'app del sistema con il permesso "apps.manage" nel manifesto. */
 static int puo_gestire(const struct chi_chiede *c) {
     if (!ha_permesso(c, PERMESSO_GESTIRE_APP)) return 0;
     return c->uid == UID_SISTEMA || (c->programma[0] && pacchetto_puo_gestire(c->programma));

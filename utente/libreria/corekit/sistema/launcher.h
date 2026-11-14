@@ -116,7 +116,7 @@
  * open_app, open_file, describe_package e list_apps li puo' chiedere chiunque.
  * Per apps.manage, oltre a ha_permesso, resta il controllo vero di prima: lo concede solo
  * il sistema (uid 0) o un'app DEL SISTEMA che nel manifesto chiede il permesso
- * "app.gestire" (lo Store; pacchetto_puo_gestire). Gli altri ricevono denied. Quando
+ * "apps.manage" (lo Store; pacchetto_puo_gestire). Gli altri ricevono denied. Quando
  * ha_permesso sara' vera, prendera' il suo posto.
  *
  * IL TEMPO MASSIMO. Chi chiede aspetta la risposta al massimo TEMPO_CHIEDI (5 secondi,
@@ -135,8 +135,7 @@
 #include "../apertura.h"
 #include "pacchetto.h"
 /* messaggi.h NO: lo includono solo il launcher e interno/launcher.c. Chi usa queste
- * funzioni non vede i messaggi; e un'app con UIKit non potrebbe includerlo, perche' anche
- * UIKit ha una struct messaggio (uikit/messaggio.h, il riquadro con un avviso). */
+ * funzioni non vede i messaggi: li fa CoreKit per lei. */
 
 #define NOME_LAUNCHER "launcher"
 

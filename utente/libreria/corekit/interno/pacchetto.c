@@ -50,12 +50,12 @@ const char *cartella_persone = "/data/users";
 
 /* --- i nomi che il sistema conosce (APPLICAZIONI.md, sezione 9) --- */
 
-static const char *const permessi_normali[] = { "file.leggere", "file.scrivere", "notifiche", "rete", "audio", 0 };
+static const char *const permessi_normali[] = { "files.read", "files.write", "notifications", "network", "audio", 0 };
 static const struct { const char *nome, *cosa; } permessi_sistema[] = {
-    { "processi", "vedere i programmi in esecuzione e fermarli" },
-    { "impostazioni.sistema", "cambiare le impostazioni del sistema" },
-    { "spegnimento", "spegnere e riavviare il computer" },
-    { "app.gestire", "installare, aggiornare e togliere app" },
+    { "processes", "vedere i programmi in esecuzione e fermarli" },
+    { "settings.system", "cambiare le impostazioni del sistema" },
+    { "system.power", "spegnere e riavviare il computer" },
+    { "apps.manage", "installare, aggiornare e togliere app" },
     { 0, 0 },
 };
 static const struct { const char *nome, *avviso; } deviazioni_note[] = {
@@ -862,4 +862,4 @@ int pacchetto_ha_permesso(const char *programma, const char *permesso) {
     return puo;
 }
 
-int pacchetto_puo_gestire(const char *programma) { return pacchetto_ha_permesso(programma, "app.gestire"); }
+int pacchetto_puo_gestire(const char *programma) { return pacchetto_ha_permesso(programma, "apps.manage"); }

@@ -79,10 +79,9 @@ aprire la shell): i dati grandi (il resoconto di un pacchetto, l'elenco delle ap
 nel foglio allegato alla risposta. Il servizio network lo userà per la sua porta. Il
 compositore si allineerà più avanti.
 
-Un'avvertenza per chi scrive app: UIKit ha anche lei una `struct messaggio` (il riquadro con un
-avviso, `uikit/messaggio.h`), quindi un file che include `uikit.h` non può includere
-`messaggi.h`. Per questo le app non vedono i messaggi: chiamano le funzioni del servizio
-(`apertura.h`, `sistema/launcher.h`), che li fanno dentro CoreKit.
+Le app non vedono i messaggi: chiamano le funzioni del servizio (`apertura.h`,
+`sistema/launcher.h`), che li fanno dentro CoreKit. (Il riquadro con un avviso di UIKit si
+chiama `struct messagebox`, `uikit/messagebox.h`: nessuno scontro di nomi con `messaggi.h`.)
 
 **Dove sta il codice:** in CoreKit, `utente/libreria/corekit/messaggi.h` (pubblico: chi chiede), `corekit/sistema/servizi.h` (del sistema: il lato del servizio) e `corekit/interno/messaggi.c` (la spiegazione lunga, con un esempio di scambio, è in testa a `messaggi.c`). Le funzioni principali:
 - costruire: `messaggio_inizia`, `messaggio_aggiungi`, `messaggio_aggiungi_numero`, `messaggio_risposta` (la busta della risposta: stesso `id`, `result`);

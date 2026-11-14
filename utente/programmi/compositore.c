@@ -997,13 +997,13 @@ static void porta_davanti(int pannello, unsigned int numero) {
 }
 
 /* CAMBIA_TEMA (gkit/sistema/protocollo.h, IL TEMA): solo dal sistema o da un'app del sistema con il permesso
- * "impostazioni.sistema" (lo dice il kernel: il programma all'altro capo). Il tema nuovo e' gia'
+ * "settings.system" (lo dice il kernel: il programma all'altro capo). Il tema nuovo e' gia'
  * nelle preferenze: lo si rilegge, si rifanno le ombre di tutte le finestre (dipendono dal
  * tema) e tutto il fotogramma, e lo si dice a tutte le finestre e ai pannelli, che si
  * ridisegnano. Da chi non puo', non succede niente. */
 static void cambia_tema(int i) {
     struct finestra_compositore *f = &finestre[i];
-    if (chi(f->collegamento) != UID_SISTEMA && !pacchetto_ha_permesso(f->programma, "impostazioni.sistema"))
+    if (chi(f->collegamento) != UID_SISTEMA && !pacchetto_ha_permesso(f->programma, "settings.system"))
         return;
     compositore_rileggi_tema();
     for (int k = 0; k < MAX_FINESTRE; k++)

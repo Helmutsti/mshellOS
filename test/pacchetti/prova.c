@@ -192,11 +192,11 @@ int main(int quanti, char **argomenti) {
     /* due app del sistema: files, e store che puo' gestire le app */
     FILE *m = fopen(RADICE "/system/apps/files/manifest.toml", "w");
     fprintf(m, "id = \"files\"\nnome = \"Files\"\nversione = \"1.0.0\"\nprocessore = \"" PROCESSORE_QUI "\"\n"
-               "sistema_minimo = 1\nprogramma = \"code\"\npermessi = [\"file.scrivere\"]\n");
+               "sistema_minimo = 1\nprogramma = \"code\"\npermessi = [\"files.write\"]\n");
     fclose(m);
     m = fopen(RADICE "/system/apps/store/manifest.toml", "w");
     fprintf(m, "id = \"store\"\nnome = \"Store\"\nversione = \"1.0.0\"\nprocessore = \"" PROCESSORE_QUI "\"\n"
-               "sistema_minimo = 1\nprogramma = \"code\"\npermessi = [\"app.gestire\"]\n");
+               "sistema_minimo = 1\nprogramma = \"code\"\npermessi = [\"apps.manage\"]\n");
     fclose(m);
 
     /* descrivere un pacchetto buono: si', con solo l'avviso delle PNG del tema scuro */
@@ -273,7 +273,7 @@ int main(int quanti, char **argomenti) {
 
     /* chi puo' chiedere di installare */
     system("touch " RADICE "/system/apps/store/code " RADICE "/system/apps/files/code");
-    controlla(pacchetto_puo_gestire(RADICE "/system/apps/store/code"), "store (app.gestire) puo' installare");
+    controlla(pacchetto_puo_gestire(RADICE "/system/apps/store/code"), "store (apps.manage) puo' installare");
     controlla(!pacchetto_puo_gestire(RADICE "/system/apps/files/code"), "files non puo' installare");
     controlla(!pacchetto_puo_gestire(RADICE "/data/apps/prova/code"), "un'app installata non puo' installare");
 
