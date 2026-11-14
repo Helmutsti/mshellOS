@@ -63,7 +63,7 @@ if [ "$cpu" = arm64 ]; then
         -device virtio-gpu-pci,xres=1280,yres=800 -display cocoa,zoom-to-fit=on \
         -drive if=none,id=disco,file="$qui/build/arm64/disco.img",format=raw \
         -device virtio-blk-pci,drive=disco \
-        -device qemu-xhci -device usb-kbd -device usb-tablet
+        -device qemu-xhci -device usb-kbd -device usb-tablet -nic user,model=virtio-net-pci
 fi
 
 # -machine pc -m 2048 -smp 4 : un PC con 2 GB di RAM (si puo' dare di piu': -m 8192) e 4
@@ -81,5 +81,5 @@ exec qemu-system-x86_64 -machine pc -m 2048 -smp 4 -rtc base=localtime \
     -drive if=none,id=disco,file="$qui/build/x86_64/disco.img",format=raw \
     -device virtio-blk-pci,drive=disco,bootindex=1 \
     -vga none -device virtio-vga,xres=1280,yres=800 \
-    -device qemu-xhci -device usb-kbd -device usb-tablet \
+    -device qemu-xhci -device usb-kbd -device usb-tablet -nic user,model=virtio-net-pci \
     -display cocoa,zoom-to-fit=on
