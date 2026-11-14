@@ -72,7 +72,7 @@
  *   open_program      path = il percorso di un PROGRAMMA normale, non un'app (per ora solo
  *                     quelli di /system/bin: APPLICAZIONI.md, sezione 2). Il launcher lo fa
  *                     partire come la persona (uid 1000), senza argomenti. Oggi non lo usa
- *                     nessuno (il Terminale e' un'app). Permesso programs.open. Risposta:
+ *                     nessuno (il Terminale e' un'app). Permesso apps.open. Risposta:
  *                     ok con task; denied per un percorso fuori da /system/bin.
  *
  *   open_shell        ALLEGATO il capo "schiavo" di un terminale finto (pty) di chi chiede.
@@ -111,7 +111,7 @@
  * se ha il permesso (sistema/servizi.h). Oggi ha_permesso e' PROVVISORIA: dice sempre si'
  * e scrive la domanda nel registro ("permesso apps.manage a ... (provvisorio)").
  *     apps.manage    install_package, update_package, remove_app, clear_app_data
- *     programs.open  open_program
+ *     apps.open  open_program
  *     system.shell   open_shell
  * open_app, open_file, describe_package e list_apps li puo' chiedere chiunque.
  * Per apps.manage, oltre a ha_permesso, resta il controllo vero di prima: lo concede solo
@@ -170,7 +170,7 @@
 
 /* i permessi che il launcher chiede (ha_permesso, sistema/servizi.h) */
 #define PERMESSO_GESTIRE_APP "apps.manage"
-#define PERMESSO_PROGRAMMI   "programs.open"
+#define PERMESSO_PROGRAMMI   "apps.open"
 #define PERMESSO_SHELL       "system.shell"
 
 /* il tempo massimo delle richieste sui pacchetti, in millisecondi */

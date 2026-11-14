@@ -100,7 +100,7 @@ collegamento si chiude e chi chiede lo sa subito.
 `network.settings`). **Oggi risponde sempre sì** e scrive la domanda nel registro, con la parola
 "provvisorio". Quando sarà vera riconoscerà sistema, app (manifesto e permessi concessi) e
 comando della persona: il commento in `messaggi.c` dice come. La usa il launcher
-(`apps.manage`, `programs.open`, `system.shell`: `APPLICAZIONI.md`, sezione 9).
+(`apps.manage`, `apps.open`, `system.shell`: `APPLICAZIONI.md`, sezione 9).
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
 

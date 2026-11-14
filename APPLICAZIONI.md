@@ -163,7 +163,7 @@ quello che tocca le cose della persona o il sistema intero.
 | `files.read` | leggere tutti i file della persona (la sua Home) |
 | `files.write` | leggere e modificare tutti i file della persona (comprende `files.read`) |
 | `notifications` | mandare notifiche |
-| `network` | usare la rete e internet (oggi l'app non vede nessuna rete) |
+| `network.use` | usare la rete e internet (oggi l'app non vede nessuna rete) |
 | `audio` | riprodurre suoni (quando il sistema avrà l'audio) |
 
 ### Permessi di sistema: poteri sul sistema intero
@@ -174,7 +174,11 @@ autorizzato ("chiavi a due livelli").
 
 | Permesso | Cosa permette | Chi lo usa oggi |
 |---|---|---|
-| `processes` | vedere i programmi in esecuzione e fermarli | Attività |
+| `processes.view` | vedere i programmi in esecuzione | — |
+| `processes.stop` | vederli e fermarli (comprende `processes.view`) | Attività |
+| `network.settings` | riavviare o fermare il servizio di rete | — |
+| `network.firewall.rules` | aggiungere regole del firewall per sé | — |
+| `network.firewall` | controllo pieno del firewall (comprende `.rules`) | — |
 | `settings.system` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
 | `system.power` | spegnere e riavviare il computer | (scrivania) |
 | `apps.manage` | installare, aggiornare e togliere app | Store |
@@ -189,7 +193,7 @@ del manifesto qui sopra (per esempio `apps.manage` ad `apps.manage`).
 | Permesso | Servizio | Cosa permette | Note |
 |---|---|---|---|
 | `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | provvisorio: oggi sempre concesso; il launcher controlla in più, come prima, che sia il sistema o un'app del sistema con `apps.manage` (lo Store) |
-| `programs.open` | launcher | far partire un programma di `/system/bin` come la persona | provvisorio: oggi sempre concesso; oggi non lo chiede nessuno |
+| `apps.open` | launcher | far partire un programma di `/system/bin` come la persona | provvisorio: oggi sempre concesso; oggi non lo chiede nessuno |
 | `system.shell` | launcher | aprire la shell come sistema (il Terminale) | provvisorio: oggi sempre concesso (terminale come sistema aperto a chiunque, `STATO.md`) |
 
 ### Deviazioni dallo standard: si dichiarano, la persona viene informata
@@ -224,7 +228,7 @@ finestra come pannello di controllo. Non sono nell'elenco finché non esiste que
 | App | Permessi | Deviazioni | Ruoli |
 |---|---|---|---|
 | Files | `files.write` | — | file |
-| Attività | `processes` (di sistema) | — | — |
+| Attività | `processes.stop` (di sistema) | — | — |
 | Impostazioni | `settings.system` (di sistema) | — | — |
 | Store | `apps.manage` (di sistema) | — | — |
 | Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |

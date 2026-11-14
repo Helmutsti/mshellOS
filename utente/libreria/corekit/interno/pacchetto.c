@@ -50,9 +50,13 @@ const char *cartella_persone = "/data/users";
 
 /* --- i nomi che il sistema conosce (APPLICAZIONI.md, sezione 9) --- */
 
-static const char *const permessi_normali[] = { "files.read", "files.write", "notifications", "network", "audio", 0 };
+static const char *const permessi_normali[] = { "files.read", "files.write", "notifications", "network.use", "audio", 0 };
 static const struct { const char *nome, *cosa; } permessi_sistema[] = {
-    { "processes", "vedere i programmi in esecuzione e fermarli" },
+    { "processes.view", "vedere i programmi in esecuzione" },
+    { "processes.stop", "vedere i programmi in esecuzione e fermarli" },
+    { "network.settings", "riavviare o fermare il servizio di rete" },
+    { "network.firewall.rules", "aggiungere regole del firewall per se' stessa" },
+    { "network.firewall", "controllo pieno del firewall" },
     { "settings.system", "cambiare le impostazioni del sistema" },
     { "system.power", "spegnere e riavviare il computer" },
     { "apps.manage", "installare, aggiornare e togliere app" },

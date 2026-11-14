@@ -83,7 +83,7 @@ def main():
     zip_(d / "futuro.app", base(manifesto(sistema=2)))
     zip_(d / "sistema.app", base(manifesto(id="files")))
     zip_(d / "permesso-ignoto.app", base(manifesto(permessi='["files.read", "telecamera"]')))
-    zip_(d / "permesso-sistema.app", base(manifesto(id="prova-sis", permessi='["processes"]',
+    zip_(d / "permesso-sistema.app", base(manifesto(id="prova-sis", permessi='["processes.view"]',
                                                      deviazioni='["sottofondo"]', funzioni='["testo.apri"]')))
     zip_(d / "deviazione-ignota.app", base(manifesto(deviazioni='["invisibile"]')))
     zip_(d / "funzione-ignota.app", base(manifesto(funzioni='["caffe.fai"]')))

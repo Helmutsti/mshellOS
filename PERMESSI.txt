@@ -1,0 +1,54 @@
+PERMESSI DI MSHELL - il riferimento
+====================================
+Aggiornato il 14/11/2026. Chi aggiunge, toglie o rinomina un permesso aggiorna questo file
+nello stesso commit. Le regole complete (chi concede cosa, manifesto, Store) sono in
+APPLICAZIONI.md; qui c'e' l'elenco con gli annidamenti.
+
+REGOLE
+- I nomi sono in inglese minuscolo, divisi da punti: gruppo.azione.
+- Un permesso "padre" comprende tutti i suoi "figli": chi ha network.firewall ha anche
+  network.firewall.rules; chi ha files.write ha anche files.read.
+- Stato di ogni permesso:
+    [c]  esiste nel codice (manifesti, servizi, ha_permesso)
+    [n]  deciso, ma ancora da mettere nel codice (oggi c'e' il nome indicato tra parentesi)
+- Normali: li concede la persona (al primo avvio dell'app, rivedibili in Impostazioni).
+  Di sistema: oggi solo le app del sistema (/system/apps); in futuro le app firmate da uno
+  sviluppatore autorizzato.
+- Oggi ha_permesso risponde SEMPRE si' (provvisorio): i permessi sono scritti ma non controllati.
+
+ELENCO
+files                         normale
+  files.read            [c]   leggere tutti i file della persona (la sua Home)
+  files.write           [c]   leggere e modificare tutti i file della persona
+                              (comprende files.read)
+
+network                       normale (use) / di sistema (il resto)
+  network.use           [c]   usare la rete e internet; chiedere lo stato
+                              al servizio di rete
+  network.settings      [c]   riavviare o fermare il servizio di rete (la configurazione
+                              resta statica in /system/config/network)
+  network.firewall      [c]   controllo pieno del firewall (comprende network.firewall.rules)
+    network.firewall.rules [c] aggiungere regole del firewall per se'
+
+notifications           [c]   normale: mandare notifiche
+
+audio                   [c]   normale: riprodurre suoni (quando ci sara' l'audio)
+
+processes                     di sistema
+  processes.view        [c]   vedere i programmi in esecuzione
+  processes.stop        [c]   fermarli (comprende processes.view)
+
+settings                      di sistema
+  settings.system       [c]   cambiare le impostazioni del sistema (tema, lingua, schermo)
+
+apps                          di sistema
+  apps.manage           [c]   installare, aggiornare e togliere app (lo Store)
+  apps.open             [c]   aprire app e programmi dal launcher
+
+system                        di sistema
+  system.power          [c]   spegnere e riavviare il computer
+  system.shell          [c]   aprire una shell come sistema (il Terminale; da proteggere,
+                              decisione provvisoria della persona: per ora resta cosi')
+
+DA DECIDERE
+- Se un padre si puo' concedere da solo (per esempio "network" intero) o solo i figli.

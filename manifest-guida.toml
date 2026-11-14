@@ -85,10 +85,11 @@ nella_barra = true
 #   "files.read"   leggere tutti i file della persona
 #   "files.write"  leggere e modificare tutti i file della persona
 #   "notifications"      mandare notifiche
-#   "network"           usare la rete e internet
+#   "network.use"       usare la rete e internet
 #   "audio"          riprodurre suoni
 # Permessi di sistema (oggi solo per le app del sistema):
-#   "processes", "settings.system", "system.power", "apps.manage"
+#   "processes.view", "processes.stop", "settings.system", "system.power", "apps.manage",
+#   "network.settings", "network.firewall.rules", "network.firewall" (PERMESSI.txt)
 #
 # L'elenco completo e le regole sono in APPLICAZIONI.md (sezione 9).
 

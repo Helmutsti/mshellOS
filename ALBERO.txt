@@ -1,0 +1,136 @@
+ALBERO DEL DISCO DI MSHELL
+
+Che cos'e': il riferimento dell'albero delle cartelle del disco di mshell (il disco
+build/<cpu>/disco.img che fa build.sh). Dice dove sta ogni cosa, di chi e',
+con quali permessi, e a cosa serve.
+
+Aggiornato il 14/11/2026.
+Fonte: build.sh (passo 2) e la testa di build.sh (IL DISCO).
+Regola: chi cambia l'albero in build.sh aggiorna questo file.
+
+====================================================================================================
+LE TRE PARTIZIONI (tabella GPT, MB = 1048576 byte)
+====================================================================================================
+  1. avvio    64 MB   FAT32   dal 1 MB al 64 MB. Sul PC: \EFI\BOOT\BOOTX64.EFI (la UKI).
+                              Su ARM e' vuota (QEMU usa -kernel e -initrd).
+  2. system   64 MB   ext4    dal 65 MB al 128 MB. Montata da avvio in SOLA LETTURA come /.
+  3. data     64 MB   ext4    dal 129 MB al 192 MB. Montata da avvio in LETTURA E
+                              SCRITTURA come /data.
+
+Legenda: UID = proprietario; PERM = permessi (cartelle e file). (prove) = sta solo nei dischi
+delle prove (disco_prove.img e gli altri, mai in disco.img).
+
+====================================================================================================
+ALBERO
+====================================================================================================
+NOME                                          UID   PERM.    DESCRIZIONE
+----------------------------------------------------------------------------------------------------
+/   partizione system, sola lettura (montata da avvio)
+├── dev/                                      0     755      i dispositivi (montata da avvio)
+├── etc/                                      0     755      la configurazione di sistema, quasi
+                                                             vuota
+│   └── resolv.conf                           0     -        collegamento a
+                                                             /run/network/resolv.conf: i server dei
+                                                             nomi (DNS)
+├── proc/                                     0     755      i processi (montata da avvio)
+├── run/                                      0     755      in memoria: i socket (in /run/mshell) e
+                                                             i file di network
+├── sys/                                      0     755      il kernel e i driver (montata da avvio)
+├── system/                                   0     755      tutto il sistema, in sola lettura (vedi
+                                                             sotto)
+│   ├── init                                  0     755      il primo programma: processo numero 1
+                                                             (da utente/programmi)
+│   ├── bin/                                  0     755      i comandi del sistema
+│   │   ├── shell                             0     755      la shell di prova (da
+                                                             utente/programmi/shell.c)
+│   │   └── webask                            0     755      comando: webask (da utente/comandi)
+│   ├── apps/                                 0     755      le applicazioni del sistema, una
+                                                             cartella ciascuna
+│   │   ├── <app>/                            0     755      una app: lo stesso contenuto del suo
+                                                             pacchetto .app
+│   │   │   ├── code                          0     755      il programma dell'app
+│   │   │   ├── manifest.toml                 0     644      il manifesto dell'app
+│   │   │   └── resources/                    0     755      le risorse dell'app (i file dentro sono
+                                                             644)
+│   │   ├── ...                               0              un'altra cartella per ogni app del
+                                                             sistema
+│   │   └── (prove) esempio/, contatore/      0              le app di utente/prove (solo nei dischi
+                                                             prove)
+│   ├── config/                               0     755      configurazione predefinita dei servizi,
+                                                             da leggere
+│   │   └── network/                          0     755      configurazione del servizio network
+│   │       ├── firewall.conf                 0     644      il firewall
+│   │       └── network.conf                  0     644      la rete
+│   ├── firmware/                             0     755      il firmware dei dispositivi
+                                                             (firmware_class.path)
+│   ├── lib/                                  0     755      librerie condivise: per ora vuota
+│   ├── modules/                              0     755      moduli del kernel dal disco: per ora
+                                                             vuota
+│   ├── resources/                            0     755      risorse del sistema, da risorse/ (i
+                                                             file dentro 644)
+│   │   ├── fonts/                            0     755      i caratteri
+│   │   │   └── ...                           0     644      i file dei caratteri
+│   │   ├── icons/                            0     755      le icone
+│   │   │   └── ...                           0     644      i file delle icone
+│   │   └── wallpapers/                       0     755      gli sfondi
+│   │       └── ...                           0     644      i file degli sfondi
+│   └── services/                             0     755      i programmi dei servizi: il nome del
+                                                             programma e' il servizio
+│       ├── eventi                            0     755      servizio eventi (da
+                                                             utente/programmi/eventi.c)
+│       ├── compositore                       0     755      servizio compositore
+│       ├── launcher                          0     755      servizio launcher
+│       ├── scrivania                         0     755      servizio scrivania
+│       └── network                           0     755      servizio network (rete e firewall)
+├── tmp/                                      0     755      in memoria: file temporanei (montata da
+                                                             avvio)
+└── data/                                     0     755      il punto dove avvio monta la partizione
+                                                             data
+
+/data   partizione data, lettura e scrittura (montata da avvio)
+├── apps/                                     0     755      le app installate dalla persona
+                                                             (all'inizio nessuna)
+├── services/                                 0     755      stato e registri di ogni servizio:
+                                                             ognuno suo
+│   ├── eventi/                               0     700      stato e registri del servizio eventi
+│   ├── compositore/                          0     700      stato e registri del servizio
+                                                             compositore
+│   ├── launcher/                             0     700      stato e registri del servizio launcher
+│   ├── scrivania/                            0     700      stato e registri del servizio scrivania
+│   └── network/                              0     700      stato e registri del servizio network
+├── system/                                   0     700      identita', utenti, permessi, app
+                                                             installate: solo del sistema
+├── tests/                                    0     755      (prove) i programmi delle prove:
+                                                             /data/tests
+└── users/                                    0     755      le persone (per ora una sola)
+    └── 1000/                                 1000  700      la persona (uid 1000): la sua cartella
+                                                             e' solo sua
+        ├── appsdata/                         1000  700      i dati di ogni applicazione
+        │   └── <app>/                        1000  700      i dati di un'app (una cartella per app
+                                                             del sistema)
+        ├── bin/                              1000  700      i suoi comandi: cercati DOPO
+                                                             /system/bin, mai overlay
+        ├── home/                             1000  700      i suoi file: i programmi la vedono come
+                                                             /home
+        │   ├── Scrivania/                    1000  700      la scrivania (da rinominare, vedi
+                                                             sotto)
+        │   └── ...                           1000  755/644  i file di file/ del repository
+                                                             (cartelle 755, file 644)
+        └── preferences/                      1000  700      le sue preferenze
+
+====================================================================================================
+REGOLE GIA' DECISE (CLAUDE.md, build.sh)
+====================================================================================================
+  - Nomi su disco in inglese minuscolo. Da applicare quando si ristruttura il disco.
+  - Niente dati scrivibili sotto /system: sola lettura. Quello che si scrive sta in /data,
+    oppure in /dev, /proc, /sys, /run e /tmp (montati da avvio).
+  - I comandi della persona stanno in /data/users/<uid>/bin e si cercano DOPO /system/bin,
+    mai con un overlay.
+  - Proprietari: il sistema e' uid 0 (root). Le cartelle e i file della persona sono del suo
+    uid (1000). I servizi girano come sistema e hanno ognuno la loro cartella, 700.
+  - Permessi: cartelle 755 e file 644 per le risorse e la configurazione; i programmi 755.
+
+DA RINOMINARE (oggi non sono in inglese minuscolo, cambiare quando si ristruttura):
+  - /data/services/eventi, compositore, launcher, scrivania
+  - /system/services/eventi, compositore, launcher, scrivania (e i loro programmi)
+  - /data/users/1000/home/Scrivania
