@@ -217,6 +217,7 @@ offre **tutte** le funzioni obbligatorie.
 | **immagini** | `immagine.apri` (riceve un file immagine e lo mostra) | — |
 | **testo** | `testo.apri` (riceve un file di testo e lo apre per modificarlo) · `testo.nuovo` (apre un testo vuoto) | — |
 | **terminale** | `terminale.apri` (apre un terminale in una cartella data) | — |
+| **firewall** | `firewall.porta` (riceve "<app> vuole accettare connessioni sulla porta X" e risponde sì o no, eventualmente chiedendo alla persona). In più il permesso `network.firewall` | — (senza app vale la configurazione predefinita) |
 
 Il ruolo **firewall** (deciso il 14 novembre 2026) non passa da un modulo aggiuntivo ma dal
 permesso `network.firewall`: l'app scelta dalla persona chiede le regole al servizio network, che le
@@ -224,7 +225,7 @@ controlla, le applica e le conserva anche ad app chiusa (come firewalld con polk
 app alla volta, perché due app con il controllo pieno si scontrerebbero (come Windows, che spegne il
 suo firewall quando un altro prende il posto, o Android, che tiene attiva una sola VPN). Le funzioni
 L'app scelta prende il posto degli interruttori di base del firewall; tolta l'app, si torna a quelli
-(come Windows). Le funzioni obbligatorie del ruolo sono una domanda aperta (`SISTEMA.md`, sezione 4).
+(come Windows).
 
 **Le app che vogliono ricevere connessioni da fuori** (per esempio un gioco in rete che accoglie altri
 giocatori) non scrivono regole e non decidono niente: **chiedono al firewall** di poter accettare
@@ -233,6 +234,10 @@ network con gli interruttori di base se nessuna app è scelta), così non c'è m
 novembre 2026; come il Mac e Windows, che chiedono "vuoi che questa app accetti connessioni in
 entrata?". Senza app scelta vale sempre la configurazione predefinita, che chiede alla persona e
 ricorda la risposta (`SISTEMA.md`, sezione 4).
+
+**Funzione obbligatoria del ruolo firewall** (deciso il 14 novembre 2026): rispondere alle richieste
+di aprire una porta (riceve "<app> vuole accettare connessioni sulla porta X", risponde sì o no,
+eventualmente chiedendo alla persona). Un'app che non la offre non viene proposta per il ruolo.
 Altri ruoli che devono lavorare per tutto il computer passano dai moduli aggiuntivi (sezione 10).
 
 ### Le app di oggi con questo elenco
