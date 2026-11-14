@@ -44,9 +44,13 @@ def esegui(p):
     try:
         time.sleep(0.8)              # oltre il mezzo secondo prima della ripetizione
         visti = []
-        for _ in range(8):
+        # Le pause sono IRREGOLARI di proposito: i colori sono 4 e il kernel ripete ogni 30 ms,
+        # quindi i colori tornano uguali ogni 120 ms. Con foto a intervalli fissi (pausa + tempo
+        # della foto) che sommano un multiplo di 120 ms, si vedrebbe sempre lo stesso colore
+        # anche con la ripetizione in corso (succede su arm64, dove la foto dura ~50 ms).
+        for pausa in (0.07, 0.013, 0.041, 0.023, 0.057, 0.031, 0.019, 0.05):
             visti.append(sfondo())
-            time.sleep(0.07)
+            time.sleep(pausa)
     finally:
         m.tasto_su("a")
     p.controlla(all(c in s.ESEMPIO_SFONDI for c in visti),
