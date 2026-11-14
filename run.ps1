@@ -8,7 +8,14 @@
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 
-docker run --rm -v "${qui}:/w" alpine:3.24 sh /w/build.sh x86_64
+# il container degli attrezzi (strumenti/compilazione/Dockerfile), preparato una volta sola
+$attrezzi = "mshell-attrezzi-x86_64"
+docker image inspect $attrezzi *> $null
+if ($LASTEXITCODE -ne 0) {
+    docker build -q -t $attrezzi "${qui}\strumenti\compilazione" | Out-Null
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+docker run --rm -v "${qui}:/w" $attrezzi sh /w/build.sh x86_64
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # -machine pc -m 2048 : un PC con 2 GB di RAM (si puo' dare di piu': -m 8192), con un solo

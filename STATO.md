@@ -27,16 +27,21 @@ Il risultato va in `build/<cpu>/` e si può cancellare: viene rifatto.
 **Mac o Linux** (QEMU con `brew install qemu`):
 
 ```sh
-./run.sh             # PC (x86_64), avviato da UEFI
-./run.sh arm64       # ARM a 64 bit (sul Mac con chip Apple usa la virtualizzazione vera)
+./run.sh             # compila e avvia, sul processore del computer (arm64 sul Mac con chip Apple)
 ```
 
-**Solo compilare**, senza avviare:
+**Solo compilare**, senza avviare (sempre sul processore del computer, Docker nativo):
 
 ```sh
-docker run --rm --platform linux/amd64 -v "$PWD:/w" alpine:3.24 sh /w/build.sh x86_64
-docker run --rm --platform linux/amd64 -v "$PWD:/w" alpine:3.24 sh /w/build.sh arm64
+docker run --rm -v "$PWD:/w" $(sh strumenti/compilazione/attrezzi.sh) sh /w/build.sh
 ```
+
+Prima si compila, poi si monta: i programmi pronti restano in `build/<cpu>/oggetti` e make
+(`strumenti/compilazione/programmi.mk`, lo stesso della sandbox) rifa' solo quello che e'
+cambiato; archivio di avvio, kernel e UKI si rifanno solo se cambia quello da cui vengono; il
+disco si monta ogni volta dai pezzi pronti. Sul Mac (14/11/2026): da zero 13 s, dopo una
+modifica circa 5 s (prima, con x86 emulato, oltre 5 minuti). Il container degli attrezzi
+(`mshell-attrezzi-<arch>`) si prepara una volta sola.
 
 Da Git Bash su Windows serve `MSYS_NO_PATHCONV=1` e `$(pwd -W)` al posto di `$PWD`.
 Con la variabile `NUCLEO=lts` (con Docker: `-e NUCLEO=lts` prima di `alpine:3.24`) si usa

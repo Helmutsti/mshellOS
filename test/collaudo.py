@@ -154,9 +154,11 @@ def compila(cpu_scelte, build):
     for cpu in cpu_scelte:
         uscita = f"{relativa.as_posix()}/{cpu}"
         print(f"compilo per {cpu} in {uscita} ...", flush=True)
+        attrezzi = subprocess.run(["sh", str(REPO / "strumenti/compilazione/attrezzi.sh")],
+                                  capture_output=True, text=True, check=True).stdout.strip()
         r = subprocess.run(["docker", "run", "--rm",
                             "-e", f"USCITA={uscita}", "-v", f"{REPO}:/w",
-                            "alpine:3.24", "sh", "/w/build.sh", cpu])
+                            attrezzi, "sh", "/w/build.sh", cpu])
         if r.returncode:
             sys.exit(f"la compilazione per {cpu} non e' riuscita")
 

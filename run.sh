@@ -41,7 +41,8 @@ if [ -n "$1" ] && [ "$1" != "$cpu" ] && ! { [ "$1" = x86 ] && [ "$cpu" = x86_64 
     echo "run.sh: si lavora sul processore del computer ($cpu), non $1"; exit 1
 fi
 
-docker run --rm -v "$qui:/w" alpine:3.24 sh /w/build.sh "$cpu"
+attrezzi=$(sh "$qui/strumenti/compilazione/attrezzi.sh")
+docker run --rm -v "$qui:/w" "$attrezzi" sh /w/build.sh "$cpu"
 
 if [ "$cpu" = arm64 ]; then
     # -M virt     : la macchina ARM "virtuale" di QEMU

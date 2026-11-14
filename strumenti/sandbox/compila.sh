@@ -18,7 +18,7 @@ cd /w
 # CPU e ARCH arrivano da sandbox.py (il processore del computer: arm64 o x86_64)
 : "${CPU:?}" "${ARCH:?}"
 O=/o
-make -s -f strumenti/sandbox/Makefile -j"$(nproc)" O=$O ARCH=$ARCH
+make -s -f strumenti/sandbox/Makefile -j"$(nproc)" O=$O ARCH=$ARCH CPU=$CPU RADICE=/radice
 
 A=/tmp/albero
 rm -rf "$A"
@@ -63,9 +63,9 @@ done
 (cd risorse && find . -type f | sort) | while read -r f; do
     metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
 done
-metti_file $O/bin/init /system/init 755
+metti_file $O/sandbox/init /system/init 755
 SERVIZI="compositore eventi launcher scrivania network"
-for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755; done
+for nome in $SERVIZI; do metti_file "$O/sandbox/$nome" "/system/services/$nome" 755; done
 # la configurazione predefinita dei servizi, come build.sh. Il collegamento
 # /etc/resolv.conf invece no: nel container quel file lo mette Docker. Il servizio network
 # qui non tocca niente: Docker non gli da' il permesso di cambiare le schede, e lui lo dice
@@ -74,7 +74,7 @@ for nome in $SERVIZI; do metti_file "$O/bin/$nome" "/system/services/$nome" 755;
     metti_file "utente/config/${f#./}" "/system/config/${f#./}" 644
 done
 # i comandi, come build.sh: la shell di prova e quelli di utente/comandi
-for nome in shell; do metti_file "$O/bin/$nome" "/system/bin/$nome" 755; done
+for nome in shell; do metti_file "$O/sandbox/$nome" "/system/bin/$nome" 755; done
 for f in utente/comandi/*.c; do
     nome=$(basename "$f" .c)
     metti_file "$O/bin/comandi/$nome" "/system/bin/$nome" 755
@@ -152,7 +152,7 @@ done
 find "$CASA_VERA" -exec touch -d "2025-12-31 18:02:00" {} +
 
 # --- solo della sandbox ---
-metti_file $O/bin/avvio /.sandbox/avvio 755
+metti_file $O/sandbox/avvio /.sandbox/avvio 755
 metti_file $O/bin/prove/riempitivo /.sandbox/prove/riempitivo 755
 metti_file $O/bin/prove/pacchetti /.sandbox/prove/pacchetti 755
 metti_file $O/bin/prove/messaggi /.sandbox/prove/messaggi 755

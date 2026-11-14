@@ -10,11 +10,15 @@
 #   sh build.sh x86_64   lo stesso, detto per nome ("x86" vale lo stesso); arm64 per ARM.
 #                        Se non e' quello del computer, il build si ferma.
 #
-# SI RIFA SOLO QUELLO CHE E' CAMBIATO: gli oggetti compilati (build/<cpu>/oggetti) restano da
-# una volta all'altra, e un .c si ricompila solo se lui, uno dei .h che include o il comando
-# di compilazione (argomenti, pacchetti di Alpine) sono cambiati (vedi compila, passo 1).
-# Tutto il resto (programmi legati, archivio di avvio, dischi) si rifa' ogni volta: costa
-# pochi secondi. Per ricompilare tutto da zero: cancellare build/<cpu>/oggetti.
+# PRIMA SI COMPILA, POI SI MONTA. I programmi pronti (librerie, programmi, comandi, pacchetti
+# delle app) restano da parte in build/<cpu>/oggetti, e make (strumenti/compilazione/
+# programmi.mk) rifa' solo quello che e' cambiato. Anche l'archivio di avvio, il kernel e
+# (sul PC) la UKI si rifanno solo se e' cambiato quello da cui vengono. Poi il disco si
+# monta ogni volta da capo con i pezzi pronti: costa pochi secondi, ed e' sempre identico a
+# quello che si distribuisce. Per rifare tutto da zero: cancellare build/<cpu>.
+#
+# Gli attrezzi (clang, make...) si installano solo se mancano: il container
+# mshell-attrezzi-<arch> (strumenti/compilazione/Dockerfile, che run.sh prepara) li ha gia'.
 #
 # IL SISTEMA. Sotto c'e' il kernel Linux, preso cosi' com'e' dai pacchetti di Alpine Linux
 # 3.24 (lo stesso container in cui gira questo script); sopra, dal processo numero 1 in
@@ -186,7 +190,10 @@ SCARICO=/w/build/scarico
 mkdir -p "$SCARICO/$ARCH"
 # binutils: ar, che mette insieme libcorekit.a (passo 2); e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
 # FAT della partizione di avvio, scritta senza montarla
-apk add --cache-dir "$SCARICO/$ARCH" clang lld binutils e2fsprogs sfdisk mtools zip $ATTREZZI_CPU >/dev/null
+# make: la compilazione (programmi.mk); zip: i pacchetti delle app
+ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip $ATTREZZI_CPU"
+apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = "$(echo $ATTREZZI | wc -w)" ] ||
+    apk add --cache-dir "$SCARICO/$ARCH" $ATTREZZI >/dev/null
 
 # LA RADICE DI ALPINE PER LA CPU: un albero con i pacchetti di Alpine PER QUELLA CPU
 # (apk --arch, anche se il container e' x86_64), da cui si prendono:
@@ -203,126 +210,25 @@ apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \
 VERSIONE_K=$(ls "$RADICE/lib/modules")
 MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
 
-# si ripulisce la cartella d'uscita (mai build/ intera: dentro ci sono le altre CPU), ma
-# non gli oggetti compilati: si ricompila solo quello che e' cambiato (vedi compila)
-[ "$B" = build ] && { echo "build.sh: USCITA=build cancellerebbe tutto"; exit 1; }
-mkdir -p "$B/oggetti"
-find "$B" -mindepth 1 -maxdepth 1 ! -name oggetti -exec rm -rf {} +
+# la cartella d'uscita non si cancella: dentro ci sono i pezzi pronti (vedi in testa)
+[ "$B" = build ] && { echo "build.sh: USCITA=build e' la cartella di tutte le CPU"; exit 1; }
+mkdir -p "$B"
 
-# --- 1. il compilatore ---
-# clang compila per la CPU scelta (--target) con gli header e le librerie della radice di
-# Alpine (--sysroot). I programmi sono STATICI: dentro ognuno c'e' tutto quello che gli
-# serve della libreria C, e nel disco non serve un "caricatore" di librerie (ld.so).
-#   -ffunction-sections -fdata-sections e --gc-sections: dentro va solo quello che si usa
-#   -s: senza i nomi delle funzioni (programmi piu' piccoli)
-# Si lega con ld.lld direttamente: i pezzi di avvio di musl (crt1.o, crti.o, crtn.o:
-# chiamano main e poi exit), i nostri file, e la libreria C (-lc).
-CC="clang --target=$ARCH-alpine-linux-musl --sysroot=$RADICE -O2 -Wall -Wextra -ffunction-sections -fdata-sections"
-LIBC="$RADICE/usr/lib"
-# compila ARGOMENTI_DI_CC... -o OGGETTO: come $CC, ma solo se serve. Accanto all'oggetto
-# restano OGGETTO.d (i file da cui dipende: il .c e i .h che include, scritti da clang con
-# -MMD -MP) e OGGETTO.cmd (il comando con cui e' stato fatto, con l'impronta dei pacchetti
-# di Alpine installati nella radice). Si ricompila se manca uno dei tre, se il comando e'
-# diverso, o se uno dei file da cui dipende manca o e' piu' nuovo dell'oggetto.
-FIRMA_RADICE=$(md5sum < "$RADICE/lib/apk/db/installed" | cut -d' ' -f1)
-COMPILATI=0
-compila() {
-    _o=""
-    _prima=""
-    for _a in "$@"; do
-        [ "$_prima" = -o ] && _o=$_a
-        _prima=$_a
-    done
-    _cmd="$CC $* radice=$FIRMA_RADICE"
-    if [ -f "$_o" ] && [ -f "$_o.d" ] && [ "$(cat "$_o.cmd" 2>/dev/null)" = "$_cmd" ] &&
-       aggiornato "$_o"; then
-        return 0
-    fi
-    $CC -MMD -MP -MF "$_o.d" "$@"
-    printf '%s' "$_cmd" > "$_o.cmd"
-    COMPILATI=$((COMPILATI + 1))
-}
-# aggiornato OGGETTO: vero se nessuno dei file in OGGETTO.d manca o e' piu' nuovo. Nel .d
-# la prima riga e' "oggetto: sorgente intestazioni... \", poi le righe che continuano e le
-# regole vuote "intestazione:" (di -MP), che si saltano.
-aggiornato() {
-    for _f in $(sed -e '/:$/d' -e 's/^[^:]*://' -e 's/\\$//' "$1.d"); do
-        [ -e "$_f" ] || return 1
-        [ "$_f" -nt "$1" ] && return 1
-    done
-    return 0
+# pronto PEZZO CHIAVE: vero se PEZZO c'e' ed e' stato fatto con la stessa CHIAVE (scritta in
+# PEZZO.chiave). Dopo averlo rifatto: echo "$CHIAVE" > PEZZO.chiave.
+pronto() {
+    [ -f "$1" ] && [ "$(cat "$1.chiave" 2>/dev/null)" = "$2" ]
 }
 
-lega() {   # lega USCITA OGGETTI...
-    _uscita=$1
-    shift
-    # compiler-rt: le funzioni del compilatore (es. i long double a 128 bit su ARM, che
-    # printf e scanf di musl usano): senza, legare un programma che usa printf non riesce
-    _rt=$(ls "$RADICE"/usr/lib/llvm*/lib/clang/*/lib/*/libclang_rt.builtins-*.a 2>/dev/null | head -1)
-    ld.lld -static --gc-sections -s -o "$_uscita" "$LIBC/crt1.o" "$LIBC/crti.o" "$@" -L"$LIBC" -lc $_rt "$LIBC/crtn.o"
-}
+# --- 1. e 2. i programmi: le librerie, i programmi del sistema, i comandi e le applicazioni ---
+# Come si compilano lo dice strumenti/compilazione/programmi.mk (lo stesso che usa la
+# sandbox): make rifa' solo quello che e' cambiato e mette i programmi pronti in P (che
+# resta da una volta all'altra). Qui sotto si prendono da li' e si mettono nel disco.
+P="$B/oggetti"
+make -s -f strumenti/compilazione/programmi.mk -j"$(nproc)" \
+    ARCH="$ARCH" CPU="$CPU" RADICE="$RADICE" O="$P"
+echo "programmi compilati in $P"
 
-# --- 2. i programmi: le librerie, i programmi del sistema e le applicazioni ---
-UTENTE="-Iutente/libreria"
-# Le librerie di altri (utente/libreria/esterni/, ognuna con la sua LICENSE):
-#   miniz 3.0.2 (MIT), la release "amalgamata": leggere gli ZIP (i pacchetti .app).
-#     Senza le funzioni sui FILE della libreria C e senza i nomi di zlib (pacchetto.c fa
-#     le stesse scelte).
-#   tomlc99 (MIT), commit 62ce93c del 4/11/2026: leggere il TOML (i manifesti).
-#   stb_image 2.30 (pubblico dominio o MIT), commit f58f558: leggere le PNG (le icone delle
-#     app), per immagine_carica di GKit. Solo PNG e senza FILE (esterni/stb/stb_image.c).
-# Non sono nostre: i loro avvisi del compilatore si spengono (-w), per non coprire i nostri.
-ESTERNI="-w -DMINIZ_NO_STDIO -DMINIZ_NO_ZLIB_COMPATIBLE_NAMES"
-
-# COREKIT, la libreria comune (utente/libreria/corekit/, LIBRERIE.md): i suoi .c (in
-# corekit/interno/) e le due librerie di altri che usa solo lei (miniz per i pacchetti,
-# tomlc99 per i manifesti) diventano UNA libreria statica, libcorekit.a: un archivio di
-# oggetti (ar). Chi lega un programma prende dall'archivio solo gli oggetti che gli
-# servono. Nel comando di lega l'archivio va DOPO gli oggetti del programma e di GKit e
-# UIKit (che usano le sue funzioni) e prima della libreria C (che usa lei).
-mkdir -p "$B/oggetti/corekit"
-oggetti_lib=""
-for f in utente/libreria/corekit/interno/*.c; do
-    compila $UTENTE -c "$f" -o "$B/oggetti/corekit/$(basename "$f" .c).o"
-    oggetti_lib="$oggetti_lib $B/oggetti/corekit/$(basename "$f" .c).o"
-done
-compila $ESTERNI -c utente/libreria/esterni/miniz/miniz.c -o "$B/oggetti/corekit/miniz.o"
-oggetti_lib="$oggetti_lib $B/oggetti/corekit/miniz.o"
-compila $ESTERNI -c utente/libreria/esterni/tomlc99/toml.c -o "$B/oggetti/corekit/toml.o"
-oggetti_lib="$oggetti_lib $B/oggetti/corekit/toml.o"
-rm -f "$B/libcorekit.a"
-ar rcs "$B/libcorekit.a" $oggetti_lib
-COREKIT="$B/libcorekit.a"
-
-# GKIT, la grafica (utente/libreria/gkit/, LIBRERIE.md), come CoreKit: i suoi .c (in
-# gkit/interno/) e stb_image (le PNG: la usa solo GKit) diventano libgkit.a. Nel comando
-# di lega va dopo gli oggetti del programma e UIKit (che usano le sue funzioni) e prima di
-# libcorekit.a (che usa lei): il programma, UIKit, GKit, CoreKit, la libreria C.
-mkdir -p "$B/oggetti/gkit"
-oggetti_lib=""
-for f in utente/libreria/gkit/interno/*.c; do
-    compila $UTENTE -c "$f" -o "$B/oggetti/gkit/$(basename "$f" .c).o"
-    oggetti_lib="$oggetti_lib $B/oggetti/gkit/$(basename "$f" .c).o"
-done
-compila $ESTERNI -c utente/libreria/esterni/stb/stb_image.c -o "$B/oggetti/gkit/stb_image.o"
-oggetti_lib="$oggetti_lib $B/oggetti/gkit/stb_image.o"
-rm -f "$B/libgkit.a"
-ar rcs "$B/libgkit.a" $oggetti_lib
-GKIT="$B/libgkit.a"
-
-# UIKIT, l'interfaccia (utente/libreria/uikit/, LIBRERIE.md), come GKit: i suoi .c (in
-# uikit/interno/) diventano libuikit.a. Nel comando di lega va subito dopo gli oggetti del
-# programma (che usano le sue funzioni) e prima di libgkit.a e libcorekit.a (che usa lei):
-# il programma, UIKit, GKit, CoreKit, la libreria C.
-mkdir -p "$B/oggetti/uikit"
-oggetti_lib=""
-for f in utente/libreria/uikit/interno/*.c; do
-    compila $UTENTE -c "$f" -o "$B/oggetti/uikit/$(basename "$f" .c).o"
-    oggetti_lib="$oggetti_lib $B/oggetti/uikit/$(basename "$f" .c).o"
-done
-rm -f "$B/libuikit.a"
-ar rcs "$B/libuikit.a" $oggetti_lib
-UIKIT="$B/libuikit.a"
 
 # Mentre si compilano, i programmi si mettono negli ALBERI DELLE PARTIZIONI: due cartelle
 # che sono gia' come saranno le partizioni system e data, con proprietari e permessi
@@ -372,6 +278,18 @@ metti_file() {
     printf '  %-40s %7s byte  %s\n' "$2" "$(wc -c < "$1")" "$3"
 }
 # metti_cartella /percorso UID PERMESSI: una cartella di qualcuno
+# metti_albero CARTELLA /percorso UID: tutta la CARTELLA in /percorso, di UID, cartelle 755
+# e file 644, in un colpo solo (non file per file: sul Mac ogni comando costa)
+metti_albero() {
+    cartelle_per "$2/"
+    _qui=$(vero "$2")
+    mkdir -p "$_qui"
+    cp -R "$1/." "$_qui/"
+    chown -R "$3:$3" "$_qui"
+    find "$_qui" -type d -exec chmod 755 {} +
+    find "$_qui" -type f -exec chmod 644 {} +
+    printf '  %-40s %7s file   di %s\n' "$2" "$(find "$_qui" -type f | wc -l)" "$3"
+}
 metti_cartella() {
     cartelle_per "$1/"
     chown "$2:$2" "$(vero "$1")"
@@ -410,16 +328,12 @@ done
 # /system/resources (fonts/, icons/, wallpapers/). Non sono dentro i programmi: GKit li
 # legge dal disco (gkit/interno/materiali_file.c) e UIKit carica i suoi la prima volta che servono
 # (uikit/materiali.h). Sono di tutti da leggere: 644.
-(cd risorse && find . -type f | sort) | while read -r f; do
-    metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
-done
+metti_albero risorse /system/resources 0
 
 # La configurazione predefinita dei servizi: i file di utente/config/ tali e quali in
 # /system/config (oggi network/network.conf e firewall.conf, letti dal servizio network). Di tutti da
 # leggere: 644. Quella della persona, quando ci sara', stara' in /data.
-(cd utente/config && find . -type f | sort) | while read -r f; do
-    metti_file "utente/config/${f#./}" "/system/config/${f#./}" 644
-done
+metti_albero utente/config /system/config 0
 
 # /etc/resolv.conf: musl ci cerca i server dei nomi (DNS), ma "/" e' in sola lettura. Come
 # fa systemd-resolved, e' un collegamento simbolico a un file in memoria, che il servizio
@@ -437,14 +351,12 @@ APPS=""
 # riconosce nell'elenco dei processi). Sono programmi: 755.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
-    compila $UTENTE -c "$f" -o "$B/oggetti/$nome.o"
-    lega "$B/oggetti/$nome" "$B/oggetti/$nome.o" $UIKIT $GKIT $COREKIT
     case "$nome" in
         init) posto=/system/init ;;
         shell) posto=/system/bin/$nome ;;   # la shell di prova
         *)    posto=/system/services/$nome; SERVIZI="$SERVIZI $nome" ;;
     esac
-    metti_file "$B/oggetti/$nome" "$posto" 755
+    metti_file "$P/bin/$nome" "$posto" 755
 done
 
 # I comandi (utente/comandi, uno per file): <nome>.c diventa /system/bin/<nome>. Un comando
@@ -452,82 +364,35 @@ done
 # niente GKit e UIKit, solo CoreKit. Sono programmi: 755.
 for f in utente/comandi/*.c; do
     nome=$(basename "$f" .c)
-    compila $UTENTE -c "$f" -o "$B/oggetti/comando_$nome.o"
-    lega "$B/oggetti/comando_$nome" "$B/oggetti/comando_$nome.o" $COREKIT
-    metti_file "$B/oggetti/comando_$nome" "/system/bin/$nome" 755
+    metti_file "$P/bin/comandi/$nome" "/system/bin/$nome" 755
 done
 
-# Le applicazioni (utente/applicazioni/<Nome>/). Per ognuna:
-#   1. si compila il programma, code (i suoi .c legati insieme);
-#   2. si prepara il suo PACCHETTO, una cartella con dentro (APPLICAZIONI.md, sezione 3):
-#        manifest.toml  il manifesto, con "@PROCESSORE@" sostituito dal processore per cui
-#                       si compila (x86_64 o arm64): il sorgente e' uno, i pacchetti uno per
-#                       processore, e cosi' il manifesto non puo' sbagliare processore
-#        code           il programma
-#        resources/     le icone (la cartella resources/ dei sorgenti) e tutti gli altri file
-#                       della cartella dei sorgenti che non sono .c, .h o il manifesto (per
-#                       esempio doom1.wad)
-#      e lo si chiude in uno ZIP: $B/pacchetti/<id>.app (le date fisse, per avere sempre lo
-#      stesso file);
-#   3. le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
-#      contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
-#      Le app di utente/prove/applicazioni/ (Esempio, Contatore) NON sono del sistema: si
-#      compilano e si impacchettano come le altre, ma vanno solo nei dischi delle prove
-#      (passo 6), mai in disco.img. In quei dischi quelle di DA_INSTALLARE hanno il pacchetto
-#      sulla Scrivania della persona, per provare l'installazione (si apre con Files: il
-#      launcher fa partire lo Store, che chiede se installarla); le altre sono scompattate
-#      in /system/apps.
-# L'id dell'app (nel manifesto) deve essere il nome della cartella dei sorgenti in minuscolo.
+# Le applicazioni (utente/applicazioni/<Nome>/): il pacchetto di ognuna lo prepara
+# programmi.mk (con strumenti/compilazione/impacchetta.sh): scompattato in P/pacchetti/<id>/
+# e chiuso in P/pacchetti/<id>.app. Qui:
+#   - tutti gli .app si copiano in $B/pacchetti/ (per lo Store, le prove, chi li vuole);
+#   - le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
+#     contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
+#     Le app di utente/prove/applicazioni/ (Esempio, Contatore) NON sono del sistema: vanno
+#     solo nei dischi delle prove (passo 6), mai in disco.img. In quei dischi quelle di
+#     DA_INSTALLARE hanno il pacchetto sulla Scrivania della persona, per provare
+#     l'installazione (si apre con Files: il launcher fa partire lo Store, che chiede se
+#     installarla); le altre sono scompattate in /system/apps.
 DA_INSTALLARE="contatore"
 PACCHETTI="$B/pacchetti"
+rm -rf "$PACCHETTI"
 mkdir -p "$PACCHETTI"
-PACCHETTI_ASSOLUTO=$(cd "$PACCHETTI" && pwd)
 PROVE_APPS=""
 for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
     nome=$(basename "$cartella" | tr A-Z a-z)
-    mkdir -p "$B/oggetti/applicazioni/$nome"
-    oggetti=""
-    for f in "$cartella"*.c; do
-        o="$B/oggetti/applicazioni/$nome/$(basename "$f" .c).o"
-        compila $UTENTE -I"$cartella" -c "$f" -o "$o"
-        oggetti="$oggetti $o"
-    done
-    lega "$B/oggetti/applicazioni/$nome/code" $oggetti $UIKIT $GKIT $COREKIT
-
-    manifesto="${cartella}manifest.toml"
-    [ -f "$manifesto" ] || { echo "build.sh: manca $manifesto"; exit 1; }
-    grep -q "^id = \"$nome\"" "$manifesto" || { echo "build.sh: in $manifesto l'id non e' \"$nome\""; exit 1; }
-    grep -q '^processore = "@PROCESSORE@"' "$manifesto" ||
-        { echo "build.sh: in $manifesto manca processore = \"@PROCESSORE@\""; exit 1; }
-    pacchetto="$B/oggetti/pacchetti/$nome"
-    mkdir -p "$pacchetto/resources"
-    sed "s/@PROCESSORE@/$CPU/" "$manifesto" > "$pacchetto/manifest.toml"
-    cp "$B/oggetti/applicazioni/$nome/code" "$pacchetto/code"
-    for r in "$cartella"*; do
-        case "$r" in *.c|*.h|*/manifest.toml) continue ;; esac
-        [ -f "$r" ] && cp "$r" "$pacchetto/resources/"
-    done
-    [ -d "${cartella}resources" ] && cp -R "${cartella}resources/." "$pacchetto/resources/"
-    find "$pacchetto" -type d -exec chmod 755 {} +
-    find "$pacchetto" -type f -exec chmod 644 {} +
-    chmod 755 "$pacchetto/code"
-    find "$pacchetto" -exec touch -d "2026-01-01 00:00:00" {} +
-    rm -f "$PACCHETTI/$nome.app"
-    (cd "$pacchetto" && find manifest.toml code resources | sort | zip -X -q -D "$PACCHETTI_ASSOLUTO/$nome.app" -@)
-    printf '  %-40s %7s byte  pacchetto\n' "$PACCHETTI/$nome.app" "$(wc -c < "$PACCHETTI/$nome.app")"
-
+    cp "$P/pacchetti/$nome.app" "$PACCHETTI/$nome.app"
     case "$cartella" in
     utente/prove/*)
-        # le app di prova: solo nei dischi delle prove (passo 6), mai in disco.img
         PROVE_APPS="$PROVE_APPS $nome"
         ;;
     *)
-        (cd "$pacchetto" && find . -type f | sort) | while read -r f; do
-            f=${f#./}
-            permessi=644
-            [ "$f" = code ] && permessi=755
-            metti_file "$pacchetto/$f" "/system/apps/$nome/$f" $permessi
-        done
+        metti_albero "$P/pacchetti/$nome" "/system/apps/$nome" 0
+        chmod 755 "$(vero "/system/apps/$nome/code")"
         APPS="$APPS $nome"
         ;;
     esac
@@ -584,26 +449,25 @@ done
 find "$CASA_VERA" -exec touch -d "2025-12-31 18:02:00" {} +
 echo "programmi pronti"
 
-# I programmi delle prove (utente/prove): servono SOLO alle prove automatiche (test/), e
-# nel disco normale non ci vanno. Per ora c'e' riempitivo, che dorme per sempre: in
+# I programmi delle prove (utente/prove, compilati in P/bin/prove): servono SOLO alle prove
+# automatiche (test/), e nel disco normale non ci vanno. riempitivo dorme per sempre: in
 # disco_prove.img (passo 6) ce ne sono RIEMPITIVI copie, e init le fa partire tutte.
-mkdir -p "$B/oggetti/prove"
-for f in utente/prove/*.c; do
-    nome=$(basename "$f" .c)
-    compila $UTENTE -c "$f" -o "$B/oggetti/prove/$nome.o"
-    lega "$B/oggetti/prove/$nome" "$B/oggetti/prove/$nome.o" $UIKIT $GKIT $COREKIT
-done
 RIEMPITIVI=6
 
 # --- 3. l'archivio di avvio (initramfs) ---
 # Un archivio cpio (formato "newc", quello che legge il kernel) compresso con gzip, con
 # avvio come /init, i moduli e il loro ordine (vedi utente/avvio/avvio.c).
+# Si rifa' solo se e' cambiato qualcosa da cui viene: il programma avvio, il kernel e i suoi
+# moduli, l'elenco dei moduli, o build.sh stesso.
+FIRMA_BUILD=$(md5sum < build.sh | cut -d' ' -f1)
+CHIAVE_AVVIO="$(md5sum < "$P/bin/avvio" | cut -d' ' -f1) $NUCLEO $VERSIONE_K $MODULI $FIRMA_BUILD"
+if pronto "$B/avvio.img" "$CHIAVE_AVVIO"; then
+    echo "$B/avvio.img gia' pronto"
+else
 ARCHIVIO=/tmp/archivio-avvio
 rm -rf "$ARCHIVIO"
 mkdir -p "$ARCHIVIO/moduli" "$ARCHIVIO/dev" "$ARCHIVIO/proc" "$ARCHIVIO/sys"
-compila -c utente/avvio/avvio.c -o "$B/oggetti/avvio.o"
-echo "compilati: $COMPILATI file (gli altri erano gia' a posto)"
-lega "$ARCHIVIO/init" "$B/oggetti/avvio.o"
+cp "$P/bin/avvio" "$ARCHIVIO/init"
 mknod -m 600 "$ARCHIVIO/dev/console" c 5 1
 
 # I moduli, nell'ordine giusto. modules.dep dice, per ogni modulo, da quali dipende
@@ -643,6 +507,8 @@ for m in $MODULI; do metti_modulo "$m"; done
 (cd "$ARCHIVIO" && find . | sort | cpio -o -H newc 2>/dev/null) | gzip -9n > "$B/avvio.img"
 echo "$B/avvio.img pronto: $(wc -l < "$ARCHIVIO/moduli/elenco") moduli ($(tr '\n' ' ' < "$ARCHIVIO/moduli/elenco"))"
 rm -rf "$ARCHIVIO"
+echo "$CHIAVE_AVVIO" > "$B/avvio.img.chiave"
+fi
 
 # --- 4. il kernel ---
 # Sul PC vmlinuz e' un "bzImage", che sa anche partire da UEFI da solo (l'"EFI stub").
@@ -650,13 +516,16 @@ rm -rf "$ARCHIVIO"
 # "zimg", da dove a dove sta il kernel compresso, e "gzip"): per partire senza UEFI
 # (QEMU -kernel, UTM) serve l'"Image" che c'e' dentro, quindi lo si tira fuori.
 VMLINUZ="$RADICE/boot/vmlinuz-$NUCLEO"
-if [ "$CPU" = arm64 ] && [ "$(dd if="$VMLINUZ" bs=1 skip=4 count=4 2>/dev/null)" = zimg ]; then
+CHIAVE_LINUX="$NUCLEO $VERSIONE_K $FIRMA_BUILD"
+if pronto "$B/linux" "$CHIAVE_LINUX"; then
+    echo "$B/linux gia' pronto: Linux $VERSIONE_K"
+elif [ "$CPU" = arm64 ] && [ "$(dd if="$VMLINUZ" bs=1 skip=4 count=4 2>/dev/null)" = zimg ]; then
     numero_a() { od -An -tu4 -j "$1" -N4 "$VMLINUZ" | tr -d ' '; }
     tail -c +"$(($(numero_a 8) + 1))" "$VMLINUZ" | head -c "$(numero_a 12)" | gzip -dc > "$B/linux"
 else
     cp "$VMLINUZ" "$B/linux"
 fi
-echo "$B/linux pronto: Linux $VERSIONE_K"
+pronto "$B/linux" "$CHIAVE_LINUX" || { echo "$CHIAVE_LINUX" > "$B/linux.chiave"; echo "$B/linux pronto: Linux $VERSIONE_K"; }
 
 # --- 5. (solo PC) il programma UEFI che avvia tutto ---
 # All'accensione il firmware UEFI cerca un disco con una partizione EFI (FAT) e dentro il
@@ -665,10 +534,14 @@ echo "$B/linux pronto: Linux $VERSIONE_K"
 # come "sezioni" al programmino UEFI di systemd che sa far partire Linux (systemd-stub).
 # Su ARM QEMU carica il kernel e l'archivio da se' (-kernel, -initrd): la riga di comando
 # gliela passa run.sh (-append), da riga_kernel.txt.
-if [ "$CPU" = x86_64 ]; then
+CHIAVE_UKI="$CHIAVE_AVVIO / $CHIAVE_LINUX / $RIGA_KERNEL"
+if [ "$CPU" = x86_64 ] && pronto "$B/BOOTX64.EFI" "$CHIAVE_UKI"; then
+    echo "$B/BOOTX64.EFI gia' pronto"
+elif [ "$CPU" = x86_64 ]; then
     printf 'NAME="mshell"\nID=mshell\nPRETTY_NAME="mshell (Linux %s)"\n' "$VERSIONE_K" > /tmp/os-release
     efi-mkuki -c "$RIGA_KERNEL" -k "$VERSIONE_K" -r /tmp/os-release \
         -S /usr/lib/systemd/boot/efi/linuxx64.efi.stub -o "$B/BOOTX64.EFI" "$B/linux" "$B/avvio.img"
+    echo "$CHIAVE_UKI" > "$B/BOOTX64.EFI.chiave"
     echo "$B/BOOTX64.EFI pronto"
 else
     echo "$RIGA_KERNEL" > "$B/riga_kernel.txt"
@@ -761,7 +634,7 @@ echo "$B/disco_app.img pronto: come disco.img, con in piu' le app di prova:$PROV
 cp "$B/disco_app.img" "$B/disco_prove.img"
 metti_cartella /data/tests 0 755 >/dev/null
 for i in $(seq $RIEMPITIVI); do
-    metti_file "$B/oggetti/prove/riempitivo" "/data/tests/riempitivo-$i" 755 >/dev/null
+    metti_file "$P/bin/prove/riempitivo" "/data/tests/riempitivo-$i" 755 >/dev/null
 done
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_prove.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_prove.img pronto: con $RIEMPITIVI riempitivi in /data/tests"
@@ -772,7 +645,7 @@ echo "$B/disco_prove.img pronto: con $RIEMPITIVI riempitivi in /data/tests"
 # le altre prove non devono vederlo. Lo usa test/prove/pacchetti.py.
 cp "$B/disco_app.img" "$B/disco_pacchetti.img"
 rm -f "$(vero /data/tests)"/riempitivo-*
-metti_file "$B/oggetti/prove/pacchetti" "/data/tests/pacchetti" 755 >/dev/null
+metti_file "$P/bin/prove/pacchetti" "/data/tests/pacchetti" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_pacchetti.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_pacchetti.img pronto: con il programma pacchetti in /data/tests"
@@ -783,7 +656,7 @@ echo "$B/disco_pacchetti.img pronto: con il programma pacchetti in /data/tests"
 # a mano, come spiegato in rete.c.
 cp "$B/disco_app.img" "$B/disco_rete.img"
 rm -f "$(vero /data/tests)"/pacchetti
-metti_file "$B/oggetti/prove/rete" "/data/tests/rete" 755 >/dev/null
+metti_file "$P/bin/prove/rete" "/data/tests/rete" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_rete.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_rete.img pronto: con il programma rete in /data/tests"
 
@@ -796,7 +669,7 @@ echo "$B/disco_rete.img pronto: con il programma rete in /data/tests"
 #   disco_firewall_aperto.img  la controprova: system con firewall.conf cambiato in
 #                              incoming=allow, e la connessione deve arrivare
 cp "$B/disco_app.img" "$B/disco_firewall.img"
-metti_file "$B/oggetti/prove/firewall" "/data/tests/firewall" 755 >/dev/null
+metti_file "$P/bin/prove/firewall" "/data/tests/firewall" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_firewall.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_firewall.img pronto: con i programmi rete e firewall in /data/tests"
 cp "$B/disco_firewall.img" "$B/disco_firewall_aperto.img"
@@ -809,7 +682,7 @@ echo "$B/disco_firewall_aperto.img pronto: come disco_firewall.img, ma con incom
 # clienti (messaggi.h) facendo da servizio finto e da cliente. Lo usa test/prove/messaggi.py.
 cp "$B/disco_app.img" "$B/disco_messaggi.img"
 rm -f "$(vero /data/tests)"/rete "$(vero /data/tests)"/firewall
-metti_file "$B/oggetti/prove/messaggi" "/data/tests/messaggi" 755 >/dev/null
+metti_file "$P/bin/prove/messaggi" "/data/tests/messaggi" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_messaggi.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_messaggi.img pronto: con il programma messaggi in /data/tests"
@@ -822,13 +695,12 @@ cp "$B/disco_app.img" "$B/disco_shell.img"
 rm -f "$(vero /data/tests)"/messaggi
 rmdir "$(vero /data/tests)"
 metti_cartella /data/users/0 0 700 >/dev/null
-metti_file "$B/oggetti/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null
+metti_file "$P/bin/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_shell.img" $((MISURA_DATI * MB / 4096))
 rm -rf "$ALBERO_SISTEMA" "$ALBERO_DATI"
 echo "$B/disco_shell.img pronto: con il programma argomenti in /data/users/0/bin"
 
-# gli oggetti compilati restano: alla prossima volta si ricompila solo quello che e' cambiato
 echo "versioni: $(apk --root "$RADICE" info -v 2>/dev/null | grep -E '^(linux-|musl-)' | tr '\n' ' ')"
 
 # DA IMPLEMENTARE
