@@ -475,7 +475,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 
 **Prove**
 9. Rifare le immagini di confronto vecchie (Files, Attività, scrivania) dopo averle guardate.
-10. La prova `scorrimento` fallisce ("la barra non compare"), anche prima degli ultimi lavori.
+10. La prova `scorrimento` passa in QEMU ARM (3 volte su 3: barra visibile, sparisce dopo ~1 s); il "la barra non compare" riguarda solo la sandbox Docker, non indagato.
 11. La prova `attivita` nella sandbox non può controllare i 2 GB (vede la memoria del PC).
 
 **Regole delle app** (APPLICAZIONI.md)
