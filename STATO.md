@@ -548,8 +548,10 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
     "cartella non trovata" ma la shell scrive "cartella inesistente" (già prima).
 32. **HTTPS** per `webask`: fatto con mbedTLS 4 di Alpine (legato dentro webask) e i certificati radice di Alpine in `/etc/ssl/certs/ca-certificates.crt`. Il certificato si controlla sempre (anche la data): su un computer vero servirà la sincronizzazione dell'ora. Le prove automatiche tengono l'orologio al 1° gennaio 2026, quindi lì i certificati più recenti risultano "non ancora validi".
 33. **Il servizio di rete**: la porta di controllo c'e' (status, restart, stop; in sola lettura, `corekit/sistema/network.h`):
-    il comando `network` la usa (`utente/comandi/network.c`: status, restart, stop); manca la pagina della rete. Da fare: API del firewall per le app (due
-    permessi: aggiungere regole / controllo pieno, sempre attraverso il servizio). Non provati:
+    il comando `network` la usa (`utente/comandi/network.c`: status, restart, stop); manca la pagina della rete. Da fare: API del firewall (controllo pieno per
+    l'app del ruolo firewall; richiesta di accettare connessioni in entrata per le altre app): prima vanno
+    decise le domande aperte in `SISTEMA.md` (sezione 4, "Regole del firewall" e "Cambiare la
+    rete dall'interno"). Non provati:
     rinnovo del DHCP, `mode=static`, firewall con la tabella già presente, IPv6.
 34. **Store e Terminale** usano la parte "del sistema" del launcher (installare, shell come
     sistema): da decidere se restano app di sistema per sempre.

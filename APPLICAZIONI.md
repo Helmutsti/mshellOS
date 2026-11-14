@@ -177,8 +177,7 @@ autorizzato ("chiavi a due livelli").
 | `processes.view` | vedere i programmi in esecuzione | — |
 | `processes.stop` | vederli e fermarli (comprende `processes.view`) | Attività |
 | `network.settings` | riavviare o fermare il servizio di rete | — |
-| `network.firewall.rules` | aggiungere regole del firewall per sé | — |
-| `network.firewall` | controllo pieno del firewall (comprende `.rules`) | — |
+| `network.firewall` | controllo pieno del firewall. Lo esercita **una sola app alla volta**: quella che la persona sceglie per il ruolo firewall (sezione 7); le altre app con questo permesso non possono usarlo finché non vengono scelte | — |
 | `settings.system` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
 | `system.power` | spegnere e riavviare il computer | (scrivania) |
 | `apps.manage` | installare, aggiornare e togliere app | Store |
@@ -219,9 +218,22 @@ offre **tutte** le funzioni obbligatorie.
 | **testo** | `testo.apri` (riceve un file di testo e lo apre per modificarlo) · `testo.nuovo` (apre un testo vuoto) | — |
 | **terminale** | `terminale.apri` (apre un terminale in una cartella data) | — |
 
-Ruoli come **firewall**, che devono lavorare per tutto il computer, passano dai moduli aggiuntivi
-(sezione 10): il ruolo è coperto da un'app che ha un modulo sul punto di aggancio giusto, più la sua
-finestra come pannello di controllo. Non sono nell'elenco finché non esiste quel punto di aggancio.
+Il ruolo **firewall** (deciso il 14 novembre 2026) non passa da un modulo aggiuntivo ma dal
+permesso `network.firewall`: l'app scelta dalla persona chiede le regole al servizio network, che le
+controlla, le applica e le conserva anche ad app chiusa (come firewalld con polkit su Linux). Una sola
+app alla volta, perché due app con il controllo pieno si scontrerebbero (come Windows, che spegne il
+suo firewall quando un altro prende il posto, o Android, che tiene attiva una sola VPN). Le funzioni
+L'app scelta prende il posto degli interruttori di base del firewall; tolta l'app, si torna a quelli
+(come Windows). Le funzioni obbligatorie del ruolo sono una domanda aperta (`SISTEMA.md`, sezione 4).
+
+**Le app che vogliono ricevere connessioni da fuori** (per esempio un gioco in rete che accoglie altri
+giocatori) non scrivono regole e non decidono niente: **chiedono al firewall** di poter accettare
+connessioni in entrata su una porta. Decide solo il firewall (l'app scelta per il ruolo, o il servizio
+network con gli interruttori di base se nessuna app è scelta), così non c'è mai scontro. Deciso il 14
+novembre 2026; come il Mac e Windows, che chiedono "vuoi che questa app accetti connessioni in
+entrata?". Senza app scelta vale sempre la configurazione predefinita, che chiede alla persona e
+ricorda la risposta (`SISTEMA.md`, sezione 4).
+Altri ruoli che devono lavorare per tutto il computer passano dai moduli aggiuntivi (sezione 10).
 
 ### Le app di oggi con questo elenco
 
@@ -246,7 +258,7 @@ controllare la rete di tutti. Per queste un'app può portarsi dietro un **modulo
 - **Per una persona** (la posta che controlla le mail, la musica che continua a suonare): è la
   deviazione `sottofondo` dell'elenco. Gira nel mondo isolato di quella persona, finché la persona è
   dentro. Si dichiara, e la persona viene informata.
-- **Per tutto il computer** (firewall, VPN, backup di tutto il disco): solo con un modulo aggiuntivo.
+- **Per tutto il computer** (VPN, backup di tutto il disco): solo con un modulo aggiuntivo. Il firewall no: passa dal permesso `network.firewall` e dal ruolo (sezione 9).
 
 ### Come funziona
 
@@ -283,7 +295,7 @@ vede informazioni private (con chi parla ogni app); si valuterà solo dopo le fi
 ### Punti di aggancio
 
 **Nessuno per ora.** Si aggiungono uno alla volta, solo quando arriva un'app che ne ha davvero
-bisogno. Il primo candidato è il "filtro della rete", per il firewall.
+bisogno. Il firewall non ne ha bisogno (passa dal permesso, sezione 9): gli esempi su firewall qui sopra restano solo per spiegare le condizioni.
 
 ## 11. Lo Store
 
