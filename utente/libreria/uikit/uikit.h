@@ -194,6 +194,11 @@ struct widget {
     int elastico;                      /* prende lo spazio in piu' nel suo contenitore */
     int largo;                         /* nell'altra direzione si allarga a tutto lo spazio */
     int nascosto;                      /* non c'e': non si misura, non si vede, non sente */
+    /* la forma del puntatore (FORMA_..., gkit.h) quando e' sopra di lui: FORMA_TESTO per chi si
+     * scrive (il campo), FORMA_COLLEGAMENTO per un collegamento. 0 (FORMA_NORMALE): la freccia,
+     * come per i pulsanti, le voci degli elenchi e tutto il resto. Disabilitato: sempre la
+     * freccia (come nel disegno). Lo mette chi prepara il widget. */
+    unsigned int forma_puntatore;
 };
 
 /* Mette 'figlio' in fondo ai figli di 'genitore' e gli segna il genitore. Al massimo
@@ -575,6 +580,8 @@ struct finestra_tk {
     struct chiamata_tk chiamate[MAX_CHIAMATE];   /* i "chiamami ogni tanto" */
     struct avviso *avviso;             /* l'avviso della finestra (finestra_tk_avviso), o 0 */
     int mini;                          /* 1: mini finestra (finestra_tk_mini) */
+    unsigned int forma_chiesta;        /* la forma voluta dall'app (finestra_tk_forma), 0: quella del widget */
+    unsigned int forma_inviata;        /* l'ultima forma detta al compositore (parte da FORMA_NORMALE) */
     /* la tastiera fisica (tasti.h): chi ascolta le scorciatoie, e i modificatori premuti */
     struct ascoltatore_tk ascoltatori[MAX_ASCOLTATORI];
     unsigned int modificatori;         /* MOD_CTRL | MOD_MAIUSC | MOD_ALT, tenuti giu' adesso */
@@ -611,6 +618,15 @@ struct finestra_tk {
  *
  * La testata non e' contenuto: ha la sua funzione di disegno e le sue misure, e quello che
  * l'applicazione mette nella finestra comincia sempre sotto di lei (finestra_tk_corpo). */
+
+/* LA FORMA DEL PUNTATORE. UIKit la sceglie da solo secondo il widget sotto il puntatore (campo
+ * di testo: FORMA_TESTO; un widget disabilitato e il resto: FORMA_NORMALE) e la dice al
+ * compositore solo quando cambia. Per l'attesa (l'app sta lavorando e non risponde subito)
+ * l'app chiama finestra_tk_forma(f, FORMA_ATTESA), e quando ha finito finestra_tk_forma(f,
+ * FORMA_NORMALE); vale finche' non la si toglie, anche con il puntatore fermo o su un campo. Come
+ * il disegno, FORMA_NON_DISPONIBILE e' per un'azione che il sistema rifiuta (un trascinamento
+ * su una destinazione sbagliata, un permesso negato), non per un controllo disabilitato. */
+void finestra_tk_forma(struct finestra_tk *f, unsigned int forma);
 
 /* Dove comincia il contenuto della finestra, senza il suo margine: sotto la testata e, se c'e'
  * (e non e' nascosta), sotto la barra degli strumenti. */

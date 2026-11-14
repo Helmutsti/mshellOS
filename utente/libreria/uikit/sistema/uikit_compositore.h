@@ -10,6 +10,8 @@
  *     mini finestra ('mini' = 1: piu' bassa, con il titolo piccolo e il solo chiudi);
  *   - L'OMBRA E IL VETRO SMERIGLIATO intorno e sotto le finestre: sono del design (il token
  *     "ombra/finestra", diverso nei temi Chiaro e Scuro), anche se stanno fuori dalla finestra;
+ *   - IL PUNTATORE: i colori delle sue forme nel tema in uso (cursore/contorno e cursore/riempimento) e
+ *     se il tema e' lo scuro (l'ombra e' piu' forte);
  *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia (CAMBIA_TEMA, gkit/sistema/protocollo.h)
  *     il compositore lo rilegge dalle preferenze.
  *
@@ -50,6 +52,11 @@ const struct strato_ombra *ombra_pannello(int sopra, int *quanti);
 
 /* Quanto si sfoca lo sfondo sotto il vetro di una finestra: il raggio di Figma, in pixel. */
 int sfocatura_finestra(void);
+
+/* I colori del puntatore nel tema in uso, 0xAARRGGBB opachi: il contorno (chiaro nel tema chiaro)
+ * e il riempimento (scuro nel tema chiaro). Restituisce 1 se il tema e' lo scuro, 0 se e' il
+ * chiaro (l'ombra del puntatore cambia opacita'). */
+int colori_puntatore(unsigned int *contorno, unsigned int *riempimento);
 
 /* Rilegge il tema dalle preferenze (tema_leggi, tema.h): da qui in poi barra congelata e
  * ombre sono quelle del tema nuovo. Le ombre gia' calcolate vanno rifatte. */

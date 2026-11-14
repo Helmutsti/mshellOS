@@ -115,7 +115,7 @@ static const struct tipo_widget tipo_campo = {
 
 void campo_prepara(struct campo *c, const char *testo, const char *suggerimento,
                    int icona, al_cambio_campo al_cambio, void *dati) {
-    *c = (struct campo){ .base = { .tipo = &tipo_campo, .largo = 1 }, .icona = icona, .misura = MISURA_M,
+    *c = (struct campo){ .base = { .tipo = &tipo_campo, .largo = 1, .forma_puntatore = FORMA_TESTO }, .icona = icona, .misura = MISURA_M,
                          .al_cambio = al_cambio, .dati = dati };
     copia_testo(c->testo, testo, MAX_TESTO_WIDGET);
     copia_testo(c->suggerimento, suggerimento, MAX_TESTO_WIDGET);

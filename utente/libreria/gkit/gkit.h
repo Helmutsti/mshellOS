@@ -247,6 +247,20 @@ int finestra_tasti_fisici(struct finestra *f);
  * quando la scrivania la fa tornare. 0, o -1. */
 int finestra_riducimi(struct finestra *f);
 
+/* Le FORME DEL PUNTATORE (come il disegno, "Puntatore"). Il compositore disegna il puntatore e
+ * mostra la forma che vuole la finestra su cui sta; di partenza e' FORMA_NORMALE. */
+#define FORMA_NORMALE         0   /* la freccia */
+#define FORMA_COLLEGAMENTO    1   /* la mano: su un collegamento */
+#define FORMA_TESTO           2   /* la barra a I: su un testo che si scrive o si seleziona */
+#define FORMA_NON_DISPONIBILE 3   /* la freccia col divieto: l'azione non e' consentita */
+#define FORMA_ATTESA          4   /* l'anello che gira: sto lavorando, non rispondo subito */
+
+/* Dice al compositore quale forma mostrare mentre il puntatore e' su questa finestra (vale
+ * finche' non la si cambia; il compositore la mostra anche mentre il puntatore e' fermo). Se la
+ * forma non e' una di FORMA_..., il compositore chiude il collegamento. UIKit la sceglie da
+ * solo (uikit.h, finestra_tk_forma). 0, o -1 se il compositore ha chiuso. */
+int finestra_forma_puntatore(struct finestra *f, unsigned int forma);
+
 /* Chiede al compositore di dire a tutte le finestre che il tema e' cambiato (TEMA_CAMBIATO):
  * il tema nuovo va scritto PRIMA nelle preferenze. Lo puo' chiedere solo il sistema o un'app
  * con il permesso "settings.system" nel manifesto; per gli altri non succede niente.

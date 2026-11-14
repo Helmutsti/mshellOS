@@ -37,6 +37,7 @@ int rinomina(const char *a, const char *b) { (void)a; (void)b; return ERRORE_SOL
 int chiudi(int d) { (void)d; return 0; }
 int data_ora(struct data_ora *d) { (void)d; return -1; }
 int manda(int d, const void *x, unsigned int n) { (void)d; (void)x; (void)n; return -1; }
+int finestra_forma_puntatore(struct finestra *f, unsigned int forma) { (void)f; (void)forma; return -1; }
 
 /* --- il ciclo degli eventi dell'anteprima: si tiene la finestra e torna (il disegno lo fa
  * main, dopo). E' la uikit_esegui di uikit.h: quella vera, in ciclo.c, qui non si compila. --- */
