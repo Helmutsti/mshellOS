@@ -127,8 +127,9 @@ const struct tema tema_scuro = {
     .bordo_controllo                = OPACO(0x4C4C52),
     .bordo_separatore               = OPACO(0x55555B),
     .bordo_focus                    = OPACO(0xE3E3E5),
-    .cursore_riempimento            = OPACO(0xFAFAFA),
-    .cursore_contorno               = OPACO(0x1C1C1E),
+    /* il puntatore non cambia col tema: freccia scura e contorno bianco anche nello scuro */
+    .cursore_riempimento            = OPACO(0x37373B),
+    .cursore_contorno               = OPACO(0xFFFFFF),
     .oggetto_riempimento            = OPACO(0x2F2F33),
     .oggetto_riempimento_forte      = OPACO(0x414146),
     .oggetto_tratto                 = OPACO(0x9A9A9F),

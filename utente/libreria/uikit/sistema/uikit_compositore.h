@@ -53,9 +53,9 @@ const struct strato_ombra *ombra_pannello(int sopra, int *quanti);
 /* Quanto si sfoca lo sfondo sotto il vetro di una finestra: il raggio di Figma, in pixel. */
 int sfocatura_finestra(void);
 
-/* I colori del puntatore nel tema in uso, 0xAARRGGBB opachi: il contorno (chiaro nel tema chiaro)
- * e il riempimento (scuro nel tema chiaro). Restituisce 1 se il tema e' lo scuro, 0 se e' il
- * chiaro (l'ombra del puntatore cambia opacita'). */
+/* I colori del puntatore, 0xAARRGGBB opachi: il contorno (bianco) e il riempimento (scuro).
+ * Il puntatore NON cambia col tema (deciso dalla persona): stessi colori e stessa ombra nel
+ * chiaro e nello scuro. Restituisce sempre 0: l'ombra e' quella del chiaro. */
 int colori_puntatore(unsigned int *contorno, unsigned int *riempimento);
 
 /* Rilegge il tema dalle preferenze (tema_leggi, tema.h): da qui in poi barra congelata e
