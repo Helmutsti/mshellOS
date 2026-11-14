@@ -189,7 +189,7 @@
  * Figma la da' in %: -1% di 24 px = -0,24 px, +2% di 12 px = +0,24 px). Solo questi due stili
  * ce l'hanno (pagina "Token e dimensioni"; gli altri 0). La si legge con spaziatura_del_font. */
 #define SPAZIATURA_TITOLO      (-24)    /* testo/titolo: -1% */
-#define SPAZIATURA_ETICHETTA     24     /* testo/etichetta: +2% */
+#define SPAZIATURA_ETICHETTA     24    /* testo/etichetta: +2% */
 #define FONT_CORPO              (&plex_14)
 #define FONT_CORPO_MEDIO        (&plex_medio_14)
 #define FONT_PICCOLO_NUOVO      (&plex_12)
@@ -214,8 +214,6 @@
 #define INTERLINEA_PULSANTE_S   16
 #define INTERLINEA_PULSANTE_M   20
 #define INTERLINEA_PULSANTE_L   24
-#define SPAZIATURA_TITOLO       (-1)
-#define SPAZIATURA_ETICHETTA     2
 
 /* --- le ombre: strati sovrapposti ---
  * Una tabella di 'struct strato_ombra' (gkit_disegno.h) per ogni livello di profondita' e
