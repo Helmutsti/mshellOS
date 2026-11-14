@@ -172,7 +172,7 @@ def esegui_una(modulo, cpu, args):
     shutil.rmtree(cartella, ignore_errors=True)
     cartella.mkdir(parents=True)
     m = Macchina(cpu, args.build, cartella, args.porte, args.ram,
-                 getattr(modulo, "DISCO", "disco.img"))
+                 getattr(modulo, "DISCO", "disco.img"), getattr(modulo, "RETE", False))
     p = Prova(modulo.NOME, cpu, m, cartella, args.riferimenti)
     inizio = time.time()
     riuscita, messaggio = True, ""

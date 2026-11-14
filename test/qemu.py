@@ -170,7 +170,7 @@ class Macchina:
     # La RAM di ARM64 e' fissa (512 MB, come run.sh); quella del PC si sceglie (--ram).
     RAM_ARM64 = 512
 
-    def __init__(self, cpu, build, lavoro, porta, ram=2048, disco="disco.img"):
+    def __init__(self, cpu, build, lavoro, porta, ram=2048, disco="disco.img", rete=False):
         self.cpu = cpu
         self.ram = self.RAM_ARM64 if cpu == "arm64" else ram     # in MB
         self.build = Path(build) / cpu      # build.sh compila in build/<cpu>/
@@ -178,6 +178,9 @@ class Macchina:
         # il disco da copiare: disco.img, o disco_prove.img (con i programmi delle prove
         # in /data/tests, che init fa partire: vedi build.sh) se la prova lo chiede
         self.disco = disco
+        # con la scheda di rete (virtio-net, rete "user" di QEMU: DHCP e DNS finti, uscita
+        # verso Internet) se la prova lo chiede (RETE = True): le altre non ne hanno bisogno
+        self.rete = rete
         self.porta_qmp = porta
         self.porta_hmp = porta + 1
         self.processo = None
@@ -212,6 +215,8 @@ class Macchina:
                       "-device", "virtio-blk-pci,drive=disco,bootindex=1"]
         # Un'ora fissa (clock=vm: corre solo quando corre la macchina): le date dei file
         # e l'ora che le app mostrano sono sempre piu' o meno le stesse, prova dopo prova.
+        if self.rete:
+            argomenti += ["-nic", "user,model=virtio-net-pci"]
         return argomenti + [
             "-rtc", "base=2026-01-01T10:00:00,clock=vm",
             "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",

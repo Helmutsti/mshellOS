@@ -76,7 +76,7 @@ Cosa deve dire:
 
 Il primo a usarlo è il launcher (aprire le app e i file, installare e togliere i pacchetti,
 aprire la shell): i dati grandi (il resoconto di un pacchetto, l'elenco delle app) viaggiano
-nel foglio allegato alla risposta. Il servizio network lo userà per la sua porta. Il
+nel foglio allegato alla risposta. Il servizio network lo usa per la sua porta (contratto in `corekit/sistema/network.h`: `status`, `restart`, `stop`; in sola lettura, la configurazione non si cambia da lì; permessi `network.use` e `network.settings`; prova `test/prove/stato_rete.py`). Il
 compositore si allineerà più avanti.
 
 Le app non vedono i messaggi: chiamano le funzioni del servizio (`apertura.h`,
@@ -97,7 +97,7 @@ arrivata tardi ha l'`id` vecchio e la butta la richiesta successiva. Se il servi
 collegamento si chiude e chi chiede lo sa subito.
 
 **Permessi (provvisori).** Il servizio chiede `ha_permesso(chi chiede, "nome.permesso")` (es.
-`network.configure`). **Oggi risponde sempre sì** e scrive la domanda nel registro, con la parola
+`network.settings`). **Oggi risponde sempre sì** e scrive la domanda nel registro, con la parola
 "provvisorio". Quando sarà vera riconoscerà sistema, app (manifesto e permessi concessi) e
 comando della persona: il commento in `messaggi.c` dice come. La usa il launcher
 (`apps.manage`, `programs.open`, `system.shell`: `APPLICAZIONI.md`, sezione 9).

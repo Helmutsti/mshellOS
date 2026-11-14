@@ -61,6 +61,7 @@
 #       disco_firewall.img, disco_firewall_aperto.img  per la prova del firewall, in QEMU
 #                      (vedi in fondo)
 #       disco_messaggi.img  per la prova dei messaggi tra servizi: il programma messaggi
+#       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #   build/scarico/     i pacchetti di Alpine scaricati, tenuti per la prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
@@ -687,12 +688,22 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_messaggi.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_messaggi.img pronto: con il programma messaggi in /data/tests"
 
+# IL DISCO DELLA PROVA DELLA PORTA DI RETE: lo stesso, con in /data/tests solo il programma
+# stato_rete (utente/prove/stato_rete.c), che interroga il servizio network con status e prova
+# stop e restart. Serve la scheda di rete (RETE = True in test/prove/stato_rete.py).
+cp "$B/disco_app.img" "$B/disco_stato_rete.img"
+rm -f "$(vero /data/tests)"/messaggi
+metti_file "$P/bin/prove/stato_rete" "/data/tests/stato_rete" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_stato_rete.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_stato_rete.img pronto: con il programma stato_rete in /data/tests"
+
 # IL DISCO DELLA PROVA DELLA SHELL: come disco_app.img, con in piu' il programma argomenti
 # (utente/prove/argomenti.c) tra i comandi del sistema, in /data/users/0/bin (dove la shell
 # cerca i comandi di uid 0, dopo /system/bin). Non in /data/tests: non deve partire da solo.
 # La prova si fa a mano sulla seriale, in QEMU, come spiegato in argomenti.c.
 cp "$B/disco_app.img" "$B/disco_shell.img"
-rm -f "$(vero /data/tests)"/messaggi
+rm -f "$(vero /data/tests)"/stato_rete
 rmdir "$(vero /data/tests)"
 metti_cartella /data/users/0 0 700 >/dev/null
 metti_file "$P/bin/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null

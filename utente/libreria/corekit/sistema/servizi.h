@@ -17,7 +17,7 @@ struct chi_chiede {
 /* Riempie *c per il collegamento 'd'. 0, o -1 se il kernel non lo sa (non e' un socket). */
 int chi_chiede(int d, struct chi_chiede *c);
 
-/* Chi chiede (riempito da chi_chiede) ha il permesso 'nome' (es. "network.configure")?
+/* Chi chiede (riempito da chi_chiede) ha il permesso 'nome' (es. "network.settings")?
  * 1 si', 0 no. PROVVISORIO: oggi risponde sempre si' e scrive la domanda nel registro;
  * cosa fara' quando sara' vera e' spiegato accanto al codice, in interno/messaggi.c. */
 int ha_permesso(const struct chi_chiede *c, const char *nome);
