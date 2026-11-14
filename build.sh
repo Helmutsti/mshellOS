@@ -34,7 +34,7 @@
 #                      moduli del kernel, trova e monta le partizioni, fa partire init
 #   utente/programmi/  i programmi del sistema (init, eventi, compositore, launcher, scrivania)
 #   utente/comandi/    i comandi (programmi senza grafica, per la riga di comando: SISTEMA.md),
-#                      uno per file: <nome>.c diventa /system/bin/<nome> (oggi webask)
+#                      uno per file: <nome>.c diventa /system/bin/<nome> (oggi webask e network)
 #   utente/applicazioni/  le applicazioni, una cartella ciascuna (i .c, manifest.toml e resources/)
 #   utente/prove/      programmi che servono solo alle prove automatiche (test/): vanno
 #                      solo in disco_prove.img, mai nel disco normale
@@ -80,7 +80,7 @@
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
 #                                manifest.toml e resources/ (lo stesso contenuto del loro
 #                                pacchetto .app, scompattato)
-#       bin/                     i comandi: quelli di utente/comandi (webask) e la shell di prova
+#       bin/                     i comandi: quelli di utente/comandi (webask, network) e la shell di prova
 #       lib/                     per le librerie condivise (per ora nessuna: vedi sotto)
 #       resources/               le risorse del sistema: fonts/ (i caratteri), icons/ (le
 #                                icone), wallpapers/ (gli sfondi). Sono i file di risorse/

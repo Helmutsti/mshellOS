@@ -548,7 +548,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
     "cartella non trovata" ma la shell scrive "cartella inesistente" (già prima).
 32. **HTTPS** per `webask`: ancora niente (BearSSL o mbedTLS quando servirà).
 33. **Il servizio di rete**: la porta di controllo c'e' (status, restart, stop; in sola lettura, `corekit/sistema/network.h`):
-    mancano la pagina della rete e il comando `network` che la usano. Da fare: API del firewall per le app (due
+    il comando `network` la usa (`utente/comandi/network.c`: status, restart, stop); manca la pagina della rete. Da fare: API del firewall per le app (due
     permessi: aggiungere regole / controllo pieno, sempre attraverso il servizio). Non provati:
     rinnovo del DHCP, `mode=static`, firewall con la tabella già presente, IPv6.
 34. **Store e Terminale** usano la parte "del sistema" del launcher (installare, shell come
