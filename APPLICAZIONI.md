@@ -98,7 +98,7 @@ e la persona ne viene informata.
 
 Deciso il 14 novembre 2026.
 
-- **I muri (il kernel).** Il gestore delle app fa partire ogni app in un recinto fatto con gli
+- **I muri (il kernel).** Il launcher fa partire ogni app in un recinto fatto con gli
   strumenti di Linux (namespaces, seccomp, cgroups). Dentro l'app vede **solo** la sua cartella
   del pacchetto, la sua cartella dei dati e, in sola lettura, font, icone e sfondi del sistema
   (`/system/resources`, come l'iPhone). Non vede il disco della persona, la rete, gli altri
@@ -121,7 +121,7 @@ Deciso il 14 novembre 2026.
   3. *la rete*: dentro il recinto l'app non ha nessuna rete sua e usa solo le connessioni che
      riceve; il firewall riconosce l'app dal suo gruppo (cgroup) e applica le regole per app anche
      se i dati non passano dal servizio;
-  4. *il gestore delle app è il pezzo più potente* (recinti, canali, identità): va tenuto piccolo
+  4. *il launcher è il pezzo più potente* (recinti, canali, identità): va tenuto piccolo
      e semplice, e solo lui fa questo lavoro;
   5. *un'app che si prende tutte le risorse*: limiti per gruppo su memoria, processore e spazio
      dei suoi dati;
@@ -146,11 +146,11 @@ recinto tocca quasi ogni pezzo:
 3. **La finestra di domanda del sistema non esiste** (serve anche al firewall e al primo avvio
    per i permessi).
 4. **Come si trovano i servizi.** Oggi ogni programma si collega da sé agli indirizzi in
-   `/run/mshell`. Col recinto li apre il gestore delle app e li passa all'app all'avvio: cambiano
-   il gestore delle app, CoreKit (come trova i canali) e il compositore (anche il canale verso il
+   `/run/mshell`. Col recinto li apre il launcher e li passa all'app all'avvio: cambiano
+   il launcher, CoreKit (come trova i canali) e il compositore (anche il canale verso il
    compositore va passato così).
 5. **Come il servizio sa chi è l'app.** Oggi lo ricava dal kernel (uid e percorso del programma).
-   Dentro il recinto il percorso visto è diverso: l'identità la dice il gestore delle app quando
+   Dentro il recinto il percorso visto è diverso: l'identità la dice il launcher quando
    apre il canale, e il servizio si fida solo di lui.
 6. **Le app del sistema che oggi guardano tutto.** Attività legge l'elenco dei programmi da `/proc`
    (nel recinto non c'è: serve un servizio dei processi); lo Store scrive in `/data/apps`; il
@@ -173,7 +173,7 @@ recinto tocca quasi ogni pezzo:
     messaggi devono andare nel registro del sistema.
 
 **Ordine dei lavori proposto:** il database del sistema e il controllo vero dei permessi
-(`ha_permesso`); poi il gestore delle app che passa i canali; poi il recinto; poi le finestre del
+(`ha_permesso`); poi il launcher che passa i canali; poi il recinto; poi le finestre del
 sistema ("Apri", domande). Il firewall che risponde alle app viene dopo il controllo dei permessi
 (`SISTEMA.md`, sezione 4).
 - **Niente token.** Un token è un testo che si può copiare e rubare. Il canale invece è un oggetto
@@ -229,7 +229,7 @@ sistema ("Apri", domande). Il firewall che risponde alle app viene dopo il contr
   concedersi i permessi da sola). Contro i guasti: SQLite regge gli spegnimenti a metà scrittura,
   più una copia di riserva ogni tanto. Da decidere: se i permessi valgono per ogni persona o per
   tutto il computer, e chi apre il database (un custode solo a cui gli altri servizi chiedono,
-  oppure ogni servizio lo legge da sé e scrive solo il gestore delle app).
+  oppure ogni servizio lo legge da sé e scrive solo il launcher).
 - Il toolkit mostra le due cose come una sola: l'app può chiedere "che permessi ho?", ma non può
   cambiarli.
 
