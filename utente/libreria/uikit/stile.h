@@ -377,6 +377,15 @@ extern const struct ombra_del_design ombre_incassato, ombre_sollevato, ombre_sol
 #define STRUMENTI_CONTENUTO    28   /* l'altezza delle cose dentro (centrate in altezza) */
 #define STRUMENTI_MARGINE      10   /* a sinistra e a destra */
 #define STRUMENTI_SPAZIO        8   /* tra una cosa e l'altra */
+/* il suggerimento (Figma "Suggerimento", 113:3004): alto 24 (16 di testo + 4 sopra e sotto), 8
+ * ai lati, 8 tra il testo e la scorciatoia, raggio RAGGIO_CASELLA (3: nel disegno si vede 3, la descrizione dice 6), ombra "sovrapposto"; una riga,
+ * al massimo 240. Compare dopo 500 ms di puntatore fermo, a 4 sotto il widget. */
+#define SUGGERIMENTO_ATTESA     500
+#define SUGGERIMENTO_PADDING_X    8
+#define SUGGERIMENTO_ALTEZZA     24   /* 16 di testo + 2 * 4 */
+#define SUGGERIMENTO_GAP          8
+#define SUGGERIMENTO_MAX        240
+#define SUGGERIMENTO_DISTANZA     4
 /* la pillola: un gruppo di pulsanti solo icona, attaccati */
 #define PILLOLA_MARGINE         2   /* tra il bordo della pillola e i pulsanti */
 #define PILLOLA_SPAZIO          2   /* tra un pulsante e l'altro */

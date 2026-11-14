@@ -87,6 +87,7 @@ static void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pu
     if (comando != f->comando_sopra) { f->comando_sopra = comando; uikit_cambiata_testata(f); }
 
     if (appena_premuto) {
+        suggerimento_ferma(f);
         if (comando == 2 && sinistro) { f->chiudi_premuto = 1; uikit_cambiata_testata(f); return; }
         if (comando == 1 && sinistro) { f->riduci_premuto = 1; uikit_cambiata_testata(f); return; }
         /* la barra del titolo, e lo spazio vuoto della barra degli strumenti: "trascinami" */

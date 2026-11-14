@@ -332,6 +332,7 @@ void uikit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
         avviso_sotto(v, p, f->base.l, f->base.a);
         widget_disegna(&v->base, p);
     }
+    suggerimento_disegna(f, p);
 }
 
 void uikit_sotto(struct finestra_tk *f, struct widget *w) {
@@ -343,6 +344,7 @@ void uikit_sotto(struct finestra_tk *f, struct widget *w) {
     f->sotto = w;
     if (w) { w->sopra = 1; if (!w->tipo->movimento) widget_cambiato(w); }
     if (prima && prima->tipo->sopra_cambiato) prima->tipo->sopra_cambiato(prima);
+    suggerimento_sotto(f, w);
     if (w && w->tipo->sopra_cambiato) w->tipo->sopra_cambiato(w);
 }
 

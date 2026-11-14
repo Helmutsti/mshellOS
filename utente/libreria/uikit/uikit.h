@@ -194,7 +194,16 @@ struct widget {
     int elastico;                      /* prende lo spazio in piu' nel suo contenitore */
     int largo;                         /* nell'altra direzione si allarga a tutto lo spazio */
     int nascosto;                      /* non c'e': non si misura, non si vede, non sente */
+    const char *suggerimento;          /* il testo del suggerimento (widget_suggerimento), o 0 */
+    const char *scorciatoia;           /* la scorciatoia nel suggerimento, o 0 */
 };
+
+/* IL SUGGERIMENTO (tooltip, Figma "Suggerimento"): una etichetta di 24 pixel che compare a 4
+ * sotto il widget (sopra, se sotto non ci sta) dopo 500 ms di puntatore fermo su di lui, e sparisce
+ * quando il puntatore esce o si preme. Sta sopra il contenuto, una riga, al massimo 240.
+ * 'scorciatoia' (o 0) si vede a destra in colore secondario ("Ctrl+S"). Le stringhe non si
+ * copiano: devono restare vive (di solito sono costanti). Obbligatorio sui pulsanti solo icona. */
+void widget_suggerimento(struct widget *w, const char *testo, const char *scorciatoia);
 
 /* Mette 'figlio' in fondo ai figli di 'genitore' e gli segna il genitore. Al massimo
  * MAX_FIGLI figli: quelli in piu' non entrano (senza avviso). */
@@ -542,7 +551,7 @@ void avviso_apri(struct avviso *v);
 struct finestra_tk;
 
 /* Una chiamata "ogni tanto" (finestra_tk_ogni). */
-#define MAX_CHIAMATE 4
+#define MAX_CHIAMATE 5
 struct chiamata_tk {
     void (*funzione)(struct finestra_tk *f, void *dati);   /* 0: posto libero */
     void *dati;
@@ -574,6 +583,8 @@ struct finestra_tk {
     unsigned int pulsanti_prima;
     struct chiamata_tk chiamate[MAX_CHIAMATE];   /* i "chiamami ogni tanto" */
     struct avviso *avviso;             /* l'avviso della finestra (finestra_tk_avviso), o 0 */
+    int sugg_visibile;                 /* il suggerimento di 'sotto' si vede, qui: */
+    int sugg_x, sugg_y, sugg_l;
     int mini;                          /* 1: mini finestra (finestra_tk_mini) */
     /* la tastiera fisica (tasti.h): chi ascolta le scorciatoie, e i modificatori premuti */
     struct ascoltatore_tk ascoltatori[MAX_ASCOLTATORI];

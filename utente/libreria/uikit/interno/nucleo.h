@@ -118,6 +118,22 @@ struct finestra_tk *widget_finestra(struct widget *w);
  * segue il puntatore da sola. */
 void uikit_sotto(struct finestra_tk *f, struct widget *w);
 
+/* --- suggerimento.c --- */
+
+/* Il puntatore e' passato sopra 'w' (o su nessuno): il suggerimento che si vedeva sparisce e,
+ * se 'w' ne ha uno, parte l'attesa. La chiama uikit_sotto. */
+void suggerimento_sotto(struct finestra_tk *f, struct widget *w);
+
+/* Spegne il suggerimento e l'attesa (un clic). */
+void suggerimento_ferma(struct finestra_tk *f);
+
+/* Disegna il suggerimento, se si vede: l'ultima cosa, sopra tutto (uikit_disegna_tutto). */
+void suggerimento_disegna(struct finestra_tk *f, struct pennello *p);
+
+/* L'etichetta da sola, a (x, y), larga 'l': la usano il suggerimento e l'anteprima. */
+void suggerimento_disegna_forma(struct pennello *p, int x, int y, int l, const char *testo,
+                                const char *scorciatoia);
+
 /* Da' il fuoco della tastiera a 'w' (0: a nessuno), senza guardare se prende i tasti; chi lo
  * aveva lo perde. Tutti e due si ridisegnano. La usano il ciclo degli eventi (al clic) e
  * l'avviso; per le app c'e' finestra_tk_dai_fuoco (uikit.h). */

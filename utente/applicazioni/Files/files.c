@@ -1035,6 +1035,10 @@ int main(int quanti, char **argomenti) {
     pulsante_barra_prepara(&a_elenco, ICONA_LIST, premi_vista, 0);
     pillola_aggiungi(&viste, &a_icone);
     pillola_aggiungi(&viste, &a_elenco);
+    widget_suggerimento(&indietro.base, "Indietro", 0);
+    widget_suggerimento(&avanti.base, "Avanti", 0);
+    widget_suggerimento(&a_icone.base, "Vista a icone", 0);
+    widget_suggerimento(&a_elenco.base, "Vista a elenco", 0);
     pulsante_barra_accendi(&a_icone, 1);
     percorso_prepara(&percorso, clic_percorso, 0);
     ricerca_prepara(&ricerca, "Cerca in Home", ricerca_cambiata, 0);
