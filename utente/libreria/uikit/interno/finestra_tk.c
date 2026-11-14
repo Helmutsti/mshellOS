@@ -335,6 +335,21 @@ void uikit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
     suggerimento_disegna(f, p);
 }
 
+/* La forma del puntatore adesso (quella voluta dall'app, se c'e'; se no quella del widget sotto
+ * il puntatore, tranne se e' disabilitato): al compositore si dice solo quando cambia. */
+static void uikit_forma(struct finestra_tk *f) {
+    unsigned int forma = f->forma_chiesta;
+    if (!forma && f->sotto && !f->sotto->disabilitato) forma = f->sotto->forma_puntatore;
+    if (forma == f->forma_inviata) return;
+    f->forma_inviata = forma;
+    finestra_forma_puntatore(&f->finestra, forma);
+}
+
+void finestra_tk_forma(struct finestra_tk *f, unsigned int forma) {
+    f->forma_chiesta = forma;
+    uikit_forma(f);
+}
+
 void uikit_sotto(struct finestra_tk *f, struct widget *w) {
     if (w == f->sotto) return;
     struct widget *prima = f->sotto;
@@ -346,6 +361,7 @@ void uikit_sotto(struct finestra_tk *f, struct widget *w) {
     if (prima && prima->tipo->sopra_cambiato) prima->tipo->sopra_cambiato(prima);
     suggerimento_sotto(f, w);
     if (w && w->tipo->sopra_cambiato) w->tipo->sopra_cambiato(w);
+    uikit_forma(f);
 }
 
 void uikit_fuoco(struct finestra_tk *f, struct widget *w) {

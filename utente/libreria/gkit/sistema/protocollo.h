@@ -94,6 +94,11 @@
                              * IL TEMA, sopra). Solo il sistema o un'app con il permesso
                              * "settings.system"; dagli altri si ignora */
 
+#define MOSTRA_PUNTATORE 10 /* "il puntatore, mentre sta sulla mia finestra, deve avere la forma
+                             * 'forma'" (FORMA_..., gkit.h). Il compositore la tiene finche' non
+                             * ne arriva un'altra: l'attesa la mostra anche quando un'app e'
+                             * bloccata. Una forma che non c'e': la finestra si scollega */
+
 /* I ruoli speciali (RUOLO_FINESTRA, la finestra normale, e' in gkit.h) */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
 #define RUOLO_PANNELLO  2   /* sopra tutte le finestre (solo il sistema) */
@@ -126,6 +131,11 @@ struct riducimi {
 struct porta_davanti {
     unsigned int tipo;
     unsigned int numero;
+};
+
+struct mostra_puntatore {
+    unsigned int tipo;
+    unsigned int forma;                /* FORMA_... (gkit.h) */
 };
 
 struct cambia_tema {

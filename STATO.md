@@ -257,7 +257,7 @@ vassoio) il puntatore lo sentono sempre.
 
 **L'interfaccia**
 - Pulsanti che si illuminano al passaggio del mouse (riduci, chiudi, voci della barra delle app).
-- Puntatore nero in stile Mac.
+- Il puntatore ha le cinque forme del disegno (freccia, mano, barra a I, divieto, anello dell'attesa), chiaro e scuro: l'app dice la forma al compositore (`MOSTRA_PUNTATORE`), UIKit sceglie da sola la barra a I sui campi di testo; l'attesa la chiede l'app (`finestra_tk_forma`) e il compositore la mostra anche per un'app che non risponde.
 - Barra degli strumenti sotto il titolo, con lo stesso vetro, che si spegne insieme al titolo.
 - Font e icone nuovi.
 - Attività come nel disegno: pagine Processi, Memoria e Disco, con totale e spazio libero
@@ -464,11 +464,19 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 4. **La scrivania legge le app solo all'avvio**: un'app installata o tolta compare o sparisce solo
    quando riparte.
 5. **La conferma di eliminazione in Files** non è disegnata in Figma (testo scelto dall'agente).
-6. **Pezzi della libreria che mancano**: forme del puntatore (collegamento, testo, non
-   disponibile, attesa). Fatti il 14/11/2026: menu a tendina (`tendina.h`), suggerimento
-   (`widget_suggerimento`), barra di scorrimento orizzontale (nessuna app la usa ancora), testo con
-   spaziatura delle lettere (titolo -1%, etichetta +2%). Il gruppo di azioni e l'interruttore
-   c'erano gia' (la pillola della barra degli strumenti; `uikit.h`).
+6. ~~**Pezzi della libreria che mancano**~~: tutti fatti il 14/11/2026: menu a tendina
+   (`tendina.h`), suggerimento (`widget_suggerimento`), barra di scorrimento orizzontale (nessuna
+   app la usa ancora), testo con spaziatura delle lettere (titolo -1%, etichetta +2%), forme del puntatore (foto in `disegni/Puntatore/codice/`); restano da
+   decidere: (a) il disegno dice che la mano va anche sulle voci di elenco e sulle icone cliccabili
+   (non sui pulsanti), ora UIKit la usa solo dove un widget la chiede (`forma_puntatore`: ancora
+   nessuno, non ci sono collegamenti); (b) il disegno dice che sopra un controllo disabilitato il
+   puntatore resta la freccia: il divieto lo chiede l'app (`finestra_tk_forma`) per un'azione
+   rifiutata; (c) l'anello: l'SVG del disegno non mostra la "pista" (l'anello intero sotto
+   l'arco), nel chiaro si vede al 22% e nello scuro quasi pieno; nel codice 22% in tutti e due.
+   Il set "Caricamento – fotogrammi" non l'ho aperto (12 fotogrammi, un giro al secondo);
+   (d) le foto di riferimento delle prove (`test/riferimenti/*`) hanno il puntatore parcheggiato
+   nell'angolo: con la freccia nuova (contorno più largo) vanno rifatte, dopo averle guardate.
+   Il gruppo di azioni e l'interruttore c'erano gia' (la pillola della barra degli strumenti).
 7. **Togliere la vecchia grafica** (vetro scuro, Inter) da codice e Figma.
 8. **Controllo sulla lunghezza** del percorso del programma di un'app (`MAX_PERCORSO_PROGRAMMA`
    contro `MAX_ID`): un controllo in compilazione, se la persona lo vuole.

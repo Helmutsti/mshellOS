@@ -36,7 +36,7 @@
  * (vedi cosa_rifare), come fanno Wayland, macOS e Windows ("le zone rovinate").
  * Il puntatore non sta in 'disegno': lo si disegna solo sullo schermo, dopo la copia.
  * Cosi' quando si muove solo il mouse non si compone niente: si rimette sullo schermo
- * il pezzetto di scena dove stava la freccia, e la si disegna dove sta adesso.
+ * il pezzetto di scena dove stava il puntatore, e lo si disegna dove sta adesso.
  *
  * NON SI ASPETTA MAI UN'APPLICAZIONE. Il compositore manda i suoi messaggi senza
  * aspettare (manda_subito), e non si fida di quello che riceve: misure, immagini e
@@ -78,7 +78,7 @@ static int larghezza, altezza;
 
 /* La scena, prima dello schermo: pixel premoltiplicati, come quelli delle finestre.
  * Ci si disegna con la libreria di disegno, come in una finestra. C'e' tutto tranne il
- * puntatore: e' sempre la scena intera di adesso, senza la freccia. */
+ * puntatore: e' sempre la scena intera di adesso, senza il puntatore. */
 static unsigned int disegno[MAX_LARGHEZZA * MAX_ALTEZZA];
 static struct tela scena;
 static struct pennello pennello;
@@ -143,6 +143,7 @@ struct finestra_compositore {
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
+    unsigned int forma;         /* la forma del puntatore quando e' sulla finestra (MOSTRA_PUNTATORE) */
 };
 
 static struct finestra_compositore finestre[MAX_FINESTRE];
@@ -1025,6 +1026,7 @@ static void da_applicazione(int i) {
         struct voglio_finestra v;
         struct mostra m;
         struct trascinami t;
+        struct mostra_puntatore u;
         struct pong p;
     } m;
     int foglio = -1;
@@ -1034,6 +1036,10 @@ static void da_applicazione(int i) {
     if (foglio >= 0) chiudi(foglio);   /* un foglio va solo col primo messaggio */
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
+    if (m.tipo == MOSTRA_PUNTATORE && n == sizeof m.u && m.u.forma <= FORMA_ATTESA) {
+        finestre[i].forma = m.u.forma;
+        return;
+    }
     if (m.tipo == PONG && n == sizeof m.p) { pong(i, &m.p); return; }
     if (m.tipo == VOGLIO_TASTI_FISICI && n == sizeof m.k) { finestre[i].tasti_fisici = 1; return; }
     if (m.tipo == RIDUCIMI && n == sizeof m.r) { riducimi(i); return; }
@@ -1048,51 +1054,35 @@ static void da_applicazione(int i) {
 
 /* --- il puntatore --- */
 
-/* LA FRECCIA, nera col bordo bianco e un'ombra morbida sotto (come quella del Mac,
- * disegnata da noi). E' un'immagine piccola, gia' pronta: per ogni pixel quanto copre
- * (alfa) e quanto bianco c'e' (grigio, gia' moltiplicato per alfa, come i pixel delle
- * finestre), in un numero solo, 0xAAGG. Il nero del corpo e dell'ombra e' grigio 0.
+/* LE FORME DEL PUNTATORE (disegno: "Componenti base", Puntatore): la freccia, la mano, la barra a
+ * I, la freccia col divieto e l'anello dell'attesa, ognuna con il suo contorno, la sua ombra e
+ * il suo punto caldo. Sono immagini piccole, gia' pronte, in puntatori.h (scritto da
+ * strumenti/grafica/puntatore.py, che spiega com'e' fatto ogni pixel: quanto copre il
+ * contorno, quanto la forma, quanto e' scura l'ombra nel chiaro e nello scuro). Qui si
+ * mescolano coi colori del tema e con la scena, e basta.
  *
- * COME E' FATTA (una volta per tutte, con strumenti/grafica/puntatore.py, che stampa
- * questa tabella): alta 19 pixel e larga 12 col bordo, come la vecchia freccia a
- * quadretti. Il corpo e' un poligono (la punta, il lato sinistro, la coda, l'ala); il
- * bordo e' tutto quello che sta a meno di 1 pixel dal corpo; si disegna 8 volte piu'
- * grande e si rimpicciolisce facendo la media (gli orli sfumati, "antialiasing").
- * L'ombra e' la sagoma intera spostata in basso a destra (1 e 0,5 pixel), sfocata
- * (raggio 1) e nera al 30%; la freccia si mette sopra. Qui niente conti: si mescola e
- * basta.
+ * IL PUNTO CALDO, (px, py), e' dove sta il puntatore: nell'immagine e' il pixel (immagine.px,
+ * immagine.py), quindi si disegna a partire da (px - immagine.px, py - immagine.py). Nell'immagine c'e'
+ * il margine per l'ombra, che sborda anche a sinistra e in alto.
  *
- * IL PUNTO CALDO, (px, py), e' l'angolo in alto a sinistra della freccia col bordo (la
- * punta). Nell'immagine c'e' un margine per l'ombra, che sborda anche a sinistra: il
- * punto caldo e' il pixel (FRECCIA_PX, FRECCIA_PY) dell'immagine, che quindi si
- * disegna a partire da (px - FRECCIA_PX, py - FRECCIA_PY). */
-#define FRECCIA_L  15
-#define FRECCIA_A  21
-#define FRECCIA_PX 1
-#define FRECCIA_PY 0
-static const unsigned short freccia[FRECCIA_A][FRECCIA_L] = {
-    {0x0000,0xBDBB,0xD5D3,0x2318,0x0500,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000},
-    {0x0800,0xFFFF,0xFF70,0xDCD7,0x2818,0x0600,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000},
-    {0x0C00,0xFFFF,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000},
-    {0x0D00,0xFFFF,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000,0x0000,0x0000,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000,0x0000,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x2918,0x0600,0x0000},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF70,0xDDD7,0x1808,0x0400},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF00,0xFF83,0xFFDF,0xFFDF,0xFFDF,0xEBE3,0x240C,0x0800},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF00,0xFF14,0xFF00,0xFF00,0xFF2C,0xE5DB,0x4304,0x3C08,0x330C,0x1800,0x0800},
-    {0x0E00,0xFFFF,0xFF00,0xFF00,0xFF28,0xFFE3,0xFF50,0xFF00,0xFF00,0xFFB3,0x7854,0x2400,0x1700,0x0C00,0x0400},
-    {0x0E00,0xFFFF,0xFF00,0xFF3C,0xF4DB,0x9D78,0xFFCF,0xFF00,0xFF00,0xFF44,0xD2C7,0x1B00,0x0B00,0x0400,0x0000},
-    {0x0E00,0xFFFF,0xFF4C,0xEDDB,0x5B28,0x3600,0xD7CB,0xFF40,0xFF00,0xFF00,0xFFCF,0x5840,0x0B00,0x0000,0x0000},
-    {0x0C00,0xD9D3,0xECE3,0x4D1C,0x2900,0x1F00,0x6B50,0xFFBF,0xFF00,0xFF50,0xFFD7,0x7C64,0x1000,0x0000,0x0000},
-    {0x0800,0x1F08,0x2F0C,0x2200,0x1400,0x0D00,0x1700,0xDED7,0xFFD7,0xC4AF,0x6A40,0x2400,0x0F00,0x0000,0x0000},
-    {0x0400,0x0B00,0x1000,0x0E00,0x0600,0x0400,0x0C00,0x3A20,0x6544,0x2E00,0x2400,0x1500,0x0800,0x0000,0x0000},
-    {0x0000,0x0000,0x0400,0x0000,0x0000,0x0000,0x0400,0x0E00,0x1600,0x1600,0x0E00,0x0700,0x0000,0x0000,0x0000},
-    {0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0000,0x0400,0x0600,0x0500,0x0000,0x0000,0x0000,0x0000,0x0000},
+ * QUALE FORMA. La dice l'applicazione (MOSTRA_PUNTATORE) per quando il puntatore sta sulla sua
+ * finestra: forma_voluta() guarda la finestra sotto il puntatore (o quella "presa", mentre un
+ * pulsante e' premuto). Un'applicazione bloccata mostra sempre l'attesa. L'attesa gira da
+ * sola, 1 giro al secondo: l'immagine dipende dall'ora (fotogramma_ora), e finche' c'e' si
+ * ricompone ogni 1/FOTOGRAMMI_ATTESA di secondo. */
+#include "puntatori.h"
+
+/* un'immagine di una forma: i pixel e le misure; il fotogramma conta solo per l'attesa */
+struct forma_ora {
+    const unsigned int *pixel;
+    int l, a, px, py;
 };
+
+static struct forma_ora immagine_forma(unsigned int forma, int fotogramma) {
+    const struct forma_puntatore_immagine *f = &forme_puntatore[forma];
+    return (struct forma_ora){ forma == FORMA_ATTESA ? fotogrammi_attesa[fotogramma] : f->pixel,
+                               f->l, f->a, f->px, f->py };
+}
 
 /* --- dalla scena allo schermo --- */
 
@@ -1123,32 +1113,46 @@ static void copia(int x0, int y0, int x1, int y1) {
     }
 }
 
-/* La freccia, direttamente sullo schermo (non nella scena). I suoi pixel sono in parte
+/* Un pixel del puntatore (0xCCFFLLDD, vedi puntatori.h) messo sul pixel 'sotto' della scena:
+ * prima l'ombra (nera), poi il contorno, poi la forma, ognuno con la sua copertura. I colori
+ * sono quelli del tema, premoltiplicati per la copertura; il risultato e' per lo schermo. */
+static unsigned int pixel_puntatore(unsigned int v, unsigned int contorno, unsigned int riempimento,
+                                    int scuro, unsigned int sotto) {
+    unsigned int c = v >> 24, f = (v >> 16) & 0xFF, o = scuro ? v & 0xFF : (v >> 8) & 0xFF;
+    unsigned int p = o << 24;   /* l'ombra: nera, gia' premoltiplicata */
+    if (c) p = sopra_a(c << 24 | diviso_255(((contorno >> 16) & 0xFF) * c) << 16 |
+                       diviso_255(((contorno >> 8) & 0xFF) * c) << 8 | diviso_255((contorno & 0xFF) * c), p);
+    if (f) p = sopra_a(f << 24 | diviso_255(((riempimento >> 16) & 0xFF) * f) << 16 |
+                       diviso_255(((riempimento >> 8) & 0xFF) * f) << 8 | diviso_255((riempimento & 0xFF) * f), p);
+    return per_lo_schermo(sopra_a(p, sotto));
+}
+
+/* Il puntatore, direttamente sullo schermo (non nella scena). I suoi pixel sono in parte
  * trasparenti (gli orli, l'ombra): ognuno si mescola con il pixel della SCENA che sta
- * sotto (da 'disegno', non dallo schermo, dove potrebbe esserci ancora la freccia di
- * prima), e il risultato va sullo schermo. Solo il rettangolo della freccia, tagliato
+ * sotto (da 'disegno', non dallo schermo, dove potrebbe esserci ancora il puntatore di
+ * prima), e il risultato va sullo schermo. Solo il rettangolo dell'immagine, tagliato
  * dentro lo schermo. */
-static void disegna_puntatore(void) {
-    int x0 = px - FRECCIA_PX, y0 = py - FRECCIA_PY;
-    int r0 = y0 < 0 ? -y0 : 0, r1 = altezza - y0 < FRECCIA_A ? altezza - y0 : FRECCIA_A;
-    int k0 = x0 < 0 ? -x0 : 0, k1 = larghezza - x0 < FRECCIA_L ? larghezza - x0 : FRECCIA_L;
+static void disegna_puntatore(const struct forma_ora *im) {
+    unsigned int contorno, riempimento;
+    int scuro = colori_puntatore(&contorno, &riempimento);
+    int x0 = px - im->px, y0 = py - im->py;
+    int r0 = y0 < 0 ? -y0 : 0, r1 = altezza - y0 < im->a ? altezza - y0 : im->a;
+    int k0 = x0 < 0 ? -x0 : 0, k1 = larghezza - x0 < im->l ? larghezza - x0 : im->l;
     for (int r = r0; r < r1; r++) {
         const unsigned int *sotto = &disegno[(y0 + r) * larghezza];
         unsigned int *riga = (unsigned int *)(memoria + (y0 + r) * schermo.passo);
-        for (int k = k0; k < k1; k++) {
-            unsigned int a = freccia[r][k] >> 8, g = freccia[r][k] & 0xFF;
-            riga[x0 + k] = per_lo_schermo(sopra_a(a << 24 | g << 16 | g << 8 | g, sotto[x0 + k]));
-        }
+        for (int k = k0; k < k1; k++)
+            riga[x0 + k] = pixel_puntatore(im->pixel[r * im->l + k], contorno, riempimento, scuro, sotto[x0 + k]);
     }
 }
 
-/* Il rettangolo della freccia (ombra compresa) con la punta in (x, y), tagliato dentro
- * lo schermo. L'ombra sborda un poco anche a sinistra. */
-static struct zona_schermo dentro_lo_schermo(int x, int y) {
-    int x0 = x - FRECCIA_PX, y0 = y - FRECCIA_PY;
+/* Il rettangolo dell'immagine (ombra compresa) con il punto caldo in (x, y), tagliato dentro
+ * lo schermo. */
+static struct zona_schermo dentro_lo_schermo(const struct forma_ora *im, int x, int y) {
+    int x0 = x - im->px, y0 = y - im->py;
     return (struct zona_schermo){ x0 > 0 ? x0 : 0, y0 > 0 ? y0 : 0,
-                                  x0 + FRECCIA_L < larghezza ? x0 + FRECCIA_L : larghezza,
-                                  y0 + FRECCIA_A < altezza ? y0 + FRECCIA_A : altezza };
+                                  x0 + im->l < larghezza ? x0 + im->l : larghezza,
+                                  y0 + im->a < altezza ? y0 + im->a : altezza };
 }
 
 /* --- la scena, poi sullo schermo --- */
@@ -1174,6 +1178,10 @@ struct impronta {
 };
 static struct impronta impronte_prima[MAX_FINESTRE];
 static int px_prima, py_prima;
+static struct forma_ora immagine_prima;   /* l'immagine del puntatore di prima: da cancellare */
+static unsigned int forma_prima = FORMA_NORMALE;
+static int fotogramma_prima;
+
 
 /* Le zone da rifare: si aggiunge un rettangolo alla volta. Le zone non devono mai
  * toccarsi (in una parte comune a due zone si disegnerebbe due volte, e le cose
@@ -1364,32 +1372,50 @@ static void componi_zone(void) {
         if (finestre[lista[k]].ruolo != RUOLO_SFONDO) disegna_finestra(lista[k], da_sfocare[lista[k]]);
 }
 
+/* Quale forma ha il puntatore adesso: quella voluta dalla finestra su cui sta (o dalla "presa"),
+ * l'attesa se e' bloccata, la freccia se non e' su nessuna o si sta spostando una finestra. */
+static unsigned int forma_voluta(void) {
+    if (trascinata >= 0) return FORMA_NORMALE;
+    int i = presa >= 0 ? presa : finestra_sotto(px, py);
+    if (i < 0) return FORMA_NORMALE;
+    return finestre[i].non_risponde ? FORMA_ATTESA : finestre[i].forma;
+}
+
+/* Il fotogramma dell'attesa all'ora di adesso: un giro al secondo, a velocita' costante. */
+static int fotogramma_ora(void) { return (int)(tempo() % 1000) * FOTOGRAMMI_ATTESA / 1000; }
+
 static void componi(void) {
     fai_lista();
     cosa_rifare();
-    int mosso = px != px_prima || py != py_prima;
+    unsigned int forma = forma_voluta();
+    int fotogramma = forma == FORMA_ATTESA ? fotogramma_ora() : 0;
+    int mosso = px != px_prima || py != py_prima || forma != forma_prima || fotogramma != fotogramma_prima;
     if (!quante_zone && !mosso) return;
 
     componi_zone();
 
-    /* sullo schermo: le zone, poi dove stava la freccia (la scena senza freccia), poi
-     * la freccia dove sta adesso (sopra le zone appena copiate) */
+    /* sullo schermo: le zone, poi dove stava il puntatore (la scena senza di lui), poi
+     * il puntatore dove sta adesso (sopra le zone appena copiate) */
     struct zona_schermo cambiate[MAX_ZONE + 2];
     int n = 0;
     for (int k = 0; k < quante_zone; k++) {
         copia(zone[k].x0, zone[k].y0, zone[k].x1, zone[k].y1);
         cambiate[n++] = (struct zona_schermo){ zone[k].x0, zone[k].y0, zone[k].x1, zone[k].y1 };
     }
-    if (mosso) {   /* tutto il rettangolo della freccia di prima, ombra compresa */
-        copia(px_prima - FRECCIA_PX, py_prima - FRECCIA_PY,
-              px_prima - FRECCIA_PX + FRECCIA_L, py_prima - FRECCIA_PY + FRECCIA_A);
-        cambiate[n++] = dentro_lo_schermo(px_prima, py_prima);
+    struct forma_ora adesso = immagine_forma(forma, fotogramma);
+    if (mosso) {   /* tutto il rettangolo del puntatore di prima, ombra compresa */
+        copia(px_prima - immagine_prima.px, py_prima - immagine_prima.py,
+              px_prima - immagine_prima.px + immagine_prima.l, py_prima - immagine_prima.py + immagine_prima.a);
+        cambiate[n++] = dentro_lo_schermo(&immagine_prima, px_prima, py_prima);
     }
-    disegna_puntatore();
-    cambiate[n++] = dentro_lo_schermo(px, py);
+    disegna_puntatore(&adesso);
+    cambiate[n++] = dentro_lo_schermo(&adesso, px, py);
     schermo_cambiato(D_SCHERMO, cambiate, n);   /* tutto in una volta, a fine fotogramma */
     px_prima = px;
     py_prima = py;
+    immagine_prima = adesso;
+    forma_prima = forma;
+    fotogramma_prima = fotogramma;
 }
 
 /* --- gli eventi del kernel: mouse e tastiera --- */
@@ -1534,6 +1560,7 @@ int main(void) {
     altezza = schermo.altezza;
     px = larghezza / 2;
     py = altezza / 2;
+    immagine_prima = immagine_forma(FORMA_NORMALE, 0);
     scena = (struct tela){ disegno, larghezza, altezza };
     pennello_prepara(&pennello, &scena);
     componi();
@@ -1546,7 +1573,8 @@ int main(void) {
      * non le vedrebbe nessuno: conta solo l'ultima. (Come Wayland, macOS e Windows: un
      * fotogramma con tutto quello che e' successo dall'ultimo.) */
     for (;;) {
-        if (servi(500) < 0) return 0;   /* al massimo mezzo secondo: i "ci sei?" */
+        /* al massimo mezzo secondo: i "ci sei?"; con l'attesa sullo schermo, un fotogramma dell'anello */
+        if (servi(forma_voluta() == FORMA_ATTESA ? 1000 / FOTOGRAMMI_ATTESA : 500) < 0) return 0;
         /* il resto della coda, senza dormire; con un limite, per ridisegnare comunque
          * ogni tanto anche se gli eventi non smettono mai di arrivare */
         for (int giri = 0; giri < 64; giri++) {

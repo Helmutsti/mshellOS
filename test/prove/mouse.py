@@ -23,12 +23,15 @@ DESCRIZIONE = "puntatore in tondo per 8 s: segue, non si blocca, arriva dove dev
 
 ANGOLO = (1230, 750, 1280, 800)     # dove e' parcheggiato il puntatore nella foto di base
 RITARDO = 70                        # pixel di distanza accettati durante il giro
+# La punta (il punto caldo) sta 2 pixel dentro il riquadro del puntatore: il contorno bianco della
+# freccia (tratto 3, come nel disegno) sporge di 1,5 dalla punta e un po' di sfumatura.
+PUNTA = (2, 2)
 
 
 def trova_puntatore(base, foto):
-    """L'angolo in alto a sinistra del puntatore (la punta della freccia), o None."""
+    """Dove e' la punta della freccia (il punto caldo), o None."""
     r = riquadro_diverso(base, foto, ANGOLO, soglia=24)
-    return (r[0], r[1]) if r else None
+    return (r[0] + PUNTA[0], r[1] + PUNTA[1]) if r else None
 
 
 def giro(p, base, cx, cy, raggio, secondi, nome):

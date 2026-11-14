@@ -147,6 +147,11 @@ int finestra_riducimi(struct finestra *f) {
     return manda(f->collegamento, &m, sizeof m);
 }
 
+int finestra_forma_puntatore(struct finestra *f, unsigned int forma) {
+    struct mostra_puntatore m = { .tipo = MOSTRA_PUNTATORE, .forma = forma };
+    return manda(f->collegamento, &m, sizeof m);
+}
+
 int finestra_cambia_tema(struct finestra *f) {
     struct cambia_tema m = { .tipo = CAMBIA_TEMA };
     return manda(f->collegamento, &m, sizeof m);
