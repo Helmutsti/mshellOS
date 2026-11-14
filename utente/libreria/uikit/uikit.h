@@ -1020,6 +1020,7 @@ int uikit_esegui(struct finestra_tk *f);
 #include "oggetti.h"          /* le icone di file e cartelle (l'"Oggetto" di Figma) */
 #include "menu.h"             /* il menu: voce, intestazione, separatore, sottomenu */
 #include "tendina.h"          /* il menu a tendina: il campo con la freccia e l'elenco sotto */
+#include "sfondo.h"           /* lo sfondo della scrivania scelto dalla persona */
 #include "barra_laterale.h"   /* la barra laterale e le sue voci */
 #include "tabella.h"          /* la tabella: intestazioni di colonna con l'ordine, righe */
 #include "griglia.h"          /* la griglia di icone: i tile */

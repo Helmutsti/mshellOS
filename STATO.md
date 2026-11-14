@@ -151,7 +151,7 @@ né seriale: per una shell si entra nel container con `docker exec -it <nome> sh
   gia' disegnati, da `risorse/` del repository), `/system/firmware`, `/system/modules`.
 - `/data/apps` (app installate), `/data/system` (identità, utenti, permessi, elenco delle
   app installate: solo per root), `/data/services/<nome>`,
-  `/data/users/<uid>/{home, bin, appsdata/<app>, preferences}`.
+  `/data/users/<uid>/{home, bin, appsdata/<app>, preferences, wallpapers}` (`wallpapers`: le foto JPEG tra cui la persona sceglie lo sfondo; fuori dalla home, Files non la mostra).
 - `/dev`, `/proc`, `/sys`, `/run`, `/tmp` li dà Linux.
 
 **Cosa fa Linux e cosa facciamo noi**

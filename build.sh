@@ -440,13 +440,23 @@ for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
 #   bin               i suoi comandi, cercati dopo /system/bin (quando ci sara' una shell)
 #   appsdata/<app>    i dati di ogni applicazione
 #   preferences       le sue preferenze
+#   wallpapers        le foto tra cui sceglie lo sfondo (fuori dalla home: Files non la mostra)
 UTENTE_UID=1000
 CASA=/data/users/$UTENTE_UID
 metti_cartella /data/users 0 755
-for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences"; do
+for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences" "$CASA/wallpapers"; do
     metti_cartella "$c" $UTENTE_UID 700
 done
 for nome in $APPS; do metti_cartella "$CASA/appsdata/$nome" $UTENTE_UID 700; done
+# Le foto di esempio per lo sfondo (risorse/wallpapers/esempi/*.jpg, se ci sono): sono della persona.
+SFONDI_VERI=$(vero "$CASA/wallpapers")
+for f in risorse/wallpapers/esempi/*.jpg; do
+    if [ -e "$f" ]; then
+        cp "$f" "$SFONDI_VERI/"
+        chown $UTENTE_UID:$UTENTE_UID "$SFONDI_VERI/$(basename "$f")"
+        chmod 644 "$SFONDI_VERI/$(basename "$f")"
+    fi
+done
 
 # La cartella file/ del repository va nella casa: quello che ci si mette dentro si
 # ritrova nel sistema (tranne il suo LEGGIMI.md, che parla della cartella). E' della

@@ -367,6 +367,7 @@ static int notizia_vassoio(const struct notizia *n) {
 /* --- lo sfondo --- */
 
 static struct finestra sfondo;
+static char sfondo_disegnato[SFONDO_FILE_MAX];   /* la foto in uso ("" = Predefinito) */
 
 /* Lo sfondo del disegno, ingrandito da quello piccolo (320x200, il materiale sfondo_piccolo:
  * /system/resources/wallpapers/default.image): ogni pixel nuovo e' una media pesata dei
@@ -402,13 +403,20 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
 
 /* --- lo sfondo --- */
 
-/* Lo sfondo, disegnato una volta. Le icone della scrivania non ci sono: torneranno quando la
+/* Lo sfondo, disegnato all'avvio e quando la persona lo cambia (notizia_tema): la foto scelta
+ * in Impostazioni (sfondo.h) o, senza scelta, il Predefinito. Le icone della scrivania non ci sono: torneranno quando la
  * scrivania mostrera' i file della cartella Scrivania della persona. Le app si aprono dal
  * vassoio delle app. */
 static int disegna_sfondo(void) {
     unsigned int *pixel = finestra_tela(&sfondo);
     if (!pixel) return 0;
-    prepara_sfondo(pixel, schermo_l, schermo_a);
+    char file[SFONDO_FILE_MAX];
+    sfondo_leggi(file, sizeof file);   /* la scelta della persona ("" = Predefinito) */
+    if (!file[0] || sfondo_disegna_foto(file, pixel, schermo_l, schermo_a) < 0) {
+        file[0] = 0;                   /* Predefinito, o la foto non si legge */
+        prepara_sfondo(pixel, schermo_l, schermo_a);
+    }
+    for (int i = 0; i < SFONDO_FILE_MAX; i++) sfondo_disegnato[i] = file[i];
     return finestra_mostra(&sfondo) >= 0;
 }
 
@@ -429,6 +437,10 @@ static int notizia_sfondo(const struct notizia *n) {
 static int notizia_tema(const struct notizia *n) {
     if (n->tipo != TEMA_CAMBIATO) return 0;
     tema_cambiato();
+    /* Lo sfondo scelto da Impostazioni arriva con la stessa notizia: se e' cambiato, si ridisegna. */
+    char file[SFONDO_FILE_MAX];
+    sfondo_leggi(file, sizeof file);
+    if (!uguali(file, sfondo_disegnato)) disegna_sfondo();
     if (vassoio_aperto && !disegna_vassoio()) chiudi_vassoio();
     return 1;
 }

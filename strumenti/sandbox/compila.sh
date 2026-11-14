@@ -130,10 +130,19 @@ for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
 UTENTE_UID=1000
 CASA=/data/users/$UTENTE_UID
 metti_cartella /data/users 0 755
-for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences"; do
+for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences" "$CASA/wallpapers"; do
     metti_cartella "$c" $UTENTE_UID 700
 done
 for nome in $APPS; do metti_cartella "$CASA/appsdata/$nome" $UTENTE_UID 700; done
+# Le foto di esempio per lo sfondo (risorse/wallpapers/esempi/*.jpg, se ci sono): sono della persona.
+SFONDI_VERI=$(vero "$CASA/wallpapers")
+for f in risorse/wallpapers/esempi/*.jpg; do
+    if [ -e "$f" ]; then
+        cp "$f" "$SFONDI_VERI/"
+        chown $UTENTE_UID:$UTENTE_UID "$SFONDI_VERI/$(basename "$f")"
+        chmod 644 "$SFONDI_VERI/$(basename "$f")"
+    fi
+done
 CASA_VERA=$(vero "$CASA/home")
 for r in file/* file/.[!.]*; do
     if [ -e "$r" ] && [ "$r" != file/LEGGIMI.md ]; then

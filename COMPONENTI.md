@@ -146,7 +146,7 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Poteri**: super no. Manifesto: "processes.stop". Il permesso non è controllato da nessun servizio: il limite vero è l'uid 1000.
 
 ### Impostazioni (`applicazioni/Impostazioni/impostazioni.c`)
-- **Cosa fa**: impostazioni del sistema. Oggi solo "Aspetto": tema chiaro/scuro e anteprima dello sfondo; le altre sezioni sono vuote.
+- **Cosa fa**: impostazioni del sistema. Oggi solo "Aspetto": tema chiaro/scuro e sfondo della scrivania (anteprima e "Cambia": elenco Predefinito + foto di `/data/users/<uid>/wallpapers`, scelta salvata in `preferences/sfondo`); le altre sezioni sono vuote.
 - **Tipo**: app.
 - **Lanciato da**: launcher (anche su richiesta dello Store).
 - **Lancia**: nessuno.

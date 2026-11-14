@@ -11,8 +11,11 @@
  *     un altro lo scrive nelle preferenze e lo fa cambiare a tutto il sistema
  *     (uikit_cambia_tema: il compositore lo dice a tutte le finestre e ai pannelli, anche a
  *     questa, che si ridisegna come le altre);
- *   - "Sfondo della scrivania": l'anteprima dello sfondo e il pulsante "Cambia" (per ora non
- *     fa niente).
+ *   - "Sfondo della scrivania": l'anteprima dello sfondo scelto e il pulsante "Cambia", che apre
+ *     l'elenco (il menu di menu.h, lo stesso del menu a tendina, a 4 sotto il pulsante) con
+ *     "Predefinito" e le foto della cartella /data/users/1000/wallpapers, in ordine
+ *     alfabetico, con la scelta attuale spuntata. Scegliere salva la preferenza (sfondo.h),
+ *     aggiorna l'anteprima e avvisa la scrivania (stessa notizia del cambio di tema).
  * Le altre sezioni si possono scegliere e mostrano il pannello vuoto.
  *
  * LE ICONE delle sezioni sono quelle Lucide del disegno: palette, globe, keyboard, shield,
@@ -21,9 +24,9 @@
 
 /* --- l'anteprima dello sfondo ---
  * Nel disegno e' un rettangolo di 120 x 75 con gli angoli RAGGIO_CONTROLLO_NUOVO. Mostra lo
- * sfondo vero della scrivania (il materiale sfondo_piccolo, lo stesso che usa la scrivania),
- * rimpicciolito per riempire l'anteprima senza deformarlo. Lo sfondo e' uguale nei due temi,
- * quindi anche l'anteprima: la si calcola una volta, la prima volta che si disegna. */
+ * sfondo scelto (la foto, o il materiale sfondo_piccolo per il Predefinito), rimpicciolito per
+ * riempire l'anteprima senza deformarlo. Lo sfondo e' uguale nei due temi, quindi anche
+ * l'anteprima: la si calcola all'avvio e quando la persona sceglie (anteprima_calcola). */
 #define ANTEPRIMA_L 120
 #define ANTEPRIMA_A 75
 
@@ -36,9 +39,27 @@ static void anteprima_misura(struct widget *w, int *l, int *a) {
     *a = ANTEPRIMA_A;
 }
 
-static void anteprima_disegna(struct widget *w, struct pennello *p) {
-    if (!anteprima_sfondo.l)
+/* Calcola l'anteprima di 'file' (la foto) o, se e' vuoto o non si legge, del Predefinito. */
+static void anteprima_calcola(const char *file) {
+    struct immagine foto = { 0 };
+    int fatto = 0;
+    if (file[0]) {
+        char percorso[64 + SFONDO_FILE_MAX] = "/data/users/1000/wallpapers/";
+        int n = 0;
+        while (percorso[n]) n++;
+        for (int i = 0; file[i]; i++) percorso[n++] = file[i];
+        percorso[n] = 0;
+        if (immagine_carica(percorso, &foto) == 0) {
+            anteprima_sfondo = immagine_rimpicciolita(&foto, anteprima_pixel, ANTEPRIMA_L, ANTEPRIMA_A);
+            immagine_libera(&foto);
+            fatto = 1;
+        }
+    }
+    if (!fatto)
         anteprima_sfondo = immagine_rimpicciolita(&sfondo_piccolo, anteprima_pixel, ANTEPRIMA_L, ANTEPRIMA_A);
+}
+
+static void anteprima_disegna(struct widget *w, struct pennello *p) {
     disegna_immagine_arrotondata(p, &anteprima_sfondo, w->x, w->y, RAGGIO_CONTROLLO_NUOVO);
 }
 
@@ -57,6 +78,14 @@ static struct pillola temi;
 static struct pulsante_barra chiaro, scuro;
 static struct widget anteprima;
 static struct pulsante cambia;
+
+/* L'elenco degli sfondi: azione 0 = Predefinito, k + 1 = la foto k. */
+static struct menu_tk menu_sfondi;
+static struct voce_menu_tk voci_sfondi[SFONDI_MAX + 1];
+static char file_sfondi[SFONDI_MAX][SFONDO_FILE_MAX];
+static char nomi_sfondi[SFONDI_MAX][SFONDO_NOME_MAX];
+static int quanti_sfondi;
+static int sfondo_scelto;   /* l'azione della voce scelta */
 
 static int voce_aspetto, scelta;   /* la sezione scelta (numero di voce della barra laterale) */
 
@@ -80,6 +109,27 @@ static void scegli_tema(struct pulsante_barra *b, void *dati) {
     int vuole_scuro = b == &scuro;
     if (vuole_scuro == TEMA_SCURO_IN_USO) return;
     uikit_cambia_tema(&finestra, vuole_scuro ? "scuro" : "chiaro");
+}
+
+static int sfondo_spuntato(int azione, void *dati) {
+    (void)dati;
+    return azione == sfondo_scelto;
+}
+
+/* Una voce scelta: si salva, si aggiorna l'anteprima e si avvisa la scrivania. */
+static void sfondo_scelta(struct menu_tk *m, int azione, void *dati) {
+    (void)m; (void)dati;
+    const char *file = azione > 0 ? file_sfondi[azione - 1] : "";
+    if (sfondo_salva(file) < 0) return;
+    sfondo_scelto = azione;
+    anteprima_calcola(file);
+    widget_cambiato(&anteprima);
+    uikit_cambia_tema(&finestra, TEMA_SCURO_IN_USO ? "scuro" : "chiaro");   /* la notizia a tutti; il tema resta */
+}
+
+static void apri_sfondi(struct pulsante *b, void *dati) {
+    (void)dati;
+    menu_apri(&menu_sfondi, voci_sfondi, quanti_sfondi + 1, b->base.x, b->base.y + b->base.a + SPAZIO_4);
 }
 
 int main(void) {
@@ -113,7 +163,23 @@ int main(void) {
     etichetta_prepara(&sfondo, "Sfondo della scrivania", FONT_CORPO_MEDIO);
     spazio_prepara(&spinta_sfondo);
     anteprima = (struct widget){ .tipo = &tipo_anteprima };
-    pulsante_prepara(&cambia, "Cambia", NESSUNA_ICONA, 0, 0);   /* Secondario M; per ora non fa niente */
+    pulsante_prepara(&cambia, "Cambia", NESSUNA_ICONA, apri_sfondi, 0);   /* Secondario M */
+
+    /* le scelte: Predefinito e le foto; quella nelle preferenze e' la scelta attuale */
+    char scelto[SFONDO_FILE_MAX];
+    sfondo_leggi(scelto, sizeof scelto);
+    quanti_sfondi = sfondo_elenca(file_sfondi, SFONDI_MAX);
+    voci_sfondi[0] = (struct voce_menu_tk)TENDINA_VOCE(0, "Predefinito");
+    for (int k = 0; k < quanti_sfondi; k++) {
+        sfondo_nome_mostrato(file_sfondi[k], nomi_sfondi[k], SFONDO_NOME_MAX);
+        voci_sfondi[k + 1] = (struct voce_menu_tk)TENDINA_VOCE(k + 1, nomi_sfondi[k]);
+        int uguale = 1;
+        for (int i = 0; uguale; i++) { if (file_sfondi[k][i] != scelto[i]) uguale = 0; if (!scelto[i]) break; }
+        if (uguale) sfondo_scelto = k + 1;
+    }
+    if (!sfondo_scelto) scelto[0] = 0;   /* la preferenza punta a una foto che non c'e': Predefinito */
+    anteprima_calcola(scelto);
+    menu_prepara(&menu_sfondi, MISURA_M, 0, 0, sfondo_spuntato, sfondo_scelta, 0);
     widget_aggiungi(&riga_sfondo.base, &sfondo.base);
     widget_aggiungi(&riga_sfondo.base, &spinta_sfondo.base);
     widget_aggiungi(&riga_sfondo.base, &anteprima);
@@ -133,6 +199,7 @@ int main(void) {
 
     finestra_tk_prepara(&finestra, "Impostazioni", &corpo.base);
     finestra_tk_aree(&finestra);
+    menu_aggiungi(&finestra, &menu_sfondi);   /* sta sopra a tutto: dopo il resto */
     finestra_tk_dimensione(&finestra, 800, 520);   /* il disegno */
     return uikit_esegui(&finestra);
 }
