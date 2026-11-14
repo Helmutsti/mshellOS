@@ -11,11 +11,11 @@ divieto). Ognuna sta su un canvas 32 x 32 con il suo punto caldo; i tracciati qu
 sono copiati a mano dai file SVG del disegno (stesse coordinate, il canvas ha l'origine in
 (0, 0): 'sposta' dice dove cade l'origine di ogni SVG sul canvas).
 
-Ogni forma ha un contorno (chiaro nel tema chiaro, scuro nello scuro) e una forma (scura nel
-chiaro, chiara nello scuro), piu' l'ombra "ombra/puntatore": due ombre nere, la prima
-spostata di 1 e sfocata 0,5 (opacita' 0,20 chiaro, 0,55 scuro), la seconda spostata di 3,
-sfocata 3, ristretta di 1 (0,26 chiaro, 0,55 scuro). I colori e l'opacita' cambiano col tema,
-le forme no: ogni pixel della tabella porta quindi QUATTRO numeri, uno per byte,
+Ogni forma ha un contorno (bianco) e una forma (scura), piu' l'ombra "ombra/puntatore": due
+ombre nere, la prima spostata di 1 e sfocata 0,5 (opacita' 0,20), la seconda spostata di 3,
+sfocata 3, ristretta di 1 (0,26). IL PUNTATORE NON CAMBIA COL TEMA (deciso dalla persona):
+stessi colori e stessa ombra anche nello scuro. La tabella porta ancora l'ombra di un tempo
+dello scuro (DD), che il compositore non usa piu'. Ogni pixel porta QUATTRO numeri, uno per byte,
 0xCCFFLLDD:
 
     CC  quanto copre il contorno          FF  quanto copre la forma
@@ -43,7 +43,8 @@ SOGLIA = 3              # un'ombra con opacita' fino a 3 (su 255) non si tiene
 # colori del disegno, per l'anteprima (il compositore li legge dal tema)
 TEMI = {
     "chiaro": dict(contorno=(255, 255, 255), forma=(0x37, 0x37, 0x3B), fondo=(223, 223, 223), ombra=(0.20, 0.26)),
-    "scuro": dict(contorno=(0x1C, 0x1C, 0x1E), forma=(0xFA, 0xFA, 0xFA), fondo=(0x1C, 0x1C, 0x1E), ombra=(0.55, 0.55)),
+    # il puntatore non cambia col tema (deciso dalla persona): cambia solo il fondo
+    "scuro": dict(contorno=(255, 255, 255), forma=(0x37, 0x37, 0x3B), fondo=(0x1C, 0x1C, 0x1E), ombra=(0.20, 0.26)),
 }
 
 # --- i tracciati (dai file SVG del disegno) ---
@@ -276,7 +277,7 @@ def anteprima(tema, fuori, zoom):
     img = Image.new("RGB", (len(forme) * CANVAS, CANVAS), t["fondo"])
     for i, (nome, foto) in enumerate(forme):
         c, f, sl, sd, caldo = foto[0]
-        s = sl if tema == "chiaro" else sd
+        s = sl                    # l'ombra del chiaro anche nello scuro (il compositore fa lo stesso)
         dest = Image.new("RGB", c.size, t["fondo"])
         dest = Image.composite(Image.new("RGB", c.size, (0, 0, 0)), dest, s)
         dest = Image.composite(Image.new("RGB", c.size, t["contorno"]), dest, c)
