@@ -200,14 +200,18 @@ apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = 
 # (apk --arch, anche se il container e' x86_64), da cui si prendono:
 #   - il kernel, i suoi moduli (linux-virt) e il firmware;
 #   - musl-dev: la libreria C (libc.a) e i suoi header, da legare dentro i programmi;
-#   - linux-headers: gli header del kernel (input, DRM...).
+#   - linux-headers: gli header del kernel (input, DRM...);
+#   - mbedtls-dev, mbedtls-static: mbedTLS, la libreria per HTTPS (la lega dentro webask);
+#   - ca-certificates-bundle: i certificati radice (le autorita' di cui ci si fida per HTTPS),
+#     che vanno in /etc/ssl/certs/ca-certificates.crt.
 # Le firme dei pacchetti si controllano con le chiavi di Alpine per quella CPU.
 # --no-scripts: gli script d'installazione non girano (sono per un'altra CPU, e non servono).
 RADICE=/tmp/radice-$ARCH
 rm -rf "$RADICE"
 apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \
     --repositories-file /etc/apk/repositories --keys-dir "/usr/share/apk/keys/$ARCH" \
-    --cache-dir "$SCARICO/$ARCH" add musl-dev linux-headers compiler-rt $PACCHETTI_KERNEL >/dev/null
+    --cache-dir "$SCARICO/$ARCH" add musl-dev linux-headers compiler-rt \
+    mbedtls-dev mbedtls-static ca-certificates-bundle $PACCHETTI_KERNEL >/dev/null
 VERSIONE_K=$(ls "$RADICE/lib/modules")
 MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
 
@@ -343,6 +347,9 @@ metti_cartella /etc 0 755
 ln -s /run/network/resolv.conf "$(vero /etc/resolv.conf)"
 printf '  %-40s -> /run/network/resolv.conf
 ' /etc/resolv.conf
+# i certificati radice per HTTPS (ca-certificates-bundle di Alpine, nella RADICE): webask li
+# cerca nel posto solito di Linux. Si aggiornano rifacendo il build.
+metti_file "$RADICE/etc/ssl/certs/ca-certificates.crt" /etc/ssl/certs/ca-certificates.crt 644
 
 SERVIZI=""
 APPS=""

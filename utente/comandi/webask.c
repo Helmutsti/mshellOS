@@ -1,9 +1,10 @@
 /* webask: chiede una pagina a un server web e ne scrive il contenuto. Il primo comando del
  * sistema (SISTEMA.md: un comando e' un programma senza grafica, in /system/bin, che gira
- * con i permessi di chi lo lancia). Un "curl" essenziale: SOLO HTTP, niente HTTPS (deciso
- * dalla persona: per HTTPS servirebbe una libreria di crittografia, che non c'e').
+ * con i permessi di chi lo lancia). Un "curl" essenziale: HTTP e HTTPS. Per HTTPS usa
+ * mbedTLS (il pacchetto di Alpine, legato dentro il programma) e i certificati radice di
+ * Alpine (ca-certificates-bundle) in CERTIFICATI.
  *
- *     webask [-i] http://nome[:porta][/percorso]
+ *     webask [-i] http[s]://nome[:porta][/percorso]
  *     webask -h
  *
  *     -i   scrive anche la riga di stato e le intestazioni della risposta, poi una riga
@@ -11,11 +12,11 @@
  *     -h   questo aiuto, con i codici di uscita
  *
  * COSA FA, in ordine:
- *   1. legge l'indirizzo: lo schema deve essere "http://" (maiuscole o minuscole). Dopo
- *      vengono il nome (o un indirizzo numerico; uno IPv6 tra parentesi quadre, come
- *      [::1]), la porta facoltativa (se manca: 80) e il percorso (se manca: "/"). Quello
- *      che sta dopo un '#' resta a noi e non si manda (e' cosi' per tutti i programmi web).
- *      "https://" ha un messaggio suo; ogni altro schema e' un errore.
+ *   1. legge l'indirizzo: lo schema deve essere "http://" o "https://" (maiuscole o
+ *      minuscole). Dopo vengono il nome (o un indirizzo numerico; uno IPv6 tra parentesi
+ *      quadre, come [::1]), la porta facoltativa (se manca: 80, o 443 con https) e il
+ *      percorso (se manca: "/"). Quello che sta dopo un '#' resta a noi e non si manda (e'
+ *      cosi' per tutti i programmi web). Ogni altro schema e' un errore.
  *   2. traduce il nome in indirizzi (getaddrinfo della libreria C musl: legge i server dei
  *      nomi in /etc/resolv.conf, che punta al file scritto dal servizio network). Il tempo
  *      massimo di questo passo lo decide musl (5 secondi per tentativo, 2 tentativi).
@@ -42,15 +43,20 @@
  * I REINDIRIZZAMENTI (le risposte 3xx: la pagina sta altrove) NON si seguono: webask
  * scrive sullo standard error dove porterebbero (l'intestazione Location) ed esce con
  * USCITA_REINDIRIZZAMENTO. Il contenuto di queste risposte (di solito una paginetta che
- * dice "spostato qui") non si scrive. Se il posto nuovo e' https:// lo dice chiaramente,
- * perche' succede quasi sempre (molti siti mandano subito da http a https).
+ * dice "spostato qui") non si scrive.
+ *
+ * HTTPS. Con https://, appena collegati, si apre la connessione sicura (TLS 1.2 o 1.3) e
+ * tutto il resto passa da li'. Il certificato del server si controlla SEMPRE: deve essere
+ * firmato da una delle autorita' in CERTIFICATI, valido oggi (serve l'orologio giusto) e
+ * per il nome chiesto. Se non va, webask si ferma e dice perche' (USCITA_SICUREZZA): non
+ * c'e' un modo per saltare il controllo.
  *
  * Le risposte 4xx e 5xx (pagina che non c'e', errore del server) sono risposte vere:
  * si scrive il contenuto e si esce con 0, come fa curl. La riga di stato si vede con -i.
  *
  * I CODICI DI USCITA (li dice anche "webask -h"):
  *     0  fatto: la risposta e' arrivata tutta (qualunque codice HTTP che non sia 3xx)
- *     1  uso sbagliato: argomenti, indirizzo non valido, schema che non sia http (https)
+ *     1  uso sbagliato: argomenti, indirizzo non valido, schema che non sia http o https
  *     2  il nome non si traduce in un indirizzo (non esiste, o i server dei nomi non
  *        rispondono)
  *     3  collegamento non riuscito (rifiutato, rete irraggiungibile) o caduto a meta'
@@ -58,12 +64,14 @@
  *     5  risposta non valida o troncata (non e' HTTP, o finisce prima del dovuto)
  *     6  reindirizzamento (3xx): non seguito, il posto nuovo e' sullo standard error
  *     7  non si riesce a scrivere sullo standard output
+ *     8  connessione sicura non riuscita: certificato non valido, o errore di TLS
  *
  * COME E' FATTO: le chiamate di Linux dirette per la rete (socket, connect, poll, recv,
  * send: CoreKit non ha la rete, e non serve), CoreKit per scrivere (scrivi_in, lunghezza)
  * e per il tempo (tempo). Tutto quello che si legge passa da un recipiente solo (struct
  * lettore), da cui si prendono righe (le intestazioni, le misure dei pezzi) o blocchi di
- * byte (il contenuto). Nessuna memoria chiesta al sistema: tutto in recipienti fissi. */
+ * byte (il contenuto). Nessuna memoria chiesta al sistema: tutto in recipienti fissi
+ * (tranne quella che chiede mbedTLS per la connessione sicura e i certificati). */
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -73,7 +81,18 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
+#include <signal.h>
+
+#include <mbedtls/error.h>
+#include <mbedtls/net_sockets.h>
+#include <mbedtls/ssl.h>
+#include <mbedtls/x509_crt.h>
+#include <psa/crypto.h>
+
 #include "corekit/corekit.h"
+
+/* i certificati radice: le autorita' di cui ci si fida (il file di ca-certificates-bundle) */
+#define CERTIFICATI "/etc/ssl/certs/ca-certificates.crt"
 
 #define TEMPO_COLLEGAMENTO 10000   /* ms, per collegarsi (tutti gli indirizzi insieme) */
 #define TEMPO_LETTURA      15000   /* ms, al massimo, tra un pezzo di risposta e il successivo */
@@ -86,6 +105,7 @@
 #define USCITA_RISPOSTA         5
 #define USCITA_REINDIRIZZAMENTO 6
 #define USCITA_SCRITTURA        7
+#define USCITA_SICUREZZA        8
 
 #define MAX_SERVER      256
 #define MAX_PERCORSO_WEB 4096
@@ -122,20 +142,21 @@ static void __attribute__((noreturn)) fallisci(int uscita, const char *a, const 
 }
 
 static const char aiuto[] =
-    "uso: webask [-i] http://nome[:porta][/percorso]\n"
-    "Chiede la pagina al server web (solo HTTP, niente HTTPS) e ne scrive il contenuto.\n"
+    "uso: webask [-i] http[s]://nome[:porta][/percorso]\n"
+    "Chiede la pagina al server web (HTTP o HTTPS) e ne scrive il contenuto.\n"
     "  -i  scrive anche la riga di stato e le intestazioni\n"
     "  -h  questo aiuto\n"
     "I reindirizzamenti (3xx) non si seguono: il posto nuovo si scrive come errore.\n"
     "Codici di uscita:\n"
     "  0  fatto (qualunque risposta che non sia un reindirizzamento)\n"
-    "  1  uso sbagliato, indirizzo non valido o schema non http (https non c'e')\n"
+    "  1  uso sbagliato, indirizzo non valido o schema non http/https\n"
     "  2  il nome non si traduce in un indirizzo\n"
     "  3  collegamento non riuscito o caduto\n"
     "  4  tempo scaduto\n"
     "  5  risposta non valida o troncata\n"
     "  6  reindirizzamento, non seguito\n"
-    "  7  non si riesce a scrivere l'uscita\n";
+    "  7  non si riesce a scrivere l'uscita\n"
+    "  8  connessione sicura non riuscita (certificato non valido o errore TLS)\n";
 
 /* --- piccoli aiuti sul testo --- */
 
@@ -171,19 +192,20 @@ struct indirizzo {
     char porta[8];                   /* in cifre, come la vuole getaddrinfo */
     int porta_data;                  /* 1: scritta nell'indirizzo (allora va anche in Host) */
     char percorso[MAX_PERCORSO_WEB]; /* comincia sempre con '/' */
+    int sicuro;                      /* 1: https:// (TLS) */
 };
 
 static void leggi_indirizzo(const char *testo, struct indirizzo *u) {
     const char *dopo = strstr(testo, "://");
     if (!dopo) fallisci(USCITA_USO, "manca lo schema: scrivi http://", testo, 0);
-    if (comincia(testo, "https://"))
-        fallisci(USCITA_USO, "HTTPS non e' supportato (solo http://): ", testo, 0);
-    if (!comincia(testo, "http://")) {
+    u->sicuro = comincia(testo, "https://");
+    if (!u->sicuro && !comincia(testo, "http://")) {
         char schema[32];
         if (copia(schema, sizeof schema, testo, (int)(dopo - testo)) < 0) schema[0] = 0;
-        fallisci(USCITA_USO, "schema non supportato: ", schema, " (solo http://)");
+        fallisci(USCITA_USO, "schema non supportato: ", schema, " (solo http:// e https://)");
     }
-    const char *p = testo + 7;
+    const char *p = dopo + 3;
+    const char *predefinita = u->sicuro ? "443" : "80";
 
     /* il nome (e la porta) finiscono al primo '/', '?' o '#' */
     const char *fine = p;
@@ -213,7 +235,7 @@ static void leggi_indirizzo(const char *testo, struct indirizzo *u) {
     if (!u->nome[0]) fallisci(USCITA_USO, "manca il nome del server: ", testo, 0);
 
     u->porta_data = 0;
-    strcpy(u->porta, "80");
+    strcpy(u->porta, predefinita);
     if (due_punti) {
         const char *c = due_punti + 1;
         int n = 0, cifre = 0;
@@ -221,11 +243,11 @@ static void leggi_indirizzo(const char *testo, struct indirizzo *u) {
             if (*c < '0' || *c > '9' || cifre >= 5) fallisci(USCITA_USO, "porta non valida: ", testo, 0);
             n = n * 10 + (*c - '0');
         }
-        if (cifre > 0) {                                  /* "nome:" senza cifre: la 80 */
+        if (cifre > 0) {                                  /* "nome:" senza cifre: la predefinita */
             if (n < 1 || n > 65535) fallisci(USCITA_USO, "porta non valida: ", testo, 0);
             if (copia(u->porta, sizeof u->porta, due_punti + 1, cifre) < 0)
                 fallisci(USCITA_USO, "porta non valida: ", testo, 0);
-            u->porta_data = n != 80;
+            u->porta_data = !uguali(u->porta, predefinita);
         }
     }
 
@@ -296,6 +318,74 @@ static int collegati(const struct indirizzo *u) {
     fallisci(USCITA_COLLEGAMENTO, "  ", strerror(perche), 0);
 }
 
+/* --- 3 bis. la connessione sicura (https) ---
+ * Con https tutto passa da 'tls' invece che direttamente dal socket: si manda con
+ * mbedtls_ssl_write e si riceve con mbedtls_ssl_read, che cifrano e decifrano. */
+
+static int sicuro;                       /* 1: si parla attraverso tls */
+static mbedtls_ssl_context tls;
+static mbedtls_ssl_config tls_regole;
+static mbedtls_x509_crt autorita;
+static mbedtls_net_context tls_presa;
+
+static void __attribute__((noreturn)) fallisci_tls(int uscita, const char *cosa, int codice) {
+    char perche[200];
+    mbedtls_strerror(codice, perche, sizeof perche);
+    fallisci(uscita, cosa, perche, 0);
+}
+
+/* Apre la connessione sicura sul socket gia' collegato 's' e controlla il certificato. */
+static void apri_tls(int s, const struct indirizzo *u) {
+    signal(SIGPIPE, SIG_IGN);            /* mbedTLS scrive con write: un server chiuso non deve ucciderci */
+    if (psa_crypto_init() != PSA_SUCCESS) fallisci(USCITA_SICUREZZA, "la crittografia non parte (manca il caso?)", 0, 0);
+    mbedtls_x509_crt_init(&autorita);
+    int e = mbedtls_x509_crt_parse_file(&autorita, CERTIFICATI);
+    if (e < 0) fallisci_tls(USCITA_SICUREZZA, "non riesco a leggere i certificati in " CERTIFICATI ": ", e);
+    mbedtls_ssl_config_init(&tls_regole);
+    e = mbedtls_ssl_config_defaults(&tls_regole, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM,
+                                    MBEDTLS_SSL_PRESET_DEFAULT);
+    if (e) fallisci_tls(USCITA_SICUREZZA, "TLS: ", e);
+    mbedtls_ssl_conf_authmode(&tls_regole, MBEDTLS_SSL_VERIFY_REQUIRED);
+    mbedtls_ssl_conf_ca_chain(&tls_regole, &autorita, 0);
+    mbedtls_ssl_conf_read_timeout(&tls_regole, TEMPO_LETTURA);
+    mbedtls_ssl_init(&tls);
+    if ((e = mbedtls_ssl_setup(&tls, &tls_regole))) fallisci_tls(USCITA_SICUREZZA, "TLS: ", e);
+    /* il nome: va al server (SNI, per scegliere il certificato) e si confronta con il certificato */
+    if ((e = mbedtls_ssl_set_hostname(&tls, u->nome))) fallisci_tls(USCITA_SICUREZZA, "TLS: ", e);
+    tls_presa.fd = s;
+    mbedtls_ssl_set_bio(&tls, &tls_presa, mbedtls_net_send, 0, mbedtls_net_recv_timeout);
+
+    while ((e = mbedtls_ssl_handshake(&tls)) != 0) {
+        if (e == MBEDTLS_ERR_SSL_WANT_READ || e == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+        if (e == MBEDTLS_ERR_SSL_TIMEOUT) fallisci(USCITA_TEMPO, "tempo scaduto: ", u->nome, " non completa la connessione sicura");
+        if (e == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) {
+            char perche[512];
+            mbedtls_x509_crt_verify_info(perche, sizeof perche, "  ", mbedtls_ssl_get_verify_result(&tls));
+            errore("il certificato di ", u->nome, " non e' valido:");
+            scrivi_in(2, perche, (unsigned int)lunghezza(perche));
+            _exit(USCITA_SICUREZZA);
+        }
+        fallisci_tls(USCITA_SICUREZZA, "connessione sicura non riuscita: ", e);
+    }
+    sicuro = 1;
+}
+
+/* Manda tutto 'n' byte, in chiaro o attraverso tls. */
+static void manda_tutto(int s, const char *r, int n) {
+    for (int fatti = 0; fatti < n;) {
+        long k;
+        if (sicuro) {
+            k = mbedtls_ssl_write(&tls, (const unsigned char *)r + fatti, (size_t)(n - fatti));
+            if (k == MBEDTLS_ERR_SSL_WANT_READ || k == MBEDTLS_ERR_SSL_WANT_WRITE) continue;
+        } else {
+            k = send(s, r + fatti, (size_t)(n - fatti), MSG_NOSIGNAL);
+            if (k < 0 && errno == EINTR) continue;
+        }
+        if (k <= 0) fallisci(USCITA_COLLEGAMENTO, "collegamento caduto mentre mandavo la richiesta", 0, 0);
+        fatti += (int)k;
+    }
+}
+
 /* --- 4. la richiesta --- */
 
 static void manda_richiesta(int s, const struct indirizzo *u) {
@@ -312,12 +402,7 @@ static void manda_richiesta(int s, const struct indirizzo *u) {
         memcpy(r + n, pezzi[i], (size_t)l);
         n += l;
     }
-    for (int fatti = 0; fatti < n;) {
-        ssize_t k = send(s, r + fatti, (size_t)(n - fatti), MSG_NOSIGNAL);
-        if (k < 0 && errno == EINTR) continue;
-        if (k <= 0) fallisci(USCITA_COLLEGAMENTO, "collegamento caduto mentre mandavo la richiesta", 0, 0);
-        fatti += (int)k;
-    }
+    manda_tutto(s, r, n);
 }
 
 /* --- 5. leggere la risposta --- */
@@ -341,6 +426,20 @@ static int riempi(struct lettore *l) {
         l->inizio = 0;
     }
     if (l->fine == (int)sizeof l->dati) return 1;     /* pieno: c'e' gia' da prendere */
+    if (sicuro) {
+        /* il tempo massimo lo conta mbedTLS (mbedtls_ssl_conf_read_timeout) */
+        int k;
+        do k = mbedtls_ssl_read(&tls, (unsigned char *)l->dati + l->fine, sizeof l->dati - (size_t)l->fine);
+        while (k == MBEDTLS_ERR_SSL_WANT_READ || k == MBEDTLS_ERR_SSL_WANT_WRITE ||
+               k == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET);
+        if (k == MBEDTLS_ERR_SSL_TIMEOUT) fallisci(USCITA_TEMPO, "tempo scaduto: il server non manda piu' niente", 0, 0);
+        /* chiusura: quella in regola (close_notify) o il socket chiuso senza avvisare (lo
+         * fanno molti server; se manca dei byte, lo dice Content-Length o la fine dei pezzi) */
+        if (k == 0 || k == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY || k == MBEDTLS_ERR_NET_CONN_RESET) { l->chiuso = 1; return 0; }
+        if (k < 0) fallisci_tls(USCITA_COLLEGAMENTO, "collegamento sicuro caduto: ", k);
+        l->fine += k;
+        return 1;
+    }
     struct pollfd pf = { l->s, POLLIN, 0 };
     int n;
     do n = poll(&pf, 1, TEMPO_LETTURA); while (n < 0 && errno == EINTR);
@@ -425,12 +524,13 @@ int main(int argc, char **argv) {
         else if (testo) fallisci(USCITA_USO, "un indirizzo solo, per favore (webask -h per l'aiuto)", 0, 0);
         else testo = argv[i];
     }
-    if (!testo) fallisci(USCITA_USO, "manca l'indirizzo. uso: webask [-i] http://nome[:porta][/percorso]", 0, 0);
+    if (!testo) fallisci(USCITA_USO, "manca l'indirizzo. uso: webask [-i] http[s]://nome[:porta][/percorso]", 0, 0);
 
     static struct indirizzo u;
     leggi_indirizzo(testo, &u);
     static struct lettore l;
     l.s = collegati(&u);
+    if (u.sicuro) apri_tls(l.s, &u);
     manda_richiesta(l.s, &u);
 
     /* la riga di stato e le intestazioni */
@@ -485,8 +585,7 @@ int main(int argc, char **argv) {
         char numero[4] = { (char)('0' + codice / 100), (char)('0' + codice / 10 % 10), (char)('0' + codice % 10), 0 };
         if (!c_e_posto) fallisci(USCITA_REINDIRIZZAMENTO, "reindirizzamento (", numero, ") senza dire dove: non seguito");
         errore("reindirizzamento (", numero, "), non seguito");
-        fallisci(USCITA_REINDIRIZZAMENTO, "la pagina e' a ", posto,
-                 comincia(posto, "https://") ? " (HTTPS non e' supportato)" : 0);
+        fallisci(USCITA_REINDIRIZZAMENTO, "la pagina e' a ", posto, 0);
     }
 
     if (codice == 204 || codice == 304) return USCITA_FATTO;

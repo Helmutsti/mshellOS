@@ -109,8 +109,8 @@ nel disco `disco_shell.img`.
 
 **I comandi** sono fatti da noi, uno per file in `utente/comandi/<nome>.c`: `build.sh` (e la
 sandbox) li mette in `/system/bin/<nome>`, legati solo con CoreKit. Il primo è **`webask`**, un
-"curl" essenziale: `webask [-i] http://nome[:porta]/percorso` scrive il contenuto della pagina
-(`-i` anche stato e intestazioni). Solo HTTP, niente HTTPS (decisione della persona); i
+"curl" essenziale: `webask [-i] http[s]://nome[:porta]/percorso` scrive il contenuto della pagina
+(`-i` anche stato e intestazioni). HTTP e HTTPS (mbedTLS, vedi sotto); i
 reindirizzamenti non si seguono, si dice dove porterebbero. Codici di uscita in `webask -h` e
 nel commento in testa al file. Nessun altro comando di base per ora (decisione della persona).
 
@@ -546,7 +546,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 31. **La shell**: Ctrl-Z ferma un programma ma la shell non sa tenerlo da parte (lo fa ripartire);
     Ctrl-C provato solo sulla seriale, non nel Terminale; la prova `test/shell.py` aspetta
     "cartella non trovata" ma la shell scrive "cartella inesistente" (già prima).
-32. **HTTPS** per `webask`: ancora niente (BearSSL o mbedTLS quando servirà).
+32. **HTTPS** per `webask`: fatto con mbedTLS 4 di Alpine (legato dentro webask) e i certificati radice di Alpine in `/etc/ssl/certs/ca-certificates.crt`. Il certificato si controlla sempre (anche la data): su un computer vero servirà la sincronizzazione dell'ora. Le prove automatiche tengono l'orologio al 1° gennaio 2026, quindi lì i certificati più recenti risultano "non ancora validi".
 33. **Il servizio di rete**: la porta di controllo c'e' (status, restart, stop; in sola lettura, `corekit/sistema/network.h`):
     il comando `network` la usa (`utente/comandi/network.c`: status, restart, stop); manca la pagina della rete. Da fare: API del firewall per le app (due
     permessi: aggiungere regole / controllo pieno, sempre attraverso il servizio). Non provati:

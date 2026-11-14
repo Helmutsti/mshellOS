@@ -121,8 +121,11 @@ PROVE     := $(basename $(notdir $(wildcard utente/prove/*.c)))
 $(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIBRERIE)
 	$(call lega,$@,$< $(LIBRERIE))
 # i comandi: programmi senza grafica, solo CoreKit (SISTEMA.md)
+# Un comando che usa una libreria di Alpine la dice in LIBRERIE_<nome> (legata dentro il
+# programma, dopo CoreKit). webask: mbedTLS, per HTTPS (pacchetto mbedtls-static).
+LIBRERIE_webask := -lmbedtls -lmbedx509 -lmbedcrypto
 $(addprefix $(O)/bin/comandi/,$(COMANDI)): $(O)/bin/comandi/%: $(O)/utente/comandi/%.o $(COREKIT)
-	$(call lega,$@,$< $(COREKIT))
+	$(call lega,$@,$< $(COREKIT) -L$(LIBC) $(LIBRERIE_$*))
 # i programmi delle prove (utente/prove): solo nei dischi delle prove
 $(addprefix $(O)/bin/prove/,$(PROVE)): $(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIE)
 	$(call lega,$@,$< $(LIBRERIE))
