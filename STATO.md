@@ -464,8 +464,11 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 4. **La scrivania legge le app solo all'avvio**: un'app installata o tolta compare o sparisce solo
    quando riparte.
 5. **La conferma di eliminazione in Files** non è disegnata in Figma (testo scelto dall'agente).
-6. **Pezzi della libreria che mancano**: barra di scorrimento orizzontale, forme del puntatore
-   (collegamento, testo, non disponibile, attesa), testo con spaziatura delle lettere.
+6. **Pezzi della libreria che mancano**: forme del puntatore (collegamento, testo, non
+   disponibile, attesa). Fatti il 14/11/2026: menu a tendina (`tendina.h`), suggerimento
+   (`widget_suggerimento`), barra di scorrimento orizzontale (nessuna app la usa ancora), testo con
+   spaziatura delle lettere (titolo -1%, etichetta +2%). Il gruppo di azioni e l'interruttore
+   c'erano gia' (la pillola della barra degli strumenti; `uikit.h`).
 7. **Togliere la vecchia grafica** (vetro scuro, Inter) da codice e Figma.
 8. **Controllo sulla lunghezza** del percorso del programma di un'app (`MAX_PERCORSO_PROGRAMMA`
    contro `MAX_ID`): un controllo in compilazione, se la persona lo vuole.
@@ -633,7 +636,7 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
   Store hanno le loro icone vere (SVG e PNG 32/18). Le scelte dove Figma non dice niente sono da
   confermare. Il pannello incassato di Files (`pannello.h`) resta l'eccezione approvata per Files;
   le altre app usano la pagina (`pagina.h`), con 24 dal bordo dell'area al primo testo, in x e in y.
-- Mancano ancora nella libreria: testo con spaziatura delle lettere. `elemento_file.h` (era l'icona
+- `elemento_file.h` (era l'icona
   Home della scrivania, oggi tolta) usa ancora i nomi e le icone vecchie.
 - Prove: `test/scrivania.py` ha le posizioni della userbar e del vassoio (ramo `scrivania-figma`);
   nella sandbox passano applicazioni, finestre, mouse e tastiera. `scorrimento.py` (la barra di

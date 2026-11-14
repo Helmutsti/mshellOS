@@ -9,18 +9,36 @@ const struct glifo *glifo_di(const struct font *f, unsigned char c) {
     return &f->glifi[i];
 }
 
+/* La spaziatura e' in centesimi di pixel, aggiunta dopo ogni lettera (come il "letterSpacing"
+ * di Figma). Si somma in centesimi, e in pixel interi si arrotonda solo il punto dove cade
+ * ogni lettera: con spaziatura 0 e' esattamente la somma degli avanzi di prima. */
+static int arrotonda_centesimi(int c) {
+    return c >= 0 ? (c + 50) / 100 : -((-c + 50) / 100);
+}
+
+int larghezza_testo_spaziato(const struct font *f, const char *s, int spaziatura) {
+    int c = 0;
+    for (; *s; s++) c += glifo_di(f, (unsigned char)*s)->avanzo * 100 + spaziatura;
+    return arrotonda_centesimi(c);
+}
+
 int larghezza_testo(const struct font *f, const char *s) {
-    int l = 0;
-    for (; *s; s++) l += glifo_di(f, (unsigned char)*s)->avanzo;
-    return l;
+    return larghezza_testo_spaziato(f, s, 0);
 }
 
 int testo(struct pennello *p, const struct font *f, int x, int y, const char *s) {
+    return testo_spaziato(p, f, x, y, s, 0);
+}
+
+int testo_spaziato(struct pennello *p, const struct font *f, int x0, int y, const char *s,
+                   int spaziatura) {
     int base = y + f->ascesa;
     int invisibile = pennello_invisibile(p);
+    int pennino = 0;                   /* dove si e' arrivati, in centesimi di pixel dal via */
     for (; *s; s++) {
         const struct glifo *g = glifo_di(f, (unsigned char)*s);
         const unsigned char *alfa = f->alfa + g->inizio;
+        int x = x0 + arrotonda_centesimi(pennino);
         int gx = x + g->x, gy = base - g->y;
         int x0, y0, x1, y1;
         /* solo la parte della lettera dentro il ritaglio (una lettera fuori: niente) */
@@ -31,9 +49,9 @@ int testo(struct pennello *p, const struct font *f, int x, int y, const char *s)
                 for (int k = 0; k < x1 - x0; k++)
                     if (v[k]) copri_pixel(p, &d[k], v[k] + (v[k] >> 7));
             }
-        x += g->avanzo;
+        pennino += g->avanzo * 100 + spaziatura;
     }
-    return x;
+    return x0 + arrotonda_centesimi(pennino);
 }
 
 void disegna_icona(struct pennello *p, const struct icona *misure, int quante, int lato, int x, int y) {

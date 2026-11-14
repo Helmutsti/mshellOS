@@ -45,16 +45,18 @@ static int scorrimento_rotella(struct scorrimento *s, int scatti) {
 
 #define SCORRIMENTO_FOTOGRAMMA 20      /* ms tra un passo e l'altro dell'animazione */
 
-/* Il cursore: dove comincia (y) e quanto e' lungo. */
+/* Il cursore: dove comincia (y: lungo l'asse della barra, quindi x se e' orizzontale) e
+ * quanto e' lungo. */
 static void barra_scorrimento_cursore(const struct barra_scorrimento *b, int *y, int *lungo) {
     const struct scorrimento *s = &b->scorrimento;
-    int corsa = b->base.a - 2 * SCORRIMENTO_CURSORE_MARGINE;     /* dove il cursore si muove */
+    int lunga = b->orizzontale ? b->base.l : b->base.a;         /* la barra, lungo il suo asse */
+    int corsa = lunga - 2 * SCORRIMENTO_CURSORE_MARGINE;        /* dove il cursore si muove */
     int l = s->totale > 0 ? (int)((long long)corsa * s->vista / s->totale) : corsa;
     if (l < SCORRIMENTO_CURSORE_LUNGHEZZA) l = SCORRIMENTO_CURSORE_LUNGHEZZA;
     if (l > corsa) l = corsa;
     int massimo = scorrimento_massimo(s);
     *lungo = l;
-    *y = b->base.y + SCORRIMENTO_CURSORE_MARGINE +
+    *y = (b->orizzontale ? b->base.x : b->base.y) + SCORRIMENTO_CURSORE_MARGINE +
          (massimo ? (int)((long long)(corsa - l) * s->posizione / massimo) : 0);
 }
 
@@ -76,8 +78,11 @@ static void barra_scorrimento_disegna(struct widget *w, struct pennello *p) {
     if (b->spessore) {                 /* il binario: tutta la striscia, compare sfumando */
         pennello_salva(p);
         pennello_opacita(p, b->spessore);
-        struct tondo binario = tondo(w->x + (w->l - SCORRIMENTO_BINARIO) / 2, w->y,
-                                     SCORRIMENTO_BINARIO, w->a, SCORRIMENTO_BINARIO / 2);
+        struct tondo binario = b->orizzontale
+            ? tondo(w->x, w->y + (w->a - SCORRIMENTO_BINARIO) / 2,
+                    w->l, SCORRIMENTO_BINARIO, SCORRIMENTO_BINARIO / 2)
+            : tondo(w->x + (w->l - SCORRIMENTO_BINARIO) / 2, w->y,
+                    SCORRIMENTO_BINARIO, w->a, SCORRIMENTO_BINARIO / 2);
         ombre_strati_fuori(p, &binario, OMBRA_TAB(incassato), OMBRA_N(incassato));
         pennello_colore(p, SUPERFICIE_INCASSATA);
         riempi_forma(p, &binario);
@@ -86,8 +91,11 @@ static void barra_scorrimento_disegna(struct widget *w, struct pennello *p) {
     }
     int y, lungo;
     barra_scorrimento_cursore(b, &y, &lungo);
-    struct tondo cursore = tondo(w->x + (w->l - SCORRIMENTO_CURSORE_NUOVO) / 2, y,
-                                 SCORRIMENTO_CURSORE_NUOVO, lungo, SCORRIMENTO_CURSORE_NUOVO / 2);
+    struct tondo cursore = b->orizzontale
+        ? tondo(y, w->y + (w->a - SCORRIMENTO_CURSORE_NUOVO) / 2,
+                lungo, SCORRIMENTO_CURSORE_NUOVO, SCORRIMENTO_CURSORE_NUOVO / 2)
+        : tondo(w->x + (w->l - SCORRIMENTO_CURSORE_NUOVO) / 2, y,
+                SCORRIMENTO_CURSORE_NUOVO, lungo, SCORRIMENTO_CURSORE_NUOVO / 2);
     pennello_salva(p);
     pennello_opacita(p, 90);           /* l'ombra "sollevato" ridotta a un velo */
     ombre_strati_fuori(p, &cursore, OMBRA_TAB(sollevato), OMBRA_N(sollevato));
@@ -163,13 +171,14 @@ int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti) {
     return 1;
 }
 
-/* Il cursore segue il puntatore, tenuto per il punto in cui lo si e' preso. */
+/* Il cursore segue il puntatore, tenuto per il punto in cui lo si e' preso. 'y' e' la
+ * coordinata lungo l'asse della barra (x se e' orizzontale). */
 static void barra_scorrimento_segui(struct barra_scorrimento *b, int y) {
     int inizio, lungo;
     barra_scorrimento_cursore(b, &inizio, &lungo);
-    int corsa = b->base.a - 2 * SCORRIMENTO_CURSORE_MARGINE - lungo;
+    int corsa = (b->orizzontale ? b->base.l : b->base.a) - 2 * SCORRIMENTO_CURSORE_MARGINE - lungo;
     if (corsa <= 0) return;
-    int da_inizio = y - b->presa - (b->base.y + SCORRIMENTO_CURSORE_MARGINE);
+    int da_inizio = y - b->presa - ((b->orizzontale ? b->base.x : b->base.y) + SCORRIMENTO_CURSORE_MARGINE);
     int posizione = (int)((long long)da_inizio * scorrimento_massimo(&b->scorrimento) / corsa);
     barra_scorrimento_usata(b, scorrimento_metti(&b->scorrimento, posizione));
 }
@@ -178,7 +187,7 @@ static void barra_scorrimento_segui(struct barra_scorrimento *b, int y) {
  * salta li', e lo si tiene per il centro. Poi segue il puntatore finche' non si lascia. */
 static void barra_scorrimento_puntatore(struct widget *w, int x, int y, unsigned int pulsanti) {
     struct barra_scorrimento *b = (struct barra_scorrimento *)w;
-    (void)x;
+    if (b->orizzontale) y = x;         /* da qui in poi 'y' e' la coordinata lungo la barra */
     int giu = pulsanti & PULSANTE_SINISTRO;
     if (giu && !b->trascinata) {
         int inizio, lungo;
@@ -196,9 +205,15 @@ static void barra_scorrimento_puntatore(struct widget *w, int x, int y, unsigned
     }
 }
 
+int barra_scorrimento_rotella_xy(struct barra_scorrimento *b, int sx, int sy) {
+    if (!b->orizzontale) return barra_scorrimento_rotella(b, sy);
+    struct finestra_tk *f = widget_finestra(&b->base);
+    int scatti = sx ? sx : (f && (f->modificatori & MOD_MAIUSC)) ? sy : 0;
+    return barra_scorrimento_rotella(b, scatti);
+}
+
 static void barra_scorrimento_su_rotella(struct widget *w, int sx, int sy) {
-    (void)sx;
-    barra_scorrimento_rotella((struct barra_scorrimento *)w, sy);
+    barra_scorrimento_rotella_xy((struct barra_scorrimento *)w, sx, sy);
 }
 
 static void barra_scorrimento_sopra(struct widget *w) {
@@ -217,6 +232,18 @@ void barra_scorrimento_prepara(struct barra_scorrimento *b) {
 int barra_scorrimento_riserva(const struct barra_scorrimento *b, int libero) {
     int manca = SCORRIMENTO_ZONA - b->fuori - libero;
     return b->fuori + (scorrimento_massimo(&b->scorrimento) && manca > 0 ? manca : 0);
+}
+
+void barra_scorrimento_prepara_orizzontale(struct barra_scorrimento *b) {
+    barra_scorrimento_prepara(b);
+    b->orizzontale = 1;
+}
+
+void barra_scorrimento_posto_orizzontale(struct barra_scorrimento *b, int x, int y, int l, int a) {
+    b->base.x = x;
+    b->base.y = y + a - SCORRIMENTO_ZONA;
+    b->base.l = l;
+    b->base.a = SCORRIMENTO_ZONA;
 }
 
 void barra_scorrimento_posto(struct barra_scorrimento *b, int x, int y, int l, int a) {

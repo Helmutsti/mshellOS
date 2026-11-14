@@ -173,18 +173,23 @@
  * Il disegno usa IBM Plex Sans (font plex_*, generati da strumenti/grafica). Ogni stile di testo
  * (Plex dimensione/interlinea/spaziatura) ha il suo font; dove il disegno chiede una
  * dimensione o un peso che non e' stato generato si usa il piu' vicino:
- *   titolo          SemiBold 24/32 (-1)   ->  plex_semigrassetto_24
+ *   titolo          SemiBold 24/32 (-1%)  ->  plex_semigrassetto_24
  *   titolo-finestra SemiBold 14/20        ->  plex_semigrassetto_14
  *   sezione         SemiBold 15/20        ->  plex_semigrassetto_15
  *   corpo           Regular  14/20        ->  plex_14
  *   corpo-medio     Medium   14/20        ->  plex_medio_14
  *   piccolo         Regular  12/16        ->  plex_12
- *   etichetta       Medium   12/16 (+2)   ->  plex_medio_12
+ *   etichetta       Medium   12/16 (+2%)  ->  plex_medio_12
  *   pulsante-s/m/l  Medium   13/16, 14/20, 16/24  ->  plex_medio_13, _14, _16
  * (FONT_TITOLO, FONT_SEZIONE e FONT_PICCOLO esistono gia' nel vecchio stile: _NUOVO.) */
 #define FONT_TITOLO_NUOVO       (&plex_semigrassetto_24)
 #define FONT_TITOLO_FINESTRA    (&plex_semigrassetto_14)
 #define FONT_SEZIONE_NUOVO      (&plex_semigrassetto_15)
+/* LA SPAZIATURA TRA LE LETTERE (letterSpacing degli stili di testo, in centesimi di pixel;
+ * Figma la da' in %: -1% di 24 px = -0,24 px, +2% di 12 px = +0,24 px). Solo questi due stili
+ * ce l'hanno (pagina "Token e dimensioni"; gli altri 0). La si legge con spaziatura_del_font. */
+#define SPAZIATURA_TITOLO      (-24)    /* testo/titolo: -1% */
+#define SPAZIATURA_ETICHETTA     24    /* testo/etichetta: +2% */
 #define FONT_CORPO              (&plex_14)
 #define FONT_CORPO_MEDIO        (&plex_medio_14)
 #define FONT_PICCOLO_NUOVO      (&plex_12)
@@ -209,8 +214,6 @@
 #define INTERLINEA_PULSANTE_S   16
 #define INTERLINEA_PULSANTE_M   20
 #define INTERLINEA_PULSANTE_L   24
-#define SPAZIATURA_TITOLO       (-1)
-#define SPAZIATURA_ETICHETTA     2
 
 /* --- le ombre: strati sovrapposti ---
  * Una tabella di 'struct strato_ombra' (gkit_disegno.h) per ogni livello di profondita' e

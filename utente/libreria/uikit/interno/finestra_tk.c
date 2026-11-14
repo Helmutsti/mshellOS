@@ -129,7 +129,7 @@ static void finestra_tk_misura(struct widget *w, int *l, int *a) {
     if (w->quanti_figli) widget_misura(w->figli[0], &cl, &ca);
     /* il titolo sta tra i due gruppi (lo spazio vuoto e i comandi), con un po' d'aria */
     int barra = 2 * (comandi_larghezza(f) + SPAZIO_8) +
-                larghezza_testo(f->mini ? FONT_ETICHETTA : FONT_TITOLO_FINESTRA, f->titolo);
+                larghezza_testo_stile(f->mini ? FONT_ETICHETTA : FONT_TITOLO_FINESTRA, f->titolo);
     *l = 2 * finestra_padding(f) + cl;
     if (*l < barra) *l = barra;
     if (f->strumenti && !f->strumenti->nascosto) {
@@ -195,7 +195,7 @@ static void finestra_tk_titolo_disegna(struct finestra_tk *f, struct pennello *p
     pennello_ritaglia(p, margine, 0, w->l - 2 * margine, alta);
     int attiva = f->attiva && !finestra_tk_bloccata(f);   /* sotto un avviso bloccante si spegne */
     pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_SECONDARIO);
-    testo_centrato(p, font, (w->l - larghezza_testo(font, f->titolo)) / 2, 0, alta, f->titolo);
+    testo_centrato(p, font, (w->l - larghezza_testo_stile(font, f->titolo)) / 2, 0, alta, f->titolo);
     pennello_ripristina(p);
 
     /* i comandi: pulsanti ghost tondi (S, o XS nella mini finestra, che ha solo chiudi).

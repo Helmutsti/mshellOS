@@ -347,6 +347,14 @@ int larghezza_testo(const struct font *f, const char *s);
  * Restituisce dove finisce (la x dopo l'ultima lettera). */
 int testo(struct pennello *p, const struct font *f, int x, int y, const char *s);
 
+/* Lo stesso, con la SPAZIATURA TRA LE LETTERE (il "letterSpacing" di Figma): 'spaziatura' e'
+ * in centesimi di pixel (24 = un quarto di pixel in piu' dopo ogni lettera, -24 = in meno;
+ * l'ultima compresa, come in Figma). Le lettere restano intere: si sposta solo il punto
+ * dove cade ciascuna, arrotondato al pixel. Con 0 e' identico a testo / larghezza_testo. */
+int larghezza_testo_spaziato(const struct font *f, const char *s, int spaziatura);
+int testo_spaziato(struct pennello *p, const struct font *f, int x, int y, const char *s,
+                   int spaziatura);
+
 /* --- le icone e le immagini --- */
 
 /* L'icona 'misure' (le sue 'quante' misure, dalla piu' piccola) di lato 'lato' pixel, con

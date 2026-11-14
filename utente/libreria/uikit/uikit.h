@@ -253,7 +253,14 @@ void copia_testo(char *dove, const char *da, int massimo);
 #define MAX_TESTO_WIDGET 64
 #define NESSUNA_ICONA (-1)
 
-/* Un testo centrato in verticale nel rettangolo (x, y, ..., a), con il colore del pennello. */
+/* La spaziatura tra le lettere dello stile di questo font, in centesimi di pixel (stile.h:
+ * SPAZIATURA_TITOLO, SPAZIATURA_ETICHETTA; 0 per tutti gli altri). testo_centrato la applica da
+ * sola; la larghezza con la spaziatura dello stile e' larghezza_testo_stile. */
+int spaziatura_del_font(const struct font *f);
+int larghezza_testo_stile(const struct font *f, const char *s);
+
+/* Un testo centrato in verticale nel rettangolo (x, y, ..., a), con il colore del pennello
+ * e la spaziatura dello stile del font. */
 int testo_centrato(struct pennello *p, const struct font *f, int x, int y, int a,
                    const char *s);
 
@@ -875,6 +882,8 @@ struct barra_scorrimento {
     unsigned int attesa;               /* ogni quanti ms la si chiama ora (0: non la si chiama) */
     int trascinata;                    /* il cursore e' preso con il mouse */
     int presa;                         /* dove lo si e' preso, dal suo inizio */
+    int orizzontale;                   /* 1: barra orizzontale (la posizione e' in x, la barra sta
+                                        * lungo il bordo in basso); 0: verticale */
     int fuori;                         /* gli ultimi pixel a destra del widget che scorre sono
                                         * il padding del contenitore (barra_scorrimento_riserva) */
 };
@@ -885,6 +894,21 @@ int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti);
 
 /* Prepara una barra di scorrimento: ferma e nascosta, finche' non si scorre. */
 void barra_scorrimento_prepara(struct barra_scorrimento *b);
+
+/* LA BARRA ORIZZONTALE: come la verticale, ruotata (Figma: Orientamento=Orizzontale). Il
+ * contenuto piu' largo della vista: 'scorrimento' conta in larghezza (totale, vista,
+ * posizione = pixel passati a sinistra). La striscia e' alta SCORRIMENTO_ZONA (14), lungo il
+ * bordo in basso della vista; compare, sparisce e sta sotto il puntatore come la verticale. */
+void barra_scorrimento_prepara_orizzontale(struct barra_scorrimento *b);
+
+/* La vista e' (x, y, l, a): la barra va lungo il suo bordo in basso (14 pixel). Per
+ * l'orizzontale; la striscia deve restare vuota (padding in basso). */
+void barra_scorrimento_posto_orizzontale(struct barra_scorrimento *b, int x, int y, int l, int a);
+
+/* La rotella per una barra orizzontale: scorre con la rotella orizzontale (sx, positivo: a
+ * destra), o con quella normale (sy) se Maiusc e' tenuto giu'. Per una verticale e' come
+ * barra_scorrimento_rotella(b, sy). 0 se non c'e' niente da scorrere. */
+int barra_scorrimento_rotella_xy(struct barra_scorrimento *b, int sx, int sy);
 
 /* LA CORSIA DELLA BARRA: la barra non va mai sopra il contenuto. Sta nella striscia di
  * SCORRIMENTO_ZONA (14) lungo il bordo destro del widget che scorre, e quella striscia deve
