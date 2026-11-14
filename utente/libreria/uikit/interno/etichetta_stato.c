@@ -5,7 +5,7 @@
 #include "uikit/interno/componenti_piccoli.h"
 
 int etichetta_stato_larghezza(const char *testo) {
-    return 2 * SPAZIO_8 + larghezza_testo(FONT_ETICHETTA, testo);
+    return 2 * SPAZIO_8 + larghezza_testo_stile(FONT_ETICHETTA, testo);
 }
 
 void etichetta_stato_disegna_in(struct pennello *p, int x, int y, int tipo, const char *testo) {

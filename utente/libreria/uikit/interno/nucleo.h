@@ -170,9 +170,9 @@ extern const struct tipo_widget tipo_barra_scorrimento;
 /* Quanto e' largo un pezzo di testo (da 'da' a 'a', escluso). Inline: minuscola, la chiamano
  * di continuo testo_a_capo e paragrafo_a_capo mentre cercano dove tagliare. */
 static inline int larghezza_pezzo(const struct font *f, const char *s, int da, int a) {
-    int l = 0;
-    for (int i = da; i < a; i++) l += glifo_di(f, (unsigned char)s[i])->avanzo;
-    return l;
+    int sp = spaziatura_del_font(f), c = 0;   /* centesimi di pixel, come larghezza_testo_spaziato */
+    for (int i = da; i < a; i++) c += glifo_di(f, (unsigned char)s[i])->avanzo * 100 + sp;
+    return c >= 0 ? (c + 50) / 100 : -((-c + 50) / 100);
 }
 
 /* Spezza 'testo' in righe larghe al massimo 'largo' pixel, al massimo 'massimo' righe:

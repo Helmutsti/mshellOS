@@ -60,7 +60,7 @@ static void tabella_tk_disponi(struct widget *w) { tabella_tk_impagina((struct t
 static void intestazione_colonna_disegna(struct pennello *p, int x, int y, int l, const char *etichetta,
                                          int destra, int ordine) {
     int freccia = ordine != ORDINE_NESSUNO ? SPAZIO_4 + TABELLA_FRECCIA : 0;
-    int largo = larghezza_testo(FONT_ETICHETTA, etichetta) + freccia;
+    int largo = larghezza_testo_stile(FONT_ETICHETTA, etichetta) + freccia;
     int tx = destra ? x + l - largo : x;
     pennello_colore(p, TESTO_SECONDARIO);
     testo_centrato(p, FONT_ETICHETTA, tx, y, TABELLA_ALTEZZA_TESTATA, etichetta);

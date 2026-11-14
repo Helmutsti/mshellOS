@@ -121,7 +121,17 @@ void copia_testo(char *dove, const char *da, int massimo) {
 
 int testo_centrato(struct pennello *p, const struct font *f, int x, int y, int a,
                    const char *s) {
-    return testo(p, f, x, y + (a - f->altezza) / 2, s);
+    return testo_spaziato(p, f, x, y + (a - f->altezza) / 2, s, spaziatura_del_font(f));
+}
+
+int spaziatura_del_font(const struct font *f) {
+    if (f == FONT_ETICHETTA) return SPAZIATURA_ETICHETTA;
+    if (f == FONT_TITOLO_NUOVO) return SPAZIATURA_TITOLO;
+    return 0;
+}
+
+int larghezza_testo_stile(const struct font *f, const char *s) {
+    return larghezza_testo_spaziato(f, s, spaziatura_del_font(f));
 }
 
 /* Si somma lungo la direzione del contenitore, si prende il piu' grande nell'altra. */
@@ -202,7 +212,7 @@ void spazio_fisso_prepara(struct spazio_fisso *s, int misura) {
 
 static void etichetta_misura(struct widget *w, int *l, int *a) {
     struct etichetta *e = (struct etichetta *)w;
-    *l = larghezza_testo(e->font, e->testo);
+    *l = larghezza_testo_stile(e->font, e->testo);
     *a = e->font->altezza;
 }
 

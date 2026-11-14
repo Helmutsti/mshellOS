@@ -4,14 +4,13 @@
 #include "uikit/interno/nucleo.h"
 
 int paragrafo_a_capo(const struct font *f, const char *testo, int largo, char righe[][PARAGRAFO_RIGA], int massimo) {
-    int pos = 0, n = 0, puntini = larghezza_testo(f, "...");
+    int sp = spaziatura_del_font(f);   /* centesimi di pixel dopo ogni lettera */
+    int pos = 0, n = 0, puntini = larghezza_testo_spaziato(f, "...", sp);
     while (testo[pos] == ' ') pos++;
     while (testo[pos] && n < massimo) {
-        int fine = pos, l = 0;
+        int fine = pos;
         while (testo[fine] && fine - pos < PARAGRAFO_RIGA - 4) {
-            int c = glifo_di(f, (unsigned char)testo[fine])->avanzo;
-            if (l + c > largo) break;
-            l += c;
+            if (larghezza_pezzo(f, testo, pos, fine + 1) > largo) break;
             fine++;
         }
         if (fine == pos) fine++;
@@ -49,7 +48,7 @@ static void paragrafo_misura(struct widget *w, int *l, int *a) {
     struct paragrafo *g = (struct paragrafo *)w;
     char righe[PARAGRAFO_RIGHE][PARAGRAFO_RIGA];
     int n = paragrafo_righe(g, w->largo ? w->l : 0, righe);
-    *l = w->largo ? 0 : larghezza_testo(g->font, g->testo);
+    *l = w->largo ? 0 : larghezza_testo_stile(g->font, g->testo);
     *a = n * g->interlinea;
 }
 
@@ -60,7 +59,7 @@ static void paragrafo_disegna(struct widget *w, struct pennello *p) {
     pennello_colore(p, COLORE_ICONA(g->colore));
     int y0 = w->y + (w->a > n * g->interlinea ? (w->a - n * g->interlinea) / 2 : 0);   /* in una riga piu' alta: al centro */
     for (int i = 0; i < n; i++) {
-        int x = w->x, lr = larghezza_testo(g->font, righe[i]);
+        int x = w->x, lr = larghezza_testo_stile(g->font, righe[i]);
         if (g->allineamento == PARAGRAFO_CENTRO) x += (w->l - lr) / 2;
         else if (g->allineamento == PARAGRAFO_DESTRA) x += w->l - lr;
         testo_centrato(p, g->font, x, y0 + i * g->interlinea, g->interlinea, righe[i]);

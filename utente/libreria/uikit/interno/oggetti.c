@@ -65,7 +65,7 @@ void oggetto(struct pennello *p, int quale, int misura, int x, int y) {
     const char *scritta = misura == OGGETTO_GRANDE ? oggetto_etichetta(quale) : 0;
     if (scritta) {
         pennello_colore(p, OGGETTO_TRATTO);
-        testo_centrato(p, FONT_ETICHETTA, x + (dati->l - larghezza_testo(FONT_ETICHETTA, scritta)) / 2,
+        testo_centrato(p, FONT_ETICHETTA, x + (dati->l - larghezza_testo_stile(FONT_ETICHETTA, scritta)) / 2,
                        y + OGGETTO_ETICHETTA_Y, INTERLINEA_ETICHETTA, scritta);
     }
 }
@@ -127,7 +127,7 @@ void campo_rinomina_disegna(struct pennello *p, int x, int y, int l, int a, int 
     pennello_colore(p, BORDO_FOCUS);
     contorna_forma(p, &t, BORDO_FOCUS_SPESSORE);
     int dentro = a < ALTEZZA_S ? SPAZIO_4 : RINOMINA_DENTRO;
-    int largo = larghezza_testo(f, testo_nome) + CAMPO_CURSORE_SPAZIO + RINOMINA_CURSORE;
+    int largo = larghezza_testo_stile(f, testo_nome) + CAMPO_CURSORE_SPAZIO + RINOMINA_CURSORE;
     int spazio = l - 2 * dentro;
     int tx = centrato && largo < spazio ? x + (l - largo) / 2 : x + dentro;
     if (largo > spazio) tx = x + l - dentro - largo;
@@ -143,9 +143,9 @@ void testo_tagliato(struct pennello *p, const struct font *f, int x, int y, int 
                     const char *s, int destra) {
     char riga[1][MAX_RIGA_NOME];
     const char *t = s;
-    if (larghezza_testo(f, s) > largo) {
+    if (larghezza_testo_stile(f, s) > largo) {
         testo_a_capo(f, s, largo, riga, 1);
         t = riga[0];
     }
-    testo_centrato(p, f, destra ? x + largo - larghezza_testo(f, t) : x, y, a, t);
+    testo_centrato(p, f, destra ? x + largo - larghezza_testo_stile(f, t) : x, y, a, t);
 }
