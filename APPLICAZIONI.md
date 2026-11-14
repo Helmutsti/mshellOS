@@ -65,6 +65,9 @@ e la persona ne viene informata.
 - Il manifesto elenca i permessi di cui l'app ha bisogno.
 - **Al primo avvio** il sistema li chiede tutti insieme alla persona.
 - Dopo, le **Impostazioni** mostrano i permessi di ogni app e permettono di spegnerli.
+- **Spegnere un permesso chiude subito l'app**, se è aperta, con un avviso (deciso il 14 novembre
+  2026, come Android): i file e le connessioni che ha già ricevuto non si possono togliere uno per
+  uno, quindi si chiude l'app e alla prossima apertura riparte senza quel permesso.
 - Se la persona dice no, l'app parte lo stesso senza quel permesso. **Ogni app deve funzionare,
   o almeno spiegare cosa non va, senza i permessi che non ha.**
 
@@ -86,6 +89,93 @@ e la persona ne viene informata.
 - L'app non può aprirsi canali da sola: nel suo mondo isolato i servizi non si vedono.
 - **I dettagli** (per esempio, per i file, "solo leggere" o "anche scrivere") li controlla il
   servizio, in base all'identità dell'app.
+- **I canali sono uno per servizio, non uno per permesso** (14 novembre 2026): i permessi sono
+  tanti, i servizi pochi. Ogni servizio decide quale permesso chiede per ogni sua richiesta
+  (per la rete, "dimmi lo stato" chiede `network.use`, "fermati" chiede `network.settings`) e lo
+  controlla nel database del sistema (sezione 8), con un solo controllo uguale per tutti.
+
+### L'app non vede niente: il kernel fa i muri, i servizi fanno le porte
+
+Deciso il 14 novembre 2026.
+
+- **I muri (il kernel).** Il gestore delle app fa partire ogni app in un recinto fatto con gli
+  strumenti di Linux (namespaces, seccomp, cgroups). Dentro l'app vede **solo** la sua cartella
+  del pacchetto, la sua cartella dei dati e, in sola lettura, font, icone e sfondi del sistema
+  (`/system/resources`, come l'iPhone). Non vede il disco della persona, la rete, gli altri
+  programmi né gli indirizzi dei servizi.
+- **Le porte (i servizi).** Tutto il resto, anche i file della persona e la rete, si chiede dai
+  canali. Il servizio controlla il permesso e **non fa da tramite per i dati**: apre il file o la
+  connessione e la consegna all'app già aperta (Linux passa un file aperto da un programma
+  all'altro). Da lì l'app legge, scrive e trasmette alla velocità normale; il costo è un messaggio
+  solo all'apertura. Come la finestra "Apri" del Mac e i portali di Flatpak.
+- **Rischi che restano e come si chiudono:**
+  1. *un servizio che si fa ingannare* (esempio: chiede "Home/../../data/system/..." e il servizio
+     apre il file con i suoi poteri): i percorsi si aprono con il modo di Linux che rifiuta da sé
+     ogni percorso che esce dalla cartella, anche tramite collegamenti (`openat2` con
+     `RESOLVE_BENEATH`); ogni servizio gira con i poteri minimi (il servizio dei file di una
+     persona gira come quella persona, non come sistema); prove automatiche con richieste sbagliate
+     o maligne per ogni servizio;
+  2. *il file consegnato con poteri sbagliati o che dura troppo*: il servizio apre sempre con i
+     poteri esatti del permesso (solo lettura se il permesso è `files.read`); per la revoca, l'app
+     si chiude (sezione "Come si chiedono");
+  3. *la rete*: dentro il recinto l'app non ha nessuna rete sua e usa solo le connessioni che
+     riceve; il firewall riconosce l'app dal suo gruppo (cgroup) e applica le regole per app anche
+     se i dati non passano dal servizio;
+  4. *il gestore delle app è il pezzo più potente* (recinti, canali, identità): va tenuto piccolo
+     e semplice, e solo lui fa questo lavoro;
+  5. *un'app che si prende tutte le risorse*: limiti per gruppo su memoria, processore e spazio
+     dei suoi dati;
+  6. *un errore nel kernel che fa uscire dal recinto*: all'app si vietano le chiamate al kernel
+     che non le servono, e il kernel si tiene aggiornato (aggiornamenti A/B);
+  7. *due app d'accordo* che hanno tutte e due la rete e si parlano via internet: rischio accettato,
+     come su Mac e Android.
+
+### Problemi che l'idea porta con sé (da risolvere, 14 novembre 2026)
+
+Oggi niente di questo c'è: le app vedono tutto il disco e `ha_permesso` dice sempre sì. Passare al
+recinto tocca quasi ogni pezzo:
+
+1. **Le cartelle consegnate aperte non sono sicure.** Un file aperto va bene; una *cartella* aperta
+   no: da una cartella aperta si risale con ".." anche fuori dal recinto (Linux ferma ".." solo
+   alla radice del programma). Quindi il servizio può consegnare file, non cartelle. Ma Files
+   (`files.write`) deve sfogliare tutta la Home: per le app con `files.read`/`files.write` la Home
+   va forse **montata dentro il recinto** (come Flatpak con il permesso sulla Home), e il servizio
+   dei file resta per le app senza permesso (la finestra "Apri"). Da decidere.
+2. **La finestra "Apri"/"Salva" del sistema non esiste.** Senza, un'app senza permessi sui file non
+   può aprire niente.
+3. **La finestra di domanda del sistema non esiste** (serve anche al firewall e al primo avvio
+   per i permessi).
+4. **Come si trovano i servizi.** Oggi ogni programma si collega da sé agli indirizzi in
+   `/run/mshell`. Col recinto li apre il gestore delle app e li passa all'app all'avvio: cambiano
+   il gestore delle app, CoreKit (come trova i canali) e il compositore (anche il canale verso il
+   compositore va passato così).
+5. **Come il servizio sa chi è l'app.** Oggi lo ricava dal kernel (uid e percorso del programma).
+   Dentro il recinto il percorso visto è diverso: l'identità la dice il gestore delle app quando
+   apre il canale, e il servizio si fida solo di lui.
+6. **Le app del sistema che oggi guardano tutto.** Attività legge l'elenco dei programmi da `/proc`
+   (nel recinto non c'è: serve un servizio dei processi); lo Store scrive in `/data/apps`; il
+   Terminale apre una shell come sistema. Vanno rifatte sulle porte, o tenute fuori dal recinto
+   (da decidere: niente eccezioni sarebbe meglio).
+7. **La rete dentro l'app.** Senza rete propria l'app non legge i server DNS né apre connessioni:
+   il servizio di rete deve sapere "collegami a questo nome e porta" e consegnare la connessione;
+   per ricevere connessioni da fuori c'è la richiesta al firewall (sezione 7).
+8. **I comandi non sono nel recinto.** Un comando lanciato dalla persona ha tutti i suoi poteri
+   (come su Linux e Mac): `webask` usa la rete direttamente. Due modelli diversi convivono; come si
+   distribuiscono e con quali poteri girano i comandi degli altri è già una domanda aperta
+   (`SISTEMA.md`).
+9. **I permessi `apps.open` e `system.shell`**: da capire come gestirli (sezione 12).
+10. **SQLite dentro i servizi**: i programmi sono statici, circa 1 MB in più per ogni programma che
+    lo apre; dipende da chi apre il database (sezione 8).
+11. **Prove.** La sandbox Docker deve poter creare i recinti (namespaces dentro Docker chiedono
+    permessi in più); servono prove che un'app non veda davvero niente e che le richieste maligne
+    vengano rifiutate.
+12. **Fare debug di un'app** diventa più difficile (non vede `/proc`, non scrive dove vuole): i suoi
+    messaggi devono andare nel registro del sistema.
+
+**Ordine dei lavori proposto:** il database del sistema e il controllo vero dei permessi
+(`ha_permesso`); poi il gestore delle app che passa i canali; poi il recinto; poi le finestre del
+sistema ("Apri", domande). Il firewall che risponde alle app viene dopo il controllo dei permessi
+(`SISTEMA.md`, sezione 4).
 - **Niente token.** Un token è un testo che si può copiare e rubare. Il canale invece è un oggetto
   del kernel e non si copia. I token servirebbero solo per servizi su internet.
 - **Il toolkit nasconde tutto questo**: chi sviluppa scrive "leggi questo file" e il toolkit trova
@@ -103,7 +193,8 @@ e la persona ne viene informata.
   programmi figli che ereditano i canali.
 - Rischi che restano (nessun sistema li elimina del tutto): un errore nel kernel che permette di
   uscire dall'isolamento, un servizio che non controlla bene le richieste, due app che si mettono
-  d'accordo (per esempio via rete) per aggirare i permessi.
+  d'accordo (per esempio via rete) per aggirare i permessi. Come si chiudono: sezione "L'app non
+  vede niente" qui sopra.
 
 ## 6. Le app tra loro
 
@@ -129,10 +220,16 @@ e la persona ne viene informata.
 - **Database dell'app**: ogni app ha a disposizione un piccolo database SQLite, uno per ogni persona
   che la usa, nella sua cartella dei dati (`/data/users/<uid>/appsdata/<app>`). È **offerto, non
   obbligatorio**: l'app può anche salvare file normali.
-- **Database del sistema sull'app**: c'è sempre. Contiene i permessi concessi, se il primo avvio è
-  già avvenuto, i ruoli assegnati. Sta **fuori dal mondo dell'app**, nella parte del disco che solo
-  il sistema può toccare (`/data/system`). Non può stare nel file dell'app, perché l'app potrebbe
-  modificarlo (per esempio concedersi i permessi da sola).
+- **Database del sistema**: uno solo per tutto il sistema (deciso il 14 novembre 2026, al posto di
+  un database del sistema per ogni app; come il Mac e Android), SQLite. Contiene per tutte le app i
+  permessi concessi, se il primo avvio è già avvenuto, i ruoli assegnati, le risposte "questa app
+  può ricevere connessioni su questa porta"; forse anche l'elenco delle app installate. Sta **fuori
+  dal mondo dell'app**, nella parte del disco che solo il sistema può toccare (`/data/system`).
+  Non può stare nella cartella dell'app, perché l'app potrebbe modificarlo (per esempio
+  concedersi i permessi da sola). Contro i guasti: SQLite regge gli spegnimenti a metà scrittura,
+  più una copia di riserva ogni tanto. Da decidere: se i permessi valgono per ogni persona o per
+  tutto il computer, e chi apre il database (un custode solo a cui gli altri servizi chiedono,
+  oppure ogni servizio lo legge da sé e scrive solo il gestore delle app).
 - Il toolkit mostra le due cose come una sola: l'app può chiedere "che permessi ho?", ma non può
   cambiarli.
 
@@ -181,6 +278,8 @@ autorizzato ("chiavi a due livelli").
 | `settings.system` | cambiare le impostazioni del sistema (tema, lingua, schermo) | Impostazioni |
 | `system.power` | spegnere e riavviare il computer | (scrivania) |
 | `apps.manage` | installare, aggiornare e togliere app | Store |
+| `apps.open` | far partire un programma di `/system/bin` come la persona | — (da capire come gestirlo: sezione 12) |
+| `system.shell` | aprire la shell come sistema | Terminale (da capire come gestirlo: sezione 12) |
 
 ### Permessi che i servizi chiedono dalla porta (provvisorio: oggi sempre concesso)
 
@@ -334,3 +433,7 @@ Da decidere, più o meno in quest'ordine:
    leggere gli zip (per esempio miniz).
 6. **Cosa vede un eseguibile normale avviato dalla scrivania**: oggi ha tutti i poteri della
     persona. macOS, per esempio, avvisa al primo avvio dei file scaricati.
+7. **I permessi `apps.open` e `system.shell`** (aggiunti all'elenco il 14 novembre 2026): capire
+   come gestirli. Chi li riceve (solo le app del sistema? anche le altre, chiedendo alla persona?),
+   se `system.shell` deve restare un permesso di un'app o diventare una conferma della persona
+   ogni volta (come `sudo` o la finestra della password del Mac), e se `apps.open` serve davvero.

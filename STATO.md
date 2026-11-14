@@ -489,6 +489,10 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 **Regole delle app** (APPLICAZIONI.md)
 12. Permessi chiesti al primo avvio e rivedibili in Impostazioni; chiavi (un canale per servizio).
 13. **Isolamento delle app** con namespaces, cgroups e seccomp di Linux.
+    L'idea decisa il 14/11/2026 (l'app non vede niente, i servizi fanno solo le porte, un solo
+    database del sistema) e i problemi che porta sono in APPLICAZIONI.md, sezioni 5 e 8.
+    Messo da parte il 14/11/2026 (decisione della persona): da riprendere più avanti; la prima
+    domanda aperta è come vede la Home un'app con il permesso sui file.
 14. Firme e registro con scadenze; versione minima del sistema; tipi di file che un'app apre;
     ruoli; moduli aggiuntivi.
 
