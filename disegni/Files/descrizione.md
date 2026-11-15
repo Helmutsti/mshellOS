@@ -1,9 +1,9 @@
 # Files: il disegno
 
 Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt), pagina "App – Files" (81:734).
-Schermate (cornice 1024 x 664, padding spazio/32, finestra 960 x 600): vista a elenco 135:2, vista a icone con menu del file 135:404, cartella vuota 135:796, errore di lettura 139:1495, permesso negato 139:1602. Icona dell'app: sezione 165:4100.
+Schermate (cornice 1024 x 664, padding spazio/32, finestra 960 x 600): vista a elenco 135:2, vista a icone con menu del file 135:404, cartella vuota 135:796, errore di lettura 139:1495, permesso negato 139:1602, avviso in basso 285:2909. Icona dell'app: sezione 165:4100.
 
-- `figma/`: foto ritagliate sulla finestra (960 x 600), in chiaro e scuro: `elenco` (135:2), `icone-menu` (135:404), `cartella-vuota` (135:796), `errore-di-lettura` (139:1495), `permesso-negato` (139:1602), ognuna `-chiaro.png` e `-scuro.png`. Scuro = collezione Semantici sul modo "Scuro" sulla cornice, poi tolto: cornici e finestre non hanno nessun modo esplicito (sono in Chiaro).
+- `figma/`: foto ritagliate sulla finestra (960 x 600), in chiaro e scuro: `elenco` (135:2), `icone-menu` (135:404), `cartella-vuota` (135:796), `errore-di-lettura` (139:1495), `permesso-negato` (139:1602), `avviso` (285:2909), ognuna `-chiaro.png` e `-scuro.png`. Scuro = collezione Semantici sul modo "Scuro" sulla cornice, poi tolto: cornici e finestre non hanno nessun modo esplicito (sono in Chiaro).
 - `codice/`: foto dell'app vera (sandbox).
 
 ## Struttura della finestra (principio: lo spazio lo da solo il contenitore)
@@ -32,3 +32,12 @@ Schermate (cornice 1024 x 664, padding spazio/32, finestra 960 x 600): vista a e
 - Stato=Selezionata (133:1716): sfondo Semantici/controllo/selezione-vetro (Chiaro #000000 8%, Scuro #FFFFFF 12%).
 - Stato=Sopra (133:1711): sfondo Semantici/controllo/sopra-vetro (Chiaro #000000 4%, Scuro #FFFFFF 6%).
 - Padding orizzontale 8, verticale 0 (sfondo proprio, punto 3).
+
+## Avviso in basso (schermata 285:2909, finestra 285:2910)
+- Copia della vista a elenco 135:2 con l'avviso dentro il pannello (285:2931). Nome cornice: "Files – avviso in basso", a x 7700, y 1100 della pagina. Foto: `figma/avviso-chiaro.png`, `figma/avviso-scuro.png`.
+- Componente nuovo "Avviso in basso" (285:2903, pagina "Componenti base", sotto tutto, x 0 y 14353): non c'era nella libreria niente di adatto ("Suggerimento" 113:3004 e' la nuvoletta di 24 con raggio 3, senza icona). Proprieta testo "Testo" (IBM Plex Sans, stile testo/corpo).
+- Struttura: pillola orizzontale, altezza 32 (Misure/altezza/s), larghezza a contenuto, padding orizzontale 12 (Misure/spazio/12) e verticale 0, gap 8 (Misure/spazio/8), raggio Misure/raggio/pillola, sfondo Semantici/suggerimento/sfondo, ombra stile ombra/sovrapposto, non ritaglia. Dentro: icona Simbolo/avviso (triangle-alert) a 16, tratto Semantici/suggerimento/testo-secondario; testo Semantici/suggerimento/testo.
+- Posizione nell'istanza: assoluta dentro il pannello, centrata in orizzontale, a 8 dal fondo dello spazio interno del pannello (spazio/8 + padding 8 = 16 dal bordo del pannello): x 230, y 456 nel pannello 752 x 504. Testo d'esempio: "Le app vanno installate prima di aprirle".
+- Spaziatura (punto 5): il pannello e la tabella non cambiano (x 16, y 16 dal bordo del pannello, 24 dalla finestra). L'avviso ha sfondo proprio (punto 3): 12 dal bordo della pillola all'icona, in verticale 0 (32 di altezza, icona centrata). Barra laterale: x 16, y 16 come prima.
+- Misurato sulla foto: pillola a 16 dal fondo del pannello (576 contro 592), centrata sul pannello (centro a 576), icona a 12 dal bordo sinistro della pillola.
+- Differenze del codice (files.c) da correggere: AVVISO_DENTRO usa PADDING_S (12): nel disegno e' spazio/12, meglio SPAZIO_12; AVVISO_GAP usa GAP_M (8): nel disegno e' spazio/8, meglio SPAZIO_8; AVVISO_ALTEZZA = ALTEZZA_S (32), icona ICONA_S (16), raggio altezza/2 (16 = raggio/pillola, il disegno usa la variabile): i valori coincidono. Il commento sopra l'avviso dice che il disegno non lo ha: ora ce l'ha, va aggiornato.
