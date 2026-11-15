@@ -244,13 +244,13 @@ static const int toni_memoria[PEZZI_MEMORIA] = { 0, 1, 2, 3, 0 };
 
 /* Il disco: system ("/", sola lettura) e data (/data) come una cosa sola. Totale e libero li
  * dice Linux (statvfs); sistema, applicazioni e utenti si contano camminando nelle cartelle;
- * "Altro" e' il resto di quello che e' in uso (le tabelle di ext4, i file che Attivita' non
- * puo' vedere). Non c'e' nel disegno: e' una domanda aperta (STATO.md, "Da confermare"). */
-enum { DISCO_SISTEMA, DISCO_APPLICAZIONI, DISCO_UTENTI, DISCO_ALTRO, DISCO_LIBERO, PEZZI_DISCO };
+ * lo spazio in uso che nessuna cartella spiega (le tabelle di ext4) non e' un pezzo a parte,
+ * come nel disegno: la barra intera e' la somma dei quattro pezzi, cosi' resta piena. */
+enum { DISCO_SISTEMA, DISCO_APPLICAZIONI, DISCO_UTENTI, DISCO_LIBERO, PEZZI_DISCO };
 static const char *const nomi_disco[PEZZI_DISCO] = {
-    "Sistema", "Applicazioni", "Utenti (home)", "Altro (file system)", "Libero"
+    "Sistema", "Applicazioni", "Utenti (home)", "Libero"
 };
-static const int toni_disco[PEZZI_DISCO] = { 0, 1, 2, 3, 0 };
+static const int toni_disco[PEZZI_DISCO] = { 0, 1, 2, 0 };
 static const char *const partizioni[] = { "/system", "/data" };
 
 /* Quanto pesano i file di una cartella, contando anche quelli delle cartelle dentro.
@@ -408,10 +408,8 @@ static void aggiorna_disco(struct finestra_tk *f, void *dati) {
     b[DISCO_APPLICAZIONI] = app_sistema + peso("/data/apps");
     b[DISCO_UTENTI] = peso("/data/users");
     unsigned long long in_uso = totale - libero;
-    unsigned long long contati = b[DISCO_SISTEMA] + b[DISCO_APPLICAZIONI] + b[DISCO_UTENTI];
-    b[DISCO_ALTRO] = in_uso > contati ? in_uso - contati : 0;
     b[DISCO_LIBERO] = libero;
-    disco.grafico.totale = totale;
+    disco.grafico.totale = 0;   /* la somma dei pezzi: la barra e' piena anche senza "Altro" */
     riepilogo(&disco, in_uso, totale);
     pagina_grafico_cambiata(&disco);
 }

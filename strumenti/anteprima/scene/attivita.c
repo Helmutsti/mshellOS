@@ -2,7 +2,7 @@
  * Attivita'" del Figma) al posto di quelli del kernel. La pagina si sceglie con la
  * variabile PAGINA=processi|memoria|disco (senza: processi, con la riga di "attivita"
  * scelta e quella di "compositore" sotto il puntatore). Il disco non c'e' (apri dice
- * "non trovato"): Sistema, Applicazioni e Utenti valgono 0 e tutto l'usato e' "Altro". */
+ * "non trovato"): Sistema, Applicazioni e Utenti valgono 0 e la barra e' tutta "Libero". */
 #include <stdlib.h>
 #include <string.h>
 
