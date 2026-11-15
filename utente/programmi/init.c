@@ -45,13 +45,13 @@ static int risorse_eventi[1];
 static int risorse_compositore[3];
 static int risorse_launcher[1];
 static struct servizio servizi[] = {
-    { "/system/services/eventi", risorse_eventi, 1, -1 },
-    { "/system/services/compositore", risorse_compositore, 3, -1 },
-    { "/system/services/launcher", risorse_launcher, 1, -1 },
-    { "/system/services/scrivania", 0, 0, -1 },
+    { "/system/services/eventi/eventi", risorse_eventi, 1, -1 },
+    { "/system/services/compositore/compositore", risorse_compositore, 3, -1 },
+    { "/system/services/launcher/launcher", risorse_launcher, 1, -1 },
+    { "/system/services/scrivania/scrivania", 0, 0, -1 },
     /* la rete. Se la sua scheda non c'e', non e' init a saperlo (la scheda e' scritta
      * nella configurazione della rete): il servizio lo dice e aspetta, senza finire */
-    { "/system/services/network", 0, 0, -1 },
+    { "/system/services/network/network", 0, 0, -1 },
     /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere.
      * Parte solo se la seriale c'e' (come la getty sulla seriale di Linux): nella sandbox
      * Docker non c'e', e la shell ripartirebbe ogni 5 secondi senza poter fare niente. */

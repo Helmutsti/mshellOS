@@ -143,7 +143,7 @@ né seriale: per una shell si entra nel container con `docker exec -it <nome> sh
 
 **Le cartelle nel sistema** (nomi in inglese minuscolo, scelta della persona):
 
-- `/system/init`, `/system/services/<nome>` (un file per servizio),
+- `/system/init`, `/system/services/<nome>/<nome>` (una cartella per servizio),
   `/system/apps/<app>/{code, manifest.toml, resources}`, `/system/bin`,
   `/system/lib` (vuota, tenuta per una futura libreria condivisa),
   `/system/resources/{fonts, icons, wallpapers}` (le risorse del sistema: font, icone e sfondo

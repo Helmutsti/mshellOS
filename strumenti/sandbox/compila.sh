@@ -65,7 +65,7 @@ done
 done
 metti_file $O/sandbox/init /system/init 755
 SERVIZI="compositore eventi launcher scrivania network"
-for nome in $SERVIZI; do metti_file "$O/sandbox/$nome" "/system/services/$nome" 755; done
+for nome in $SERVIZI; do metti_file "$O/sandbox/$nome" "/system/services/$nome/$nome" 755; done
 # la configurazione predefinita dei servizi, come build.sh. Il collegamento
 # /etc/resolv.conf invece no: nel container quel file lo mette Docker. Il servizio network
 # qui non tocca niente: Docker non gli da' il permesso di cambiare le schede, e lui lo dice

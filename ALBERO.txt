@@ -75,14 +75,14 @@ NOME                                          UID   PERM.    DESCRIZIONE
 │   │   │   └── ...                           0     644      i file delle icone
 │   │   └── wallpapers/                       0     755      gli sfondi
 │   │       └── ...                           0     644      i file degli sfondi
-│   └── services/                             0     755      i programmi dei servizi: il nome del
-                                                             programma e' il servizio
-│       ├── eventi                            0     755      servizio eventi (da
+│   └── services/                             0     755      una cartella per servizio, con dentro
+                                                             il programma (stesso nome del servizio)
+│       ├── eventi/                           0     755      servizio eventi (da
                                                              utente/programmi/eventi.c)
-│       ├── compositore                       0     755      servizio compositore
-│       ├── launcher                          0     755      servizio launcher
-│       ├── scrivania                         0     755      servizio scrivania
-│       └── network                           0     755      servizio network (rete e firewall)
+│       ├── compositore/                      0     755      servizio compositore
+│       ├── launcher/                         0     755      servizio launcher
+│       ├── scrivania/                        0     755      servizio scrivania
+│       └── network/                          0     755      servizio network (rete e firewall)
 ├── tmp/                                      0     755      in memoria: file temporanei (montata da
                                                              avvio)
 └── data/                                     0     755      il punto dove avvio monta la partizione

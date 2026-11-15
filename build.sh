@@ -77,7 +77,8 @@
 # Com'e' fatto il sistema che ne viene fuori:
 #   /system                      (sola lettura) i programmi del sistema
 #       init                     il primo programma (il processo 1)
-#       services/<servizio>      i servizi: eventi, compositore, launcher, scrivania, network
+#       services/<servizio>/     una cartella per servizio (eventi, compositore, launcher,
+#                                scrivania, network), con dentro il programma <servizio>
 #       config/<servizio>/       la configurazione predefinita dei servizi, da leggere (644):
 #                                i file di utente/config/ (oggi network/network.conf e firewall.conf)
 #       apps/<app>/              le applicazioni del sistema: code (il programma),
@@ -363,14 +364,14 @@ SERVIZI=""
 APPS=""
 
 # I programmi del sistema (utente/programmi): init in /system, i servizi in
-# /system/services/<servizio> (il programma si chiama come il servizio: cosi' lo si
+# /system/services/<servizio>/<servizio> (il programma si chiama come il servizio: cosi' lo si
 # riconosce nell'elenco dei processi). Sono programmi: 755.
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     case "$nome" in
         init) posto=/system/init ;;
         shell) posto=/system/bin/$nome ;;   # la shell di prova
-        *)    posto=/system/services/$nome; SERVIZI="$SERVIZI $nome" ;;
+        *)    posto=/system/services/$nome/$nome; SERVIZI="$SERVIZI $nome" ;;
     esac
     metti_file "$P/bin/$nome" "$posto" 755
 done

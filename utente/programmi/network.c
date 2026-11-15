@@ -1114,7 +1114,7 @@ static int firewall_attivo;         /* le regole sono nel kernel */
 static int porta = -1;              /* il descrittore di ascolta("network") */
 
 #define MAX_CLIENTI 8
-#define SERVIZIO "/system/services/network"
+#define SERVIZIO "/system/services/network/network"
 
 /* Un valore di firewall.conf, come lo scrive il file. */
 static const char *allow_block(int si) { return si ? "allow" : "block"; }

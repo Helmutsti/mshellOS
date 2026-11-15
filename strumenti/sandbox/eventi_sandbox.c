@@ -1,7 +1,7 @@
 /* eventi, nella SANDBOX: al posto di /dev/input, una presa TCP.
  *
  * Nel container non ci sono tastiera e mouse (ne' /dev/input, ne' uinput per inventarli).
- * Questo programma prende il posto di eventi (/system/services/eventi: init lo fa partire
+ * Questo programma prende il posto di eventi (/system/services/eventi/eventi: init lo fa partire
  * e gli presta il tubo verso il compositore, come sempre) e USA IL CODICE DI eventi.c,
  * incluso qui sotto cosi' com'e': la tastiera italiana, la scala della tavoletta, i
  * pacchetti (SYN_REPORT), la rotella. Cambia solo da dove arrivano gli eventi di Linux:

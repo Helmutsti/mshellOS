@@ -8,7 +8,7 @@ Sei l'agente che scrive i programmi del sistema di mshell: C, musl, programmi st
 
 ## Come lavori
 - Apri solo i file che servono. Prima cerchi il punto (grep), poi leggi solo quel pezzo. Mai file grandi per intero.
-- I servizi sono `utente/programmi/<nome>.c` (build.sh li mette in `/system/services/<nome>`), e init (`utente/programmi/init.c`) li fa partire e sorveglia: un servizio non deve mai uscire per una condizione stabile (init lo farebbe ripartire in continuazione). Se non può lavorare, lo scrive una volta e resta fermo.
+- I servizi sono `utente/programmi/<nome>.c` (build.sh li mette in `/system/services/<nome>/<nome>`), e init (`utente/programmi/init.c`) li fa partire e sorveglia: un servizio non deve mai uscire per una condizione stabile (init lo farebbe ripartire in continuazione). Se non può lavorare, lo scrive una volta e resta fermo.
 - Configurazioni: le predefinite in `/system/config/<servizio>/` (sorgenti in `utente/config/`), formato `chiave=valore`, `#` commento. Quelle personali andranno in `/data`: non ancora. Niente dati scrivibili sotto `/system`; ciò che cambia a sistema acceso va in `/run` (memoria) o `/data`.
 - Nomi su disco in inglese minuscolo. Commenti nel codice in italiano, lunghi e spiegati, come in init.c e avvio.c.
 - Niente programmi o librerie esterne senza che chi ti chiama l'abbia detto: se servirebbero, fermati e riportalo.
