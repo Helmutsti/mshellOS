@@ -195,8 +195,11 @@ class Macchina:
         """La riga di comando di QEMU, come in run.sh, ma senza finestra."""
         disco = self.lavoro / "disco.img"
         if self.cpu == "arm64":
-            veloce = (platform.system() == "Darwin" and platform.machine() == "arm64")
-            cpu_qemu = ["-accel", "hvf", "-cpu", "host"] if veloce else ["-cpu", "cortex-a72"]
+            # La virtualizzazione del computer, come run.sh: hvf sul Mac con chip Apple, kvm
+            # su Linux ARM. Niente emulazione del processore (CLAUDE.md): collaudo.py fa
+            # arrivare qui solo la CPU del computer.
+            acceleratore = "hvf" if platform.system() == "Darwin" else "kvm"
+            cpu_qemu = ["-accel", acceleratore, "-cpu", "host"]
             riga = (self.build / "riga_kernel.txt").read_text().strip()
             argomenti = [trova_qemu("qemu-system-aarch64"), "-M", "virt", *cpu_qemu,
                          "-m", str(self.ram), "-smp", "4",

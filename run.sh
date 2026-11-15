@@ -49,13 +49,19 @@ if [ "$cpu" = arm64 ]; then
     # -kernel, -initrd, -append : niente firmware: QEMU mette in RAM il kernel e
     #               l'archivio di avvio e salta al kernel, con la sua riga di comando
     # -serial stdio : la seriale e' questo terminale
-    # Su un Mac con chip Apple si usa la virtualizzazione (hvf): il kernel gira sulla CPU
-    # vera, senza essere emulato. Altrove si emula un Cortex-A72.
-    if [ "$(uname -s)" = Darwin ] && [ "$(sysctl -n kern.hv_support 2>/dev/null)" = 1 ] &&
-       [ "$(uname -m)" = arm64 ]; then
+    # Si usa la virtualizzazione del computer: il kernel gira sulla CPU vera, senza essere
+    # emulato. Sul Mac con chip Apple e' hvf (Hypervisor.framework), su Linux ARM e' kvm.
+    # Se non c'e', ci si ferma: emulare il processore non si fa (CLAUDE.md).
+    if [ "$(uname -s)" = Darwin ]; then
+        if [ "$(sysctl -n kern.hv_support 2>/dev/null)" != 1 ]; then
+            echo "run.sh: questo Mac non ha la virtualizzazione (hvf): QEMU non puo' girare nativo"; exit 1
+        fi
         cpu_qemu="-accel hvf -cpu host"
     else
-        cpu_qemu="-cpu cortex-a72"
+        if [ ! -w /dev/kvm ]; then
+            echo "run.sh: manca /dev/kvm (o non e' scrivibile): QEMU non puo' girare nativo"; exit 1
+        fi
+        cpu_qemu="-accel kvm -cpu host"
     fi
     exec qemu-system-aarch64 -M virt $cpu_qemu -m 512 -smp 4 -rtc base=localtime \
         -kernel "$qui/build/arm64/linux" -initrd "$qui/build/arm64/avvio.img" \

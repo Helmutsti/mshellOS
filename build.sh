@@ -199,8 +199,8 @@ ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip $ATTREZZI_CPU"
 apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = "$(echo $ATTREZZI | wc -w)" ] ||
     apk add --cache-dir "$SCARICO/$ARCH" $ATTREZZI >/dev/null
 
-# LA RADICE DI ALPINE PER LA CPU: un albero con i pacchetti di Alpine PER QUELLA CPU
-# (apk --arch, anche se il container e' x86_64), da cui si prendono:
+# LA RADICE DI ALPINE PER LA CPU: un albero a parte con i pacchetti di Alpine (la stessa CPU
+# del container, ma fuori dal suo sistema: non si mescolano con gli attrezzi), da cui si prendono:
 #   - il kernel, i suoi moduli (linux-virt) e il firmware;
 #   - musl-dev: la libreria C (libc.a) e i suoi header, da legare dentro i programmi;
 #   - linux-headers: gli header del kernel (input, DRM...);
@@ -208,7 +208,7 @@ apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = 
 #   - ca-certificates-bundle: i certificati radice (le autorita' di cui ci si fida per HTTPS),
 #     che vanno in /etc/ssl/certs/ca-certificates.crt.
 # Le firme dei pacchetti si controllano con le chiavi di Alpine per quella CPU.
-# --no-scripts: gli script d'installazione non girano (sono per un'altra CPU, e non servono).
+# --no-scripts: gli script d'installazione non girano (sono per un sistema Alpine vero, e qui non servono).
 RADICE=/tmp/radice-$ARCH
 rm -rf "$RADICE"
 apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \

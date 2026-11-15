@@ -2,8 +2,9 @@
 
 `test/collaudo.py` accende mshell (il kernel Linux con i nostri programmi) in QEMU **senza finestra**, lo usa come farebbe una
 persona (mouse, tastiera, fotografie dello schermo) e controlla che faccia quello che deve.
-Ogni prova gira sia sul PC (`x86_64`, avviato dal firmware UEFI) sia su ARM64, e ogni volta
-su un sistema appena acceso. Il disco (uno solo, con le partizioni avvio, system e data)
+Ogni prova gira sul processore del computer (CLAUDE.md): sul PC `x86_64`, avviato dal firmware
+UEFI; sul Mac con chip Apple ARM64, con la virtualizzazione del Mac (hvf), senza emulazione. Ogni
+volta su un sistema appena acceso. Il disco (uno solo, con le partizioni avvio, system e data)
 viene copiato prima di ogni prova: `build/` non si tocca.
 
 ## Cosa si prova
@@ -74,7 +75,7 @@ uv run test/collaudo.py
 Le opzioni:
 
 ```sh
-uv run test/collaudo.py --cpu x86_64           # solo il PC ("x86" vale lo stesso; oppure arm64; tutte se non si dice)
+uv run test/collaudo.py --cpu x86_64           # dirlo per nome ("x86" vale lo stesso; arm64 sul Mac): deve essere quello del computer
 uv run test/collaudo.py --ram 8192             # il PC con 8 GB di RAM (2048 MB se non si dice; ARM64 ha sempre 512)
 uv run test/collaudo.py --solo mouse finestre  # solo alcune prove (--elenco per vederle)
 uv run test/collaudo.py --compila              # prima compila con Docker, come run.sh
@@ -126,9 +127,8 @@ Meglio **aspettare una condizione** (`aspetta_che`) che dormire un tempo fisso.
 Quando il disegno cambia apposta (nuovo stile, nuove applicazioni), si rifanno:
 
 ```sh
-uv run test/collaudo.py --riferimenti            # tutte e due le CPU
-uv run test/collaudo.py --riferimenti --cpu x86_64  # solo il PC
-uv run test/collaudo.py --riferimenti --cpu x86_64 --ram 8192 --solo attivita  # la memoria a 8 GB
+uv run test/collaudo.py --riferimenti            # il processore del computer (PC o Mac)
+uv run test/collaudo.py --riferimenti --ram 8192 --solo attivita  # sul PC, la memoria a 8 GB
 ```
 
 Prima di salvarle nel repo, guardarle: devono mostrare la cosa giusta (per

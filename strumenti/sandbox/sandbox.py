@@ -137,11 +137,12 @@ def prepara_attrezzi():
         return
     print("sandbox: preparo gli attrezzi (una volta sola) ...", flush=True)
     nome = f"{ATTREZZI}-{os.getpid()}"
-    comando = ("apk add --cache-dir /w/build/scarico/host clang lld binutils make zip tar >/dev/null && "
+    # una sola cartella di pacchetti per processore, come build.sh: attrezzi e radice di musl
+    # sono dello stesso processore, quello del computer
+    comando = (f"apk add --cache-dir /w/build/scarico/{ARCH} clang lld binutils make zip tar >/dev/null && "
                f"apk --arch {ARCH} --root /radice --initdb --no-scripts "
                f"--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/{ARCH} "
                f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt >/dev/null")
-    (REPO / "build" / "scarico" / "host").mkdir(parents=True, exist_ok=True)
     (REPO / "build" / "scarico" / ARCH).mkdir(parents=True, exist_ok=True)
     r = subprocess.run(["docker", "run", "--name", nome, "--platform", PIATTAFORMA,
                         "-v", f"{REPO}:/w", "alpine:3.24", "sh", "-c", comando])

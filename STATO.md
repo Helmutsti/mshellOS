@@ -60,16 +60,15 @@ uv run test/collaudo.py --solo mouse finestre     # solo alcune (--elenco per ve
 ```
 
 - Sul PC passano tutte, a 2 e a 8 GB.
-- ARM è solo compilato: per scelta della persona le prove ARM non si fanno in emulazione
-  su un PC x86 (tempi e velocità non sono quelli veri, i risultati non sono affidabili);
-  si fanno su un ARM vero, il Mac (vedi la sezione 10).
+- Sul Mac (ARM, QEMU con hvf, 15/11/2026) le prove girano native in circa 3 minuti; com'è
+  andata e cosa resta è nella sezione 10. Ogni computer prova solo il suo processore.
 - **Le prove sul PC Windows sono lente** perché QEMU emula il processore via software. Si
   possono accelerare molto (stimato 5–10 volte) attivando la funzionalità di Windows
   "Piattaforma hypervisor Windows" (serve l'amministratore e un riavvio) e aggiungendo
   `-accel whpx` a QEMU. Da decidere.
 - La spiegazione completa delle prove è in `test/LEGGIMI.md`.
 
-**La sandbox: prove in pochi secondi, senza QEMU** (solo PC, `strumenti/sandbox/`). I programmi
+**La sandbox: prove in pochi secondi, senza QEMU** (PC e Mac, ognuno nativo; `strumenti/sandbox/`). I programmi
 veri di mshell girano in un container Docker, compilati come in `build.sh`; cambiano solo lo
 schermo (un file in memoria al posto del DRM) e il servizio eventi (mouse e tastiera arrivano
 da una presa TCP, tradotti dallo stesso codice di `eventi.c`). Serve solo Docker.
@@ -483,7 +482,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 
 **Prove**
 9. Rifare le immagini di confronto vecchie (Files, Attività, scrivania) dopo averle guardate.
-10. La prova `scorrimento` passa in QEMU ARM (3 volte su 3: barra visibile, sparisce dopo ~1 s); il "la barra non compare" riguarda solo la sandbox Docker, non indagato.
+10. La prova `scorrimento` passa in QEMU ARM e, dal 15/11/2026, anche nella sandbox sul Mac (barra visibile, sparisce dopo ~1 s).
 11. La prova `attivita` nella sandbox non può controllare i 2 GB (vede la memoria del PC).
 
 **Regole delle app** (APPLICAZIONI.md)
@@ -518,8 +517,11 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 24. **Integrazione a pannelli**; **ragionare sulla barra del titolo**; pulsante a griglia nel
     launcher (rimandato).
 25. **Si lavora sul processore del computer** (decisione della persona, 14/11/2026): sul Mac
-    tutto in arm64, sul PC Windows tutto in x86_64, niente emulazione. Da adattare
-    compilazione, sandbox e prove; le prove ARM sul Mac (sezione 10) diventano quelle normali.
+    tutto in arm64, sul PC Windows tutto in x86_64, niente emulazione. Fatto per compilazione
+    (`build.sh`, Docker senza `--platform`), sandbox e prove: sul Mac il 15/11/2026 compilano e
+    girano native (QEMU con hvf; su Linux ARM con kvm; se manca, `run.sh` e le prove si fermano
+    invece di emulare). Restano le cose della sezione 10. Sul PC Windows QEMU emula ancora il
+    processore (punto 23).
 
 **Rimandati per il futuro** (decisione della persona, 13/11/2026)
 26. **Il compositore sullo standard dei messaggi.** Per ora tiene il suo formato a dati fissi
@@ -566,21 +568,38 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 Non servono più: priorità e tempo reale (li dà Linux); la chiamata "chi sono io" (su Linux
 c'è `getuid`).
 
-## 10. Da provare su ARM (sul Mac)
+## 10. Le prove su ARM (sul Mac)
 
-Su ARM finora si è solo compilato. Sul Mac:
+Sul Mac con chip Apple tutto gira nativo: Docker senza `--platform`, QEMU con hvf. Servono
+Docker, QEMU (`brew install qemu`) e `uv` (`brew install uv`).
 
 ```sh
-docker run --rm --platform linux/amd64 -v "$PWD:/w" alpine:3.24 sh /w/build.sh arm64
-./run.sh arm64
-uv run test/collaudo.py --cpu arm64
+./run.sh                                                         # compila e avvia (seriale nel terminale)
+docker run --rm -v "$PWD:/w" $(sh strumenti/compilazione/attrezzi.sh) sh /w/build.sh   # solo compilare
+uv run test/collaudo.py                                          # tutte le prove (--compila: prima compila)
+uv run strumenti/sandbox/sandbox.py compila
+uv run strumenti/sandbox/sandbox.py prova applicazioni mouse files   # le prove da far girare, per nome
 ```
 
-- Le foto di riferimento ARM (`test/riferimenti/arm64/*.png`) sono vecchie: mancano il
-  puntatore nuovo, la barra degli strumenti di Impostazioni, Files, la Home e il totale della
-  memoria. Vanno rifatte con `--riferimenti`, **dopo aver guardato a occhio ogni schermata**.
-- Anche il valore atteso della memoria su ARM (nella prova di Attività) va rifatto.
-- Su ARM si è provato a mano solo Doom (funziona); le prove automatiche ARM restano da fare.
+Com'è andata il 15/11/2026 (Mac, ramo `comando-network`): compilazione 13 s (pezzi già pronti),
+sandbox 5 s; collaudo in QEMU 12 prove su 15 riuscite in circa 3 minuti; sandbox 11 su 13 (2
+saltate perché solo QEMU). Le tre che non passano:
+
+- `avvio` (2 volte su 4): il programma dell'archivio di avvio scrive la riga
+  `avvio: / montato (ext4 su /dev/vda2, sola lettura)` in tre pezzi, e il kernel ci infila in
+  mezzo il suo messaggio "EXT4-fs ... mounted": la prova non trova la riga. È un difetto di
+  `utente/avvio/avvio.c`, non della prova (sul PC non ancora visto, ma può capitare uguale).
+  Da decidere come correggerlo (ogni riga in una sola scrittura, o le righe dell'avvio nel
+  registro del kernel, `/dev/kmsg`, come fanno gli initramfs di Linux).
+- `files` e `immagini`, uguali nella sandbox (stessi pixel): le foto di riferimento sono di
+  prima del puntatore nuovo (freccia grigia con bordo bianco) e dei cambi di UIKit del 14/11
+  (spaziatura delle lettere nei testi piccoli di Files: titoli della barra laterale, sigle
+  BIN/TXT, riquadro Informazioni). Non dipendono da ARM.
+
+Le foto nuove sono in `test/risultati/arm64/foto_nuove/arm64/` (non nel repo): **vanno
+guardate** e, se giuste, copiate in `test/riferimenti/arm64/` (o rifatte con
+`uv run test/collaudo.py --riferimenti`). Lo stesso vale per quelle del PC. Il totale della
+memoria su ARM (512 MB) è uguale a quello di riferimento.
 
 ## 11. Storia
 
