@@ -273,7 +273,7 @@ vassoio) il puntatore lo sentono sempre.
   stb_image (`esterni/stb`, pubblico dominio o MIT) da `immagine_carica` di GKit. Esempio,
   Impostazioni e Contatore hanno solo l'SVG: per loro il simbolo "pacchetto".
   La **cartella Home sulla scrivania non c'è più** (Files si apre dalla userbar).
-  **L'ora e la data non ci sono più**: il disegno non le mostra (vedi "Da confermare").
+  **In fondo alla userbar ci sono la foto profilo (segnaposto: simbolo "user" 24, nessun clic) e l'ora in 24 ore su due righe**, aggiornata quando cambia il minuto (la scrivania aspetta con un tempo massimo fino al minuto dopo; ora dell'orologio del PC, `data_ora`). La data non c'è più: il disegno non la mostra.
   Scelte nostre dove il disegno non dice niente (da confermare): il segno delle app aperte è una
   lineetta scura larga 2 nel margine a sinistra del pulsante (alta 4 se aperta, 14 se in primo
   piano); nel vassoio le app sono in ordine (prima quelle del sistema, poi le altre, per nome);
@@ -421,8 +421,9 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 6. **L'avviso in basso in Files** quando un'azione non riesce (es. eliminare una cartella
    piena) non è nel disegno. Va bene, o va disegnato in Figma?
 7. ~~**Doppio clic su Home**~~: la cartella Home sulla scrivania non c'è più.
-8. **Dove vanno l'ora, la data e le notifiche.** Stavano nella vecchia isola; il disegno della
-   scrivania (userbar a sinistra) non le mostra, e per ora non si vedono da nessuna parte.
+8. **Dove vanno la data e le notifiche.** L'ora ora c'è (in fondo alla userbar); la data e le
+   notifiche stavano nella vecchia isola e per ora non si vedono da nessuna parte. Aperta anche:
+   cosa fa un clic sulla foto profilo (oggi niente) e da dove arriva la foto vera.
 9. **Le scelte della userbar che il disegno non dice** (sezione 5): il segno delle app aperte,
    l'ordine nel vassoio, il pulsante App premuto mentre il vassoio è aperto, quali app sono
    fissate (oggi quelle del sistema).

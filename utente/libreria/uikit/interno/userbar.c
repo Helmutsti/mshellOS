@@ -6,7 +6,9 @@
 
 int userbar_altezza(int fissate) {
     int voci = 1 + fissate;
-    return 2 * USERBAR_MARGINE + voci * ALTEZZA_S + (voci - 1) * USERBAR_SPAZIO;
+    int gruppo_app = voci * ALTEZZA_S + (voci - 1) * USERBAR_SPAZIO;
+    int gruppo_profilo = ALTEZZA_S + USERBAR_SPAZIO + USERBAR_ORA_ALTA;
+    return USERBAR_MARGINE + gruppo_app + USERBAR_TRA_GRUPPI + gruppo_profilo + USERBAR_MARGINE_BASSO;
 }
 
 void userbar_posto(int schermo_a, int fissate, int *x, int *y) {
@@ -51,7 +53,7 @@ void userbar_ombra(struct pennello *p, int x, int y, int fissate) {
 }
 
 void userbar_disegna(struct pennello *p, int x, int y, const struct voce_app *app,
-                     const int *stati, int fissate, int sopra, int premuta) {
+                     const int *stati, int fissate, int sopra, int premuta, int ore, int minuti) {
     struct tondo t = tondo(x, y, USERBAR_LARGHEZZA, userbar_altezza(fissate), USERBAR_RAGGIO);
     pennello_colore(p, SUPERFICIE_VETRO);
     riempi_forma(p, &t);
@@ -68,6 +70,23 @@ void userbar_disegna(struct pennello *p, int x, int y, const struct voce_app *ap
         riempi_tondo(p, x + (USERBAR_MARGINE - USERBAR_SEGNO_LARGO) / 2, vy + (ALTEZZA_S - alto) / 2,
                      USERBAR_SEGNO_LARGO, alto, USERBAR_SEGNO_LARGO / 2);
     }
+    /* Il gruppo profilo, dopo le app e il gap tra i gruppi: la foto (per ora il segnaposto,
+     * il simbolo "user") e sotto l'ora su due righe, ore sopra e minuti sotto. */
+    int py = vy - USERBAR_SPAZIO + USERBAR_TRA_GRUPPI;
+    pennello_colore(p, CONTROLLO_SFONDO_NUOVO);
+    riempi_tondo(p, vx, py, ALTEZZA_S, ALTEZZA_S, ALTEZZA_S / 2);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_PRIMARIO));
+    icona(p, ICONA_USER, USERBAR_FOTO_ICONA, vx + (ALTEZZA_S - USERBAR_FOTO_ICONA) / 2,
+          py + (ALTEZZA_S - USERBAR_FOTO_ICONA) / 2);
+    char riga[3];
+    int oy = py + ALTEZZA_S + USERBAR_SPAZIO;
+    pennello_colore(p, TESTO_PRIMARIO);
+    riga[0] = '0' + (ore / 10) % 10; riga[1] = '0' + ore % 10; riga[2] = 0;
+    testo_centrato(p, FONT_PICCOLO_NUOVO, vx + (ALTEZZA_S - larghezza_testo(FONT_PICCOLO_NUOVO, riga)) / 2,
+                   oy, INTERLINEA_PICCOLO, riga);
+    riga[0] = '0' + (minuti / 10) % 10; riga[1] = '0' + minuti % 10;
+    testo_centrato(p, FONT_PICCOLO_NUOVO, vx + (ALTEZZA_S - larghezza_testo(FONT_PICCOLO_NUOVO, riga)) / 2,
+                   oy + INTERLINEA_PICCOLO, INTERLINEA_PICCOLO, riga);
 }
 
 int userbar_voce_sotto(int x, int y, int fissate, int px, int py) {

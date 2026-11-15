@@ -11,7 +11,7 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt).
   - "Gruppo app" (232 di altezza): Pulsante App (Primario, S, 32) + app (Secondario, S, 32: Files, Browser, Posta, Impostazioni, Attivita).
   - "Gruppo profilo" (72): Foto profilo + Ora.
 - Gap tra i gruppi = spazio/16: e il doppio del gap interno (8), quindi lo stacco si vede senza linea; 24 sarebbe troppo grande per una pillola di 332 su 800 e la fa crescere oltre il necessario.
-- Foto profilo: cerchio 32 x 32, angoli raggio/pillola, fondo controllo/sfondo, padding 0. Segnaposto: Simbolo/user (Lucide "user", 16, colore icona Primario) perche non c'e ancora una foto vera.
+- Foto profilo: cerchio 32 x 32, angoli raggio/pillola, fondo controllo/sfondo, padding 0. Segnaposto: Simbolo/user (Lucide "user", **24** secondo il nodo Figma 274:3504; colore icona Primario) perche non c'e ancora una foto vera.
 - Ora: testo su due righe, "09" sopra e "41" sotto (ore e minuti, 24 ore), stile testo/piccolo (IBM Plex Sans Regular 12/16), colore testo/primario, centrato, spaziatura lettere 0. Casella larga 32 (riempie il gruppo), alta 32, padding 0.
 - Separazione tra app e profilo: solo il gap spazio/16 della pillola.
 

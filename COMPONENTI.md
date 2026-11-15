@@ -79,7 +79,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Poteri**: super sì. Permessi controllati con `ha_permesso` (provvisorio, sempre sì): "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati). Per "apps.manage" c'è anche un controllo vero: uid 0, oppure app di sistema con "apps.manage" nel manifesto (`pacchetto_puo_gestire`).
 
 ### scrivania (`utente/programmi/scrivania.c`)
-- **Cosa fa**: la "faccia" del sistema: sfondo, userbar (pulsante App e app di sistema, con segno per quelle aperte) e vassoio delle app installate. Un clic su un'icona chiede al launcher di aprire l'app.
+- **Cosa fa**: la "faccia" del sistema: sfondo, userbar (pulsante App e app di sistema, con segno per quelle aperte; in fondo foto profilo segnaposto e ora, aggiornata a ogni minuto con il timeout del poll) e vassoio delle app installate. Un clic su un'icona chiede al launcher di aprire l'app.
 - **Tipo**: servizio (con superfici speciali, per il compositore è come un'app).
 - **Lanciato da**: init.
 - **Lancia**: nessun programma direttamente; chiede al launcher (`apri_applicazione`).

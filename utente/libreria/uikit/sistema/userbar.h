@@ -9,9 +9,12 @@
  * LA USERBAR: una pillola di vetro sul bordo SINISTRO dello schermo, a USERBAR_DAL_BORDO (8) dal
  * bordo, centrata in altezza. In colonna: il pulsante App (Primario S, tondo, l'icona della
  * griglia) e sotto le app FISSATE alla barra (Secondario S, tondi, la loro icona), senza
- * nessun contenitore. SPAZIO_4 di margine intorno, SPAZIO_8 tra un pulsante e l'altro; raggio
- * a pillola, fondo SUPERFICIE_VETRO, ombra "barra". Per ora solo le icone delle app: niente
- * ora, stato o notifiche.
+ * nessun contenitore (gruppo app). Dopo, a SPAZIO_16, il gruppo profilo: la FOTO PROFILO (cerchio
+ * 32, CONTROLLO_SFONDO, per ora il simbolo "user" 24 al posto della foto; nessun clic) e sotto
+ * SPAZIO_8 l'ORA in 24 ore su due righe (ore sopra, minuti sotto, FONT_PICCOLO_NUOVO 12/16,
+ * TESTO_PRIMARIO, centrata). SPAZIO_4 di margine intorno (SPAZIO_8 in basso), SPAZIO_8 tra un
+ * pulsante e l'altro; raggio a pillola, fondo SUPERFICIE_VETRO, ombra "barra". Foto e ora non
+ * sono voci: userbar_voce_sotto non le vede.
  *
  * IL SEGNO DELLE APP APERTE (il disegno non lo mostra; scelta nostra, con i token): una
  * lineetta verticale TESTO_PRIMARIO larga 2 nel margine a sinistra del pulsante, come il
@@ -68,6 +71,10 @@
 #define USERBAR_DAL_BORDO   SPAZIO_8
 #define USERBAR_MARGINE     SPAZIO_4
 #define USERBAR_SPAZIO      SPAZIO_8
+#define USERBAR_MARGINE_BASSO SPAZIO_8   /* in basso 8: con le cifre a ~4 dal fondo della riga sono 12 visivi */
+#define USERBAR_TRA_GRUPPI  SPAZIO_16    /* tra il gruppo app e il gruppo profilo */
+#define USERBAR_FOTO_ICONA  24           /* il segnaposto della foto: Simbolo/user, 24 nel disegno */
+#define USERBAR_ORA_ALTA    (2 * INTERLINEA_PICCOLO)   /* ore sopra, minuti sotto: 32 */
 #define USERBAR_LARGHEZZA   (ALTEZZA_S + 2 * USERBAR_MARGINE)    /* 40 */
 #define USERBAR_RAGGIO      (USERBAR_LARGHEZZA / 2)              /* a pillola */
 #define USERBAR_SEGNO_LARGO 2
@@ -107,9 +114,9 @@ void userbar_ombra(struct pennello *p, int x, int y, int fissate);
 
 /* Disegna la userbar con l'angolo in alto a sinistra in (x, y). 'app' sono le app fissate,
  * 'stati' il loro APP_... (0 se non serve il segno), 'sopra' e 'premuta' le voci (0 App,
- * 1..n le app; -1 nessuna). */
+ * 1..n le app; -1 nessuna), 'ore' e 'minuti' l'ora (24 ore) in fondo. */
 void userbar_disegna(struct pennello *p, int x, int y, const struct voce_app *app,
-                     const int *stati, int fissate, int sopra, int premuta);
+                     const int *stati, int fissate, int sopra, int premuta, int ore, int minuti);
 
 /* La voce della userbar nel punto (px, py) (coordinate come quelle di userbar_disegna): 0 il
  * pulsante App, 1..n le app fissate, -1 nessuna. */

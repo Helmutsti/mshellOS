@@ -23,7 +23,7 @@ static void scrivania_disegna(struct widget *w, struct pennello *p) {
     userbar_posto(w->a, 6, &bx, &by);
     bx += w->x; by += w->y;
     userbar_ombra(p, bx, by, 6);                                 /* sulla scrivania: il compositore */
-    userbar_disegna(p, bx, by, app, stati, 6, 0, 0);             /* App premuto: il vassoio e' aperto */
+    userbar_disegna(p, bx, by, app, stati, 6, 0, 0, 9, 41);           /* App premuto: il vassoio e' aperto */
     vassoio_posto(bx, by, 6, &vx, &vy);
     vassoio_ombra(p, vx, vy, 6);
     vassoio_disegna(p, vx, vy, app, 6, 0, -1);                   /* il puntatore su Files */

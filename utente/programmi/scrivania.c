@@ -12,8 +12,8 @@
  *     come un menu), a destra del pulsante App: tutte le applicazioni installate, in una
  *     griglia. C'e' solo mentre e' aperto: si apre e si chiude con il pulsante App.
  * Il disegno e' quello della pagina "Scrivania" del file Figma (userbar e vassoio:
- * uikit/sistema/userbar.h). L'ora e la data, che stavano nella vecchia isola, nel disegno non ci
- * sono: per ora la scrivania non le mostra (STATO.md, "Da confermare").
+ * uikit/sistema/userbar.h). In fondo alla userbar ci sono la foto profilo (segnaposto) e l'ora
+ * in 24 ore, che la scrivania aggiorna quando cambia il minuto. La data non c'e'.
  *
  * LE APPLICAZIONI INSTALLATE le legge da /system/apps (quelle del sistema) e poi da
  * /data/apps (quelle installate dalla persona): una cartella per applicazione, con il suo
@@ -267,6 +267,21 @@ static int puntatore_pannello(struct puntatore_pannello *pp, const struct notizi
     return cliccata;
 }
 
+/* L'ora in fondo alla userbar (24 ore, quella dell'orologio del PC: data_ora). Si ridisegna solo
+ * la userbar quando cambia il minuto: il ciclo aspetta con un tempo massimo che arriva al
+ * minuto dopo (poll con timeout), non gira a vuoto. */
+static unsigned int ora_ore, ora_minuti;
+
+/* Rilegge l'ora; 1 se e' cambiato il minuto. *ms_al_prossimo: millisecondi al minuto dopo. */
+static int rileggi_ora(int *ms_al_prossimo) {
+    struct data_ora d;
+    if (data_ora(&d) < 0) { if (ms_al_prossimo) *ms_al_prossimo = 60000; return 0; }
+    int cambiato = d.ore != ora_ore || d.minuti != ora_minuti;
+    ora_ore = d.ore; ora_minuti = d.minuti;
+    if (ms_al_prossimo) *ms_al_prossimo = (int)(60 - d.secondi) * 1000;
+    return cambiato;
+}
+
 static int disegna_barra(void) {
     unsigned int *pixel = finestra_tela(&barra);
     if (!pixel) return 0;
@@ -278,7 +293,7 @@ static int disegna_barra(void) {
     for (int i = 0; i < quante_fissate; i++) stati[i] = stato_app(&app[fissata[i]]);
     /* mentre il vassoio e' aperto il pulsante App resta premuto */
     userbar_disegna(&p, 0, 0, voci_barra, stati, quante_fissate, su_barra.sopra,
-                    vassoio_aperto ? 0 : su_barra.premuta);
+                    vassoio_aperto ? 0 : su_barra.premuta, (int)ora_ore, (int)ora_minuti);
     return finestra_mostra(&barra) >= 0;
 }
 
@@ -453,6 +468,7 @@ int main(void) {
         return 1;
     }
     leggi_applicazioni();
+    rileggi_ora(0);
 
     if (finestra_apri_come(&sfondo, schermo_l, schermo_a, "sfondo", RUOLO_SFONDO, 0, 0, 0) < 0 ||
         !disegna_sfondo())
@@ -469,9 +485,10 @@ int main(void) {
     for (;;) {
         struct da_guardare g[3] = { { sfondo.collegamento, 0 }, { barra.collegamento, 0 },
                                     { vassoio.collegamento, 0 } };
-        if (aspetta(g, vassoio_aperto ? 3 : 2, -1) < 0) return 1;
+        int ms, minuto_nuovo = rileggi_ora(&ms);
+        if (aspetta(g, vassoio_aperto ? 3 : 2, ms) < 0) return 1;
         struct notizia n;
-        int ridisegna = 0, fuoco_cambiato = 0;
+        int ridisegna = minuto_nuovo | rileggi_ora(0), fuoco_cambiato = 0;
         if (g[0].pronto) {
             if (!finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
             ridisegna |= notizia_sfondo(&n);

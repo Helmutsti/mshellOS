@@ -4,23 +4,23 @@ Sono numeri presi dallo schermo vero (1280x800). Se la scrivania o il compositor
 cambiano disegno (la userbar, il vassoio, dove si aprono le finestre), si cambiano QUI e
 basta.
 
-    LA USERBAR, sul bordo sinistro (x 8..48), centrata in altezza (y 260..540): in colonna
+    LA USERBAR, sul bordo sinistro (x 8..48), centrata in altezza (y 214..586, alta 372: in fondo la foto profilo e l'ora): in colonna
     il pulsante App e le app del sistema, tondi di 32 pixel a 40 l'uno dall'altro, con il
     centro in x = 28:
-        App             y = 280
-        Attivita        y = 320
-        Doom            y = 360
-        Esempio         y = 400
-        Files           y = 440
-        Impostazioni    y = 480
-        Store           y = 520
+        App             y = 234
+        Attivita        y = 274
+        Doom            y = 314
+        Esempio         y = 354
+        Files           y = 394
+        Impostazioni    y = 434
+        Store           y = 474
     A sinistra di un'app aperta, nel margine della barra (x 9..11), c'e' un segno scuro
     (nel tema chiaro): un puntino alto 4, una lineetta alta 14 per quella in primo piano.
 
     IL VASSOIO DELLE APP si apre con il pulsante App, a destra della barra (x = 52), centrato
     sul pulsante App: tutte le app installate, 3 per riga, voci di 80 x 68 a 88 l'una
     dall'altra. Con le 7 app del sistema (il Terminale sta solo qui, non nella userbar):
-    3 righe, 288 x 252, angolo in (52, 154); il centro del tondo della prima voce in (108, 194).
+    3 righe, 288 x 252, angolo in (52, 108); il centro del tondo della prima voce in (108, 148).
 
     LE FINESTRE si aprono "a scala": la prima con l'angolo in (140, 130), ognuna delle
     successive 40 pixel piu' in basso e a destra (a destra della userbar).
@@ -32,9 +32,9 @@ from qemu import pixel_diversi
 
 FISSATE = ["Attivita", "Doom", "Esempio", "Files", "Impostazioni", "Store"]
 BARRA_X = 8                       # la userbar: bordo sinistro, larga 40
-BARRA_Y = (800 - (8 + 7 * 32 + 6 * 8)) // 2   # 260: centrata, con App e 6 app
+BARRA_Y = (800 - (4 + 7 * 32 + 6 * 8 + 16 + 72 + 8)) // 2   # 214: centrata, con App, 6 app, foto e ora
 VOCE_X = BARRA_X + 4 + 16         # il centro dei tondi
-APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 280)
+APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 234)
 # Contatore non e' nella userbar: non e' un'app del sistema, il suo pacchetto sta sulla
 # Scrivania della persona (build.sh). Le misure della sua finestra restano in MISURE, per
 # la prova pacchetti, che la installa e la apre.
@@ -44,10 +44,10 @@ SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine
 # Il vassoio con le 7 app del sistema: quelle della userbar e il Terminale, in ordine
 # alfabetico (con Contatore installata le righe restano 3: VASSOIO vale per le 7 e le 8).
 NEL_VASSOIO = FISSATE + ["Terminale"]
-VASSOIO_ANGOLO = (52, 154)
-VASSOIO = {nome: (52 + 16 + 40 + 88 * (i % 3), 154 + 16 + 24 + 76 * (i // 3))
+VASSOIO_ANGOLO = (52, 108)
+VASSOIO = {nome: (52 + 16 + 40 + 88 * (i % 3), 108 + 16 + 24 + 76 * (i // 3))
            for i, nome in enumerate(NEL_VASSOIO)}
-VASSOIO_RETTANGOLO = (52, 154, 52 + 288, 154 + 252)
+VASSOIO_RETTANGOLO = (52, 108, 52 + 288, 108 + 252)
 
 # Le misure delle finestre (larghezza, altezza), senza l'ombra.
 MISURE = {"Attivita": (640, 460), "Contatore": (200, 146), "Esempio": (320, 220),
