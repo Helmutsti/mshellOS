@@ -408,25 +408,24 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 
 ## 8. Da confermare (domande che aspettano la persona)
 
-1. **Il pezzo grigio "Altro (file system)" nella barra del Disco di Attività.** Non c'è nel
-   disegno Figma. Copre lo spazio che Linux dice occupato ma che nessuna cartella spiega
-   (circa mezzo megabyte). Tenerlo, toglierlo o mostrarlo diversamente?
-2. **Nomi in minuscolo**: le cartelle delle app nel sistema (`contatore`, ...) e i nomi dei
-   processi in Attività sono in minuscolo. Va bene così?
-3. **Servizi come file singoli** in `/system/services` (non una cartella per servizio). Va bene?
-4. **La sottocartella "Scrivania"** della casa tiene il nome italiano, mentre le cartelle di
-   sistema sono in inglese. Va bene?
+1. ~~**Il pezzo grigio "Altro" nel Disco di Attività**~~: tolto (15/11/2026, deciso dalla persona).
+2. ~~**Nomi in minuscolo**~~ di cartelle delle app e processi: vanno bene (deciso dalla persona).
+3. ~~**Servizi come file singoli**~~: ogni servizio ha la sua cartella anche in
+   `/system/services/<nome>/` (il programma è `<nome>/<nome>`), come in `/data/services`.
+4. ~~**La sottocartella "Scrivania"**~~: si chiama `Desktop` (deciso dalla persona).
 5. ~~**Scorciatoie da tastiera in Files**~~: fatte con i tasti fisici che `eventi` già manda
    (vedi la sezione 6b), senza cambiare il servizio.
-6. **L'avviso in basso in Files** quando un'azione non riesce (es. eliminare una cartella
-   piena) non è nel disegno. Va bene, o va disegnato in Figma?
+6. ~~**L'avviso in basso in Files**~~: riportato nel disegno così com'è nel codice
+   (`disegni/Files/`, schermata "Files – avviso in basso").
 7. ~~**Doppio clic su Home**~~: la cartella Home sulla scrivania non c'è più.
 8. **Dove vanno la data e le notifiche.** L'ora ora c'è (in fondo alla userbar); la data e le
    notifiche stavano nella vecchia isola e per ora non si vedono da nessuna parte. Aperta anche:
    cosa fa un clic sulla foto profilo (oggi niente) e da dove arriva la foto vera.
-9. **Le scelte della userbar che il disegno non dice** (sezione 5): il segno delle app aperte,
-   l'ordine nel vassoio, il pulsante App premuto mentre il vassoio è aperto, quali app sono
-   fissate (oggi quelle del sistema).
+   **Rimandata** (decisione della persona, 15/11/2026): per ora non ci si pensa.
+9. ~~**Le scelte della userbar che il disegno non dice**~~: riportate nel disegno così come sono
+   nel codice (`disegni/Scrivania/`). Restano aperte: l'icona di Doom (nel disegno un teschio
+   Lucide, scelto dall'agente) e se userbar e vassoio mostrano le icone vere delle app (come
+   il codice) o i simboli monocromatici (come il disegno).
 
 ## 9. Da fare
 

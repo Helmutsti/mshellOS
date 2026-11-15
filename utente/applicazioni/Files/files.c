@@ -345,9 +345,8 @@ static void aggiorna_frecce(void) {
 }
 
 /* L'AVVISO: quando qualcosa non riesce (un permesso che manca, un disco in
- * sola lettura), una pillola in basso nel pannello, fino alla prossima azione. Il disegno non
- * lo ha (e' una domanda aperta in STATO.md): resta quello di prima, con i colori del
- * suggerimento. */
+ * sola lettura), una pillola in basso nel pannello, fino alla prossima azione. E' nel disegno:
+ * componente "Avviso in basso", schermata "Files – avviso in basso" (disegni/Files/). */
 static char avviso[96];
 struct avviso_basso { struct widget base; };
 static struct avviso_basso avviso_w;
