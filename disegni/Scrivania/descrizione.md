@@ -8,12 +8,19 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt).
 ## Userbar (pillola di vetro, 40 x 332, x 8 -> 48, centrata in altezza: y 234 nella schermata)
 - Auto-layout verticale, larghezza fissa 40, altezza che si adatta. Padding spazio/4 su alto, destra e sinistra; **in basso spazio/8** (vedi spaziatura). **Gap spazio/16 tra i due gruppi.** Angoli raggio/pillola, riempimento superficie/vetro (72%), ombra effetto/ombra/barra. Nessuna linea, nessun ritaglio.
 - Due gruppi (auto-layout verticale, padding spazio/0, gap spazio/8, senza sfondo, senza ritaglio):
-  - "Gruppo app" (232 di altezza): Pulsante App (Primario, S, 32) + app (Secondario, S, 32: Files, Browser, Posta, Impostazioni, Attivita).
+  - "Gruppo app" (232 di altezza): Pulsante App (Primario, S, 32) + 5 app ("Pulsante app (userbar)" 285:5580, che contiene Secondario, S, 32): Attività, Doom, Files, Impostazioni, Store (le app del sistema fissate, in ordine). Terminale ha nella_barra = false, quindi non e' fissato.
   - "Gruppo profilo" (72): Foto profilo + Ora.
 - Gap tra i gruppi = spazio/16: e il doppio del gap interno (8), quindi lo stacco si vede senza linea; 24 sarebbe troppo grande per una pillola di 332 su 800 e la fa crescere oltre il necessario.
 - Foto profilo: cerchio 32 x 32, angoli raggio/pillola, fondo controllo/sfondo, padding 0. Segnaposto: Simbolo/user (Lucide "user", **24** secondo il nodo Figma 274:3504; colore icona Primario) perche non c'e ancora una foto vera.
 - Ora: testo su due righe, "09" sopra e "41" sotto (ore e minuti, 24 ore), stile testo/piccolo (IBM Plex Sans Regular 12/16), colore testo/primario, centrato, spaziatura lettere 0. Casella larga 32 (riempie il gruppo), alta 32, padding 0.
 - Separazione tra app e profilo: solo il gap spazio/16 della pillola.
+
+## Segno delle app aperte (componente "Pulsante app (userbar)")
+- Insieme di varianti 285:5580 (pagina "Componenti complessi" 104:2, sezione 160:3269, sotto la Userbar). Proprieta **Stato app**: Chiusa 285:5562, Aperta 285:5568, In primo piano 285:5574. Ogni variante: auto-layout orizzontale 32 x 32, padding spazio/0, nessun ritaglio, contiene l'istanza "Pulsante" (Secondario, S, Normale 92:1050) e il rettangolo "Segno app aperta".
+- Segno: larghezza 2, **alto 4 se Aperta, 14 se In primo piano** (nascosto se Chiusa), centrato in verticale sul pulsante; x = -3 rispetto al pulsante (cioe' 1 dal bordo della pillola: x 1..3, nel margine di 4); posizionamento ASSOLUTO nell'auto-layout, quindi non cambia il layout (pillola resta 40 x 332, gruppo app 232). Colore testo/primario (Semantici), angoli raggio/pillola (diventano 1, a pillola).
+- Come nel codice (`uikit/interno/userbar.c`: x = pillola + (USERBAR_MARGINE - 2)/2, y = centro del pulsante - alto/2, `riempi_tondo` raggio 1, colore TESTO_PRIMARIO).
+- Nelle schermate: Attività = Aperta, Files = In primo piano, le altre Chiusa (impostato sulle istanze annidate nella userbar).
+- Nuovi simboli (Lucide, stesso schema degli altri Simbolo, in "Icone – Simbolo" 160:1232, pagina "Componenti base" 80:740): Simbolo/store 285:5545, Simbolo/doom 285:5554 (scelta provvisoria: "skull"), Simbolo/pacchetto 285:5875 ("package", come ICONA_PACKAGE del codice per le app senza icona propria).
 
 ## Spaziatura (userbar)
 - Gli elementi e i gruppi hanno padding 0; lo spazio lo da solo la pillola.
@@ -26,4 +33,6 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt).
 - Chiaro e Scuro seguono la collezione Semantici.
 
 ## Note
-- Vassoio delle app aperto (148:862): centrato in altezza sulla userbar (centro del vassoio = centro della pillola = y 400; vassoio a y 312).
+- Il pulsante App nella schermata del vassoio e' in stato Premuto (variante "Pulsante App=Premuto" 148:710) finche' il vassoio e' aperto, come nel codice.
+- Vassoio app (componente 148:534, 3 colonne): 8 voci nell'ordine del codice, prima le app del sistema (Attività 148:536, Doom 148:547, Files 148:557, Impostazioni 148:565, Store 148:574, Terminale 148:582), poi le altre per nome (Contatore 285:5883, Esempio 285:5888, simbolo pacchetto). Altezza 252.
+- Vassoio delle app aperto (148:862): centrato in altezza sulla userbar (centro del vassoio = centro della pillola = y 400; vassoio alto 252, a y 274).
