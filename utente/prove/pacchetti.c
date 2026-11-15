@@ -3,13 +3,13 @@
  *
  * Sta solo nel disco disco_pacchetti.img (build.sh), in /data/tests: init lo fa partire
  * all'accensione, come sistema (uid 0, che puo' chiedere di installare). Fa, una dopo
- * l'altra, le cose che domani fara' lo Store con contatore.app (sulla Scrivania della
+ * l'altra, le cose che domani fara' lo Store con contatore.app (sul Desktop della
  * persona), e scrive nella seriale come va ogni passo. Alla fine "pacchetti: tutto bene",
  * oppure "pacchetti: fallita" con il passo. */
 #include "corekit/corekit.h"
 #include "corekit/sistema/launcher.h"
 
-#define PACCHETTO "/data/users/1000/home/Scrivania/contatore.app"
+#define PACCHETTO "/data/users/1000/home/Desktop/contatore.app"
 #define NON_PACCHETTO "/data/users/1000/home/leggimi.txt"
 
 static struct resoconto r;

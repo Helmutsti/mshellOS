@@ -141,7 +141,7 @@ def files(p):
     m.foto("ctrl_maiusc_n")
     m.premi("esc")                                                      # il nome resta
     time.sleep(0.3)
-    clic(elemento(2))                                                   # Documenti, Immagini, Nuova cartella
+    clic(elemento(3))                                                   # Desktop, Documenti, Immagini, Nuova cartella
     m.premi("delete")                                                   # vuota: via subito
     torna(casa, "la cartella nuova tolta con Canc")
     clic(elemento(4))                                                   # leggimi.txt
@@ -163,7 +163,7 @@ def files(p):
     p.controlla(not s.zona_uguale(nuova, casa, corpo), "Ctrl+Maiusc+N non ha fatto niente")
 
     # --- l'avviso: Esc fa come Annulla ---
-    clic(elemento(0))                                                   # Documenti (piena)
+    clic(elemento(1))                                                   # Documenti (piena)
     documenti = m.aspetta_schermo_fermo()
     m.premi("delete")
     avviso = cambia(documenti, "l'avviso per eliminare Documenti", schermo)

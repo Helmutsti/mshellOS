@@ -420,7 +420,7 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
 
 /* Lo sfondo, disegnato all'avvio e quando la persona lo cambia (notizia_tema): la foto scelta
  * in Impostazioni (sfondo.h) o, senza scelta, il Predefinito. Le icone della scrivania non ci sono: torneranno quando la
- * scrivania mostrera' i file della cartella Scrivania della persona. Le app si aprono dal
+ * scrivania mostrera' i file della cartella Desktop della persona. Le app si aprono dal
  * vassoio delle app. */
 static int disegna_sfondo(void) {
     unsigned int *pixel = finestra_tela(&sfondo);

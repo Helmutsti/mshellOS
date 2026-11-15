@@ -7,7 +7,7 @@
  *   |               [<][>] [::][=]  Home / Documenti      (Cerca in ...) | barra degli strumenti
  *   | Scorciatoie   +---------------------------------------------------+|
  *   |  Home         | Nome ^                     Tipo        Dimensione ||
- *   |  Scrivania    | [] Lavoro                  cartella     6 elementi||  il pannello chiaro
+ *   |  Desktop      | [] Lavoro                  cartella     6 elementi||  il pannello chiaro
  *   | Filtri        | ...                                               ||  (pannello.h), con la
  *   |  Immagini     |                                                   ||  griglia o la tabella
  *   |  Testi        |                                                   ||
@@ -15,7 +15,7 @@
  *   | Tags          +---------------------------------------------------+|
  *   +--------------------------------------------------------------------+
  *
- *   - LA BARRA LATERALE (barra_laterale.h): le scorciatoie (la casa, la sua Scrivania) e i
+ *   - LA BARRA LATERALE (barra_laterale.h): le scorciatoie (la casa, il suo Desktop) e i
  *     filtri, che mostrano della cartella solo le immagini, i testi o i programmi
  *     (riconosciuti dall'estensione del nome; i programmi dal permesso di esecuzione). Un
  *     filtro acceso si spegne con un altro clic. "Tags" e' solo il titolo, come nel disegno.
@@ -402,7 +402,7 @@ static int voce_home, voce_scrivania, voce_immagini, voce_testi, voce_programmi;
 static int laterale_selezionata(struct barra_laterale_tk *b, int voce, void *dati) {
     (void)b; (void)dati;
     if (voce == voce_home) return uguali(qui, CASA);
-    if (voce == voce_scrivania) return uguali(qui, CASA "/Scrivania");
+    if (voce == voce_scrivania) return uguali(qui, CASA "/Desktop");
     if (voce == voce_immagini) return filtro == GENERE_IMMAGINE;
     if (voce == voce_testi) return filtro == GENERE_TESTO;
     if (voce == voce_programmi) return filtro == GENERE_PROGRAMMA;
@@ -413,7 +413,7 @@ static void laterale_clic(struct barra_laterale_tk *b, int voce, void *dati) {
     (void)b; (void)dati;
     avvisa("");
     if (voce == voce_home) { vai(CASA, 1); return; }
-    if (voce == voce_scrivania) { vai(CASA "/Scrivania", 1); return; }
+    if (voce == voce_scrivania) { vai(CASA "/Desktop", 1); return; }
     int genere = voce == voce_immagini ? GENERE_IMMAGINE : voce == voce_testi ? GENERE_TESTO : GENERE_PROGRAMMA;
     filtro = filtro == genere ? -1 : genere;      /* un altro clic lo spegne */
     aggiorna_contenuto();
@@ -1052,7 +1052,7 @@ int main(int quanti, char **argomenti) {
     barra_laterale_prepara(&laterale, laterale_selezionata, laterale_clic, 0);
     barra_laterale_intestazione(&laterale, "Scorciatoie");
     voce_home = barra_laterale_voce(&laterale, "Home", ICONA_HOUSE);
-    voce_scrivania = barra_laterale_voce(&laterale, "Scrivania", ICONA_MONITOR);
+    voce_scrivania = barra_laterale_voce(&laterale, "Desktop", ICONA_MONITOR);
     barra_laterale_intestazione(&laterale, "Filtri");
     voce_immagini = barra_laterale_voce(&laterale, "Immagini", ICONA_IMAGE);
     voce_testi = barra_laterale_voce(&laterale, "Testi", ICONA_FILE_TEXT);

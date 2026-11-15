@@ -81,7 +81,7 @@ for f in utente/comandi/*.c; do
 done
 
 # le applicazioni, come build.sh: il pacchetto (manifesto, code, resources); quelle di
-# DA_INSTALLARE solo come .app sulla Scrivania, le altre scompattate in /system/apps.
+# DA_INSTALLARE solo come .app sul Desktop, le altre scompattate in /system/apps.
 # Ci sono anche Esempio e Contatore (utente/prove/applicazioni): la sandbox e' un ambiente
 # di prova, come disco_prove.img.
 DA_INSTALLARE="contatore"
@@ -130,7 +130,7 @@ for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
 UTENTE_UID=1000
 CASA=/data/users/$UTENTE_UID
 metti_cartella /data/users 0 755
-for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences" "$CASA/wallpapers"; do
+for c in "$CASA" "$CASA/home" "$CASA/home/Desktop" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences" "$CASA/wallpapers"; do
     metti_cartella "$c" $UTENTE_UID 700
 done
 for nome in $APPS; do metti_cartella "$CASA/appsdata/$nome" $UTENTE_UID 700; done
@@ -153,9 +153,9 @@ for r in file/* file/.[!.]*; do
     fi
 done
 for nome in $SCRIVANIA_PACCHETTI; do
-    cp "$P/$nome.app" "$CASA_VERA/Scrivania/$nome.app"
-    chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Scrivania/$nome.app"
-    chmod 644 "$CASA_VERA/Scrivania/$nome.app"
+    cp "$P/$nome.app" "$CASA_VERA/Desktop/$nome.app"
+    chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Desktop/$nome.app"
+    chmod 644 "$CASA_VERA/Desktop/$nome.app"
 done
 # (le date della casa le sposta avvio della sandbox, a ogni accensione)
 find "$CASA_VERA" -exec touch -d "2025-12-31 18:02:00" {} +

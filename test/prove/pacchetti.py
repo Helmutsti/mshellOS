@@ -2,7 +2,7 @@
 
 Si accende il disco delle prove dei pacchetti (disco_pacchetti.img, vedi build.sh): in
 /data/tests c'e' il programma pacchetti (utente/prove/pacchetti.c), che init fa partire come
-sistema. Lui, con contatore.app (sulla Scrivania della persona):
+sistema. Lui, con contatore.app (sul Desktop della persona):
   - chiede l'elenco delle app installate: le 7 del sistema (con lo Store e il Terminale), senza Contatore;
   - chiede di aprire il file leggimi.txt: il sistema non sa aprirlo (aprire contatore.app
     farebbe partire lo Store: lo prova la prova store);

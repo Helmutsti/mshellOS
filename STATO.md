@@ -299,14 +299,14 @@ di Figma (pagina "App - Files"), fatto solo di componenti di UIKit.
 - **Barra degli strumenti**: i controlli cominciano dove finisce la barra laterale: indietro e
   avanti (frecce chevron), icone o elenco, il percorso "Home / Documenti" (fuori dalla casa parte
   da "Disco"), la ricerca larga 200.
-- **Barra laterale**: Scorciatoie (Home, Scrivania), Filtri (Immagini, Testi, Programmi; un
+- **Barra laterale**: Scorciatoie (Home, Desktop), Filtri (Immagini, Testi, Programmi; un
   secondo clic toglie il filtro), il titolo "Tags" (senza voci, come nel disegno). Apps non
   c'è più (non è nel disegno).
 - **Viste**: la griglia di icone e la tabella (Nome, Tipo, Dimensione; un clic
   sull'intestazione ordina, la freccia dice il verso). La colonna Modificato non c'è più (non è
   nel disegno); l'ordine per data resta nel menu "Ordina per".
 - **Icone dei file**: gli oggetti del disegno (48 e 24 px, colori del tema), con la variante
-  più specifica: cartelle Home, Scrivania, Documenti, Immagini, Download, applicazioni; file
+  più specifica: cartelle Home, Desktop, Documenti, Immagini, Download, applicazioni; file
   TXT, PDF, PNG, ZIP, BIN.
 - **Stati**: cartella vuota (senza icona, come nel disegno), errore, permesso negato.
 - **Menu del tasto destro**: sul file (Apri, Rinomina, Duplica, Informazioni, Elimina, voci S
@@ -710,7 +710,7 @@ Le regole sono in `APPLICAZIONI.md`, il formato del manifesto in `manifest-guida
 - **Esempio e Contatore non sono app del sistema**: i sorgenti stanno in
   `utente/prove/applicazioni/` e `disco.img` (quello di `run.sh`) non li ha. Li ha solo
   `disco_app.img` (e i dischi delle prove che ne partono): Esempio in `/system/apps`, il
-  pacchetto `contatore.app` sulla Scrivania della persona (`/data/users/1000/home/Scrivania/`),
+  pacchetto `contatore.app` sul Desktop della persona (`/data/users/1000/home/Desktop/`),
   per provare l'installazione. Le prove che li usano scrivono `DISCO = "disco_app.img"`.
   Anche la sandbox li ha (è un ambiente di prova).
 - Librerie di altri, in `utente/libreria/esterni/`: miniz 3.0.2 (zip) e tomlc99 (TOML), con

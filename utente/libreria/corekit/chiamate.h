@@ -117,7 +117,7 @@ struct info_file {
  * partizione data, che si scrive: per la persona con uid U c'e' /data/users/U, sua (700),
  * con dentro home (i suoi file), bin, appsdata/<app> (i dati di ogni applicazione) e
  * preferences. /home e' la casa di chi chiede: per un programma con uid U e'
- * /data/users/U/home (la libreria traduce il percorso); dentro c'e' Scrivania. */
+ * /data/users/U/home (la libreria traduce il percorso); dentro c'e' Desktop. */
 #define UID_SISTEMA       0
 #define UID_APPLICAZIONI  1000
 #define PERMESSO_LEGGERE  4

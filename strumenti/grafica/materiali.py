@@ -43,7 +43,7 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          'package', 'bell', 'download', 'external-link', 'eye-off', 'layers', 'power', 'scan',
          'badge-check', 'circle-x', 'circle-check', 'chevron-left', 'volume-2',
          # Files nel disegno nuovo: indietro, le frecce dell'ordinamento, i simboli della
-         # barra laterale (Scrivania, Testi, Programmi)
+         # barra laterale (Desktop, Testi, Programmi)
          'chevron-up', 'chevron-down', 'monitor', 'file-text', 'app-window',
          # Impostazioni: la barra laterale (Aspetto, Tastiera e mouse, App e sicurezza, Rete)
          'palette', 'keyboard', 'shield', 'wifi']

@@ -113,8 +113,7 @@ NOME                                          UID   PERM.    DESCRIZIONE
                                                              /system/bin, mai overlay
         ├── home/                             1000  700      i suoi file: i programmi la vedono come
                                                              /home
-        │   ├── Scrivania/                    1000  700      la scrivania (da rinominare, vedi
-                                                             sotto)
+        │   ├── Desktop/                      1000  700      la scrivania della persona.
         │   └── ...                           1000  755/644  i file di file/ del repository
                                                              (cartelle 755, file 644)
         └── preferences/                      1000  700      le sue preferenze
@@ -134,4 +133,4 @@ REGOLE GIA' DECISE (CLAUDE.md, build.sh)
 DA RINOMINARE (oggi non sono in inglese minuscolo, cambiare quando si ristruttura):
   - /data/services/eventi, compositore, launcher, scrivania
   - /system/services/eventi, compositore, launcher, scrivania (e i loro programmi)
-  - /data/users/1000/home/Scrivania
+  - /data/users/1000/home/Desktop

@@ -36,7 +36,7 @@ BARRA_Y = (800 - (4 + 7 * 32 + 6 * 8 + 16 + 72 + 8)) // 2   # 214: centrata, con
 VOCE_X = BARRA_X + 4 + 16         # il centro dei tondi
 APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 234)
 # Contatore non e' nella userbar: non e' un'app del sistema, il suo pacchetto sta sulla
-# Scrivania della persona (build.sh). Le misure della sua finestra restano in MISURE, per
+# Desktop della persona (build.sh). Le misure della sua finestra restano in MISURE, per
 # la prova pacchetti, che la installa e la apre.
 APP = {nome: (VOCE_X, APP_PULSANTE[1] + 40 * (i + 1)) for i, nome in enumerate(FISSATE)}
 SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine a sinistra

@@ -33,7 +33,7 @@ Ogni prova accende il sistema con il disco normale (`disco.img`, lo stesso di `r
 Le app Esempio e Contatore non sono del sistema (i sorgenti stanno in `utente/prove/applicazioni/`):
 `disco.img` non le ha. Le prove che le usano (`DISCO = "disco_app.img"`: applicazioni, attivita,
 files, finestre, immagini, mouse, tastiera, store) partono da `disco_app.img`, uguale a `disco.img`
-ma con Esempio in `/system/apps` e `contatore.app` sulla Scrivania.
+ma con Esempio in `/system/apps` e `contatore.app` sul Desktop.
 `build.sh` prepara anche `disco_prove.img` (parte da `disco_app.img`): uguale, ma nella partizione
 data c'è in più la cartella `/data/tests`, con i programmi di `utente/prove/`. Init,
 all'accensione, fa partire tutto quello che trova in quella cartella (nel disco normale

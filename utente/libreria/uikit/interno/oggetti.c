@@ -101,7 +101,7 @@ int oggetto_di_file(const char *nome) {
 int oggetto_di_cartella(const char *percorso) {
     static const struct { const char *percorso; int oggetto; } ruoli[] = {
         { OGGETTO_CASA,                OGGETTO_HOME },
-        { OGGETTO_CASA "/Scrivania",   OGGETTO_SCRIVANIA },
+        { OGGETTO_CASA "/Desktop",   OGGETTO_SCRIVANIA },
         { OGGETTO_CASA "/Documenti",   OGGETTO_DOCUMENTI },
         { OGGETTO_CASA "/Immagini",    OGGETTO_IMMAGINI },
         { OGGETTO_CASA "/Download",    OGGETTO_DOWNLOAD },

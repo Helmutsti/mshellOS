@@ -1,8 +1,8 @@
 """store: lo Store, dall'apertura di contatore.app fino a toglierla.
 
-Come farebbe una persona, sul disco normale (contatore.app sta sulla Scrivania della
+Come farebbe una persona, sul disco normale (contatore.app sta sul Desktop della
 persona, build.sh):
-  - Files dalla userbar (primo posto, angolo in (140, 130)); nella barra laterale la Scrivania,
+  - Files dalla userbar (primo posto, angolo in (140, 130)); nella barra laterale il Desktop,
     e il doppio clic su contatore.app (il primo elemento): il launcher fa partire lo Store
     con il file, e lo Store (secondo posto, angolo in (180, 170), 600 x 600) mostra la
     richiesta di installazione ("store: richiesta di installazione: contatore");
@@ -28,7 +28,7 @@ ORDINE = 85
 DESCRIZIONE = "Store: richiesta di installazione, installa, apri, gia' installata, elenco, svuota dati, togli"
 
 FILES = s.angolo(0)
-SCRIVANIA_FILES = (FILES[0] + 72, FILES[1] + 132)      # la Scrivania nella barra laterale di Files
+SCRIVANIA_FILES = (FILES[0] + 72, FILES[1] + 132)      # il Desktop nella barra laterale di Files
 PACCHETTO = (FILES[0] + 256, FILES[1] + 128)           # contatore.app, il primo elemento
 
 # La richiesta di installazione: lo Store nel secondo posto, i pulsanti in basso a destra

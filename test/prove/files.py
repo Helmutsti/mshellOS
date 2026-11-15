@@ -4,7 +4,7 @@ Files si apre dalla userbar (la sua finestra, 800 x 480, nel primo posto: angolo
 sulla casa, /home, dove build.sh ha copiato la cartella file/ del repository:
     Documenti/   appunti.txt, elenco della spesa.txt e una cartella con un nome lungo
     Immagini/    due .png
-    Scrivania/   contatore.app (il pacchetto di Contatore, da installare: build.sh)
+    Desktop/     contatore.app (il pacchetto di Contatore, da installare: build.sh)
     dati.bin, leggimi.txt
 La finestra e' come nel disegno di Figma (finestra a aree: corpo con 8 intorno e 8 tra le
 aree): la barra del titolo (40); a sinistra la barra laterale (da x +8, larga 184, da y +48);
@@ -18,7 +18,7 @@ Si prova, una cosa dopo l'altra:
     con le foto di riferimento; nell'elenco un clic sull'intestazione "Nome" gira l'ordine
     (la freccia in giu'), un altro lo rimette;
   - il doppio clic su Documenti ci entra, "indietro" (+216, +65) torna alla casa;
-  - nella Scrivania (barra laterale) c'e' contatore.app: il doppio clic NON lo avvia (non
+  - nel Desktop (barra laterale) c'e' contatore.app: il doppio clic NON lo avvia (non
     e' installato): si apre lo Store con la richiesta di installazione, e lo si chiude;
   - in Documenti, la cartella col nome lungo si apre (i percorsi arrivano a 4096
     caratteri, come in Linux) e mostra leggimi.txt;
@@ -169,15 +169,15 @@ def esegui(p):
     torna(casa, "di nuovo la vista a icone")
 
     # --- dentro Documenti, e indietro ---
-    doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])          # Documenti
+    doppio_clic(m, wx + elemento(1)[0], wy + elemento(0)[1])          # Documenti
     documenti = cambia(casa, "Documenti aperta (doppio clic)")
     m.foto("documenti")
     clic(INDIETRO)
     torna(casa, "la casa dopo 'indietro'")
 
-    # --- la Scrivania, con il pacchetto contatore.app: aprirlo non lo avvia ---
+    # --- il Desktop, con il pacchetto contatore.app: aprirlo non lo avvia ---
     clic(SCRIVANIA)
-    cambia(casa, "la Scrivania (con contatore.app)")
+    cambia(casa, "il Desktop (con contatore.app)")
     m.foto("scrivania")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])           # contatore.app
     # si apre lo Store con la richiesta di installazione (nel secondo posto, 600 x 600): lo
@@ -197,7 +197,7 @@ def esegui(p):
     # --- la cartella dal nome lungo (percorso oltre i 63 caratteri di una volta), in Documenti ---
     clic(HOME)
     torna(casa, "la casa dalla barra laterale")
-    doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])
+    doppio_clic(m, wx + elemento(1)[0], wy + elemento(0)[1])
     torna(documenti, "di nuovo Documenti")
     doppio_clic(m, wx + elemento(0)[0], wy + elemento(0)[1])          # la cartella lunga
     cambia(documenti, "la cartella dal nome lungo aperta (c'e' leggimi.txt)")
@@ -244,8 +244,8 @@ def esegui(p):
     p.riferimento("files_vuota", vuota)
     clic(INDIETRO)
     prova = cambia(vuota, "la casa con Prova, dopo 'indietro'")
-    # Documenti, Immagini, Prova, Scrivania: Prova e' la terza
-    x, y = elemento(2)
+    # Desktop, Documenti, Immagini, Prova: Prova e' la quarta
+    x, y = elemento(3)
     clic_destro(m, wx + x, wy + y)
     cambia(prova, "il menu su Prova", finestra)
     m.clic(wx + x + 80, wy + y + voce(1))                               # "Rinomina"
@@ -257,8 +257,8 @@ def esegui(p):
     time.sleep(0.5)
     esempi = ferma("esempi")
     p.controlla(not s.zona_uguale(prova, esempi, corpo), "Rinomina non cambia il nome")
-    # Documenti, Esempi, Immagini, Scrivania: Esempi e' la seconda
-    x, y = elemento(1)
+    # Desktop, Documenti, Esempi, Immagini: Esempi e' la terza
+    x, y = elemento(2)
     clic_destro(m, wx + x, wy + y)
     cambia(esempi, "il menu su Esempi", finestra)
     m.clic(wx + x + 80, wy + y + voce(4, 1))                            # "Elimina"
@@ -266,14 +266,14 @@ def esegui(p):
     torna(casa, "la casa com'era, dopo Elimina")
 
     # --- duplicare una cartella piena, poi eliminare la copia: l'avviso con quante cose ci sono ---
-    x, y = elemento(0)                                                  # Documenti
+    x, y = elemento(1)                                                  # Documenti
     clic_destro(m, wx + x, wy + y)
     cambia(casa, "il menu su Documenti", finestra)
     m.clic(wx + x + 80, wy + y + voce(2))                               # "Duplica"
     m.muovi(*PUNTO_VUOTO)
     con_copia = cambia(casa, "la copia 'Documenti copia'")
     m.foto("cartella_duplicata")
-    x, y = elemento(1)                                                  # Documenti copia
+    x, y = elemento(2)                                                  # Documenti copia
     doppio_clic(m, wx + x, wy + y)
     aperta = cambia(con_copia, "la copia aperta (c'e' dentro quello di Documenti)")
     m.foto("copia_aperta")
@@ -324,7 +324,7 @@ def esegui(p):
     torna(casa, "il filtro spento")
 
     # --- la tastiera: Documenti scelta, Invio la apre ---
-    clic(elemento(0))
+    clic(elemento(1))
     m.premi("ret")
     torna(documenti, "Documenti aperta con Invio")
     clic(HOME)
@@ -335,7 +335,7 @@ def esegui(p):
     nuova = cambia(casa, "la cartella nuova con Ctrl+Maiusc+N")
     m.premi("esc")                                                      # Esc: il nome resta quello
     time.sleep(0.3)
-    clic(elemento(2))                                                   # Documenti, Immagini, Nuova cartella
+    clic(elemento(3))                                                   # Desktop, Documenti, Immagini, Nuova cartella
     m.premi("f2")                                                       # F2: si rinomina
     time.sleep(0.3)
     cancella(m, len("Nuova cartella"))

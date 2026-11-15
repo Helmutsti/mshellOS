@@ -394,7 +394,7 @@ metti_file "$B/curl" /system/bin/curl 755
 #     contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
 #     Le app di utente/prove/applicazioni/ (Esempio, Contatore) NON sono del sistema: vanno
 #     solo nei dischi delle prove (passo 6), mai in disco.img. In quei dischi quelle di
-#     DA_INSTALLARE hanno il pacchetto sulla Scrivania della persona, per provare
+#     DA_INSTALLARE hanno il pacchetto sul Desktop della persona, per provare
 #     l'installazione (si apre con Files: il launcher fa partire lo Store, che chiede se
 #     installarla); le altre sono scompattate in /system/apps.
 DA_INSTALLARE="contatore"
@@ -437,7 +437,7 @@ for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
 # La persona (per ora una sola, 1000: le applicazioni girano con il suo uid). La sua
 # cartella e' sua e di nessun altro (700), e dentro:
 #   home              i suoi file; i programmi la vedono come /home (CoreKit: corekit.c). Dentro
-#                     c'e' Scrivania, e quello che c'e' in file/ nel repository
+#                     c'e' Desktop, e quello che c'e' in file/ nel repository
 #   bin               i suoi comandi, cercati dopo /system/bin (quando ci sara' una shell)
 #   appsdata/<app>    i dati di ogni applicazione
 #   preferences       le sue preferenze
@@ -445,7 +445,7 @@ for nome in $SERVIZI; do metti_cartella /data/services/$nome 0 700; done
 UTENTE_UID=1000
 CASA=/data/users/$UTENTE_UID
 metti_cartella /data/users 0 755
-for c in "$CASA" "$CASA/home" "$CASA/home/Scrivania" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences" "$CASA/wallpapers"; do
+for c in "$CASA" "$CASA/home" "$CASA/home/Desktop" "$CASA/bin" "$CASA/appsdata" "$CASA/preferences" "$CASA/wallpapers"; do
     metti_cartella "$c" $UTENTE_UID 700
 done
 for nome in $APPS; do metti_cartella "$CASA/appsdata/$nome" $UTENTE_UID 700; done
@@ -630,7 +630,7 @@ echo "$B/disco.img pronto: GPT con avvio ($MISURA_AVVIO MB, FAT32), system ($MIS
 # acceso a mano (run.sh), il sistema usa sempre disco.img.
 # IL DISCO DELLE APP DI PROVA (disco_app.img): come disco.img, ma con in piu' le app di
 # prova (utente/prove/applicazioni): quelle di DA_INSTALLARE come .app
-# sulla Scrivania della persona (suoi, 644: per provare l'installazione come la farebbe
+# sul Desktop della persona (suoi, 644: per provare l'installazione come la farebbe
 # lei), le altre scompattate in /system/apps. Cambia anche system, quindi si riscrive.
 # E' il disco delle prove che usano Esempio e Contatore (DISCO in test/prove/), senza i
 # programmi di /data/tests; i due dischi qui sotto partono da lui.
@@ -638,10 +638,10 @@ for nome in $PROVE_APPS; do
     pacchetto="$B/oggetti/pacchetti/$nome"
     case " $DA_INSTALLARE " in
     *" $nome "*)
-        cp "$PACCHETTI/$nome.app" "$CASA_VERA/Scrivania/$nome.app"
-        chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Scrivania/$nome.app"
-        chmod 644 "$CASA_VERA/Scrivania/$nome.app"
-        printf '  %-40s da installare (solo prove)\n' "$CASA/home/Scrivania/$nome.app"
+        cp "$PACCHETTI/$nome.app" "$CASA_VERA/Desktop/$nome.app"
+        chown $UTENTE_UID:$UTENTE_UID "$CASA_VERA/Desktop/$nome.app"
+        chmod 644 "$CASA_VERA/Desktop/$nome.app"
+        printf '  %-40s da installare (solo prove)\n' "$CASA/home/Desktop/$nome.app"
         ;;
     *)
         (cd "$pacchetto" && find . -type f | sort) | while read -r f; do

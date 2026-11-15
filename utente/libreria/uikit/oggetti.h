@@ -3,7 +3,7 @@
  * della griglia) e PICCOLA 24 px (tratto 1,5, per le righe delle tabelle e gli elenchi).
  *
  * Il tipo e' il piu' specifico che c'e' (la regola "la variante piu' specifica"):
- *   - una cartella con un ruolo ha il suo simbolo: la casa (Home), la Scrivania, i Documenti,
+ *   - una cartella con un ruolo ha il suo simbolo: la casa (Home), il Desktop, i Documenti,
  *     le Immagini, i Download, le applicazioni; le altre sono la cartella semplice;
  *   - un file con un'estensione che il disegno conosce (TXT, PDF, PNG, ZIP, BIN) ha la sua
  *     variante: nella misura grande e' il foglio con la scritta, nella piccola un simbolo;
@@ -57,7 +57,7 @@ int oggetto_di_file(const char *nome);
 #define OGGETTO_CASA "/home"
 
 /* Una cartella, dal suo percorso intero: le cartelle con un ruolo (la casa e le sue
- * Scrivania, Documenti, Immagini, Download; le cartelle delle applicazioni) hanno il loro
+ * Desktop, Documenti, Immagini, Download; le cartelle delle applicazioni) hanno il loro
  * simbolo, le altre sono la cartella semplice. */
 int oggetto_di_cartella(const char *percorso);
 
