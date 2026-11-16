@@ -89,8 +89,8 @@
  * da li', resta quella dei file. Per rispondere mentre fa il resto (aspettare il DHCP, il
  * rinnovo...) il servizio non dorme mai con dormi: ogni attesa passa da servi(), che
  * aspetta il momento dato (o che arrivi qualcosa dalla presa del DHCP) e intanto serve le
- * richieste della porta. Un restart risponde e poi si rilancia da solo (execv): rilegge i
- * file e rifa' tutto da capo, e l'indirizzo vecchio lo toglie prima. Uno stop toglie
+ * richieste della porta. Un restart risponde e poi esce, dopo aver tolto l'indirizzo
+ * vecchio: init lo fa ripartire, e il servizio nuovo rilegge i file e rifa' tutto da capo. Uno stop toglie
  * indirizzo e strada e mette la scheda giu', lascia il firewall (un computer senza rete ma
  * protetto) e da li' non torna piu' al lavoro di prima: resta a servire la porta, in attesa
  * di un restart. Cosi' chi lo ferma non deve "srotolare" l'attesa in cui si trova.
@@ -99,8 +99,9 @@
  * nel manifesto riceve dal launcher una porta verso la rete: il launcher ne da' il capo qui
  * (request=attach, accettato solo dal sistema, con il programma dell'app) e ogni connect che
  * arriva su quella porta e' un collegamento di quell'app (uid UID_APPLICAZIONI e quel programma),
- * senza chiederlo al kernel. Un restart rilancia il programma: le porte restano aperte e si
- * passano negli argomenti ("<descrittore>=<programma>"), cosi' le app non le trovano morte.
+ * senza chiederlo al kernel. Ogni porta nuova se ne manda una copia a init (canale al descrittore 0, servizi.h):
+ * se il servizio riparte (un restart, o una caduta) init gli riconsegna le porte, e le app non le
+ * trovano morte.
  *
  * Scrive nel registro righe brevi, come gli altri servizi, per esempio:
  *   network: firewall attivo (ingresso bloccato, uscita libera, inoltro bloccato, ping ammesso)
@@ -1121,7 +1122,9 @@ static int firewall_attivo;         /* le regole sono nel kernel */
 static int porta = -1;              /* il descrittore di ascolta("network") */
 
 #define MAX_CLIENTI 8
-#define SERVIZIO "/system/services/network/network"
+#define D_CUSTODE 0   /* prestato da init: il canale con cui init custodisce le porte delle app
+                       * (servizi.h): ogni porta nuova gli si manda, e a ogni partenza lui
+                       * riconsegna quelle che teneva */
 
 /* Un valore di firewall.conf, come lo scrive il file. */
 static const char *allow_block(int si) { return si ? "allow" : "block"; }
@@ -1198,6 +1201,7 @@ static void attacca(const struct chi_chiede *c, struct messaggio *q, struct mess
     } else {
         porte[p].d = capo;
         porte[p].usata = 0;
+        custodisci_porta(D_CUSTODE, &porte[p].chi, capo);   /* init ne tiene una copia (prima di dire ok) */
         capo = -1;
         messaggio_risposta(r, q, ESITO_OK);
     }
@@ -1246,65 +1250,27 @@ static enum azione rispondi(int d, const struct chi_chiede *dalla_porta) {
 }
 
 /* restart: toglie l'indirizzo (se la nuova configurazione ne da' un altro, il vecchio non
- * deve restare) e si rilancia: rilegge i file e rifa' tutto da capo, firewall compreso.
- * Il nome "network" lo libera la chiusura dei descrittori (sono tutti CLOEXEC), e il nuovo
- * lo riprende. Se execv non riesce lo dice e il servizio continua com'e'. */
-static void riavvia(void) {
-    di("riavvio richiesto, rileggo la configurazione");
+ * deve restare) ed esce: init se ne accorge, lo fa ripartire (dopo mezzo secondo) e gli
+ * riconsegna le porte delle app che teneva in custodia (servizi.h). Il servizio nuovo rilegge
+ * i file e rifa' tutto da capo, firewall compreso, e riprende il nome "network" che la
+ * chiusura di questo ha liberato. Le app non perdono niente: il loro capo della porta e'
+ * anche in mano a init. */
+static void __attribute__((noreturn)) riavvia(void) {
+    di("riavvio richiesto, esco e init mi fa ripartire con la configurazione riletta");
     if (ha_indirizzo) togli_indirizzo(&attuale);
-    /* Le porte delle app devono sopravvivere: il loro capo sta qui, e se si chiudesse le app
-     * resterebbero con una porta morta. Si lasciano aperte nel nuovo programma (senza
-     * CLOEXEC, allo stesso numero) e gli argomenti dicono quali sono, di chi e con quali permessi:
-     * "<numero>=<programma>=<permesso>,<permesso>..." (leggi_porte_ereditate). */
-    static char testi[MAX_PORTE][16 + MAX_PERCORSO_PROGRAMMA + MAX_PERMESSI_APP * MAX_NOME_PERMESSO];
-    char *argomenti[MAX_PORTE + 2];
-    int n = 0, nelle_porte[MAX_PORTE];
-    argomenti[n++] = (char *)SERVIZIO;
-    for (int p = 0; p < MAX_PORTE; p++) {
-        if (porte[p].d < 0) continue;
-        int l = snprintf(testi[p], sizeof testi[p], "%d=%s=", porte[p].d, porte[p].chi.programma);
-        for (int i = 0; i < porte[p].chi.quanti_permessi; i++)
-            l += snprintf(testi[p] + l, sizeof testi[p] - (size_t)l, "%s%s", i ? "," : "", porte[p].chi.permessi[i]);
-        argomenti[n] = testi[p];
-        nelle_porte[n++ - 1] = p;
-        fcntl(porte[p].d, F_SETFD, 0);
-    }
-    argomenti[n] = 0;
-    execv(SERVIZIO, argomenti);
-    for (int i = 0; i < n - 1; i++) fcntl(porte[nelle_porte[i]].d, F_SETFD, FD_CLOEXEC);
-    metti("network: non riesco a rilanciarmi: ");
-    metti(strerror(errno));
-    fine_riga();
+    exit(0);
 }
 
-/* Dopo un restart: le porte che il programma di prima ha lasciato aperte, negli argomenti
- * ("<numero>=<programma>=<permessi separati da virgole>", vedi riavvia). Senza argomenti (avvio
- * normale) non c'e' niente. Un argomento che non si capisce: quella porta si chiude. */
-static void leggi_porte_ereditate(int argc, char **argv) {
-    for (int i = 1; i < argc && i <= MAX_PORTE; i++) {
-        int d = atoi(argv[i]);
-        char *programma = strchr(argv[i], '=');
-        char *permessi = programma ? strchr(programma + 1, '=') : 0;
-        if (d <= 2) continue;
-        struct chi_chiede *c = &porte[i - 1].chi;
-        int giusto = permessi && permessi - programma - 1 > 0 &&
-                     permessi - programma - 1 < MAX_PERCORSO_PROGRAMMA;
-        if (giusto) {
-            memcpy(c->programma, programma + 1, (size_t)(permessi - programma - 1));
-            c->programma[permessi - programma - 1] = 0;
-            c->uid = UID_APPLICAZIONI;
-            c->app = 1;
-            c->quanti_permessi = 0;
-            for (char *p = strtok(permessi + 1, ","); p && giusto; p = strtok(0, ",")) {
-                if (c->quanti_permessi == MAX_PERMESSI_APP || strlen(p) >= MAX_NOME_PERMESSO) giusto = 0;
-                else strcpy(c->permessi[c->quanti_permessi++], p);
-            }
-        }
-        if (!giusto) { close(d); continue; }
-        porte[i - 1].d = d;
-        porte[i - 1].usata = 1;       /* il collegamento l'ha gia' scritto il programma di prima */
-        fcntl(d, F_SETFD, FD_CLOEXEC);
-    }
+/* Una porta che init ci riconsegna dopo una ripartenza (riprendi_porte): va nella tabella com'era,
+ * e il collegamento l'ha gia' scritto nel registro chi c'era prima. */
+static void riprendi(const struct chi_chiede *app, int capo, void *dato) {
+    (void)dato;
+    int p = 0;
+    while (p < MAX_PORTE && porte[p].d >= 0) p++;
+    if (p == MAX_PORTE) { close(capo); return; }
+    porte[p].d = capo;
+    porte[p].usata = 1;
+    porte[p].chi = *app;
 }
 
 /* stop: indirizzo e DNS via, scheda giu'; il firewall resta (vedi network.h). Il servizio
@@ -1456,9 +1422,10 @@ static void __attribute__((noreturn)) con_dhcp(void) {
     }
 }
 
-int main(int argc, char **argv) {
+int main(void) {
     for (int p = 0; p < MAX_PORTE; p++) porte[p].d = -1;
-    leggi_porte_ereditate(argc, argv);   /* dopo un restart: le porte delle app non si perdono */
+    /* dopo una ripartenza (un restart, o una caduta): le porte delle app che teneva init */
+    riprendi_porte(D_CUSTODE, riprendi, 0);
     /* la porta SUBITO, prima di tutto il resto: anche se poi il servizio resta fermo per
      * un guasto, si puo' chiedere come sta (state=failed) */
     porta = ascolta(NOME_NETWORK);

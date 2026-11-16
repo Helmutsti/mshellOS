@@ -64,6 +64,7 @@
 #                      (vedi in fondo)
 #       disco_messaggi.img  per la prova dei messaggi tra servizi: il programma messaggi
 #       disco_catalog.img   per la prova del servizio delle impostazioni: il programma catalog
+#       disco_custode.img   per la prova delle porte delle app custodite da init (programma custode)
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #       disco_recinto.img     per la prova del recinto delle app (programma recinto)
 #   build/scarico/     i pacchetti di Alpine e i sorgenti di curl scaricati, tenuti per la
@@ -728,11 +729,22 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_catalog.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_catalog.img pronto: con il programma catalog in /data/tests"
 
+# IL DISCO DELLA PROVA DEL CUSTODE: lo stesso, con in /data/tests solo il programma custode
+# (utente/prove/custode.c), che fa da launcher finto, uccide catalog e network e prova che le
+# porte delle app, tenute da init, funzionano ancora. Serve la scheda di rete (RETE = True in
+# test/prove/custode.py). Lo usa test/prove/custode.py.
+cp "$B/disco_app.img" "$B/disco_custode.img"
+rm -f "$(vero /data/tests)"/catalog
+metti_file "$P/bin/prove/custode" "/data/tests/custode" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_custode.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_custode.img pronto: con il programma custode in /data/tests"
+
 # IL DISCO DELLA PROVA DELLA PORTA DI RETE: lo stesso, con in /data/tests solo il programma
 # stato_rete (utente/prove/stato_rete.c), che interroga il servizio network con status e prova
 # stop e restart. Serve la scheda di rete (RETE = True in test/prove/stato_rete.py).
 cp "$B/disco_app.img" "$B/disco_stato_rete.img"
-rm -f "$(vero /data/tests)"/catalog
+rm -f "$(vero /data/tests)"/custode
 metti_file "$P/bin/prove/stato_rete" "/data/tests/stato_rete" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco_stato_rete.img" $((MISURA_DATI * MB / 4096))

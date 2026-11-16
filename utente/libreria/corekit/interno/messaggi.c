@@ -309,14 +309,55 @@ int collega_servizio(const char *nome, int porta) {
     return e_una_porta(porta) ? collega_dalla_porta(porta) : collega(nome);
 }
 
+/* Programma e permessi di 'app' in un messaggio (la stessa forma di attach, keep e restore). */
+static void aggiungi_app(struct messaggio *q, const struct chi_chiede *app) {
+    messaggio_aggiungi(q, CHIAVE_PROGRAMMA, app->programma);
+    for (int i = 0; i < app->quanti_permessi; i++) messaggio_aggiungi(q, CHIAVE_PERMESSO, app->permessi[i]);
+}
+
+int manda_porta_app(int canale, const char *richiesta, const struct chi_chiede *app, int capo) {
+    struct messaggio q;
+    messaggio_inizia(&q);
+    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, richiesta);
+    aggiungi_app(&q, app);
+    q.allegato = capo;
+    return messaggio_manda(canale, &q);
+}
+
+int custodisci_porta(int custode, const struct chi_chiede *app, int capo) {
+    return manda_porta_app(custode, RICHIESTA_CUSTODISCI, app, capo);
+}
+
+int riprendi_porte(int custode, void (*riprendi)(const struct chi_chiede *app, int capo, void *dato), void *dato) {
+    static struct messaggio m;
+    int quante = 0;
+    for (;;) {
+        struct da_guardare g = { custode, 0 };
+        if (aspetta(&g, 1, 2000) != 1) return -1;   /* init non ha mandato "restored" */
+        int n = messaggio_ricevi(custode, &m);
+        if (n == 0 || n == -1) return -1;
+        if (n == 1 && messaggio_vale(&m, CHIAVE_RICHIESTA, RICHIESTA_RICONSEGNATE)) {
+            if (m.allegato >= 0) chiudi(m.allegato);
+            return quante;
+        }
+        struct chi_chiede app;
+        if (n == 1 && messaggio_vale(&m, CHIAVE_RICHIESTA, RICHIESTA_RICONSEGNA) && m.allegato >= 0 &&
+            app_da_attach(&m, &app) == 0) {
+            riprendi(&app, m.allegato, dato);
+            quante++;
+        } else if (n == 1 && m.allegato >= 0) {
+            chiudi(m.allegato);   /* un messaggio che non e' una riconsegna: si butta */
+        }
+    }
+}
+
 int attacca_porta(const char *nome, const struct chi_chiede *app, int capo) {
     static struct messaggio q, r;
     int d = collega(nome);
     if (d < 0) return -1;
     messaggio_inizia(&q);
     messaggio_aggiungi(&q, CHIAVE_RICHIESTA, RICHIESTA_ATTACCA);
-    messaggio_aggiungi(&q, CHIAVE_PROGRAMMA, app->programma);
-    for (int i = 0; i < app->quanti_permessi; i++) messaggio_aggiungi(&q, CHIAVE_PERMESSO, app->permessi[i]);
+    aggiungi_app(&q, app);
     q.allegato = capo;
     int fatto = chiedi_entro(d, &q, &r, 1000) == 0 && messaggio_vale(&r, CHIAVE_ESITO, ESITO_OK);
     chiudi(d);

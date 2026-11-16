@@ -8,7 +8,7 @@ servizio, un comando o un'app. Le regole delle app (pacchetti, permessi, isolame
 
 | Ruolo | Cosa fa | Chi è oggi |
 |---|---|---|
-| **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono. Nient'altro. | `/system/init` |
+| **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono, e custodisce le porte delle app di catalog, launcher e network (le riconsegna quando ripartono). Nient'altro. | `/system/init` |
 | **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), catalog (impostazioni della persona), scrivania |
 | **app** | Programmi grafici in un pacchetto `.app`, isolati, con i permessi del manifesto. Disegnano la loro interfaccia e la danno al compositore. Per tutto il resto chiedono ai servizi dalle porte. | Files, Attività, Impostazioni, Store, Terminale... |
 | **comandi** | Programmi senza grafica, per la riga di comando. Parlano con le **stesse porte** delle app, con i permessi della persona che li lancia. Non sono app (`APPLICAZIONI.md`, sezione 2). | i nostri in `/system/bin` (sorgenti in `utente/comandi/`, uno per file: oggi `network`), `/system/bin/curl` (scarica dal web, HTTP e HTTPS; non è nostro: compilato dai sorgenti ufficiali) e la shell |
@@ -155,6 +155,16 @@ il servizio chiede al kernel chi sono. Oggi le porte sono quattro (compositore, 
 network): i servizi che chiedono un permesso (network) danno la porta solo alle app che lo hanno
 nel manifesto. Per ogni app che fa partire, il launcher scrive nel registro una riga con le porte
 date (`launcher: esempio: porte compositore catalog launcher network`).
+
+**Init custodisce le porte** (deciso con la persona, come il "file descriptor store" di systemd).
+Il capo "servizio" di una porta sta nel servizio, e se il servizio cade si chiude. Allora catalog,
+launcher e network hanno con init un canale (una coppia di socket: init tiene un capo, presta
+l'altro al servizio) e a ogni porta nuova gli mandano una copia del capo (`request=keep`, con
+`program` e `permission`). Init le tiene senza mai leggerle (le butta quando l'app le chiude) e,
+a ogni partenza del servizio, prima di farlo partire gli riconsegna le porte (`request=restore`
+per ognuna, poi `restored`): il servizio le rimette nella sua tabella e le app non si accorgono
+della caduta. Il compositore no (se riparte le finestre si perdono comunque). Le funzioni comuni
+sono in `corekit/sistema/servizi.h` (`custodisci_porta`, `riprendi_porte`).
 
 ## 4. Domande aperte
 

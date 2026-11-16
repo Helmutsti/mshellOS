@@ -64,4 +64,34 @@ int attacca_porta(const char *nome, const struct chi_chiede *app, int capo);
  * l'attach e' sbagliato (manca il programma, un permesso troppo lungo o troppi). */
 int app_da_attach(const struct messaggio *attach, struct chi_chiede *app);
 
+/* INIT CUSTODISCE LE PORTE (SISTEMA.md, sezione 3). Il capo "servizio" di ogni porta sta nel
+ * servizio: se il servizio cade, si chiude, e l'app resterebbe con una porta morta. Allora init ne
+ * tiene una copia (come il "file descriptor store" di systemd) e la riconsegna al servizio quando
+ * riparte. Catalog, launcher e network hanno un canale con init (una coppia di socket: init tiene
+ * un capo, presta l'altro al servizio, al suo descrittore D_CUSTODE) su cui passa:
+ *   servizio -> init   request=keep       program, permission (ripetuta), capo allegato
+ *   init -> servizio   request=restore    le stesse cose, per ogni porta che init tiene
+ *   init -> servizio   request=restored   alla fine: le porte sono finite (anche se erano zero)
+ * Nessuna risposta in nessun caso. Init non legge mai dalle porte: le guarda solo per sapere
+ * quando l'app le chiude, e allora le butta. */
+#define RICHIESTA_CUSTODISCI   "keep"
+#define RICHIESTA_RICONSEGNA   "restore"
+#define RICHIESTA_RICONSEGNATE "restored"
+
+/* Manda sul canale 'canale' un messaggio 'richiesta' (RICHIESTA_CUSTODISCI o RICHIESTA_RICONSEGNA)
+ * per la porta dell'app 'app' con il capo 'capo' allegato (il capo resta di chi manda). 0, o -1. */
+int manda_porta_app(int canale, const char *richiesta, const struct chi_chiede *app, int capo);
+
+/* (il servizio) Ha una porta nuova di un'app (da attach, o creata da lui): ne manda una copia a
+ * init. Se non riesce non e' un guasto: la porta funziona lo stesso, ma non sopravvivera' a una
+ * caduta del servizio. 0, o -1. */
+int custodisci_porta(int custode, const struct chi_chiede *app, int capo);
+
+/* (il servizio, appena parte) Legge dal canale le porte che init riconsegna, fino a
+ * RICHIESTA_RICONSEGNATE (al massimo 2 secondi di attesa per messaggio). Per ognuna chiama
+ * 'riprendi' con l'app (identita' e permessi) e il capo: il servizio lo mette nella sua tabella
+ * (ne e' padrone) e lo segna come gia' scritto nel registro. Ritorna quante porte ha riavuto, o
+ * -1 se il canale non c'e' o non e' finito bene. */
+int riprendi_porte(int custode, void (*riprendi)(const struct chi_chiede *app, int capo, void *dato), void *dato);
+
 #endif

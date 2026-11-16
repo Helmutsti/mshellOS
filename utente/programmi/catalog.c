@@ -23,6 +23,9 @@
 #include <string.h>
 
 #define D_ASCOLTO 0       /* prestato da init */
+#define D_CUSTODE 1       /* prestato da init: il canale con cui init custodisce le porte delle app
+                           * (servizi.h): ogni porta nuova gli si manda, e a ogni partenza lui
+                           * riconsegna quelle che teneva */
 #define MAX_CLIENTI 32
 #define PERMESSO_CAMBIA "settings.system"
 
@@ -168,6 +171,7 @@ static void attacca(int k) {
     } else {
         porte[p].d = capo;
         porte[p].usata = 0;
+        custodisci_porta(D_CUSTODE, &porte[p].chi, capo);   /* init ne tiene una copia (prima di dire ok) */
         capo = -1;
         messaggio_risposta(&risposta, &richiesta, ESITO_OK);
     }
@@ -235,9 +239,22 @@ static void nuovo_cliente(void) {
     nuovo_collegamento(d, &c);
 }
 
+/* Una porta che init ci riconsegna dopo una ripartenza: va nella tabella com'era, e il collegamento
+ * e' gia' stato scritto nel registro da chi c'era prima. */
+static void riprendi(const struct chi_chiede *app, int capo, void *dato) {
+    (void)dato;
+    int p = 0;
+    while (p < MAX_PORTE && porte[p].d >= 0) p++;
+    if (p == MAX_PORTE) { chiudi(capo); return; }
+    porte[p].d = capo;
+    porte[p].usata = 1;
+    porte[p].chi = *app;
+}
+
 int main(void) {
     for (int k = 0; k < MAX_CLIENTI; k++) clienti[k].d = -1;
     for (int p = 0; p < MAX_PORTE; p++) porte[p].d = -1;
+    riprendi_porte(D_CUSTODE, riprendi, 0);   /* le porte delle app che teneva init, se sono ripartito */
     for (;;) {
         struct da_guardare g[1 + MAX_CLIENTI + MAX_PORTE];
         int chi[1 + MAX_CLIENTI + MAX_PORTE];   /* un cliente (>= 0), una porta (-2 - p), o -1 */

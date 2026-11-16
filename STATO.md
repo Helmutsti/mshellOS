@@ -495,23 +495,23 @@ pagina dei permessi in Impostazioni. Poi il recinto vero nel launcher.
   un permesso speciale. Quel set di permessi fa da "task manager" (oggi `processes.view` e
   `processes.stop`) e Attività lo soddisfa.
 - **Il Terminale resta un'app senza recinto**, ancora per un po'.
-- **Un servizio che riparte**: o l'app riceve una porta nuova quando la precedente si perde, o
-  le porte le tiene init. Da ragionare su quale sia meglio.
+- **Un servizio che riparte**: deciso, le porte le tiene init (vedi sotto: fatto).
 Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
 pezzi si mescolavano con quelle di altri programmi (la prova `store` falliva per questo, quando il
 compositore scrive la porta di un'app); la usano launcher, Store, catalog e compositore. Lo stesso
 giorno anche avvio, init, eventi e i programmi di prova scrivono ogni riga in una sola volta: la
 prova `avvio` non fallisce più per la riga spezzata dal kernel.
 
-**Da decidere: un servizio che riparte e le porte delle app.** Il capo di ogni porta sta nel
-servizio. Se il servizio cade e init lo fa ripartire, le porte delle app aperte muoiono e quelle
-app non lo raggiungono più finché non ripartono (vale per catalog, network, il compositore). Per
-il `restart` di network, che si rilancia da solo, oggi le porte sopravvivono: il programma nuovo
-le eredita aperte, con i loro programmi scritti negli argomenti (`riavvia` e
-`leggi_porte_ereditate` in network.c; nessuna prova lo copre). È una soluzione solo per quel caso:
-va deciso come si comporta il sistema in generale (es. l'app chiede al launcher una porta nuova,
-come i clienti di D-Bus che si ricollegano quando un servizio riparte; oppure network che rilegge
-la configurazione senza rilanciarsi).
+**Fatto: un servizio che riparte e le porte delle app** (deciso dalla persona: le tiene init, come
+il "file descriptor store" di systemd). Catalog, launcher e network hanno con init un canale (una
+coppia di socket, init tiene un capo); a ogni porta nuova ne mandano una copia (`keep`, con
+programma e permessi). Init le tiene in una tabella per servizio senza mai leggerle (le butta solo
+quando l'app le chiude) e, a ogni partenza del servizio, prima di farlo partire gli riconsegna le
+porte (`restore`, poi `restored`) e scrive `init: riconsegnate <n> porte a <percorso>`. Il
+`restart` di network ora risponde ed esce: init lo fa ripartire e gli riconsegna le porte (tolti
+`riavvia` con gli argomenti e `leggi_porte_ereditate`). Prova: `custode` (QEMU: uccide catalog e
+network e le stesse porte funzionano ancora). Non coperto: il compositore (se riparte le finestre
+si perdono comunque) e l'app che vuole una porta nuova.
 
 **Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
 

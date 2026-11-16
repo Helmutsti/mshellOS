@@ -48,7 +48,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ## Servizi
 
 ### init (`utente/programmi/init.c`)
-- **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher", "catalog"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Avvia anche i programmi di prova in `/data/tests` se esiste.
+- **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher", "catalog"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Custodisce le porte delle app di catalog, launcher e network (canale per servizio, `keep` e `restore`, senza mai leggere dalle porte: le butta quando l'app le chiude) e le riconsegna a ogni partenza del servizio (riga `init: riconsegnate <n> porte a <percorso>`). Avvia anche i programmi di prova in `/data/tests` se esiste.
 - **Tipo**: servizio.
 - **Lanciato da**: avvio.
 - **Lancia**: catalog (come la persona, uid 1000), eventi, compositore, launcher, scrivania, network, shell (sulla seriale, solo se `/dev/ttyS0` si apre), programmi di `/data/tests`.
@@ -74,7 +74,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ### launcher (`utente/programmi/launcher.c`)
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
-- **Lanciato da**: init (con la porta "launcher" già aperta).
+- **Lanciato da**: init (con la porta "launcher" già aperta, e il canale del custode al descrittore 1: ogni porta che tiene gli manda una copia, e al riavvio init gliele riconsegna).
 - **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
 - **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
 - **Poteri**: super sì. Decide i permessi concessi a ogni app quando la fa partire (`permessi_concessi`: dichiarati nel manifesto, quelli di sistema solo alle app del sistema, sconosciuti tolti) e li passa ai servizi con le porte. Controlla con `ha_permesso`: "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati).
@@ -90,7 +90,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ### catalog (`utente/programmi/catalog.c`)
 - **Cosa fa**: possiede le impostazioni della persona (oggi tema e sfondo, in `/data/users/1000/preferences`): le dà a chi le chiede (`get`), avvisa chi lo chiede quando cambiano (`watch`, collegamento che resta aperto) e le cambia (`set`). Contratto in `corekit/catalog.h`, funzioni per chi chiede in `corekit/interno/catalog.c`.
 - **Tipo**: servizio.
-- **Lanciato da**: init (con la porta "catalog" già aperta).
+- **Lanciato da**: init (con la porta "catalog" già aperta, e il canale del custode al descrittore 1: ogni `attach` ne manda una copia a init, e al riavvio init riconsegna le porte).
 - **Lancia**: nessuno.
 - **Gira come**: la persona (uid 1000): tocca solo i suoi file, e quelli che scrive sono di lei.
 - **Poteri**: nessuno speciale. `get` e `watch` a tutti; `set` chiede `ha_permesso` per "settings.system" (il sistema, e le app del sistema che lo dichiarano: Impostazioni). Riceve dal launcher la porta di ogni app (`attach`, solo da uid 0): chi si collega da una porta è l'app che il launcher ha detto. Lo usano le app (con UIKit), la scrivania e il compositore: chiedono tema e sfondo e osservano gli avvisi; Impostazioni li cambia. Nessun altro tocca i file delle preferenze.
@@ -98,7 +98,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ### network (servizio) (`utente/programmi/network.c`)
 - **Cosa fa**: all'avvio mette il firewall, accende la scheda, ottiene l'indirizzo (DHCP o fisso), la strada predefinita e i DNS; resta acceso per rinnovare il prestito. Ha una porta di controllo (stato, riavvia, ferma).
 - **Tipo**: servizio.
-- **Lanciato da**: init (lo fa ripartire se cade).
+- **Lanciato da**: init (lo fa ripartire se cade; gli presta il canale del custode al descrittore 0: init tiene le porte delle app e gliele riconsegna a ogni partenza). Il `restart` risponde ed esce: init lo fa ripartire.
 - **Lancia**: nessuno.
 - **Gira come**: sistema (uid 0): servono CAP_NET_ADMIN e CAP_NET_RAW.
 - **Poteri**: super sì. Permessi con `ha_permesso`: "network.use" per lo stato, "network.settings" per riavvia e ferma. Riceve dal launcher la porta delle app a cui ha concesso uno di quei due permessi (`attach`, solo da uid 0, con i permessi): chi si collega da una porta è l'app che il launcher ha detto. Il restart passa le porte al programma rilanciato (argomenti `<descrittore>=<programma>=<permessi>`), così le app non le trovano morte (da decidere in generale: `STATO.md`).
