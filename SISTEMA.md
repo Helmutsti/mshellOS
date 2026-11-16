@@ -9,7 +9,7 @@ servizio, un comando o un'app. Le regole delle app (pacchetti, permessi, isolame
 | Ruolo | Cosa fa | Chi è oggi |
 |---|---|---|
 | **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono. Nient'altro. | `/system/init` |
-| **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), scrivania |
+| **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), catalog (impostazioni della persona), scrivania |
 | **app** | Programmi grafici in un pacchetto `.app`, isolati, con i permessi del manifesto. Disegnano la loro interfaccia e la danno al compositore. Per tutto il resto chiedono ai servizi dalle porte. | Files, Attività, Impostazioni, Store, Terminale... |
 | **comandi** | Programmi senza grafica, per la riga di comando. Parlano con le **stesse porte** delle app, con i permessi della persona che li lancia. Non sono app (`APPLICAZIONI.md`, sezione 2). | i nostri in `/system/bin` (sorgenti in `utente/comandi/`, uno per file: oggi `network`), `/system/bin/curl` (scarica dal web, HTTP e HTTPS; non è nostro: compilato dai sorgenti ufficiali) e la shell |
 | **shell** | Un comando come gli altri: legge righe e fa partire comandi. Non ha nessun ruolo speciale e nessuno passa da lei per parlare con il sistema. Il Terminale è solo l'app che la ospita. | `/system/bin/shell` (di prova) |
@@ -17,6 +17,15 @@ servizio, un comando o un'app. Le regole delle app (pacchetti, permessi, isolame
 Dettagli sui servizi di oggi:
 - **eventi** legge tastiera e mouse e li manda in un solo tubo, al compositore. È il compositore a passare ogni evento all'app in primo piano.
 - **la shell sulla seriale** la fa partire init, solo se la seriale c'è. Serve per lo sviluppo.
+- **catalog** (deciso il 16 novembre 2026) possiede le impostazioni della persona: oggi il tema
+  (chiaro o scuro) e lo sfondo; la lingua quando ci sarà. Contiene **solo impostazioni**, niente
+  informazioni sul sistema o sull'hardware, e valgono **per la persona** (`/data/users/<uid>/preferences`).
+  È l'unico a leggere e scrivere quei file: le app e la scrivania chiedono a lui (`get`), si fanno
+  avvisare quando cambiano (`watch`) e, con il permesso `settings.system`, le cambiano (`set`).
+  Gira come la persona (uid 1000), non come sistema: tocca solo i file di lei. Il nome glielo
+  presta init. Contratto in `corekit/catalog.h`; prova `test/prove/catalog.py`. Oggi le app
+  leggono ancora il file da sole e il cambio di tema passa ancora dal compositore: i passi dopo
+  le portano su catalog.
 
 ## 2. Un servizio, tanti clienti
 
@@ -73,6 +82,10 @@ Cosa deve dire:
 - **la busta**, uguale per tutti: quale richiesta, un numero per riconoscere la risposta, l'esito (fatto, non hai il permesso, richiesta sbagliata...), e i dati della richiesta;
 - **il controllo dei permessi**, uguale per tutti: dall'identità che dà il kernel si risale a "chi è" (un'app e i suoi permessi concessi, una persona, il sistema), e il servizio chiede solo "ha il permesso X?";
 - ogni servizio aggiunge solo l'elenco delle sue richieste.
+
+Lo usa anche catalog (`corekit/catalog.h`): è il primo servizio con collegamenti che restano
+aperti, perché chi chiede `watch` riceve gli avvisi (messaggi con `notice=changed`, senza `id` né
+`result`) sullo stesso collegamento.
 
 Il primo a usarlo è il launcher (aprire le app e i file, installare e togliere i pacchetti,
 aprire la shell): i dati grandi (il resoconto di un pacchetto, l'elenco delle app) viaggiano

@@ -97,10 +97,11 @@ e la persona ne viene informata.
 - **Fatto per il compositore** (16 novembre 2026): ogni app parte con la sua porta verso il
   compositore (al descrittore 3; 0, 1 e 2 sono /dev/null), e per ogni finestra apre un collegamento
   dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"). Gli altri servizi ancora no.
-- **Le impostazioni comuni** (tema, sfondo, lingua) arriveranno da un servizio delle impostazioni,
-  solo in lettura e solo con le voci permesse, che avvisa le app aperte quando cambiano; le
-  preferenze dell'app stanno nel suo database, nella sua cartella dei dati (sezione 8). Idea
-  discussa con la persona il 16 novembre 2026, non ancora fatta.
+- **Le impostazioni comuni** arrivano dal servizio **catalog** (deciso il 16 novembre 2026): solo
+  impostazioni (oggi tema e sfondo), della persona, in lettura per tutte le app; avvisa le app
+  aperte quando cambiano; cambiarle chiede `settings.system`. Le preferenze dell'app stanno nel
+  suo database, nella sua cartella dei dati (sezione 8). Il servizio c'è (`SISTEMA.md`, sezione
+  1); le app non lo usano ancora.
 - **I dettagli** (per esempio, per i file, "solo leggere" o "anche scrivere") li controlla il
   servizio, in base all'identità dell'app.
 - **I canali sono uno per servizio, non uno per permesso** (14 novembre 2026): i permessi sono
@@ -314,7 +315,7 @@ quello che tocca le cose della persona o il sistema intero.
 |---|---|---|
 | Aprire finestre, disegnarci, ricevere tastiera e mouse nelle proprie finestre | compositore | lo standard di ogni app |
 | La propria cartella dei dati e il proprio database | (disco) | una per persona, nel suo mondo isolato |
-| Leggere tema (chiaro/scuro), lingua, ora | impostazioni, ora | solo lettura |
+| Leggere tema (chiaro/scuro), sfondo, lingua, ora | catalog (impostazioni), ora | solo lettura |
 | Usare font e icone del sistema | (disco) | `/system/resources`, sola lettura |
 | Aprire **un file scelto dalla persona** | selettore dei file | il sistema mostra la finestra "Apri"/"Salva"; l'app riceve solo quel file. Così la maggior parte delle app non ha bisogno del permesso sui file (come macOS e iPhone) |
 | Chiedere al sistema di condividere o di passare una richiesta a un ruolo | sistema | è la persona a scegliere a chi va |

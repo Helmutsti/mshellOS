@@ -22,14 +22,14 @@ occhio una volta.
 L'ALBERO. Nella scheda "Processi" le righe sono ad albero (ognuno sotto chi l'ha lanciato).
 Le righe si contano guardando la colonna PID (c'e' scritto qualcosa o no), la freccia del
 ramo guardando il suo posto nella colonna Processo:
-  - l'interruttore "Mostra i servizi di sistema" e' spento: init (PID 1), eventi, compositore
-    e launcher non ci sono, la prima riga e' la scrivania (senza freccia: non ha figli);
-  - acceso: le righe sono 4 di piu' e la prima e' init, con la freccia del ramo aperto;
+  - l'interruttore "Mostra i servizi di sistema" e' spento: init (PID 1), catalog, eventi,
+    compositore e launcher non ci sono, la prima riga e' la scrivania (senza freccia: non ha figli);
+  - acceso: le righe sono SERVIZI di piu' e la prima e' init, con la freccia del ramo aperto;
   - un clic sulla freccia di init chiude il ramo: resta solo init (tutti gli altri
     discendono da lui); un altro clic lo riapre.
 
-TERMINARE. Con l'interruttore acceso le righe sono init, eventi, compositore, launcher e
-sotto launcher le app in ordine di PID: Esempio (aperta per prima) e' la riga 4. Si
+TERMINARE. Con l'interruttore acceso le righe sono init, catalog, eventi, compositore, launcher
+e sotto launcher le app in ordine di PID: Esempio (aperta per prima) e' la riga 5. Si
 sceglie e si preme "Termina processo" (compare a destra nella barra degli strumenti
 quando c'e' una riga scelta): la finestra di Esempio deve sparire, e nella userbar Esempio
 non deve piu' risultare aperta.
@@ -45,7 +45,8 @@ ORDINE = 60
 DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); l'albero; termina Esempio"
 RIFERIMENTI = True
 
-RIGA_ESEMPIO = 4        # servizi visibili: 0 init, 1 eventi, 2 compositore, 3 launcher, 4 esempio
+SERVIZI = 5             # le righe che l'interruttore aggiunge: init, catalog, eventi, compositore, launcher
+RIGA_ESEMPIO = 5        # servizi visibili: 0 init, 1 catalog, 2 eventi, 3 compositore, 4 launcher, 5 esempio
 PRIMA_RIGA = 150        # il centro della prima riga, dall'angolo della finestra
 PASSO = 44              # righe alte 40, a 4 l'una dall'altra
 RIGHE_IN_VISTA = 8      # quante ne stanno nella finestra (alta 526)
@@ -155,19 +156,19 @@ def esegui(p):
                 "servizi nascosti: la prima riga ha una freccia (e' init, PID 1, invece della scrivania?)")
     m.clic(x + INTERRUTTORE[0], y + INTERRUTTORE[1])
     m.muovi(*PUNTO_VUOTO)
-    f = m.aspetta_che(lambda f: righe_piene(f, x, y) == min(nascosti + 4, RIGHE_IN_VISTA), 5.0,
-                      cosa="acceso l'interruttore, 4 righe in piu' (init, eventi, compositore, launcher)")
+    f = m.aspetta_che(lambda f: righe_piene(f, x, y) == min(nascosti + SERVIZI, RIGHE_IN_VISTA), 5.0,
+                      cosa=f"acceso l'interruttore, {SERVIZI} righe in piu' (init, catalog, eventi, compositore, launcher)")
     time.sleep(0.3)
     f = m.foto("servizi_visibili")
     p.controlla(freccia_prima_riga(f, x, y), "servizi visibili: la prima riga (init, PID 1) non ha la freccia")
-    p.nota(f"righe: {nascosti} con i servizi nascosti, {nascosti + 4} visibili")
+    p.nota(f"righe: {nascosti} con i servizi nascosti, {nascosti + SERVIZI} visibili")
     m.clic(x + (FRECCIA[0] + FRECCIA[1]) // 2, y + PRIMA_RIGA)     # chiude il ramo di init
     m.muovi(*PUNTO_VUOTO)
     m.aspetta_che(lambda f: righe_piene(f, x, y) == 1, 5.0, cosa="chiuso il ramo di init, resta solo lui")
     m.foto("ramo_chiuso")
     m.clic(x + (FRECCIA[0] + FRECCIA[1]) // 2, y + PRIMA_RIGA)     # e lo riapre
     m.muovi(*PUNTO_VUOTO)
-    m.aspetta_che(lambda f: righe_piene(f, x, y) == min(nascosti + 4, RIGHE_IN_VISTA), 5.0, cosa="riaperto il ramo di init")
+    m.aspetta_che(lambda f: righe_piene(f, x, y) == min(nascosti + SERVIZI, RIGHE_IN_VISTA), 5.0, cosa="riaperto il ramo di init")
     # --- terminare Esempio ---
     m.clic(x + 300, y + PRIMA_RIGA + PASSO * RIGA_ESEMPIO)
     time.sleep(0.3)

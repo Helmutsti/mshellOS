@@ -92,6 +92,11 @@ int messaggio_vale(const struct messaggio *m, const char *chiave, const char *va
  * ha chiuso, o se il messaggio e' vuoto o guasto. */
 int messaggio_manda(int d, const struct messaggio *m);
 
+/* Come messaggio_manda, ma senza mai aspettare (manda_subito): -1 anche se la casella
+ * dell'altro e' piena. Per gli avvisi di un servizio, che non deve aspettare nessuno. Niente
+ * allegato: un messaggio con l'allegato non si manda (-1). */
+int messaggio_manda_subito(int d, const struct messaggio *m);
+
 /* Riceve un messaggio dal collegamento 'd' (dorme finche' non arriva), con il suo
  * allegato in m->allegato (o -1). 1 se e' arrivato, 0 se l'altro ha chiuso, -1 se errore,
  * MESSAGGIO_NON_VALIDO se e' arrivato un pacchetto che non segue lo standard (troppo

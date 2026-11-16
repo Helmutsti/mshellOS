@@ -458,8 +458,17 @@ Fatto lo stesso giorno: **la porta dell'app verso il compositore**. Il launcher 
 socket, dà un capo all'app (descrittore 3; 0, 1 e 2 ora sono /dev/null invece che chiusi) e manda
 l'altro al compositore con il programma dell'app; ogni finestra dell'app arriva dalla porta e il
 compositore sa di chi è senza chiederlo al kernel (`gkit/sistema/protocollo.h`, "LA PORTA
-DELL'APP"). La prova `applicazioni` lo controlla. Prossimi: il servizio delle impostazioni (tema,
-sfondo, lingua alle app, solo lettura), poi il recinto vero nel launcher.
+DELL'APP"). La prova `applicazioni` lo controlla.
+
+**Catalog, il servizio delle impostazioni** (16/11/2026, deciso con la persona: solo impostazioni,
+per la persona). Primo passo fatto: il servizio (`utente/programmi/catalog.c`, contratto in
+`corekit/catalog.h`) dà tema e sfondo (`get`), avvisa chi lo chiede quando cambiano (`watch`) e li
+cambia con `settings.system` (`set`); gira come la persona e il nome glielo presta init. Prova
+`catalog` (disco `disco_catalog.img`, anche nella sandbox). Passi che restano:
+2. le app (UIKit) e la scrivania chiedono tema e sfondo a catalog invece di leggere i file;
+   Impostazioni li cambia con catalog;
+3. gli avvisi di catalog al posto del cambio di tema che oggi passa dal compositore.
+Poi il recinto vero nel launcher.
 
 **Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
 

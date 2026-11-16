@@ -15,6 +15,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 | launcher | servizio | init | sistema (uid 0) | sì |
 | scrivania | servizio | init | sistema (uid 0) | sì |
 | network (servizio) | servizio | init | sistema (uid 0) | sì |
+| catalog | servizio | init | persona (uid 1000) | no |
 | shell | comando/servizio di prova | init (seriale) o launcher (Terminale) | sistema (uid 0) | sì |
 | network (comando) | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
 | curl | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
@@ -47,10 +48,10 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 ## Servizi
 
 ### init (`utente/programmi/init.c`)
-- **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Avvia anche i programmi di prova in `/data/tests` se esiste.
+- **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher", "catalog"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Avvia anche i programmi di prova in `/data/tests` se esiste.
 - **Tipo**: servizio.
 - **Lanciato da**: avvio.
-- **Lancia**: eventi, compositore, launcher, scrivania, network, shell (sulla seriale, solo se `/dev/ttyS0` si apre), programmi di `/data/tests`.
+- **Lancia**: catalog (come la persona, uid 1000), eventi, compositore, launcher, scrivania, network, shell (sulla seriale, solo se `/dev/ttyS0` si apre), programmi di `/data/tests`.
 - **Gira come**: sistema (uid 0).
 - **Poteri**: super sì. Non controlla permessi.
 
@@ -85,6 +86,14 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Lancia**: nessun programma direttamente; chiede al launcher (`apri_applicazione`).
 - **Gira come**: sistema (uid 0): serve per ottenere i ruoli sfondo e pannello dal compositore.
 - **Poteri**: super sì. Non controlla permessi; legge i manifest delle app per le icone.
+
+### catalog (`utente/programmi/catalog.c`)
+- **Cosa fa**: possiede le impostazioni della persona (oggi tema e sfondo, in `/data/users/1000/preferences`): le dà a chi le chiede (`get`), avvisa chi lo chiede quando cambiano (`watch`, collegamento che resta aperto) e le cambia (`set`). Contratto in `corekit/catalog.h`, funzioni per chi chiede in `corekit/interno/catalog.c`.
+- **Tipo**: servizio.
+- **Lanciato da**: init (con la porta "catalog" già aperta).
+- **Lancia**: nessuno.
+- **Gira come**: la persona (uid 1000): tocca solo i suoi file, e quelli che scrive sono di lei.
+- **Poteri**: nessuno speciale. `get` e `watch` a tutti; `set` chiede `ha_permesso` per "settings.system" (provvisorio, sempre sì) e in più il controllo vero: uid 0 o app di sistema con "settings.system" nel manifesto (`pacchetto_ha_permesso`). Oggi le app non lo usano ancora: leggono i file da sole.
 
 ### network (servizio) (`utente/programmi/network.c`)
 - **Cosa fa**: all'avvio mette il firewall, accende la scheda, ottiene l'indirizzo (DHCP o fisso), la strada predefinita e i DNS; resta acceso per rinnovare il prestito. Ha una porta di controllo (stato, riavvia, ferma).

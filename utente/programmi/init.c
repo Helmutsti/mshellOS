@@ -23,6 +23,8 @@
 #include "gkit/sistema/protocollo.h"   /* NOME_COMPOSITORE */
 #include "gkit/sistema/schermo.h"      /* apri_schermo */
 #include "corekit/sistema/launcher.h"
+#include "corekit/sistema/privilegi.h"    /* avvia_come_con_descrittori: catalog come la persona */
+#include "corekit/catalog.h"              /* NOME_CATALOG */
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -30,7 +32,8 @@
  * in prestito il capo del tubo su cui scrive; il compositore lo schermo, l'altro capo del
  * tubo e il suo nome; il launcher il suo nome; la scrivania niente (si collega al
  * compositore come le applicazioni); network niente (la configurazione se la legge da
- * solo, e gira come sistema perche' Linux gli lasci cambiare le schede di rete). L'ordine
+ * solo, e gira come sistema perche' Linux gli lasci cambiare le schede di rete); catalog il
+ * suo nome, e gira come la persona (uid 1000: tocca solo le sue preferenze). L'ordine
  * conta: prima eventi e il compositore. */
 struct servizio {
     const char *percorso;
@@ -39,12 +42,16 @@ struct servizio {
     int processo;            /* il descrittore del suo processo: pronto quando finisce */
     const char *dispositivo; /* se non e' 0, il servizio parte solo se questo si apre */
     int non_qui;             /* 1: il dispositivo manca, su questo computer non parte */
+    unsigned int uid;        /* chi e': 0 il sistema (quasi tutti), UID_APPLICAZIONI la persona */
 };
 
 static int risorse_eventi[1];
 static int risorse_compositore[3];
 static int risorse_launcher[1];
+static int risorse_catalog[1];
 static struct servizio servizi[] = {
+    /* le impostazioni della persona: prima delle app e della scrivania, che le chiedono */
+    { "/system/services/catalog/catalog", risorse_catalog, 1, -1, 0, 0, UID_APPLICAZIONI },
     { "/system/services/eventi/eventi", risorse_eventi, 1, -1 },
     { "/system/services/compositore/compositore", risorse_compositore, 3, -1 },
     { "/system/services/launcher/launcher", risorse_launcher, 1, -1 },
@@ -72,7 +79,8 @@ static int dispositivo_presente(const char *percorso) {
 /* Lo fa partire e si tiene il descrittore del suo processo. */
 static void avvia_servizio(struct servizio *s) {
     if (s->non_qui) return;
-    int n = avvia_con(s->percorso, s->risorse, s->quante);
+    int n = s->uid == UID_SISTEMA ? avvia_con(s->percorso, s->risorse, s->quante)
+                                  : avvia_come_con_descrittori(s->percorso, s->uid, s->risorse, s->quante);
     s->processo = n < 0 ? -1 : processo(n);
     if (s->processo < 0) {
         scrivi_testo("init: non riesco ad avviare ");
@@ -121,8 +129,9 @@ int main(void) {
     risorse_compositore[1] = tubo[0];
     risorse_compositore[2] = ascolta(NOME_COMPOSITORE);
     risorse_launcher[0] = ascolta(NOME_LAUNCHER);
+    risorse_catalog[0] = ascolta(NOME_CATALOG);
     if (risorse_compositore[0] < 0 || tubo[0] < 0 || risorse_compositore[2] < 0 ||
-        risorse_launcher[0] < 0) {
+        risorse_launcher[0] < 0 || risorse_catalog[0] < 0) {
         scrivi_testo("init: non riesco a prendere schermo, tastiera o i nomi dei servizi\n");
         for (;;) dormi(60 * 1000);
     }

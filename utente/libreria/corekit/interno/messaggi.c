@@ -200,6 +200,15 @@ int messaggio_manda(int d, const struct messaggio *m) {
     return n == (int)m->byte ? 0 : -1;
 }
 
+int messaggio_manda_subito(int d, const struct messaggio *m) {
+    if (m->guasto || m->byte == 0 || m->byte > MAX_MESSAGGIO || m->allegato >= 0) return -1;
+    char pacchetto[MAX_MESSAGGIO];
+    memcpy(pacchetto, m->testo, m->byte);
+    for (unsigned int i = 0; i < m->byte; i++)
+        if (!pacchetto[i]) pacchetto[i] = '\n';
+    return manda_subito(d, pacchetto, m->byte) == (int)m->byte ? 0 : -1;
+}
+
 /* Controlla il pacchetto appena ricevuto (m->byte byte in m->testo) e lo mette nella forma
  * di dentro: ogni a capo diventa 0. 0, o -1 se non segue lo standard. */
 static int controlla(struct messaggio *m) {
