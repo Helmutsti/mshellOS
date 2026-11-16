@@ -496,8 +496,10 @@ tramite (APPLICAZIONI.md, sezione 5). Provato nella prova `recinto` (secondo rec
 
 **La finestra "Apri/Salva"** (decisione della persona, 16/11/2026): la mostra un servizio del
 sistema, fuori dall'app, che consegna solo il file scelto. Disegno fatto e approvato: finestra
-minima in sovraimpressione sopra l'app (`disegni/ApriSalva/`, pagina Figma 289:674). Prossimo: il
-servizio che la mostra.
+minima in sovraimpressione sopra l'app (`disegni/ApriSalva/`, pagina Figma 289:674). Fatto
+(17/11/2026): il compositore sa mostrare la finestra di scelta (`RUOLO_SCELTA`, solo dal programma
+picker) sopra l'app, con il velo sulle sue finestre e l'input bloccato; `finestra_apri_scelta` in GKit,
+`uikit_esegui_scelta` in UIKit; picker provvisorio, prova `scelta`. Prossimo: il vero picker.
 
 **Decisioni per il recinto** (della persona, 16/11/2026):
 - **Attività nel recinto**: vede e ferma i programmi tramite un servizio dei processi, solo con

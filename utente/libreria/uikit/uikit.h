@@ -1013,6 +1013,12 @@ int uikit_cambia_tema(struct finestra_tk *f, const char *nome);
  * servire le notizie finche' lui ne restituisce una (RILASCIATA). */
 int uikit_esegui(struct finestra_tk *f);
 
+/* Solo per il servizio picker: come uikit_esegui, ma la finestra e' una FINESTRA DI SCELTA
+ * (RUOLO_SCELTA, sistema/protocollo.h) sopra le finestre dell'app 'sopra' (il suo programma,
+ * /system/apps/<id>/code): il compositore la mette li' e vela l'app finche' resta aperta. Da
+ * chiunque altro il compositore la rifiuta (uikit_esegui_scelta torna 1). */
+int uikit_esegui_scelta(struct finestra_tk *f, const char *sopra);
+
 /* I componenti che stanno ognuno nel suo file (vedi LIBRERIE.md). */
 #include "elemento_file.h"    /* l'elemento di un file: icona e nome sotto */
 #include "oggetti.h"          /* le icone di file e cartelle (l'"Oggetto" di Figma) */

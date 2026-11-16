@@ -141,12 +141,16 @@ struct finestra_compositore {
     unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
     char programma[MAX_PERCORSO_PROGRAMMA];   /* di quale programma e': lo dice il kernel, o il
                                                * launcher se e' arrivata dalla porta dell'app */
+    char sopra[MAX_PERCORSO_PROGRAMMA];   /* una SCELTA: il programma dell'app che copre ("" per le altre) */
     int dalla_porta;            /* arrivata dalla porta di un'app: 'programma' e' gia' giusto */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
     unsigned int forma;         /* la forma del puntatore quando e' sulla finestra (MOSTRA_PUNTATORE) */
 };
+
+/* Il solo programma che puo' aprire una finestra di scelta (RUOLO_SCELTA). */
+#define PROGRAMMA_PICKER "/system/services/picker/picker"
 
 static struct finestra_compositore finestre[MAX_FINESTRE];
 
@@ -691,6 +695,27 @@ static void metti_sfocatura(int i) {
     }
 }
 
+/* LA FINESTRA DI SCELTA (protocollo.h): le stringhe dei programmi si confrontano qui. */
+static int stesso_programma(const char *a, const char *b) {
+    int k = 0;
+    while (a[k] && a[k] == b[k]) k++;
+    return a[k] == b[k];
+}
+
+/* La finestra di scelta che copre la finestra normale 'i' (aperta e che si vede), o -1: finche'
+ * c'e', 'i' e' velata e non sente ne' puntatore, ne' rotella. Se le scelte sono piu' d'una,
+ * quella piu' davanti. */
+static int scelta_sopra(int i) {
+    const struct finestra_compositore *f = &finestre[i];
+    if (!f->usata || f->ruolo != RUOLO_FINESTRA || !f->programma[0]) return -1;
+    for (int k = quante - 1; k >= 0; k--) {
+        const struct finestra_compositore *g = &finestre[ordine[k]];
+        if (g->usata && g->ruolo == RUOLO_SCELTA && g->mostrata >= 0 && stesso_programma(g->sopra, f->programma))
+            return ordine[k];
+    }
+    return -1;
+}
+
 /* LA BARRA DI EMERGENZA di una finestra che non risponde (vedi in cima): la disegna UIKit,
  * con barra_congelata_disegna, al posto delle prime barra_congelata_altezza righe
  * dell'applicazione. Il compositore non sa se una finestra e' una mini finestra (il
@@ -739,6 +764,8 @@ static void disegna_finestra(int i, int ricalcola) {
                  f->non_risponde ? barra_congelata_altezza(MINI) : 0);
         if (f->non_risponde && f->ruolo == RUOLO_FINESTRA)
             barra_congelata_disegna(&pennello, f->x, f->y, f->l, f->a, f->titolo, MINI);
+        if (scelta_sopra(i) >= 0)       /* velata da una finestra di scelta */
+            velo_finestra_disegna(&pennello, f->x, f->y, f->l, f->a, f->raggio);
     }
 }
 
@@ -790,8 +817,8 @@ static void in_primo_piano(int i) {
 /* GLI STRATI, dal basso: le superfici SFONDO, poi le finestre normali nel loro ordine,
  * poi i PANNELLI. Si disegna in quest'ordine, e si cerca chi sta sotto il puntatore al
  * contrario. */
-static const unsigned int strati[] = { RUOLO_SFONDO, RUOLO_FINESTRA, RUOLO_PANNELLO };
-#define QUANTI_STRATI 3
+static const unsigned int strati[] = { RUOLO_SFONDO, RUOLO_FINESTRA, RUOLO_SCELTA, RUOLO_PANNELLO };
+#define QUANTI_STRATI 4
 
 static int finestra_sotto(int x, int y) {
     for (int s = QUANTI_STRATI - 1; s >= 0; s--)
@@ -847,7 +874,15 @@ static void scollega(int i) {
     if (trascinata == i) trascinata = -1;
     if (fuoco == i) {                 /* il fuoco passa alla finestra che c'era sotto */
         fuoco = -1;
-        dai_fuoco(piu_davanti());
+        int dopo = piu_davanti();
+        if (f->ruolo == RUOLO_SCELTA) {   /* una scelta: all'app che copriva, se si vede ancora */
+            for (int k = quante - 1; k >= 0; k--) {
+                const struct finestra_compositore *g = &finestre[ordine[k]];
+                if (g->usata && g->ruolo == RUOLO_FINESTRA && g->mostrata >= 0 && !g->ridotta &&
+                    stesso_programma(g->programma, f->sopra)) { dopo = ordine[k]; break; }
+            }
+        }
+        dai_fuoco(dopo);
     }
 }
 
@@ -922,6 +957,12 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     int ruolo_valido = m->ruolo == RUOLO_FINESTRA ||
                        ((m->ruolo == RUOLO_SFONDO || m->ruolo == RUOLO_PANNELLO) &&
                         chi(f->collegamento) == UID_SISTEMA);
+    if (m->ruolo == RUOLO_SCELTA) {   /* la scelta solo dal servizio picker: lo dice il kernel */
+        char chi_e[MAX_PERCORSO_PROGRAMMA] = "";
+        if (programma_di(f->collegamento, chi_e) < 0) chi_e[0] = 0;
+        ruolo_valido = stesso_programma(chi_e, PROGRAMMA_PICKER);
+        if (!ruolo_valido) scrivi_riga("compositore", "finestra di scelta rifiutata a ", chi_e);
+    }
     if (!pixel || !ruolo_valido || l < 1 || a < 1 || l > larghezza || a > altezza ||
         byte < 2u * l * a * 4) {
         if (pixel) f->immagini[0] = pixel;   /* lo toglie scollega */
@@ -942,6 +983,26 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     if (f->ruolo == RUOLO_FINESTRA) {
         f->x = 60 + i * 40;   /* a cascata */
         f->y = 50 + i * 40;
+    } else if (f->ruolo == RUOLO_SCELTA) {
+        /* centrata sopra la finestra piu' in primo piano dell'app 'sopra'; se non ne ha, sullo
+         * schermo. Dentro lo schermo comunque. */
+        for (int k = 0; k < MAX_PERCORSO_PROGRAMMA - 1 && m->sopra[k]; k++) f->sopra[k] = m->sopra[k];
+        int cx = larghezza / 2, cy = altezza / 2;
+        for (int k = quante - 1; k >= 0; k--) {
+            const struct finestra_compositore *g = &finestre[ordine[k]];
+            if (!g->usata || g->ruolo != RUOLO_FINESTRA || g->mostrata < 0 || g->ridotta ||
+                !stesso_programma(g->programma, f->sopra))
+                continue;
+            cx = g->x + g->l / 2;
+            cy = g->y + g->a / 2;
+            break;
+        }
+        f->x = cx - l / 2;
+        f->y = cy - a / 2;
+        if (f->x + l > larghezza) f->x = larghezza - l;
+        if (f->y + a > altezza) f->y = altezza - a;
+        if (f->x < 0) f->x = 0;
+        if (f->y < 0) f->y = 0;
     } else {
         f->x = m->x;          /* le superfici speciali stanno dove dicono loro */
         f->y = m->y;
@@ -962,9 +1023,12 @@ static void mostra(int i, const struct mostra *m) {
     struct zona_finestra tutta = { 0, 0, f->l, f->a };
     for (unsigned int k = 0; k < m->quante && f->quante_cambiate >= 0; k++)
         zone_aggiungi(f->cambiate, &f->quante_cambiate, MAX_ZONE_MOSTRA, zona_dentro(m->zone[k], tutta));
-    if (prima < 0 && f->ruolo == RUOLO_FINESTRA) {   /* la prima volta: davanti e con il fuoco */
+    if (prima < 0 && f->ruolo == RUOLO_SCELTA) {     /* la scelta: davanti, con il fuoco, non annunciata */
         in_primo_piano(i);
         dai_fuoco(i);
+    } else if (prima < 0 && f->ruolo == RUOLO_FINESTRA) {   /* la prima volta: davanti e con il fuoco */
+        in_primo_piano(i);
+        if (scelta_sopra(i) < 0) dai_fuoco(i);       /* se e' velata il fuoco resta alla scelta */
         f->annunciata = 1;
         racconta(i, FINESTRA_APERTA);
     } else if (prima < 0 && f->ruolo == RUOLO_PANNELLO) {   /* un pannello nuovo: le finestre che ci sono */
@@ -1012,7 +1076,7 @@ static void controlla_risposte(void) {
  * Se l'utente l'ha gia' lasciato (il messaggio e' arrivato tardi), non si sposta niente:
  * se no la finestra seguirebbe il mouse senza che nessuno la tenga. */
 static void trascinami(int i) {
-    if (presa != i || finestre[i].ruolo != RUOLO_FINESTRA) return;   /* le superfici speciali no */
+    if (presa != i || (finestre[i].ruolo != RUOLO_FINESTRA && finestre[i].ruolo != RUOLO_SCELTA)) return;   /* le superfici speciali no */
     trascinata = i;
     presa_x = px - finestre[i].x;
     presa_y = py - finestre[i].y;
@@ -1235,7 +1299,7 @@ static void fai_lista(void) {
  * 'posto' e' dove sta in 'lista' (0 la piu' in fondo); 'id' dice se e' ancora lei (un
  * posto in 'finestre' si puo' riusare per un'altra). */
 struct impronta {
-    int vista, x, y, l, a, posto, col_fuoco, non_risponde;
+    int vista, x, y, l, a, posto, col_fuoco, non_risponde, velata;
     unsigned int ruolo, generazione, id;
 };
 static struct impronta impronte_prima[MAX_FINESTRE];
@@ -1331,7 +1395,7 @@ static void cosa_rifare(void) {
         int i = lista[k];
         const struct finestra_compositore *f = &finestre[i];
         adesso[i] = (struct impronta){ 1, f->x, f->y, f->l, f->a, k, i == fuoco, f->non_risponde,
-                                       f->ruolo, f->generazione, f->id };
+                                       scelta_sopra(i) >= 0, f->ruolo, f->generazione, f->id };
     }
     quante_zone = 0;
     for (int i = 0; i < MAX_FINESTRE; i++) quanti_danni[i] = da_sfocare[i] = 0;
@@ -1363,7 +1427,8 @@ static void cosa_rifare(void) {
         } else if (p->col_fuoco != q->col_fuoco) {
             danno(i, impronta_con_ombra(q));
             da_sfocare[i] = 1;
-        } else if (p->non_risponde != q->non_risponde || finestre[i].quante_cambiate < 0) {
+        } else if (p->non_risponde != q->non_risponde || p->velata != q->velata ||
+                   finestre[i].quante_cambiate < 0) {
             danno(i, impronta_dentro(q));
         } else if (p->generazione != q->generazione) {   /* solo dove l'applicazione dice */
             const struct finestra_compositore *f = &finestre[i];
@@ -1439,7 +1504,7 @@ static void componi_zone(void) {
 static unsigned int forma_voluta(void) {
     if (trascinata >= 0) return FORMA_NORMALE;
     int i = presa >= 0 ? presa : finestra_sotto(px, py);
-    if (i < 0) return FORMA_NORMALE;
+    if (i < 0 || scelta_sopra(i) >= 0) return FORMA_NORMALE;
     return finestre[i].non_risponde ? FORMA_ATTESA : finestre[i].forma;
 }
 
@@ -1506,6 +1571,12 @@ static void al_mouse(const struct evento *e) {
 
     if (appena_premuto) {   /* un clic: la finestra sotto va davanti e prende il fuoco */
         int i = finestra_sotto(px, py);
+        int velo = i >= 0 ? scelta_sopra(i) : -1;
+        if (velo >= 0) {    /* una finestra velata: il clic va alla scelta, non all'app */
+            in_primo_piano(velo);
+            dai_fuoco(velo);
+            return;         /* e all'app non arriva niente */
+        }
         if (i >= 0 && finestre[i].non_risponde &&
             barra_congelata_sul_chiudi(finestre[i].l, MINI, px - finestre[i].x, py - finestre[i].y)) {
             /* il "chiudi" rosso di emergenza: si chiude il programma. La finestra sparira'
@@ -1513,7 +1584,7 @@ static void al_mouse(const struct evento *e) {
             termina(finestre[i].collegamento);
             return;
         }
-        if (i < 0 || finestre[i].ruolo == RUOLO_FINESTRA) {
+        if (i < 0 || finestre[i].ruolo == RUOLO_FINESTRA || finestre[i].ruolo == RUOLO_SCELTA) {
             dai_fuoco(i);
             if (i >= 0) in_primo_piano(i);
         }
@@ -1536,7 +1607,8 @@ static void al_mouse(const struct evento *e) {
      * Cosi' sotto il puntatore non si accende niente nelle finestre dietro. I pannelli della
      * scrivania (userbar, vassoio) non hanno mai il fuoco: loro lo sentono sempre. */
     int a_chi = presa >= 0 ? presa : finestra_sotto(px, py);
-    if (a_chi >= 0 && presa < 0 && a_chi != fuoco && finestre[a_chi].ruolo == RUOLO_FINESTRA) a_chi = -1;
+    if (a_chi >= 0 && presa < 0 && a_chi != fuoco && (finestre[a_chi].ruolo == RUOLO_FINESTRA || finestre[a_chi].ruolo == RUOLO_SCELTA)) a_chi = -1;
+    if (a_chi >= 0 && scelta_sopra(a_chi) >= 0) a_chi = -1;   /* velata: non sente il puntatore */
     if (sotto >= 0 && sotto != a_chi) avvisa(sotto, (struct notizia){ .tipo = USCITO });
     sotto = a_chi;
     if (a_chi >= 0) {
@@ -1555,7 +1627,7 @@ static void al_mouse(const struct evento *e) {
 static void alla_rotella(const struct evento *e) {
     if (trascinata >= 0) return;
     int i = presa >= 0 ? presa : finestra_sotto(px, py);
-    if (i < 0) return;
+    if (i < 0 || scelta_sopra(i) >= 0) return;   /* una velata non sente la rotella */
     const struct finestra_compositore *f = &finestre[i];
     avvisa(i, (struct notizia){ .tipo = ROTELLA, .x = px - f->x, .y = py - f->y,
                                 .scatti_x = e->dx, .scatti_y = e->dy });

@@ -271,7 +271,7 @@ static void uikit_consegna_unendo(struct sospesa_tk *s, struct finestra_tk *da, 
     }
 }
 
-int uikit_esegui(struct finestra_tk *f) {
+static int esegui(struct finestra_tk *f, const char *sopra) {
     int l, a;
     widget_misura(&f->base, &l, &a);
     f->base.x = f->base.y = 0;
@@ -279,7 +279,9 @@ int uikit_esegui(struct finestra_tk *f) {
     f->base.a = a;
     widget_disponi(&f->base);
     if (finestra_tk_avviso_aperto(f)) avviso_sistema(f->avviso, l, a);   /* aperto prima di avere una misura */
-    if (finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO) < 0) return 1;
+    if ((sopra ? finestra_apri_scelta(&f->finestra, l, a, f->titolo, sopra, RAGGIO_FINESTRA_NUOVO)
+               : finestra_apri_come(&f->finestra, l, a, f->titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_FINESTRA_NUOVO)) < 0)
+        return 1;
     finestra_tasti_fisici(&f->finestra);        /* per le scorciatoie (tasti.h) */
     f->aperta = 1;
     f->quante_cambiate = 0;
@@ -351,3 +353,7 @@ int uikit_esegui(struct finestra_tk *f) {
         if (f->da_chiudere) return 0;
     }
 }
+
+int uikit_esegui(struct finestra_tk *f) { return esegui(f, 0); }
+
+int uikit_esegui_scelta(struct finestra_tk *f, const char *sopra) { return esegui(f, sopra); }

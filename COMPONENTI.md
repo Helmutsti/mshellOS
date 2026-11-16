@@ -14,6 +14,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | compositore | servizio | init | sistema (uid 0) | sì |
 | launcher | servizio | init | sistema (uid 0) | sì |
 | scrivania | servizio | init | sistema (uid 0) | sì |
+| picker (provvisorio) | servizio | init | persona (uid 1000) | no |
 | network (servizio) | servizio | init | sistema (uid 0) | sì |
 | catalog | servizio | init | persona (uid 1000) | no |
 | shell | comando/servizio di prova | init (seriale) o launcher (Terminale) | sistema (uid 0) | sì |
@@ -51,7 +52,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher", "catalog"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Custodisce le porte delle app di catalog, launcher e network (canale per servizio, `keep` e `restore`, senza mai leggere dalle porte: le butta quando l'app le chiude) e le riconsegna a ogni partenza del servizio (riga `init: riconsegnate <n> porte a <percorso>`). Avvia anche i programmi di prova in `/data/tests` se esiste.
 - **Tipo**: servizio.
 - **Lanciato da**: avvio.
-- **Lancia**: catalog (come la persona, uid 1000), eventi, compositore, launcher, scrivania, network, shell (sulla seriale, solo se `/dev/ttyS0` si apre), programmi di `/data/tests`.
+- **Lancia**: catalog e picker (come la persona, uid 1000), eventi, compositore, launcher, scrivania, network, shell (sulla seriale, solo se `/dev/ttyS0` si apre), programmi di `/data/tests`.
 - **Gira come**: sistema (uid 0).
 - **Poteri**: super sì. Non controlla permessi.
 
@@ -65,6 +66,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 
 ### compositore (`utente/programmi/compositore.c`)
 - **Cosa fa**: padrone dello schermo. Compone finestre (con ombre e sfocatura), sfondo e pannelli, smista tastiera e mouse, sposta le finestre. Le app disegnano da sole in memoria condivisa. Riceve dal launcher la porta di ogni app (PORTA_APP, solo da uid 0) e lega a quell'app le finestre che arrivano dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"); i programmi del sistema si collegano ancora per nome.
+  **La finestra di scelta** (`RUOLO_SCELTA`, `gkit/sistema/protocollo.h`, "LA FINESTRA DI SCELTA"): sta in uno strato proprio, sopra tutte le finestre e sotto i pannelli; si mette centrata sopra la finestra più in primo piano dell'app `sopra` (o al centro dello schermo); prende il fuoco quando compare e non è annunciata alla scrivania. Finché è aperta ogni finestra di quell'app è velata (il velo `SUPERFICIE_VELO`, disegnato con `velo_finestra_disegna` di UIKit sulla forma della finestra) e non riceve puntatore, rotella né tasti: un clic su una velata porta davanti la scelta. Quando si chiude, velo via e fuoco all'app. Accettata solo dal collegamento per nome il cui programma (lo dice il kernel) è `/system/services/picker/picker`.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con schermo, tubo eventi e porta "compositore" già aperti).
 - **Lancia**: nessuno.
@@ -86,6 +88,14 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Lancia**: nessun programma direttamente; chiede al launcher (`apri_applicazione`).
 - **Gira come**: sistema (uid 0): serve per ottenere i ruoli sfondo e pannello dal compositore.
 - **Poteri**: super sì. Non controlla permessi; legge i manifest delle app per le icone.
+
+### picker (`utente/programmi/picker.c`) — PROVVISORIO
+- **Cosa fa**: oggi solo per provare il compositore: se esiste la cartella `/data/tests/scelta` (solo nel disco della prova `scelta`) apre ciclicamente una finestra di scelta vuota (480 x 421) sopra Files, 15 secondi aperta e 10 chiusa; senza la cartella dorme. Sarà sostituito dal vero picker (la finestra "Apri/Salva" in UIKit, `disegni/ApriSalva/`).
+- **Tipo**: servizio.
+- **Lanciato da**: init.
+- **Lancia**: nessuno.
+- **Gira come**: persona (uid 1000). Si collega al compositore per nome, come un programma che non è di sistema: il compositore gli concede `RUOLO_SCELTA` perché il suo programma è `/system/services/picker/picker`.
+- **Poteri**: nessuno speciale.
 
 ### catalog (`utente/programmi/catalog.c`)
 - **Cosa fa**: possiede le impostazioni della persona (oggi tema e sfondo, in `/data/users/1000/preferences`): le dà a chi le chiede (`get`), avvisa chi lo chiede quando cambiano (`watch`, collegamento che resta aperto) e le cambia (`set`). Contratto in `corekit/catalog.h`, funzioni per chi chiede in `corekit/interno/catalog.c`.

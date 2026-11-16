@@ -40,6 +40,11 @@ int barra_congelata_sul_chiudi(int larghezza, int mini, int x, int y);
 void barra_congelata_disegna(struct pennello *p, int x, int y, int l, int a, const char *titolo,
                              int mini);
 
+/* Il velo di una finestra coperta da una finestra di scelta (componente "Velo della finestra",
+ * 138:455): SUPERFICIE_VELO sulla forma della finestra in (x, y), larga l e alta a, con gli
+ * angoli di 'raggio'. */
+void velo_finestra_disegna(struct pennello *p, int x, int y, int l, int a, int raggio);
+
 /* L'ombra di una finestra nel tema in uso: la tabella degli strati (gkit_disegno.h) e, in
  * 'quanti', quante righe ha. Gli strati esterni li disegna il compositore, gli interni
  * (dentro la finestra) l'applicazione. */
