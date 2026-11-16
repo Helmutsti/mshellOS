@@ -449,6 +449,11 @@ seccomp: dentro si può ancora creare un mondo utente nuovo. Il launcher non usa
 
 **Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
 
+**Domanda aperta per servizi e permessi** (della persona, 16/11/2026): avere in mano una cartella
+di fuori permette di uscire dal recinto? Se un servizio passa all'app una cartella già aperta,
+dopo che l'app ha avuto il permesso, l'app la può usare per uscire (con "..")? Vedi anche
+APPLICAZIONI.md, sezione 5, "Problemi che l'idea porta con sé", punto 1.
+
 Il resto dell'elenco resta qui solo come memoria.
 
 Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
