@@ -379,8 +379,8 @@ dei messaggi (`SISTEMA.md`, sezione 3) chiedono a `ha_permesso` se chi chiede ha
   (il launcher scrive nel registro quelli che toglie);
 - un altro programma della persona (un comando) ha i permessi normali, nessuno di sistema.
 Ogni rifiuto si scrive nel registro (`permesso <nome> a <programma> (uid <uid>): negato`). La
-prova `applicazioni` controlla i rifiuti con Esempio, che non ha `settings.system` né
-`network.settings`.
+prova `applicazioni` controlla i rifiuti con Esempio, che non ha `settings.system`, né
+`network.settings`, né `processes.view` (l'elenco dei processi).
 
 | Permesso | Servizio | Cosa permette | Chi ce l'ha oggi |
 |---|---|---|---|
@@ -389,6 +389,8 @@ prova `applicazioni` controlla i rifiuti con Esempio, che non ha `settings.syste
 | `system.shell` | launcher | aprire la shell come sistema (il Terminale) | il Terminale (provvisorio: `STATO.md`) |
 | `settings.system` | catalog | cambiare tema e sfondo | Impostazioni |
 | `network.use` | network | chiedere lo stato della rete (e avere la porta verso network) | Esempio (prova) |
+| `processes.view` | tasks | vedere i programmi in esecuzione, la memoria e il disco (e avere la porta verso tasks) | nessuna app (la comprende `processes.stop`) |
+| `processes.stop` | tasks | vedere come sopra e fermare un programma: solo quelli della persona (uid 1000), mai quelli del sistema né init, anche se il servizio gira come sistema | Attività |
 | `network.settings` | network | riavviare e fermare la rete | nessuna app |
 
 ### Deviazioni dallo standard: si dichiarano, la persona viene informata

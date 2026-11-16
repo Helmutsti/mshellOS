@@ -64,7 +64,7 @@ done
     metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
 done
 metti_file $O/sandbox/init /system/init 755
-SERVIZI="compositore eventi launcher scrivania network catalog"
+SERVIZI="compositore eventi launcher scrivania network catalog tasks"
 for nome in $SERVIZI; do metti_file "$O/sandbox/$nome" "/system/services/$nome/$nome" 755; done
 # la configurazione predefinita dei servizi, come build.sh. Il collegamento
 # /etc/resolv.conf invece no: nel container quel file lo mette Docker. Il servizio network

@@ -78,7 +78,7 @@
 #define LAUNCHER    "/run/mshell/launcher"
 #define RISORSE     "/system/resources"
 #define PROVA       CASA "/ProvaRecinto"
-#define REGISTRO    8   /* il registro del sistema (la seriale), che init passa a tutti: CoreKit, interno.h */
+#define REGISTRO    16  /* il registro del sistema (la seriale), che init passa a tutti: CoreKit, interno.h */
 
 static int fallite;
 static int con_rete;   /* il recinto che si costruisce (o in cui si e') ha la rete del computer */

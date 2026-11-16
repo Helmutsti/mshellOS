@@ -6,9 +6,9 @@
 
 /* IL REGISTRO: il descrittore su cui scrive scrivi. E' la console del kernel (la
  * seriale): lo apre avvio, il primo programma, e passa a init, che lo lascia a tutti i
- * programmi che fa partire, e cosi' via. Sta sempre al posto 8, appena dopo quelli che
+ * programmi che fa partire, e cosi' via. Sta sempre al posto 16, appena dopo quelli che
  * si prestano con avvia_con (da 0 a MAX_PASSATI - 1). */
-#define REGISTRO 8
+#define REGISTRO 16
 
 /* Un percorso dei programmi come lo vuole Linux: controlla che sia assoluto e non troppo
  * lungo, e traduce /home nella casa di chi chiede (/data/users/<uid>/home). 0, o

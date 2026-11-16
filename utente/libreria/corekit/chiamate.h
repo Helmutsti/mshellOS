@@ -139,7 +139,7 @@ struct voce_cartella {
  * descrittori di chi lo fa partire non li vede.
  * processo(numero) da' un descrittore del processo (pidfd): aspetta lo vede pronto
  * quando il processo e' finito, e ricevi aspetta che finisca. */
-#define MAX_PASSATI 8
+#define MAX_PASSATI 16
 
 /* I PROCESSI E LA MEMORIA, per chi vuole guardarli (il task manager): la libreria li
  * legge da /proc. Chiunque puo' vedere l'elenco; terminare un processo invece segue la

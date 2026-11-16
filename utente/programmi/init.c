@@ -41,6 +41,7 @@
 #include "corekit/sistema/launcher.h"
 #include "corekit/sistema/privilegi.h"    /* avvia_come_con_descrittori: catalog come la persona */
 #include "corekit/catalog.h"              /* NOME_CATALOG */
+#include "corekit/tasks.h"                /* NOME_TASKS */
 #include "corekit/sistema/servizi.h"      /* le porte in custodia: keep, restore, chi_chiede */
 #include <errno.h>
 #include <fcntl.h>
@@ -53,7 +54,8 @@
  * tubo e il suo nome; il launcher il suo nome (e il canale del custode, come catalog); la scrivania niente (si collega al
  * compositore come le applicazioni); network solo il canale del custode (la configurazione se la legge da
  * solo, e gira come sistema perche' Linux gli lasci cambiare le schede di rete); catalog il nome e il canale
- * del custode, e gira come la persona (uid 1000: tocca solo le sue preferenze). L'ordine
+ * del custode, e gira come la persona (uid 1000: tocca solo le sue preferenze); tasks il nome e il
+ * canale del custode, e gira come sistema (deve vedere tutti i processi). L'ordine
  * conta: prima eventi e il compositore. */
 #define MAX_PORTE_CUSTODITE 32   /* per servizio: come MAX_PORTE dei servizi */
 struct servizio {
@@ -78,6 +80,7 @@ static int risorse_compositore[3];
 static int risorse_launcher[2];   /* il nome, poi il canale del custode */
 static int risorse_catalog[2];    /* il nome, poi il canale del custode */
 static int risorse_network[1];    /* il canale del custode */
+static int risorse_tasks[2];      /* il nome, poi il canale del custode */
 static struct servizio servizi[] = {
     /* le impostazioni della persona: prima delle app e della scrivania, che le chiedono */
     { "/system/services/catalog/catalog", risorse_catalog, 2, -1, 0, 0, UID_APPLICAZIONI, 1 },
@@ -88,6 +91,8 @@ static struct servizio servizi[] = {
     /* la rete. Se la sua scheda non c'e', non e' init a saperlo (la scheda e' scritta
      * nella configurazione della rete): il servizio lo dice e aspetta, senza finire */
     { "/system/services/network/network", risorse_network, 1, -1, 0, 0, UID_SISTEMA, 1 },
+    /* i processi, la memoria e il disco, per chi ha il permesso da task manager (Attivita'): come sistema */
+    { "/system/services/tasks/tasks", risorse_tasks, 2, -1, 0, 0, UID_SISTEMA, 1 },
     /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere.
      * Parte solo se la seriale c'e' (come la getty sulla seriale di Linux): nella sandbox
      * Docker non c'e', e la shell ripartirebbe ogni 5 secondi senza poter fare niente. */
@@ -223,8 +228,9 @@ int main(void) {
     risorse_compositore[2] = ascolta(NOME_COMPOSITORE);
     risorse_launcher[0] = ascolta(NOME_LAUNCHER);
     risorse_catalog[0] = ascolta(NOME_CATALOG);
+    risorse_tasks[0] = ascolta(NOME_TASKS);
     if (risorse_compositore[0] < 0 || tubo[0] < 0 || risorse_compositore[2] < 0 ||
-        risorse_launcher[0] < 0 || risorse_catalog[0] < 0) {
+        risorse_launcher[0] < 0 || risorse_catalog[0] < 0 || risorse_tasks[0] < 0) {
         scrivi_testo("init: non riesco a prendere schermo, tastiera o i nomi dei servizi\n");
         for (;;) dormi(60 * 1000);
     }

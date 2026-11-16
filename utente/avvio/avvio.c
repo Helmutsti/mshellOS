@@ -45,7 +45,7 @@
 
 #define PARTIZIONE_SISTEMA "system"   /* i nomi delle partizioni nella tabella GPT */
 #define PARTIZIONE_DATI "data"
-#define REGISTRO 8             /* dove i programmi trovano la console (corekit/interno/interno.h) */
+#define REGISTRO 16            /* dove i programmi trovano la console (corekit/interno/interno.h) */
 #define ATTESA_DISCO 100       /* volte da 100 ms: 10 secondi al massimo */
 
 static void di(const char *s) {

@@ -5,7 +5,7 @@
  * dell'immagine, /run e /tmp sono in memoria (--tmpfs), /dev /proc /sys li da' Docker.
  * Qui si fa solo quello che nel disco delle prove e' gia' scritto, ma cambia da prova a
  * prova, e poi si passa la mano a /system/init, con lo stesso numero (1) e il registro al
- * posto 8, come fa avvio:
+ * posto 16, come fa avvio:
  *
  *   avvio TEMA PROVE
  *     TEMA   "chiaro" (come il disco delle prove: il file del tema non c'e') o "scuro"
@@ -28,7 +28,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define REGISTRO 8
+#define REGISTRO 16
 #define CASA "/data/users/1000/home"
 #define PROVE_ORIGINE "/.sandbox/prove/"
 

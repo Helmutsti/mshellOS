@@ -8,8 +8,8 @@ servizio, un comando o un'app. Le regole delle app (pacchetti, permessi, isolame
 
 | Ruolo | Cosa fa | Chi è oggi |
 |---|---|---|
-| **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono, e custodisce le porte delle app di catalog, launcher e network (le riconsegna quando ripartono). Nient'altro. | `/system/init` |
-| **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), catalog (impostazioni della persona), scrivania |
+| **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono, e custodisce le porte delle app di catalog, launcher, network e tasks (le riconsegna quando ripartono). Nient'altro. | `/system/init` |
+| **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), catalog (impostazioni della persona), tasks (processi, memoria e disco), scrivania |
 | **app** | Programmi grafici in un pacchetto `.app`, isolati, con i permessi del manifesto. Disegnano la loro interfaccia e la danno al compositore. Per tutto il resto chiedono ai servizi dalle porte. | Files, Attività, Impostazioni, Store, Terminale... |
 | **comandi** | Programmi senza grafica, per la riga di comando. Parlano con le **stesse porte** delle app, con i permessi della persona che li lancia. Non sono app (`APPLICAZIONI.md`, sezione 2). | i nostri in `/system/bin` (sorgenti in `utente/comandi/`, uno per file: oggi `network`), `/system/bin/curl` (scarica dal web, HTTP e HTTPS; non è nostro: compilato dai sorgenti ufficiali) e la shell |
 | **shell** | Un comando come gli altri: legge righe e fa partire comandi. Non ha nessun ruolo speciale e nessuno passa da lei per parlare con il sistema. Il Terminale è solo l'app che la ospita. | `/system/bin/shell` (di prova) |
@@ -125,6 +125,17 @@ launcher (`apps.manage`, `apps.open`, `system.shell`), network (`network.use`,
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
 
+- **tasks** (deciso il 16 novembre 2026) possiede quello che serve a un task manager: i programmi in
+  esecuzione, la memoria, lo spazio del disco (anche quanto pesano `/system`, `/system/apps`,
+  `/data/apps` e `/data/users`) e il potere di fermare un programma. Legge `/proc`, `statvfs` e le
+  cartelle al posto delle app, che nel recinto non le vedranno. Gira come sistema (uid 0: deve
+  vedere tutti i processi) e dà le informazioni solo con `processes.view` (o `processes.stop`, che lo
+  comprende); fermare chiede `processes.stop`. **La regola di `stop`** non la lascia al kernel:
+  ferma solo i processi della persona (uid 1000), mai quelli del sistema né init, a chiunque lo
+  chieda. Il nome glielo presta init. Contratto in `corekit/tasks.h`; le funzioni `elenco_processi`,
+  `stato_memoria`, `stato_disco`, `dimensione_cartella` e `termina_processo` di CoreKit sono richieste
+  a tasks. Prova: `attivita` (Attività funziona tramite tasks) e `applicazioni`.
+
 ### Le porte delle app
 
 Deciso con la persona il 16 novembre 2026 (`APPLICAZIONI.md`, "Come funzionano le chiavi"). Un'app
@@ -140,6 +151,12 @@ recinto il percorso del programma sarebbe un altro) e non da quello che l'app di
 | 4 | catalog | lo standard: `attach` dal launcher, `connect` dall'app (`corekit/messaggi.h` e `sistema/servizi.h`) |
 | 5 | launcher | lo standard, ma senza `attach`: il launcher crea la coppia e tiene lui il capo del servizio, con il programma dell'app. A tutte le app |
 | 6 | network | lo standard (`attach` dal launcher, `connect` dall'app). Solo alle app con `network.use` o `network.settings` nel manifesto; alle altre `/dev/null` |
+| 7 | (libero) | sarà la porta del servizio per scegliere i file (picker); per ora `/dev/null` |
+| 8 | tasks | lo standard. Solo alle app con `processes.view` o `processes.stop` nel manifesto; alle altre `/dev/null` |
+
+I descrittori passati a un programma vanno da 0 a 15 (`MAX_PASSATI`); il **registro** (la console, su
+cui scrive `scrivi`) sta al 16, subito dopo (era all'8: il 16 novembre 2026 si è spostato per fare
+posto alla porta 8).
 
 Per i servizi dello standard:
 1. il launcher crea una coppia di socket, si collega al servizio per nome e manda `request=attach`
@@ -152,21 +169,21 @@ Per i servizi dello standard:
 
 **Quali sono le porte lo dice il launcher**, non si indovina: nella variabile d'ambiente
 `MSHELL_PORTE` dell'app scrive l'elenco delle porte date davvero, servizio e descrittore (es.
-`compositore=3 catalog=4 launcher=5 network=6`), come fa systemd con `LISTEN_FDS`. La libreria
+`compositore=3 catalog=4 launcher=5 network=6 tasks=8`), come fa systemd con `LISTEN_FDS`. La libreria
 (`porta_di`, `corekit/messaggi.h`) controlla prima il tipo (il servizio è nell'elenco?) e poi chi
 è (all'altro capo c'è davvero il sistema?). Corretto il 16 novembre 2026: prima si guardava solo il
 secondo punto, e in un programma del sistema un suo collegamento qualsiasi a quel numero veniva
 scambiato per una porta (la scrivania si chiudeva quando catalog ripartiva).
 
 I programmi del sistema e i comandi, che non partono dal launcher, non hanno la variabile: si
-collegano per nome, e il servizio chiede al kernel chi sono. Oggi le porte sono quattro (compositore, catalog, launcher e
-network): i servizi che chiedono un permesso (network) danno la porta solo alle app che lo hanno
+collegano per nome, e il servizio chiede al kernel chi sono. Oggi le porte sono cinque (compositore, catalog, launcher,
+network e tasks): i servizi che chiedono un permesso (network, tasks) danno la porta solo alle app che lo hanno
 nel manifesto. Per ogni app che fa partire, il launcher scrive nel registro una riga con le porte
 date (`launcher: esempio: porte compositore catalog launcher network`).
 
 **Init custodisce le porte** (deciso con la persona, come il "file descriptor store" di systemd).
 Il capo "servizio" di una porta sta nel servizio, e se il servizio cade si chiude. Allora catalog,
-launcher e network hanno con init un canale (una coppia di socket: init tiene un capo, presta
+launcher, network e tasks hanno con init un canale (una coppia di socket: init tiene un capo, presta
 l'altro al servizio) e a ogni porta nuova gli mandano una copia del capo (`request=keep`, con
 `program` e `permission`). Init le tiene senza mai leggerle (le butta quando l'app le chiude) e,
 a ogni partenza del servizio, prima di farlo partire gli riconsegna le porte (`request=restore`

@@ -9,9 +9,9 @@
  *     e quanto e' libero.
  *
  * Tutto quello che mostra lo chiede alla libreria (elenco_processi, stato_memoria,
- * stato_disco, le cartelle), che lo legge da Linux (/proc, statvfs). Terminare segue la
- * regola di Unix: Attivita' gira come utente "applicazioni", quindi puo' terminare solo
- * le applicazioni; i servizi del sistema no.
+ * stato_disco, le cartelle), che li chiede al servizio tasks (tasks.h). Terminare
+ * e' una richiesta a tasks (permesso processes.stop), che ferma solo i processi della persona:
+ * i servizi del sistema no.
  *
  * L'ASPETTO e' quello della pagina "App - Attivita'" del file Figma, fatto con i componenti di
  * UIKit: la finestra a aree, le schede nella barra degli strumenti, i pulsanti, il pannello
@@ -253,35 +253,6 @@ static const char *const nomi_disco[PEZZI_DISCO] = {
 static const int toni_disco[PEZZI_DISCO] = { 0, 1, 2, 0 };
 static const char *const partizioni[] = { "/system", "/data" };
 
-/* Quanto pesano i file di una cartella, contando anche quelli delle cartelle dentro.
- * 'percorso' e' lungo 'lungo' lettere, in un posto di MAX_PERCORSO. Una cartella che non si
- * puo' aprire conta 0. Oltre PROFONDITA_DISCO cartelle una dentro l'altra non si scende. */
-#define PROFONDITA_DISCO 8
-
-static unsigned long long peso_cartella(char *percorso, int lungo, int profondita) {
-    int d = apri(percorso, APRI_LEGGERE);
-    if (d < 0) return 0;
-    unsigned long long somma = 0;
-    struct voce_cartella v;
-    while (leggi(d, &v, sizeof v) == sizeof v) {
-        v.nome[MAX_NOME_FILE - 1] = 0;
-        if (v.tipo == TIPO_FILE) {
-            somma += v.dimensione;
-            continue;
-        }
-        if (v.tipo != TIPO_CARTELLA || profondita >= PROFONDITA_DISCO) continue;
-        if (v.nome[0] == '.' && (!v.nome[1] || (v.nome[1] == '.' && !v.nome[2]))) continue;
-        int n = lunghezza(v.nome);
-        if (lungo + 1 + n >= MAX_PERCORSO) continue;
-        percorso[lungo] = '/';
-        metti_testo(percorso + lungo + 1, v.nome);
-        somma += peso_cartella(percorso, lungo + 1 + n, profondita + 1);
-        percorso[lungo] = 0;
-    }
-    chiudi(d);
-    return somma;
-}
-
 /* --- la finestra --- */
 
 static struct finestra_tk finestra;
@@ -301,8 +272,8 @@ static struct pagina_grafico memoria, disco;
 
 enum { SCHEDA_PROCESSI, SCHEDA_MEMORIA, SCHEDA_DISCO };
 
-/* CHI SIAMO: mentre il kernel scrive l'elenco, il processo "in esecuzione" e' quello che l'ha
- * chiesto, cioe' noi. -1: non si sa. */
+/* CHI SIAMO: l'uid di questo programma (uid_mio): serve a sapere quali processi si possono
+ * terminare (tasks ne ferma solo della persona, ma e' meglio non offrire il pulsante agli altri). */
 static int mio_uid = -1;
 
 static int si_puo_terminare(const struct info_processo *pr) {
@@ -355,8 +326,7 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
     (void)f; (void)dati;
     int n = elenco_processi(processi, MAX_PROCESSI);
     quanti_processi = n < 0 ? 0 : n;
-    for (int i = 0; i < quanti_processi; i++)
-        if (processi[i].stato == STATO_IN_ESECUZIONE) mio_uid = (int)processi[i].uid;
+    mio_uid = (int)uid_mio();
     fai_righe();
     righe_cambiate();
     aggiorna_azioni();
@@ -387,9 +357,8 @@ static void aggiorna(struct finestra_tk *f, void *dati) {
 #define OGNI_DISCO 5000
 
 static unsigned long long peso(const char *cartella) {
-    char percorso[MAX_PERCORSO];
-    int lungo = (int)(metti_testo(percorso, cartella) - percorso);
-    return peso_cartella(percorso, lungo, 0);
+    unsigned long long byte = 0;
+    return dimensione_cartella(cartella, &byte) < 0 ? 0 : byte;   /* tasks cammina nelle cartelle */
 }
 
 static void aggiorna_disco(struct finestra_tk *f, void *dati) {
