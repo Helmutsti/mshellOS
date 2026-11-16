@@ -489,6 +489,14 @@ quelli di sistema solo alle app del sistema (`permessi_concessi` nel launcher). 
 registro. Il Terminale ora dichiara `system.shell`. La prova `applicazioni` controlla i rifiuti
 con Esempio (cambiare il tema, riavviare la rete). Restano: la finestra di domanda del primo avvio, il database dei permessi concessi, la
 pagina dei permessi in Impostazioni. Poi il recinto vero nel launcher.
+
+**Decisioni per il recinto** (della persona, 16/11/2026):
+- **Attività nel recinto**: vede e ferma i programmi tramite un servizio dei processi, solo con
+  un permesso speciale. Quel set di permessi fa da "task manager" (oggi `processes.view` e
+  `processes.stop`) e Attività lo soddisfa.
+- **Il Terminale resta un'app senza recinto**, ancora per un po'.
+- **Un servizio che riparte**: o l'app riceve una porta nuova quando la precedente si perde, o
+  le porte le tiene init. Da ragionare su quale sia meglio.
 Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
 pezzi si mescolavano con quelle di altri programmi (la prova `store` falliva per questo, quando il
 compositore scrive la porta di un'app); la usano launcher, Store, catalog e compositore. Lo stesso
