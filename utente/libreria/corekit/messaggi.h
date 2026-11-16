@@ -132,16 +132,27 @@ int chiedi_entro(int d, struct messaggio *richiesta, struct messaggio *risposta,
  * dicendo di quale app e'. Per parlare con il servizio l'app non usa la porta direttamente:
  * per ogni collegamento crea una coppia e ne manda un capo sulla porta (request=connect, con il
  * capo allegato, senza risposta). Il servizio lo tratta come un collegamento normale, che e'
- * dell'app della porta: lo sa dal launcher, non dal kernel e non dall'app. */
+ * dell'app della porta: lo sa dal launcher, non dal kernel e non dall'app.
+ *
+ * QUALI SONO LE PORTE lo dice il launcher, non si indovina: nella variabile d'ambiente
+ * VARIABILE_PORTE dell'app scrive l'elenco di quelle che le ha dato davvero, nome del servizio e
+ * descrittore, es. "compositore=3 catalog=4 launcher=5 network=6" (come LISTEN_FDS di systemd).
+ * Un programma senza la variabile (un programma del sistema, come la scrivania o il compositore,
+ * che parte da init) non ha porte: chiama i servizi per nome, e il servizio chiede al kernel chi
+ * e'. (Prima si guardava solo se all'altro capo del descrittore c'era il sistema: in un programma
+ * del sistema anche un suo collegamento qualsiasi lo e', e veniva scambiato per una porta.) */
 #define RICHIESTA_COLLEGA "connect"
+#define VARIABILE_PORTE   "MSHELL_PORTE"
 
-/* 1 se 'd' e' una porta data dal sistema: un collegamento il cui altro capo l'ha fatto il
- * sistema (il kernel lo dice). 0 se no (chiuso, un file, un collegamento di qualcun altro). */
-int e_una_porta(int d);
+/* La porta verso il servizio 'nome' (es. NOME_CATALOG): prima il TIPO, cioe' se il servizio e'
+ * nell'elenco del launcher (VARIABILE_PORTE), poi CHI E', cioe' se all'altro capo di quel
+ * descrittore c'e' davvero il sistema (lo dice il kernel). Il descrittore, o -1 se il programma
+ * non ha quella porta. */
+int porta_di(const char *nome);
 
-/* Si collega al servizio 'nome': dalla porta 'porta' se il programma ce l'ha (e_una_porta), se
- * no per nome (collega, corekit.h), come i programmi del sistema. Il collegamento, o -1. */
-int collega_servizio(const char *nome, int porta);
+/* Si collega al servizio 'nome': dalla sua porta se il programma ce l'ha (porta_di), se no per
+ * nome (collega, corekit.h), come i programmi del sistema. Il collegamento, o -1. */
+int collega_servizio(const char *nome);
 
 /* --- il servizio ---
  * Il lato di chi risponde (chi c'e' dall'altra parte, chi_chiede, e se ha il permesso,

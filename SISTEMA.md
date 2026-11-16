@@ -150,8 +150,16 @@ Per i servizi dello standard:
    dell'app della porta. Lo fa la libreria (`collega_servizio`): chi scrive l'app non lo vede;
 3. da lì app e servizio parlano da soli: il launcher fa solo da centralino all'inizio.
 
-I programmi del sistema e i comandi, che non partono dal launcher, si collegano ancora per nome, e
-il servizio chiede al kernel chi sono. Oggi le porte sono quattro (compositore, catalog, launcher e
+**Quali sono le porte lo dice il launcher**, non si indovina: nella variabile d'ambiente
+`MSHELL_PORTE` dell'app scrive l'elenco delle porte date davvero, servizio e descrittore (es.
+`compositore=3 catalog=4 launcher=5 network=6`), come fa systemd con `LISTEN_FDS`. La libreria
+(`porta_di`, `corekit/messaggi.h`) controlla prima il tipo (il servizio è nell'elenco?) e poi chi
+è (all'altro capo c'è davvero il sistema?). Corretto il 16 novembre 2026: prima si guardava solo il
+secondo punto, e in un programma del sistema un suo collegamento qualsiasi a quel numero veniva
+scambiato per una porta (la scrivania si chiudeva quando catalog ripartiva).
+
+I programmi del sistema e i comandi, che non partono dal launcher, non hanno la variabile: si
+collegano per nome, e il servizio chiede al kernel chi sono. Oggi le porte sono quattro (compositore, catalog, launcher e
 network): i servizi che chiedono un permesso (network) danno la porta solo alle app che lo hanno
 nel manifesto. Per ogni app che fa partire, il launcher scrive nel registro una riga con le porte
 date (`launcher: esempio: porte compositore catalog launcher network`).

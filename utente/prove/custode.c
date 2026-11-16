@@ -11,8 +11,9 @@
  * Ogni passo si scrive sulla seriale ("custode: ... -> si'" o "... -> no FALLITA"); alla fine
  * "custode: tutto bene" o "custode: fallita".
  *
- * Il capo dell'app lo si mette dove i programmi lo cercano (D_PORTA_CATALOG, D_PORTA_NETWORK) con
- * dup2, e si usano le funzioni normali di CoreKit (catalog_leggi, catalog_cambia, rete_stato). */
+ * Il capo dell'app lo si mette dove il launcher lo metterebbe (D_PORTA_CATALOG, D_PORTA_NETWORK) con
+ * dup2, con l'elenco delle porte nell'ambiente come lo scrive il launcher (VARIABILE_PORTE,
+ * messaggi.h), e si usano le funzioni normali di CoreKit (catalog_leggi, catalog_cambia, rete_stato). */
 #include "corekit/corekit.h"
 #include "corekit/messaggi.h"
 #include "corekit/catalog.h"
@@ -116,6 +117,9 @@ static int uccidi(const char *nome) {
 }
 
 int main(void) {
+    /* l'elenco delle porte, come lo scrive il launcher per un'app: senza, le funzioni di CoreKit
+     * chiamerebbero i servizi per nome (questo programma e' del sistema) */
+    setenv(VARIABILE_PORTE, NOME_CATALOG "=4 " NOME_NETWORK "=6", 1);
     int finta1 = fai_porta(NOME_CATALOG, "/system/apps/finta1/code", 0);
     int finta2 = fai_porta(NOME_CATALOG, "/system/apps/finta2/code", "settings.system");
     int finta3 = fai_porta(NOME_NETWORK, "/system/apps/finta3/code", "network.use");

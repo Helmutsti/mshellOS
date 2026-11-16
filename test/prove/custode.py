@@ -39,3 +39,8 @@ def esegui(p):
     for servizio, quante in (("catalog", 2), ("network", 1)):
         riga = f"init: riconsegnate {quante} porte a /system/services/{servizio}/{servizio}"
         p.controlla(any(r.startswith(riga) for r in righe), f"manca la riga di init: '{riga}'")
+    # gli altri programmi del sistema non ne risentono: la scrivania e il compositore, che si
+    # ricollegano a catalog per nome, non scambiano un loro collegamento per una porta
+    for servizio in ("scrivania", "compositore"):
+        p.controlla(not any(f"/{servizio}/{servizio} e' finito" in r for r in righe),
+                    f"{servizio} si e' chiusa quando catalog e network sono ripartiti")

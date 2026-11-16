@@ -3,13 +3,14 @@
 #include "corekit/corekit.h"
 #include "gkit/gkit.h"
 #include "gkit/sistema/protocollo.h"
+#include "corekit/messaggi.h"   /* porta_di: l'elenco delle porte che il launcher ha dato all'app */
 
-/* La porta dell'app (protocollo.h, LA PORTA DELL'APP): il descrittore D_PORTA_APP, se e' un
- * collegamento il cui altro capo l'ha fatto il sistema (il launcher: lo dice il kernel). Si
- * guarda una volta sola. -1 se non c'e' (la scrivania, o un programma partito in altro modo). */
+/* La porta dell'app verso il compositore (protocollo.h, LA PORTA DELL'APP): solo se il launcher
+ * l'ha messa nell'elenco delle porte dell'app (porta_di: prima il tipo, poi chi e'). Si guarda
+ * una volta sola. -1 se non c'e' (la scrivania, o un programma partito in altro modo). */
 static int porta_dell_app(void) {
     static int porta = -2;
-    if (porta == -2) porta = chi(D_PORTA_APP) == UID_SISTEMA ? D_PORTA_APP : -1;
+    if (porta == -2) porta = porta_di(NOME_COMPOSITORE);
     return porta;
 }
 

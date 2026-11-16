@@ -86,6 +86,7 @@
  * comunicazione.c), e quindi non si possono fingere. Poi chiede "ha il permesso X?" con
  * ha_permesso, e se no risponde ESITO_NEGATO. Per un'app, chi e' e i suoi permessi li dice
  * il launcher, quando le da' la porta (attach): la regola e' in sistema/servizi.h. */
+#include <stdlib.h>   /* getenv, strtol: l'elenco delle porte (porta_di) */
 #include <string.h>
 
 #include "../messaggi.h"
@@ -288,7 +289,23 @@ int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta) {
 
 /* --- le porte delle app (messaggi.h e sistema/servizi.h) --- */
 
-int e_una_porta(int d) { return d >= 0 && chi(d) == UID_SISTEMA; }
+int porta_di(const char *nome) {
+    /* il tipo: il servizio e' nell'elenco che il launcher ha messo nell'ambiente? */
+    const char *elenco = getenv(VARIABILE_PORTE);
+    size_t l = strlen(nome);
+    int d = -1;
+    for (const char *p = elenco; p && *p && d < 0;) {
+        while (*p == ' ') p++;
+        if (!strncmp(p, nome, l) && p[l] == '=') {
+            char *fine;
+            long n = strtol(p + l + 1, &fine, 10);
+            if (fine != p + l + 1 && (*fine == ' ' || !*fine) && n > 2 && n < 1024) d = (int)n;
+        }
+        while (*p && *p != ' ') p++;
+    }
+    /* chi e': all'altro capo c'e' davvero il sistema? (il kernel lo dice) */
+    return d >= 0 && chi(d) == UID_SISTEMA ? d : -1;
+}
 
 /* Una coppia: un capo va al servizio sulla porta (request=connect), l'altro e' il nostro. */
 static int collega_dalla_porta(int porta) {
@@ -305,8 +322,9 @@ static int collega_dalla_porta(int porta) {
     return -1;
 }
 
-int collega_servizio(const char *nome, int porta) {
-    return e_una_porta(porta) ? collega_dalla_porta(porta) : collega(nome);
+int collega_servizio(const char *nome) {
+    int porta = porta_di(nome);
+    return porta >= 0 ? collega_dalla_porta(porta) : collega(nome);
 }
 
 /* Programma e permessi di 'app' in un messaggio (la stessa forma di attach, keep e restore). */

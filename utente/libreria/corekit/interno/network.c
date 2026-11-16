@@ -15,7 +15,7 @@ static int chiedi_alla_rete(const char *richiesta, struct messaggio *r) {
     struct messaggio q;
     messaggio_inizia(&q);
     messaggio_aggiungi(&q, CHIAVE_RICHIESTA, richiesta);
-    int d = collega_servizio(NOME_NETWORK, D_PORTA_NETWORK);
+    int d = collega_servizio(NOME_NETWORK);
     int e = d >= 0 ? chiedi(d, &q, r) : -1;
     if (d >= 0) chiudi(d);
     if (e != 0) {

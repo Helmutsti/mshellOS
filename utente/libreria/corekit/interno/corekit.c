@@ -122,9 +122,11 @@ static void solo_quelli_passati(int quanti) {
  * padre attraverso un tubo e finisce: cosi' avvia sa subito se e' andata, e restituisce
  * -1. Se execve riesce, il tubo si chiude da solo (O_CLOEXEC) e il padre legge 0 byte.
  * uid -1: lo stesso di chi lo fa partire. 'argomento' (0: nessuno) arriva al programma
- * nuovo come secondo argomento di main (argv[1]): per esempio la cartella da aprire. */
+ * nuovo come secondo argomento di main (argv[1]): per esempio la cartella da aprire.
+ * 'variabile' (0: nessuna) e' l'unica variabile d'ambiente del programma nuovo, "NOME=valore":
+ * il launcher ci scrive l'elenco delle porte dell'app (messaggi.h, VARIABILE_PORTE). */
 static int lancia(const char *percorso, const int *passati, int quanti, int uid,
-                  const char *argomento) {
+                  const char *argomento, const char *variabile) {
     char vero[MAX_VERO];
     if (percorso_vero(percorso, vero) < 0 || quanti < 0 || quanti > MAX_PASSATI) return -1;
     figli_spariscono();
@@ -149,7 +151,7 @@ static int lancia(const char *percorso, const int *passati, int quanti, int uid,
         if (!errore) {
             /* il primo argomento e' sempre il programma; poi, se c'e', quello per lui */
             char *argomenti[] = { vero, (char *)argomento, 0 };
-            char *ambiente[] = { 0 };
+            char *ambiente[] = { (char *)variabile, 0 };
             execve(vero, argomenti, ambiente);
             errore = errno;
         }
@@ -167,26 +169,27 @@ static int lancia(const char *percorso, const int *passati, int quanti, int uid,
     return figlio > 0 && letti == 0 ? (int)figlio : -1;
 }
 
-int avvia(const char *percorso) { return lancia(percorso, 0, 0, -1, 0); }
+int avvia(const char *percorso) { return lancia(percorso, 0, 0, -1, 0, 0); }
 
-int avvia_come(const char *percorso, unsigned int uid) { return lancia(percorso, 0, 0, (int)uid, 0); }
+int avvia_come(const char *percorso, unsigned int uid) { return lancia(percorso, 0, 0, (int)uid, 0, 0); }
 
 int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento) {
-    return lancia(percorso, 0, 0, (int)uid, argomento && argomento[0] ? argomento : 0);
+    return lancia(percorso, 0, 0, (int)uid, argomento && argomento[0] ? argomento : 0, 0);
 }
 
 int avvia_con(const char *percorso, const int *descrittori, int quanti) {
-    return lancia(percorso, descrittori, quanti, -1, 0);
+    return lancia(percorso, descrittori, quanti, -1, 0, 0);
 }
 
 int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti) {
-    return lancia(percorso, descrittori, quanti, (int)uid, 0);
+    return lancia(percorso, descrittori, quanti, (int)uid, 0, 0);
 }
 
 int apri_nulla(void) { return open("/dev/null", O_RDWR | O_CLOEXEC); }
 
-int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti) {
-    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0);
+int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti,
+              const char *variabile) {
+    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, variabile);
 }
 
 #ifndef SYS_pidfd_open
