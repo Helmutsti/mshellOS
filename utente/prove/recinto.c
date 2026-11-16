@@ -23,6 +23,12 @@
  *      d. via i poteri: uid e gid 1000, nessun gruppo; poi NO_NEW_PRIVS (mai piu' poteri);
  *      e. seccomp: le chiamate vietate (unshare, mount, ptrace, bpf, ...) rispondono EPERM;
  *      f. execve di /app/code con l'argomento "dentro": da qui e' l'"app".
+ *   2bis. IL RECINTO CON LA RETE (permesso network.use, "come Android e Flatpak"): uguale, ma
+ *      senza CLONE_NEWNET: l'app vede la rete del computer. Si rilancia con "dentro-rete" e le
+ *      righe dicono "dentro con la rete: ...": internet arriva, Home, launcher e disco restano
+ *      invisibili (ENOENT), il seccomp c'e' ancora. Si conta anche quanti socket Unix astratti
+ *      (che vivono nel mondo della rete) ci sarebbero da raggiungere: i nostri servizi usano
+ *      file in /run/mshell, quindi 0.
  *   3. DENTRO, le stesse prove, che devono fallire: "non esiste" (ENOENT) per i file e il
  *      launcher, "rete irraggiungibile" (ENETUNREACH) per internet; e non deve riuscire a
  *      smontare i muri, farsi un mondo utente nuovo, spiare (ptrace) o montare (EPERM, per
@@ -75,6 +81,7 @@
 #define REGISTRO    8   /* il registro del sistema (la seriale), che init passa a tutti: CoreKit, interno.h */
 
 static int fallite;
+static int con_rete;   /* il recinto che si costruisce (o in cui si e') ha la rete del computer */
 
 /* Una riga sulla seriale, in una sola scrittura. */
 static void riga(const char *formato, ...) {
@@ -188,10 +195,31 @@ static void prove_cartelle(void) {
     if (c >= 0) close(c);
 }
 
+/* Le prove nel recinto con la rete del computer (permesso network.use): la rete non apre il
+ * resto. Internet deve arrivare; Home, launcher e disco restano invisibili; il seccomp c'e'. */
+static void prove_con_rete(void) {
+    const char *dove = "dentro con la rete";
+    int r;
+    r = internet();
+    passo(dove, "collegarsi a internet", r, r == 0 || errno == ECONNREFUSED);
+    r = apri(CASA, O_RDONLY | O_DIRECTORY);
+    passo(dove, "leggere la Home", r, r < 0 && errno == ENOENT);
+    r = launcher();
+    passo(dove, "parlare al launcher", r, r < 0 && errno == ENOENT);
+    r = apri(DISCO, O_RDONLY);
+    passo(dove, "leggere il disco intero", r, r < 0 && errno == ENOENT);
+    r = unshare(CLONE_NEWUSER);
+    passo(dove, "mondo utente nuovo con unshare", r, r < 0 && errno == EPERM);
+}
+
 /* Le prove, fuori (controprova) o dentro il recinto. */
 static void prove(int dentro) {
     const char *dove = dentro ? "dentro" : "fuori";
     int r;
+    if (dentro == 2) {
+        prove_con_rete();
+        return;
+    }
     r = apri(CASA, O_RDONLY | O_DIRECTORY);
     passo(dove, "leggere la Home", r, dentro ? (r < 0 && errno == ENOENT) : r == 0);
     r = apri(FILE_SISTEMA, O_RDONLY);
@@ -514,7 +542,7 @@ static void entra_nel_recinto(void) {
     CONTROLLA(setuid(UID_APP));
     CONTROLLA(prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0));
     CONTROLLA(metti_seccomp());      /* dopo NO_NEW_PRIVS, prima di execve */
-    execl("/app/code", "code", "dentro", (char *)NULL);
+    execl("/app/code", "code", con_rete ? "dentro-rete" : "dentro", (char *)NULL);
     riga("execve /app/code: %s -> no FALLITA", strerror(errno));
     _exit(2);
 #undef CONTROLLA
@@ -543,7 +571,8 @@ static void controprova(void) {
 
 /* Mondi nuovi, poi una copia che e' il primo programma del mondo dei numeri nuovo. */
 static void recinto(void) {
-    if (unshare(CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWUTS) < 0) {
+    /* senza il permesso della rete: una rete vuota (CLONE_NEWNET); con: quella del computer */
+    if (unshare(CLONE_NEWNS | (con_rete ? 0 : CLONE_NEWNET) | CLONE_NEWPID | CLONE_NEWIPC | CLONE_NEWUTS) < 0) {
         riga("unshare: %s -> no FALLITA", strerror(errno));
         _exit(2);
     }
@@ -551,8 +580,8 @@ static void recinto(void) {
 }
 
 int main(int argc, char **argv) {
-    if (argc > 1 && !strcmp(argv[1], "dentro")) {
-        prove(1);
+    if (argc > 1 && (!strcmp(argv[1], "dentro") || !strcmp(argv[1], "dentro-rete"))) {
+        prove(argv[1][6] ? 2 : 1);
         return fallite ? 1 : 0;
     }
     /* le cartelle della persona per la prova, come se le avesse fatte lei */
@@ -571,7 +600,24 @@ int main(int argc, char **argv) {
     }
     int fuori = in_una_copia(controprova);
     int dentro = in_una_copia(recinto);
-    riga("controprova %s, recinto %s", fuori == 0 ? "giusta" : "sbagliata", dentro == 0 ? "giusto" : "sbagliato");
-    riga(fuori == 0 && dentro == 0 ? "tutto bene" : "fallita");
+    con_rete = 1;
+    int dentro_rete = in_una_copia(recinto);
+    /* con la rete del computer l'app vedrebbe anche i socket Unix "astratti" (vivono nel mondo
+     * della rete): i nostri servizi usano file in /run/mshell, quindi qui non deve essercene
+     * nessuno; si conta dall'elenco del kernel (le righe il cui nome comincia con '@') */
+    int astratti = 0;
+    FILE *u = fopen("/proc/net/unix", "re");
+    if (u) {
+        char l[512];
+        while (fgets(l, sizeof l, u)) {
+            char *nome = strrchr(l, ' ');
+            if (nome && nome[1] == '@') astratti++;
+        }
+        fclose(u);
+    }
+    riga("socket astratti visibili con la rete del computer: %d", astratti);
+    riga("controprova %s, recinto %s, recinto con la rete %s", fuori == 0 ? "giusta" : "sbagliata",
+         dentro == 0 ? "giusto" : "sbagliato", dentro_rete == 0 ? "giusto" : "sbagliato");
+    riga(fuori == 0 && dentro == 0 && dentro_rete == 0 ? "tutto bene" : "fallita");
     return 0;
 }
