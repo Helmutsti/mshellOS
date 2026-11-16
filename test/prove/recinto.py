@@ -5,7 +5,7 @@ True, per la controprova di internet): in /data/tests c'e' il programma recinto
 (utente/prove/recinto.c), che init fa partire come sistema. Lui prova le stesse cose chiedendo
 direttamente al kernel, senza CoreKit: prima come uid 1000 senza recinto (la controprova: Home,
 launcher e internet ci arrivano), poi dentro un recinto (namespaces, radice nuova con solo il
-suo programma, una cartella dati e le risorse del sistema, uid 1000, NO_NEW_PRIVS), dove tutto
+suo programma, una cartella dati e le risorse del sistema, uid 1000, NO_NEW_PRIVS, seccomp con un elenco di chiamate vietate), dove tutto
 deve rispondere "non esiste" o "rete irraggiungibile". Qui si aspetta "recinto: tutto bene".
 """
 

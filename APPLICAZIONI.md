@@ -144,7 +144,9 @@ Deciso il 14 novembre 2026.
   5. *un'app che si prende tutte le risorse*: limiti per gruppo su memoria, processore e spazio
      dei suoi dati;
   6. *un errore nel kernel che fa uscire dal recinto*: all'app si vietano le chiamate al kernel
-     che non le servono, e il kernel si tiene aggiornato (aggiornamenti A/B);
+     che non le servono, e il kernel si tiene aggiornato (aggiornamenti A/B). Provato nella
+     prova `recinto` (16 novembre 2026): vietate unshare, mount, ptrace, bpf, kexec, moduli e le
+     altre dell'elenco in `utente/prove/recinto.c`, clone con i flag dei mondi nuovi;
   7. *due app d'accordo* che hanno tutte e due la rete e si parlano via internet: rischio accettato,
      come su Mac e Android.
 
