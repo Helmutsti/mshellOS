@@ -7,7 +7,7 @@ rifiutati mentre si costruiscono, una richiesta echo con chiedi (chiave ripetuta
 foglio allegato, una risposta con un altro id da buttare, chi chiede), un pacchetto fuori
 standard (risposta invalid senza id), una richiesta sconosciuta (invalid con l'id), il
 tempo massimo di chiedi (timeout dopo 300 ms, poi la risposta tardiva buttata) e i permessi
-provvisori (sempre si', con la riga "... concesso (provvisorio)" nel registro).
+(il programma e' del sistema, uid 0: ha tutti i permessi, e nel registro non c'e' nessun rifiuto).
 Ogni passo lo scrive nella seriale ("messaggi: ... -> si'"); qui si aspetta "messaggi:
 tutto bene" e che nessun passo sia FALLITA.
 """
@@ -34,5 +34,5 @@ def esegui(p):
     sbagliati = [r for r in seriale.splitlines() if r.startswith("messaggi:") and "FALLITA" in r]
     p.controlla(not sbagliati, "passi falliti: " + "; ".join(sbagliati))
     p.controlla("messaggi: tutto bene" in seriale, "il programma messaggi non dice 'tutto bene'")
-    riga = "permesso test.example a /data/tests/messaggi (uid 0): concesso (provvisorio)"
-    p.controlla(riga in seriale, "manca nel registro la riga del permesso provvisorio")
+    p.controlla("permesso test.example a /data/tests/messaggi (uid 0): negato" not in seriale,
+                "al sistema (uid 0) e' stato negato un permesso")

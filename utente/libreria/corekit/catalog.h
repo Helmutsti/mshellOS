@@ -28,12 +28,10 @@
  *           collegamento (non aspetta nessuno).
  * Una richiesta sconosciuta: invalid.
  *
- * I PERMESSI (ha_permesso, sistema/servizi.h; oggi provvisoria: dice sempre si' e lo scrive
- * nel registro):
+ * I PERMESSI (ha_permesso, sistema/servizi.h: la regola; un rifiuto si scrive nel registro):
  *     get, watch   nessuno: ogni programma legge le impostazioni (APPLICAZIONI.md, sezione 9)
- *     set          settings.system; e in piu', come per CAMBIA_TEMA nel compositore, il
- *                  controllo vero: il sistema (uid 0) o un'app del sistema con
- *                  "settings.system" nel manifesto (pacchetto_ha_permesso) */
+ *     set          settings.system, un permesso di sistema: il sistema (uid 0) e le app del
+ *                  sistema che lo dichiarano (Impostazioni) */
 #ifndef CATALOG_H
 #define CATALOG_H
 

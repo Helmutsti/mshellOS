@@ -1187,21 +1187,17 @@ static struct {
 /* attach dal collegamento di chi e' 'c': solo dal sistema (il launcher), con il capo allegato e
  * il programma dell'app. Il capo allegato passa alla porta, o si chiude. */
 static void attacca(const struct chi_chiede *c, struct messaggio *q, struct messaggio *r) {
-    const char *programma = messaggio_valore(q, CHIAVE_PROGRAMMA);
     int capo = q->allegato;
     q->allegato = -1;
     int p = 0;
     while (p < MAX_PORTE && porte[p].d >= 0) p++;
     if (c->uid != UID_SISTEMA) {
         messaggio_risposta(r, q, ESITO_NEGATO);
-    } else if (capo < 0 || !programma || !programma[0] || strlen(programma) >= MAX_PERCORSO_PROGRAMMA ||
-               p == MAX_PORTE) {
+    } else if (capo < 0 || p == MAX_PORTE || app_da_attach(q, &porte[p].chi) < 0) {
         messaggio_risposta(r, q, ESITO_NON_VALIDO);
     } else {
         porte[p].d = capo;
         porte[p].usata = 0;
-        porte[p].chi.uid = UID_APPLICAZIONI;
-        strcpy(porte[p].chi.programma, programma);
         capo = -1;
         messaggio_risposta(r, q, ESITO_OK);
     }
@@ -1258,15 +1254,17 @@ static void riavvia(void) {
     if (ha_indirizzo) togli_indirizzo(&attuale);
     /* Le porte delle app devono sopravvivere: il loro capo sta qui, e se si chiudesse le app
      * resterebbero con una porta morta. Si lasciano aperte nel nuovo programma (senza
-     * CLOEXEC, allo stesso numero) e gli argomenti dicono quali sono e di chi: "<numero>=<programma>"
-     * (leggi_porte_ereditate). */
-    static char testi[MAX_PORTE][16 + MAX_PERCORSO_PROGRAMMA];
+     * CLOEXEC, allo stesso numero) e gli argomenti dicono quali sono, di chi e con quali permessi:
+     * "<numero>=<programma>=<permesso>,<permesso>..." (leggi_porte_ereditate). */
+    static char testi[MAX_PORTE][16 + MAX_PERCORSO_PROGRAMMA + MAX_PERMESSI_APP * MAX_NOME_PERMESSO];
     char *argomenti[MAX_PORTE + 2];
     int n = 0, nelle_porte[MAX_PORTE];
     argomenti[n++] = (char *)SERVIZIO;
     for (int p = 0; p < MAX_PORTE; p++) {
         if (porte[p].d < 0) continue;
-        snprintf(testi[p], sizeof testi[p], "%d=%s", porte[p].d, porte[p].chi.programma);
+        int l = snprintf(testi[p], sizeof testi[p], "%d=%s=", porte[p].d, porte[p].chi.programma);
+        for (int i = 0; i < porte[p].chi.quanti_permessi; i++)
+            l += snprintf(testi[p] + l, sizeof testi[p] - (size_t)l, "%s%s", i ? "," : "", porte[p].chi.permessi[i]);
         argomenti[n] = testi[p];
         nelle_porte[n++ - 1] = p;
         fcntl(porte[p].d, F_SETFD, 0);
@@ -1280,16 +1278,31 @@ static void riavvia(void) {
 }
 
 /* Dopo un restart: le porte che il programma di prima ha lasciato aperte, negli argomenti
- * ("<numero>=<programma>", vedi riavvia). Senza argomenti (avvio normale) non c'e' niente. */
+ * ("<numero>=<programma>=<permessi separati da virgole>", vedi riavvia). Senza argomenti (avvio
+ * normale) non c'e' niente. Un argomento che non si capisce: quella porta si chiude. */
 static void leggi_porte_ereditate(int argc, char **argv) {
     for (int i = 1; i < argc && i <= MAX_PORTE; i++) {
-        char *uguale = strchr(argv[i], '=');
         int d = atoi(argv[i]);
-        if (!uguale || d <= 2 || !uguale[1] || strlen(uguale + 1) >= MAX_PERCORSO_PROGRAMMA) continue;
+        char *programma = strchr(argv[i], '=');
+        char *permessi = programma ? strchr(programma + 1, '=') : 0;
+        if (d <= 2) continue;
+        struct chi_chiede *c = &porte[i - 1].chi;
+        int giusto = permessi && permessi - programma - 1 > 0 &&
+                     permessi - programma - 1 < MAX_PERCORSO_PROGRAMMA;
+        if (giusto) {
+            memcpy(c->programma, programma + 1, (size_t)(permessi - programma - 1));
+            c->programma[permessi - programma - 1] = 0;
+            c->uid = UID_APPLICAZIONI;
+            c->app = 1;
+            c->quanti_permessi = 0;
+            for (char *p = strtok(permessi + 1, ","); p && giusto; p = strtok(0, ",")) {
+                if (c->quanti_permessi == MAX_PERMESSI_APP || strlen(p) >= MAX_NOME_PERMESSO) giusto = 0;
+                else strcpy(c->permessi[c->quanti_permessi++], p);
+            }
+        }
+        if (!giusto) { close(d); continue; }
         porte[i - 1].d = d;
         porte[i - 1].usata = 1;       /* il collegamento l'ha gia' scritto il programma di prima */
-        porte[i - 1].chi.uid = UID_APPLICAZIONI;
-        strcpy(porte[i - 1].chi.programma, uguale + 1);
         fcntl(d, F_SETFD, FD_CLOEXEC);
     }
 }

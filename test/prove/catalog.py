@@ -6,7 +6,8 @@ sistema. Lui legge le impostazioni (tema chiaro e sfondo predefinito all'inizio)
 cambia tema e sfondo (il file del tema cambia, gli avvisi arrivano), prova i valori sbagliati e
 una richiesta sconosciuta (invalid), e rimette il tema chiaro. Ogni passo lo scrive nella seriale
 ("prova catalog: ... -> si'"); qui si aspetta "prova catalog: tutto bene" e che nessun passo sia
-FALLITA, e si controlla nel registro la riga del permesso provvisorio settings.system.
+FALLITA. Il programma e' del sistema (uid 0): ha settings.system, e nel registro non c'e' nessun
+rifiuto. (Il rifiuto a un'app senza il permesso lo prova applicazioni, con Esempio.)
 """
 
 import time
@@ -32,7 +33,5 @@ def esegui(p):
     sbagliati = [r for r in seriale.splitlines() if r.startswith("prova catalog:") and "FALLITA" in r]
     p.controlla(not sbagliati, "passi falliti: " + "; ".join(sbagliati))
     p.controlla("prova catalog: tutto bene" in seriale, "il programma catalog non dice 'tutto bene'")
-    # catalog gira come la persona: il kernel non gli dice il programma di chi e' sistema, solo l'uid
-    p.controlla(any("permesso settings.system" in r and "(uid 0): concesso (provvisorio)" in r
-                    for r in seriale.splitlines()),
-                "manca nel registro la riga del permesso provvisorio settings.system")
+    p.controlla(not any(r.startswith("permesso ") and "(uid 0): negato" in r for r in seriale.splitlines()),
+                "al sistema (uid 0) e' stato negato un permesso")

@@ -20,7 +20,6 @@
 #include "corekit/messaggi.h"
 #include "corekit/catalog.h"
 #include "corekit/sistema/servizi.h"     /* chi_chiede, ha_permesso */
-#include "corekit/sistema/pacchetto.h"   /* pacchetto_ha_permesso: il controllo vero di set */
 #include <string.h>
 
 #define D_ASCOLTO 0       /* prestato da init */
@@ -122,12 +121,8 @@ static void avvisa(const struct catalog_valori *v) {
 
 /* --- le richieste --- */
 
-/* Il controllo vero per set (catalog.h): il sistema, o un'app del sistema con il permesso nel
- * manifesto. Prima ha_permesso (provvisoria, oggi si', ma scrive la domanda nel registro). */
-static int puo_cambiare(const struct chi_chiede *c) {
-    if (!ha_permesso(c, PERMESSO_CAMBIA)) return 0;
-    return c->uid == UID_SISTEMA || (c->programma[0] && pacchetto_ha_permesso(c->programma, PERMESSO_CAMBIA));
-}
+/* set chiede settings.system (catalog.h): per un'app vale quello che ha detto il launcher. */
+static int puo_cambiare(const struct chi_chiede *c) { return ha_permesso(c, PERMESSO_CAMBIA); }
 
 /* set: risponde in 'risposta'; se qualcosa e' cambiato davvero, avvisa. */
 static void cambia(int k) {
@@ -162,21 +157,17 @@ static void cambia(int k) {
 
 /* attach dal cliente k: solo dal sistema (il launcher), con il capo e il programma dell'app. */
 static void attacca(int k) {
-    const char *programma = messaggio_valore(&richiesta, CHIAVE_PROGRAMMA);
     int capo = richiesta.allegato;
     richiesta.allegato = -1;
     int p = 0;
     while (p < MAX_PORTE && porte[p].d >= 0) p++;
     if (clienti[k].chi.uid != UID_SISTEMA) {
         messaggio_risposta(&risposta, &richiesta, ESITO_NEGATO);
-    } else if (capo < 0 || !programma || !programma[0] || strlen(programma) >= MAX_PERCORSO_PROGRAMMA ||
-               p == MAX_PORTE) {
+    } else if (capo < 0 || p == MAX_PORTE || app_da_attach(&richiesta, &porte[p].chi) < 0) {
         messaggio_risposta(&risposta, &richiesta, ESITO_NON_VALIDO);
     } else {
         porte[p].d = capo;
         porte[p].usata = 0;
-        porte[p].chi.uid = UID_APPLICAZIONI;
-        strcpy(porte[p].chi.programma, programma);
         capo = -1;
         messaggio_risposta(&risposta, &richiesta, ESITO_OK);
     }

@@ -34,6 +34,6 @@ def esegui(p):
     sbagliati = [r for r in seriale.splitlines() if r.startswith("stato_rete:") and "FALLITA" in r]
     p.controlla(not sbagliati, "passi falliti: " + "; ".join(sbagliati))
     p.controlla("stato_rete: tutto bene" in seriale, "il programma stato_rete non dice 'tutto bene'")
-    for permesso in ("network.use", "network.settings"):
-        p.controlla(f"permesso {permesso} a /data/tests/stato_rete (uid 0): concesso (provvisorio)" in seriale,
-                    f"manca nel registro la riga del permesso provvisorio {permesso}")
+    # stato_rete e' del sistema (uid 0): ha tutti i permessi, nessun rifiuto nel registro
+    p.controlla(not any(r.startswith("permesso ") and "(uid 0): negato" in r for r in seriale.splitlines()),
+                "al sistema (uid 0) e' stato negato un permesso")

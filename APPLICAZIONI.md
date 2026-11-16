@@ -204,8 +204,8 @@ app non cambiano. I punti qui sotto restano per quando si allargherà.
 
 ### Problemi che l'idea porta con sé (da risolvere, 14 novembre 2026)
 
-Oggi niente di questo c'è: le app vedono tutto il disco e `ha_permesso` dice sempre sì. Passare al
-recinto tocca quasi ogni pezzo:
+Oggi il recinto non c'è: le app vedono tutto il disco (il controllo dei permessi nei servizi e le
+porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni pezzo:
 
 1. ~~**Le cartelle consegnate aperte non sono sicure.**~~ Deciso il 16 novembre 2026: i servizi
    consegnano solo file; le cartelle concesse le aggancia il launcher dentro il recinto (sezione
@@ -351,18 +351,28 @@ autorizzato ("chiavi a due livelli").
 | `apps.open` | far partire un programma di `/system/bin` come la persona | — (da capire come gestirlo: sezione 12) |
 | `system.shell` | aprire la shell come sistema | Terminale (da capire come gestirlo: sezione 12) |
 
-### Permessi che i servizi chiedono dalla porta (provvisorio: oggi sempre concesso)
+### Permessi che i servizi chiedono dalla porta
 
-I servizi che usano lo standard dei messaggi (`SISTEMA.md`, sezione 3) chiedono a
-`ha_permesso` se chi chiede ha un permesso. Oggi la risposta è **sempre sì** e la domanda finisce
-nel registro con la parola "provvisorio"; quando sarà vera, questi nomi si legheranno ai permessi
-del manifesto qui sopra (per esempio `apps.manage` ad `apps.manage`).
+Il controllo è vero dal 16 novembre 2026 (deciso con la persona). I servizi che usano lo standard
+dei messaggi (`SISTEMA.md`, sezione 3) chiedono a `ha_permesso` se chi chiede ha un permesso:
+- il sistema (uid 0) li ha tutti;
+- un'app ha quelli che il launcher le concede quando la fa partire e passa ai servizi con le
+  porte. **Finché non c'è la domanda del primo avvio, concessi = dichiarati nel manifesto**;
+  quelli di sistema solo alle app del sistema (`/system/apps`), e un nome sconosciuto non vale
+  (il launcher scrive nel registro quelli che toglie);
+- un altro programma della persona (un comando) ha i permessi normali, nessuno di sistema.
+Ogni rifiuto si scrive nel registro (`permesso <nome> a <programma> (uid <uid>): negato`). La
+prova `applicazioni` controlla i rifiuti con Esempio, che non ha `settings.system` né
+`network.settings`.
 
-| Permesso | Servizio | Cosa permette | Note |
+| Permesso | Servizio | Cosa permette | Chi ce l'ha oggi |
 |---|---|---|---|
-| `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | provvisorio: oggi sempre concesso; il launcher controlla in più, come prima, che sia il sistema o un'app del sistema con `apps.manage` (lo Store) |
-| `apps.open` | launcher | far partire un programma di `/system/bin` come la persona | provvisorio: oggi sempre concesso; oggi non lo chiede nessuno |
-| `system.shell` | launcher | aprire la shell come sistema (il Terminale) | provvisorio: oggi sempre concesso (terminale come sistema aperto a chiunque, `STATO.md`) |
+| `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | lo Store |
+| `apps.open` | launcher | far partire un programma di `/system/bin` come la persona | nessuna app |
+| `system.shell` | launcher | aprire la shell come sistema (il Terminale) | il Terminale (provvisorio: `STATO.md`) |
+| `settings.system` | catalog | cambiare tema e sfondo | Impostazioni |
+| `network.use` | network | chiedere lo stato della rete (e avere la porta verso network) | Esempio (prova) |
+| `network.settings` | network | riavviare e fermare la rete | nessuna app |
 
 ### Deviazioni dallo standard: si dichiarano, la persona viene informata
 

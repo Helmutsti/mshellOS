@@ -435,8 +435,8 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 **16/11/2026, decisione della persona: tutto quello che è elencato qui sotto e nella sezione 12
 è segnato come ok. Le uniche cose ancora da fare sono la sicurezza, i permessi e il recinto
 delle app:**
-- il controllo vero dei permessi (oggi risponde sempre sì);
-- la shell come sistema che il launcher apre a chiunque la chieda;
+- ~~il controllo vero dei permessi~~: fatto il 16/11/2026 (sotto, "Il controllo vero dei permessi");
+- la shell come sistema: dal 16/11/2026 la chiede solo chi ha `system.shell` (il Terminale);
 - i poteri con cui partono le app (oggi tutte con lo stesso uid della persona);
 - il recinto delle app (APPLICAZIONI.md, sezione 5).
 
@@ -476,7 +476,19 @@ ha la porta al descrittore 4; Esempio chiede il tema all'avvio e catalog sa che 
 porta (prova `applicazioni`). Fatti anche il launcher (al 5, a tutte le app: lo Store installa dalla
 sua porta, prova `store`) e network (al 6, solo a chi ha `network.use` o `network.settings` nel
 manifesto: Esempio ne ha uno e chiede lo stato della rete). Il launcher scrive una riga per app
-con le porte date. Poi il controllo vero dei permessi, poi il recinto vero nel launcher.
+con le porte date.
+
+**Il controllo vero dei permessi** (16/11/2026, deciso con la persona). `ha_permesso` controlla
+davvero (regola in `corekit/sistema/servizi.h`): il sistema ha tutto; un'app ha i permessi che
+il launcher le concede quando la fa partire e passa ai servizi con le porte (`attach`, chiave
+`permission`); un altro programma della persona ha i permessi normali, nessuno di sistema.
+Provvisorio finché non c'è la finestra del primo avvio: **concessi = dichiarati nel manifesto**,
+quelli di sistema solo alle app del sistema (`permessi_concessi` nel launcher). I rifiuti vanno nel
+registro. Il Terminale ora dichiara `system.shell`. La prova `applicazioni` controlla i rifiuti
+con Esempio (cambiare il tema, riavviare la rete). Il compositore controlla ancora CAMBIA_TEMA a
+modo suo (`pacchetto_ha_permesso`): andrà sui permessi della porta quando il tema passerà a
+catalog. Restano: la finestra di domanda del primo avvio, il database dei permessi concessi, la
+pagina dei permessi in Impostazioni. Poi il recinto vero nel launcher.
 Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
 pezzi si mescolavano con quelle di altri programmi (la prova `store` falliva per questo, quando il
 compositore scrive la porta di un'app); la usano launcher, Store, catalog e compositore. Lo stesso
@@ -505,14 +517,12 @@ Il resto dell'elenco resta qui solo come memoria.
 Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
 persona sono nella sezione 8.
 
-**Da proteggere**: il terminale in finestra apre una shell come sistema (uid 0) a chiunque la
-chieda al launcher (`open_shell`, `utente/programmi/launcher.c`): decisione provvisoria della
-persona, "poi lo proteggiamo" (chi può chiederla, e con quale permesso).
+**Da proteggere**: il terminale in finestra apre una shell come sistema (uid 0)
+(`open_shell`, `utente/programmi/launcher.c`): decisione provvisoria della persona. Dal 16/11/2026
+la può chiedere solo chi ha `system.shell` (il sistema, e il Terminale che lo dichiara).
 
-**I permessi delle porte rispondono sempre sì (provvisorio): da accendere.** La funzione dei
-permessi dei servizi (`ha_permesso`, `corekit/sistema/servizi.h` e `corekit/interno/messaggi.c`) oggi non controlla niente e
-scrive ogni domanda nel registro con "provvisorio"; va resa vera (sistema / app con i permessi
-concessi / comando della persona).
+~~**I permessi delle porte rispondono sempre sì**~~: fatto il 16/11/2026 (sopra, "Il controllo vero
+dei permessi").
 
 **Il launcher parla con lo standard dei messaggi** (13/11/2026): richieste `request=open_app`,
 `install_package`... in testo `chiave=valore`, esiti `result=` con `reason=` per i perché del

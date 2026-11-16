@@ -77,16 +77,18 @@ int main(void) {
     /* il tema da catalog, solo per scriverlo nel registro: la prova applicazioni controlla che
      * arrivi dalla porta che il launcher le ha dato (catalog.h, D_PORTA_CATALOG) */
     struct catalog_valori impostazioni;
-    if (catalog_leggi(&impostazioni) == 0) {
-        scrivi_testo("esempio: tema da catalog: ");
-        scrivi_testo(impostazioni.tema);
-        scrivi_testo("\n");
-    }
+    if (catalog_leggi(&impostazioni) == 0) scrivi_riga("esempio", "tema da catalog: ", impostazioni.tema);
 
     /* la rete, dalla porta che il launcher le ha dato solo perche' il manifesto ha network.use
      * (network.h, D_PORTA_NETWORK): se il servizio risponde, una riga sola nel registro */
     struct stato_rete rete;
     if (rete_stato(&rete) == RETE_FATTO) scrivi_riga("esempio", "rete risponde", 0);
+
+    /* I PERMESSI CHE NON HA (la prova applicazioni controlla i rifiuti): cambiare il tema chiede
+     * settings.system, riavviare la rete network.settings, e Esempio non li dichiara (e sono di
+     * sistema: non li avrebbe comunque, non e' un'app del sistema) */
+    scrivi_riga("esempio", "cambiare il tema: ", catalog_cambia(CATALOG_TEMA_SCURO, 0) == CATALOG_NEGATO ? "negato" : "NON negato");
+    scrivi_riga("esempio", "riavviare la rete: ", rete_riavvia() == RETE_NON_PERMESSO ? "negato" : "NON negato");
 
     unsigned int pulsanti_prima = 0;
     struct notizia n;

@@ -25,9 +25,9 @@
  *     farlo perche' /data/apps lo puo' scrivere solo il sistema.
  *
  * I permessi: per ogni richiesta che ne vuole uno (launcher.h) il launcher chiede a
- * ha_permesso (servizi.h), che oggi dice sempre si' e lo scrive nel registro
- * (PROVVISORIO). Per installare, aggiornare, togliere e svuotare resta in piu' il controllo
- * vero di prima: il sistema, o un'app del sistema con "apps.manage" nel manifesto.
+ * ha_permesso (servizi.h). Per un'app valgono i permessi che il launcher stesso le ha concesso
+ * quando l'ha fatta partire (permessi_concessi: dichiarati nel manifesto, quelli di sistema
+ * solo alle app del sistema), e li passa anche agli altri servizi con le porte.
  *
  * Il suo nome, "launcher", lo tiene init, che glielo presta al descrittore 0: se il
  * launcher cade, nessun altro puo' prenderlo, e chi chiede nel frattempo aspetta.
@@ -89,23 +89,43 @@ static const char *dato(const struct messaggio *q, const char *chiave, int massi
 #define HOME_LETTURA   1
 #define HOME_SCRITTURA 2
 
-/* L'app ha uno di questi due permessi nel manifesto? (Come per la Home: dichiarato vale come
- * concesso, finche' non c'e' la domanda del primo avvio.) */
-static int ha_nel_manifesto(const struct descrizione *d, const char *uno, const char *altro) {
+/* I PERMESSI CONCESSI all'app 'd', in *app (che diventa il chi_chiede dei suoi collegamenti dalle
+ * porte: servizi.h). La regola (decisa con la persona il 16 novembre 2026; APPLICAZIONI.md,
+ * sezione 9): finche' non c'e' la domanda del primo avvio, i permessi DICHIARATI nel manifesto
+ * valgono come concessi; quelli di sistema solo alle app del sistema (/system/apps); un nome che
+ * il sistema non conosce non vale. Quelli tolti si scrivono nel registro. */
+static void permessi_concessi(const struct descrizione *d, struct chi_chiede *app) {
     static struct manifesto m;
+    app->uid = UID_APPLICAZIONI;
+    descrizione_copia(app->programma, d->programma, sizeof app->programma);
+    app->app = 1;
+    app->quanti_permessi = 0;
     char cartella[MAX_PERCORSO];
     descrizione_copia(cartella, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
                       sizeof cartella);
     descrizione_aggiungi(cartella, "/", sizeof cartella);
     descrizione_aggiungi(cartella, d->id, sizeof cartella);
-    if (manifesto_dell_app(cartella, &m) < 0) return 0;
-    for (int i = 0; i < m.quanti_permessi; i++)
-        if (descrizione_uguali(m.permessi[i], uno) || descrizione_uguali(m.permessi[i], altro)) return 1;
+    if (manifesto_dell_app(cartella, &m) < 0) return;
+    for (int i = 0; i < m.quanti_permessi && app->quanti_permessi < MAX_PERMESSI_APP; i++) {
+        const char *p = m.permessi[i];
+        if (!permesso_conosciuto(p) || lunghezza(p) >= MAX_NOME_PERMESSO) {
+            registro("permesso sconosciuto, non concesso: ", p);
+        } else if (permesso_di_sistema(p) && !d->di_sistema) {
+            registro("permesso di sistema a un'app non del sistema, non concesso: ", p);
+        } else {
+            descrizione_copia(app->permessi[app->quanti_permessi++], p, MAX_NOME_PERMESSO);
+        }
+    }
+}
+
+static int ha_concesso(const struct chi_chiede *app, const char *nome) {
+    for (int i = 0; i < app->quanti_permessi; i++)
+        if (descrizione_uguali(app->permessi[i], nome)) return 1;
     return 0;
 }
 
 /* Cosa dice il manifesto dell'app sulla Home. Il permesso dichiarato vale come concesso finche'
- * non c'e' la domanda del primo avvio (ha_permesso e' ancora provvisorio). */
+ * non c'e' la domanda del primo avvio (permessi_concessi). */
 static int home_dell_app(const struct descrizione *d) {
     static struct manifesto m;    /* grande: non sulla pila (le richieste sono una alla volta) */
     char cartella[MAX_PERCORSO];
@@ -177,10 +197,10 @@ static int porta_compositore(const char *programma) {
 }
 
 /* La porta verso un servizio dello standard dei messaggi (attacca_porta): il capo dell'app, o -1. */
-static int porta_servizio(const char *nome, const char *programma) {
+static int porta_servizio(const char *nome, const struct chi_chiede *app) {
     int porta[2];
     if (coppia(porta) < 0) return -1;
-    int data = attacca_porta(nome, programma, porta[1]) == 0;
+    int data = attacca_porta(nome, app, porta[1]) == 0;
     chiudi(porta[1]);
     if (data) return porta[0];
     chiudi(porta[0]);
@@ -188,7 +208,7 @@ static int porta_servizio(const char *nome, const char *programma) {
 }
 
 /* La porta verso il launcher stesso: il capo dell'app, o -1. Il capo del servizio resta in porte[]. */
-static int porta_launcher(const char *programma) {
+static int porta_launcher(const struct chi_chiede *app) {
     int p = 0;
     while (p < MAX_PORTE && porte[p].d >= 0) p++;
     if (p == MAX_PORTE) return -1;
@@ -196,8 +216,7 @@ static int porta_launcher(const char *programma) {
     if (coppia(porta) < 0) return -1;
     porte[p].d = porta[0];
     porte[p].usata = 0;
-    porte[p].chi.uid = UID_APPLICAZIONI;
-    descrizione_copia(porte[p].chi.programma, programma, sizeof porte[p].chi.programma);
+    porte[p].chi = *app;
     return porta[1];
 }
 
@@ -208,13 +227,15 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
         registro("non riesco ad aprire /dev/null per ", programma);
         return -1;
     }
+    static struct chi_chiede app;
+    permessi_concessi(d, &app);
     int compositore = porta_compositore(programma);
-    int catalog = porta_servizio(NOME_CATALOG, programma);
-    int launcher = porta_launcher(programma);
-    /* la rete solo a chi la chiede nel manifesto: senza il permesso la porta non c'e' (e non e'
-     * un errore); con il permesso ma senza risposta del servizio si scrive come per gli altri */
-    int vuole_rete = ha_nel_manifesto(d, "network.use", "network.settings");
-    int rete = vuole_rete ? porta_servizio(NOME_NETWORK, programma) : -1;
+    int catalog = porta_servizio(NOME_CATALOG, &app);
+    int launcher = porta_launcher(&app);
+    /* la rete solo a chi ha un suo permesso: senza, la porta non c'e' (e non e' un errore); con il
+     * permesso ma senza risposta del servizio si scrive come per gli altri */
+    int vuole_rete = ha_concesso(&app, "network.use") || ha_concesso(&app, "network.settings");
+    int rete = vuole_rete ? porta_servizio(NOME_NETWORK, &app) : -1;
     if (vuole_rete && rete < 0) registro("niente porta verso network per ", programma);
     if (compositore < 0) registro("niente porta verso il compositore per ", programma);
     if (catalog < 0) registro("niente porta verso catalog per ", programma);
@@ -313,13 +334,10 @@ static void apri_la_shell(const struct chi_chiede *c, const struct messaggio *q,
     partito(r, q, avvia_come_con_descrittori(PROGRAMMA_SHELL, UID_SISTEMA, passati, 3));
 }
 
-/* Chi chiede puo' installare, aggiornare, togliere e svuotare i dati? Prima la domanda a
- * ha_permesso (provvisoria: oggi si', e la scrive nel registro); poi il controllo vero di
- * oggi: il sistema, o un'app del sistema con il permesso "apps.manage" nel manifesto. */
-static int puo_gestire(const struct chi_chiede *c) {
-    if (!ha_permesso(c, PERMESSO_GESTIRE_APP)) return 0;
-    return c->uid == UID_SISTEMA || (c->programma[0] && pacchetto_puo_gestire(c->programma));
-}
+/* Chi chiede puo' installare, aggiornare, togliere e svuotare i dati? "apps.manage" e' un permesso
+ * di sistema: ce l'ha il sistema, e un'app del sistema che lo dichiara (lo dice permessi_concessi,
+ * quando le da' la porta). */
+static int puo_gestire(const struct chi_chiede *c) { return ha_permesso(c, PERMESSO_GESTIRE_APP); }
 
 /* Le richieste sui pacchetti: il lavoro in un foglio, che si allega alla risposta (anche
  * quando non e' andata: e' il resoconto a dire perche'). */

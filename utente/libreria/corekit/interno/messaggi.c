@@ -84,8 +84,8 @@
  * CHI CHIEDE. Il servizio sa chi c'e' dall'altra parte da chi_chiede: l'uid e il programma,
  * che dice il kernel (SO_PEERCRED e /proc/<numero>/exe: chi e programma_di in
  * comunicazione.c), e quindi non si possono fingere. Poi chiede "ha il permesso X?" con
- * ha_permesso, e se no risponde ESITO_NEGATO. Oggi ha_permesso e' PROVVISORIA: risponde
- * sempre si' (vedi sotto, accanto al suo codice). */
+ * ha_permesso, e se no risponde ESITO_NEGATO. Per un'app, chi e' e i suoi permessi li dice
+ * il launcher, quando le da' la porta (attach): la regola e' in sistema/servizi.h. */
 #include <string.h>
 
 #include "../messaggi.h"
@@ -309,13 +309,14 @@ int collega_servizio(const char *nome, int porta) {
     return e_una_porta(porta) ? collega_dalla_porta(porta) : collega(nome);
 }
 
-int attacca_porta(const char *nome, const char *programma, int capo) {
+int attacca_porta(const char *nome, const struct chi_chiede *app, int capo) {
     static struct messaggio q, r;
     int d = collega(nome);
     if (d < 0) return -1;
     messaggio_inizia(&q);
     messaggio_aggiungi(&q, CHIAVE_RICHIESTA, RICHIESTA_ATTACCA);
-    messaggio_aggiungi(&q, CHIAVE_PROGRAMMA, programma);
+    messaggio_aggiungi(&q, CHIAVE_PROGRAMMA, app->programma);
+    for (int i = 0; i < app->quanti_permessi; i++) messaggio_aggiungi(&q, CHIAVE_PERMESSO, app->permessi[i]);
     q.allegato = capo;
     int fatto = chiedi_entro(d, &q, &r, 1000) == 0 && messaggio_vale(&r, CHIAVE_ESITO, ESITO_OK);
     chiudi(d);
@@ -324,36 +325,74 @@ int attacca_porta(const char *nome, const char *programma, int capo) {
 
 /* --- il servizio: chi c'e' dall'altra parte --- */
 
+int app_da_attach(const struct messaggio *attach, struct chi_chiede *app) {
+    const char *programma = messaggio_valore(attach, CHIAVE_PROGRAMMA);
+    if (!programma || !programma[0] || strlen(programma) >= MAX_PERCORSO_PROGRAMMA) return -1;
+    app->uid = UID_APPLICAZIONI;
+    strcpy(app->programma, programma);
+    app->app = 1;
+    app->quanti_permessi = 0;
+    for (const char *p = 0; (p = messaggio_prossimo(attach, CHIAVE_PERMESSO, p));) {
+        if (app->quanti_permessi == MAX_PERMESSI_APP || strlen(p) >= MAX_NOME_PERMESSO) return -1;
+        strcpy(app->permessi[app->quanti_permessi++], p);
+    }
+    return 0;
+}
+
 int chi_chiede(int d, struct chi_chiede *c) {
+    c->app = 0;
+    c->quanti_permessi = 0;
     c->uid = chi(d);
     if (c->uid < 0) return -1;
     if (programma_di(d, c->programma) < 0) c->programma[0] = 0;
     return 0;
 }
 
-/* I PERMESSI, PROVVISORI. Oggi questa funzione NON CONTROLLA NIENTE: risponde sempre si'.
- * Scrive pero' ogni domanda nel registro, con la parola "provvisorio", es.
- *     permesso network.configure a /system/apps/settings/code (uid 1000): concesso (provvisorio)
- * cosi' si vede chi chiede cosa, e quando si accendera' si sapra' gia' quali permessi
- * servono e a chi.
- *
- * QUANDO SARA' VERA, dal programma (che dice il kernel, non si puo' fingere) e dall'uid
- * risalira' a chi e':
- *   - un programma del SISTEMA (/system/services/..., /system/bin/... come uid 0): ha
- *     tutti i permessi;
- *   - un'APP (/system/apps/<id>/ o /data/apps/<id>/): ha il permesso solo se il suo
- *     manifesto lo dichiara E la persona gliel'ha concesso (i permessi concessi, salvati
- *     per ogni app: APPLICAZIONI.md, le sezioni sui permessi);
- *   - un COMANDO della persona (/data/users/<uid>/bin): parte dai permessi della persona
- *     che lo lancia (SISTEMA.md, domande aperte).
- * E rispondera' 0 quando il permesso non c'e': il servizio allora manda ESITO_NEGATO. */
+/* I PERMESSI (servizi.h e APPLICAZIONI.md, sezione 9). L'elenco qui sotto e' quello della
+ * sezione 9: un nome che non c'e' non e' un permesso, e nessuno lo ha (tranne il sistema). */
+static const char *const permessi_normali[] = {
+    "files.read", "files.write", "notifications", "network.use", "audio",
+};
+static const char *const permessi_di_sistema[] = {
+    "processes.view", "processes.stop", "network.settings", "network.firewall", "settings.system",
+    "system.power", "apps.manage", "apps.open", "system.shell",
+};
+
+static int nell_elenco(const char *nome, const char *const *elenco, int quanti) {
+    for (int i = 0; i < quanti; i++)
+        if (!strcmp(nome, elenco[i])) return 1;
+    return 0;
+}
+
+int permesso_di_sistema(const char *nome) {
+    return nell_elenco(nome, permessi_di_sistema, (int)(sizeof permessi_di_sistema / sizeof permessi_di_sistema[0]));
+}
+
+int permesso_conosciuto(const char *nome) {
+    return permesso_di_sistema(nome) ||
+           nell_elenco(nome, permessi_normali, (int)(sizeof permessi_normali / sizeof permessi_normali[0]));
+}
+
+/* Il controllo (la regola e' in servizi.h). Il permesso dell'app lo ha detto il launcher con
+ * attach (app_da_attach); per gli altri vale l'uid che dice il kernel. */
+static int concesso(const struct chi_chiede *c, const char *nome) {
+    if (c->uid == UID_SISTEMA) return 1;
+    if (c->app) {
+        for (int i = 0; i < c->quanti_permessi; i++)
+            if (!strcmp(c->permessi[i], nome)) return 1;
+        return 0;
+    }
+    return permesso_conosciuto(nome) && !permesso_di_sistema(nome);
+}
+
 int ha_permesso(const struct chi_chiede *c, const char *nome) {
-    /* la riga intera in un pezzo solo, con una sola scrivi: cosi' non si mescola con le
-     * righe degli altri programmi */
+    if (concesso(c, nome)) return 1;
+    /* il rifiuto nel registro: la riga intera in un pezzo solo, con una sola scrivi, cosi' non
+     * si mescola con le righe degli altri programmi */
     char riga[64 + MAX_CHIAVE + MAX_PERCORSO_PROGRAMMA + 64];
     int n = 0;
     const char *pezzi[] = { "permesso ", nome, " a ", c->programma[0] ? c->programma : "un programma sconosciuto",
-                            " (uid ", 0, "): concesso (provvisorio)\n" };
+                            " (uid ", 0, "): negato\n" };
     for (unsigned int i = 0; i < sizeof pezzi / sizeof pezzi[0]; i++) {
         if (!pezzi[i]) {
             /* l'uid in cifre */
@@ -369,5 +408,5 @@ int ha_permesso(const struct chi_chiede *c, const char *nome) {
     }
     riga[n - 1] = '\n';   /* anche se si e' tagliata, la riga finisce con l'a capo */
     scrivi(riga, n);
-    return 1;
+    return 0;
 }

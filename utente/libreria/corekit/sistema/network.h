@@ -55,8 +55,7 @@
  * LE RISPOSTE. result e' ok, denied (manca il permesso), invalid (richiesta sconosciuta).
  * Non c'e' mai error: restart e stop o si fanno, o il servizio non risponde.
  *
- * I PERMESSI (ha_permesso, sistema/servizi.h; oggi provvisoria: dice sempre si' e lo
- * scrive nel registro):
+ * I PERMESSI (ha_permesso, sistema/servizi.h: la regola; un rifiuto si scrive nel registro):
  *     network.use        status: chiunque lo abbia
  *     network.settings   restart, stop */
 #ifndef NETWORK_H

@@ -108,16 +108,14 @@
  * installare e il terminale di open_shell sono allegati della richiesta.
  *
  * I PERMESSI. Il launcher chiede a chi_chiede chi c'e' dall'altra parte, e a ha_permesso
- * se ha il permesso (sistema/servizi.h). Oggi ha_permesso e' PROVVISORIA: dice sempre si'
- * e scrive la domanda nel registro ("permesso apps.manage a ... (provvisorio)").
+ * se ha il permesso (sistema/servizi.h: la regola; un rifiuto si scrive nel registro,
+ * "permesso apps.manage a ... : negato"). Tutti e tre sono permessi di sistema: li hanno il
+ * sistema (uid 0) e le app del sistema che li dichiarano nel manifesto (lo Store apps.manage,
+ * il Terminale system.shell); gli altri ricevono denied.
  *     apps.manage    install_package, update_package, remove_app, clear_app_data
  *     apps.open  open_program
  *     system.shell   open_shell
  * open_app, open_file, describe_package e list_apps li puo' chiedere chiunque.
- * Per apps.manage, oltre a ha_permesso, resta il controllo vero di prima: lo concede solo
- * il sistema (uid 0) o un'app DEL SISTEMA che nel manifesto chiede il permesso
- * "apps.manage" (lo Store; pacchetto_puo_gestire). Gli altri ricevono denied. Quando
- * ha_permesso sara' vera, prendera' il suo posto.
  *
  * IL TEMPO MASSIMO. Chi chiede aspetta la risposta al massimo TEMPO_CHIEDI (5 secondi,
  * messaggi.h); per le richieste sui pacchetti (describe_package, install_package,

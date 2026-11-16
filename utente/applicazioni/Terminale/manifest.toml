@@ -17,7 +17,7 @@ programma = "code"
 # Solo nel vassoio delle app, non nella userbar (decisione della persona, per ora).
 nella_barra = false
 
-permessi = []
+permessi = ["system.shell"]   # apre la shell come sistema (APPLICAZIONI.md, sezione 9; provvisorio: STATO.md)
 deviazioni = []
 funzioni = []
 

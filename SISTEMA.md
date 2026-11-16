@@ -109,11 +109,18 @@ lenta c'è `chiedi_entro`, con un tempo dato da chi chiede. Se scade, la rispost
 arrivata tardi ha l'`id` vecchio e la butta la richiesta successiva. Se il servizio cade, il
 collegamento si chiude e chi chiede lo sa subito.
 
-**Permessi (provvisori).** Il servizio chiede `ha_permesso(chi chiede, "nome.permesso")` (es.
-`network.settings`). **Oggi risponde sempre sì** e scrive la domanda nel registro, con la parola
-"provvisorio". Quando sarà vera riconoscerà sistema, app (manifesto e permessi concessi) e
-comando della persona: il commento in `messaggi.c` dice come. La usa il launcher
-(`apps.manage`, `apps.open`, `system.shell`: `APPLICAZIONI.md`, sezione 9).
+**Permessi.** Il servizio chiede `ha_permesso(chi chiede, "nome.permesso")` (es.
+`network.settings`). La regola (decisa con la persona il 16 novembre 2026, in `sistema/servizi.h`):
+- il **sistema** (uid 0): tutti i permessi;
+- un'**app**, dalla sua porta: solo quelli che il launcher le ha concesso e ha detto al servizio con
+  `attach` (chiave `permission`, ripetuta). Finché non c'è la domanda del primo avvio, concessi =
+  dichiarati nel manifesto, e quelli di sistema solo alle app del sistema (`/system/apps`);
+- un **altro programma della persona** (un comando, che non parte dal launcher): i permessi
+  normali, nessuno di sistema.
+
+Ogni rifiuto finisce nel registro: `permesso <nome> a <programma> (uid <uid>): negato`. La usano
+launcher (`apps.manage`, `apps.open`, `system.shell`), network (`network.use`,
+`network.settings`) e catalog (`settings.system`): `APPLICAZIONI.md`, sezione 9.
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
 
@@ -157,6 +164,6 @@ date (`launcher: esempio: porte compositore catalog launcher network`).
   2. **deciso il 14 novembre 2026: la configurazione predefinita del firewall c'è SEMPRE, come via d'uscita.** Vale quando nessuna app è scelta per il ruolo, quando l'app scelta viene tolta, e quando l'app scelta si blocca o non risponde. In quei casi le richieste di aprire una porta le decide il servizio network secondo la configurazione predefinita. La configurazione predefinita **chiede alla persona** (deciso il 14 novembre 2026, come Mac e Windows): il sistema mostra "vuoi che <app> accetti connessioni in entrata?", e la risposta si ricorda per quell'app e quella porta; si potrà cambiare nella pagina della rete delle Impostazioni. Serve una finestra di domanda del sistema, che oggi non c'è;
   3. ~~il controllo pieno: permesso o modulo~~ **deciso il 14 novembre 2026**: con il permesso `network.firewall`, e lo esercita una sola app alla volta, quella scelta dalla persona per il ruolo firewall. **Deciso anche, come Windows:** quando un'app è scelta, prende il posto degli interruttori di base. Le Impostazioni non li mostrano più come modificabili: dicono "il firewall è gestito da <app>", con il pulsante per smettere di usarla. Se la persona la toglie dal ruolo (o disinstalla l'app), le sue regole spariscono e si torna agli interruttori di base com'erano prima. Non c'è scontro con le altre app: chiedono, e l'app firewall risponde;
   4. dove si salvano le regole (in `/data`, del servizio, con il nome dell'app) e quando spariscono (app tolta; regole che valgono solo finché l'app è aperta?);
-  5. l'ordine: prima il controllo dei permessi vero (`ha_permesso`: oggi dice sempre sì, e chiunque prenderebbe il controllo del firewall), poi la finestra di domanda del sistema, poi le richieste al servizio network.
-- **Permessi dei comandi.** Un'app ha il manifesto, un comando no: si parte dai permessi della persona che lo lancia.
-- **La shell come sistema.** Oggi il Terminale apre una shell come sistema, e chiunque può chiederla (decisione provvisoria, `STATO.md`). Quando le porte controlleranno i permessi, la shell girerà come la persona, e le azioni di sistema passeranno dalla porta del servizio, che chiede conferma (come `sudo` o la finestra della password sul Mac).
+  5. l'ordine: prima il controllo dei permessi vero (`ha_permesso`: fatto il 16 novembre 2026), poi la finestra di domanda del sistema, poi le richieste al servizio network.
+- ~~**Permessi dei comandi.**~~ Deciso il 16 novembre 2026: un programma della persona che non è un'app ha i permessi normali, nessuno di sistema (`ha_permesso`, sezione 3).
+- **La shell come sistema.** Oggi il Terminale apre una shell come sistema (decisione provvisoria, `STATO.md`): dal 16 novembre 2026 la può chiedere solo chi ha `system.shell` (il sistema e il Terminale, app del sistema che lo dichiara). Quando le porte controlleranno i permessi, la shell girerà come la persona, e le azioni di sistema passeranno dalla porta del servizio, che chiede conferma (come `sudo` o la finestra della password sul Mac).

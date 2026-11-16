@@ -95,6 +95,12 @@ def esegui(p):
     p.controlla("network: collegamento dalla porta di /system/apps/esempio/code" in seriale,
                 "network non ha ricevuto il collegamento di Esempio dalla sua porta")
     p.controlla("esempio: rete risponde\n" in seriale, "Esempio non ha avuto risposta dalla rete")
+    # il controllo vero dei permessi: Esempio non ha settings.system ne' network.settings
+    p.controlla("esempio: cambiare il tema: negato\n" in seriale, "a Esempio non e' stato negato di cambiare il tema")
+    p.controlla("esempio: riavviare la rete: negato\n" in seriale, "a Esempio non e' stato negato di riavviare la rete")
+    for permesso, servizio in [("settings.system", "catalog"), ("network.settings", "network")]:
+        p.controlla(f"permesso {permesso} a /system/apps/esempio/code (uid 1000): negato" in seriale,
+                    f"{servizio}: manca nel registro il rifiuto di {permesso} a Esempio")
 
 
 DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale
