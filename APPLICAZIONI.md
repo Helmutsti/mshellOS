@@ -192,6 +192,12 @@ Si chiede con i permessi di sempre (deciso dalla persona lo stesso giorno): `fil
 lettura, `files.write` = Home in lettura e scrittura (sezione 9). Dentro il recinto la Home si vede allo stesso percorso di fuori (`/data/users/<uid>/home`), così le
 app non cambiano. I punti qui sotto restano per quando si allargherà.
 
+**Gli sfondi** (decisione della persona, 16 novembre 2026): la cartella degli sfondi della persona
+(`/data/users/<uid>/wallpapers`, fuori dalla Home) la vede solo chi ha il permesso di sistema
+`settings.system` (Impostazioni): il launcher gliela aggancia nel recinto, in sola lettura, allo
+stesso percorso di fuori. La scelta dello sfondo la cambia catalog; la foto la disegna la
+scrivania, che è del sistema e non sta nel recinto.
+
 **Da decidere** (16 novembre 2026):
 1. come si scrivono nel manifesto le cartelle e il modo (per esempio relative alla Home:
    "Documents", oppure tutta la Home), e se questi permessi prendono il posto di `files.read` e
@@ -219,7 +225,9 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
 2. **La finestra "Apri"/"Salva" del sistema non esiste.** Senza, un'app senza permessi sui file non
    può aprire niente. Deciso il 16 novembre 2026 (la persona): la mostra un **servizio del sistema**,
    fuori dall'app (come il portale di Flatpak e la finestra "Apri" del Mac), che consegna all'app
-   solo il file scelto; prima si disegna in Figma (`disegni/ApriSalva/`), partendo da Files.
+   solo il file scelto; prima si disegna in Figma (`disegni/ApriSalva/`), partendo da Files. Il
+   servizio si chiama **picker** (deciso dalla persona lo stesso giorno). Il disegno è approvato:
+   finestra minima in sovraimpressione sopra l'app che chiede.
 3. **La finestra di domanda del sistema non esiste** (serve anche al firewall e al primo avvio
    per i permessi).
 4. **Come si trovano i servizi.** Oggi ogni programma si collega da sé agli indirizzi in
