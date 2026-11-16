@@ -14,14 +14,22 @@
  *   2. IL RECINTO, costruito da una copia che ha ancora i poteri del sistema:
  *      a. unshare: mondi nuovi per i file montati, la rete, i numeri dei programmi, ecc.;
  *      b. una radice nuova vuota (tmpfs) con dentro solo: /app/code (questo programma, sola
- *         lettura), /data (vuota, dell'app), /system/resources (sola lettura);
+ *         lettura), /data (vuota, dell'app), /system/resources (sola lettura) e le cartelle
+ *         concesse (APPLICAZIONI.md, "I permessi sulle cartelle"), agganciate come farebbe il
+ *         launcher: la Home in /home in sola lettura e, sopra, la sua sottocartella
+ *         ProvaRecinto/Scrivibile in lettura e scrittura (la piu' interna vince);
  *      c. pivot_root: quella diventa "/" e la radice vera si stacca; la radice si rimonta in
  *         sola lettura;
  *      d. via i poteri: uid e gid 1000, nessun gruppo; poi NO_NEW_PRIVS (mai piu' poteri);
  *      e. execve di /app/code con l'argomento "dentro": da qui e' l'"app".
  *   3. DENTRO, le stesse prove, che devono fallire: "non esiste" (ENOENT) per i file e il
  *      launcher, "rete irraggiungibile" (ENETUNREACH) per internet; e non deve riuscire a
- *      smontare i muri (EPERM). Le risorse del sistema invece si leggono.
+ *      smontare i muri (EPERM). Le risorse del sistema invece si leggono. Nelle cartelle
+ *      concesse: la Home si legge ma non si scrive (EROFS, "file system in sola lettura"),
+ *      Scrivibile si scrive; con ".." da li' non si esce (si resta sulla radice dell'app).
+ * Prima di tutto, come sistema, prepara nella Home vera ProvaRecinto/leggimi.txt e
+ * ProvaRecinto/Scrivibile/, della persona (uid 1000): fuori la persona ci scrive (controprova:
+ * a bloccare dentro e' l'aggancio, non i permessi del file).
  * Ogni passo e' una riga sulla seriale ("recinto: ... -> si'" o "... -> no FALLITA"), scritta in
  * una sola volta; alla fine "recinto: tutto bene" o "recinto: fallita".
  *
@@ -55,6 +63,7 @@
 #define DISCO       "/dev/vda"
 #define LAUNCHER    "/run/mshell/launcher"
 #define RISORSE     "/system/resources"
+#define PROVA       CASA "/ProvaRecinto"
 #define REGISTRO    8   /* il registro del sistema (la seriale), che init passa a tutti: CoreKit, interno.h */
 
 static int fallite;
@@ -122,6 +131,55 @@ static int apri(const char *percorso, int modo) {
     return d < 0 ? -1 : 0;
 }
 
+/* Crea (o riscrive) un file con una riga. 0, o -1 con errno. */
+static int scrivi_file(const char *percorso) {
+    int d = open(percorso, O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC, 0644);
+    if (d < 0) return -1;
+    int r = write(d, "ciao\n", 5) == 5 ? 0 : -1;
+    close(d);
+    return r;
+}
+
+/* Vero se 'percorso' e' la stessa cartella di "/" (stesso disco e stesso numero). */
+static int e_la_radice(const char *percorso) {
+    struct stat a, b;
+    return stat(percorso, &a) == 0 && stat("/", &b) == 0 && a.st_dev == b.st_dev && a.st_ino == b.st_ino;
+}
+
+/* Le cartelle concesse, viste dall'app: la Home in sola lettura, Scrivibile anche in scrittura. */
+static void prove_cartelle(void) {
+    const char *dove = "dentro";
+    int r;
+    r = apri("/home/ProvaRecinto/leggimi.txt", O_RDONLY);
+    passo(dove, "leggere un file della Home", r, r == 0);
+    r = apri("/home/ProvaRecinto/leggimi.txt", O_WRONLY);
+    passo(dove, "cambiare un file della Home", r, r < 0 && errno == EROFS);
+    r = scrivi_file("/home/ProvaRecinto/nuovo.txt");
+    passo(dove, "creare un file nella Home", r, r < 0 && errno == EROFS);
+    r = unlink("/home/ProvaRecinto/leggimi.txt");
+    passo(dove, "cancellare un file della Home", r, r < 0 && errno == EROFS);
+    r = rename("/home/ProvaRecinto/leggimi.txt", "/home/ProvaRecinto/altro.txt");
+    passo(dove, "cambiare nome a un file della Home", r, r < 0 && errno == EROFS);
+    r = scrivi_file("/home/ProvaRecinto/Scrivibile/nuovo.txt");
+    passo(dove, "creare un file in Scrivibile", r, r == 0);
+    r = unlink("/home/ProvaRecinto/Scrivibile/nuovo.txt");
+    passo(dove, "cancellarlo", r, r == 0);
+    r = scrivi_file("/home/ProvaRecinto/Scrivibile/../nuovo.txt");
+    passo(dove, "scrivere da Scrivibile con .. nella Home", r, r < 0 && errno == EROFS);
+    passo(dove, "\"../../../..\" da Scrivibile resta sulla radice", 0,
+          e_la_radice("/home/ProvaRecinto/Scrivibile/../../../../../.."));
+    r = apri("/home/ProvaRecinto/Scrivibile/../../../../data/users", O_RDONLY | O_DIRECTORY);
+    passo(dove, "arrivare al disco vero con ..", r, r < 0 && errno == ENOENT);
+    /* da una cartella aperta, come se qualcuno gliel'avesse passata: e' dentro l'aggancio */
+    int c = open("/home/ProvaRecinto/Scrivibile", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    int su = c < 0 ? -1 : openat(c, "../../../../../..", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    struct stat a, b;
+    int giusto = su >= 0 && fstat(su, &a) == 0 && stat("/", &b) == 0 && a.st_ino == b.st_ino && a.st_dev == b.st_dev;
+    passo(dove, "\"..\" da una cartella aperta resta sulla radice", su, giusto);
+    if (su >= 0) close(su);
+    if (c >= 0) close(c);
+}
+
 /* Le prove, fuori (controprova) o dentro il recinto. */
 static void prove(int dentro) {
     const char *dove = dentro ? "dentro" : "fuori";
@@ -137,7 +195,13 @@ static void prove(int dentro) {
     r = internet();
     passo(dove, "collegarsi a internet", r,
           dentro ? (r < 0 && errno == ENETUNREACH) : (r == 0 || errno == ECONNREFUSED));
-    if (!dentro) return;
+    if (!dentro) {
+        r = scrivi_file(PROVA "/nuovo.txt");
+        passo(dove, "creare un file in ProvaRecinto (permessi del file)", r, r == 0);
+        unlink(PROVA "/nuovo.txt");
+        return;
+    }
+    prove_cartelle();
     riga("dentro: uid %d, numero del programma %d (1 = vede solo se stesso)", (int)getuid(), (int)getpid());
     passo(dove, "uid dell'app", 0, getuid() == UID_APP && geteuid() == UID_APP);
     passo(dove, "vede solo se stesso", 0, getpid() == 1);
@@ -183,6 +247,12 @@ static void entra_nel_recinto(void) {
     CONTROLLA(sola_lettura(RADICE "/app/code"));
     CONTROLLA(mount(RISORSE, RADICE "/system/resources", NULL, MS_BIND | MS_REC, NULL));
     CONTROLLA(sola_lettura(RADICE "/system/resources"));
+    /* le cartelle concesse: prima la piu' grande, poi la piu' piccola sopra */
+    CONTROLLA(mkdir(RADICE "/home", 0755));
+    CONTROLLA(mount(CASA, RADICE "/home", NULL, MS_BIND | MS_REC, NULL));
+    CONTROLLA(sola_lettura(RADICE "/home"));
+    CONTROLLA(mount(PROVA "/Scrivibile", RADICE "/home/ProvaRecinto/Scrivibile", NULL, MS_BIND | MS_REC, NULL));
+    CONTROLLA(mount(NULL, RADICE "/home/ProvaRecinto/Scrivibile", NULL, MS_BIND | MS_REMOUNT | MS_NOSUID | MS_NODEV, NULL));
     CONTROLLA(mount("tmpfs", RADICE "/data", "tmpfs", MS_NOSUID | MS_NODEV | MS_NOEXEC,
                     "size=1m,mode=700,uid=1000,gid=1000"));
     CONTROLLA(chdir(RADICE));
@@ -235,6 +305,15 @@ int main(int argc, char **argv) {
     if (argc > 1 && !strcmp(argv[1], "dentro")) {
         prove(1);
         return fallite ? 1 : 0;
+    }
+    /* le cartelle della persona per la prova, come se le avesse fatte lei */
+    mkdir(PROVA, 0755);
+    mkdir(PROVA "/Scrivibile", 0755);
+    if (scrivi_file(PROVA "/leggimi.txt") < 0 || chown(PROVA, UID_APP, UID_APP) < 0 ||
+        chown(PROVA "/Scrivibile", UID_APP, UID_APP) < 0 || chown(PROVA "/leggimi.txt", UID_APP, UID_APP) < 0) {
+        riga("preparare %s: %s -> no FALLITA", PROVA, strerror(errno));
+        riga("fallita");
+        return 0;
     }
     /* la rete del sistema ci mette qualche secondo ad accendersi: fino a un minuto */
     for (int volta = 0; volta < 60; volta++) {

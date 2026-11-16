@@ -139,7 +139,9 @@ struct finestra_compositore {
     int raggio;                 /* gli angoli: per l'ombra e il vetro smerigliato */
     unsigned int pannello;      /* un PANNELLO: PANNELLO_BARRA o PANNELLO_SOPRA (l'ombra) */
     unsigned int id;            /* il suo numero per la scrivania (non si riusa) */
-    char programma[MAX_PERCORSO_PROGRAMMA];   /* di quale programma e': lo dice il kernel */
+    char programma[MAX_PERCORSO_PROGRAMMA];   /* di quale programma e': lo dice il kernel, o il
+                                               * launcher se e' arrivata dalla porta dell'app */
+    int dalla_porta;            /* arrivata dalla porta di un'app: 'programma' e' gia' giusto */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
@@ -147,6 +149,15 @@ struct finestra_compositore {
 };
 
 static struct finestra_compositore finestre[MAX_FINESTRE];
+
+/* LE PORTE DELLE APP (protocollo.h, LA PORTA DELL'APP): il capo del compositore, e il programma
+ * dell'app che il launcher ha detto. Una porta si chiude quando l'app la chiude (o finisce). */
+#define MAX_PORTE MAX_FINESTRE
+static struct {
+    int usata;
+    int d;
+    char programma[MAX_PERCORSO_PROGRAMMA];
+} porte[MAX_PORTE];
 
 /* L'ordine: ordine[0] e' quella piu' in fondo, ordine[quante-1] quella in primo piano.
  * Si disegnano dal fondo: ognuna copre quelle disegnate prima. */
@@ -840,17 +851,61 @@ static void scollega(int i) {
     }
 }
 
-/* Un collegamento nuovo: si accetta e si aspetta il suo VOGLIO_FINESTRA. */
-static void nuovo_collegamento(int ascolto) {
-    int d = accetta(ascolto);
-    if (d < 0) return;
+/* Un collegamento nuovo 'd' (accettato, o arrivato da una porta): si aspetta il suo
+ * VOGLIO_FINESTRA. Il suo posto, o -1 (troppe finestre: 'd' si chiude). */
+static int nuova_finestra(int d) {
     int i = 0;
     while (i < MAX_FINESTRE && finestre[i].usata) i++;
-    if (i == MAX_FINESTRE) { chiudi(d); return; }   /* troppe finestre */
+    if (i == MAX_FINESTRE) { chiudi(d); return -1; }   /* troppe finestre */
     struct finestra_compositore *f = &finestre[i];
     *f = (struct finestra_compositore){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1,
                             .da_rilasciare = -1, .ultimo_ping = tempo() };
     ordine[quante++] = i;
+    return i;
+}
+
+static void nuovo_collegamento(int ascolto) {
+    int d = accetta(ascolto);
+    if (d >= 0) nuova_finestra(d);
+}
+
+/* PORTA_APP sul collegamento 'i': solo dal sistema (il launcher; lo dice il kernel), prima di
+ * ogni finestra, con il capo allegato. Si tiene la porta; il collegamento 'i' si chiude. */
+static void porta_app(int i, const struct porta_app *m, int capo) {
+    int k = 0;
+    while (k < MAX_PORTE && porte[k].usata) k++;
+    if (capo < 0 || finestre[i].immagini[0] || chi(finestre[i].collegamento) != UID_SISTEMA || k == MAX_PORTE) {
+        if (capo >= 0) chiudi(capo);
+        scollega(i);
+        return;
+    }
+    porte[k].usata = 1;
+    porte[k].d = capo;
+    for (int c = 0; c < MAX_PERCORSO_PROGRAMMA; c++) porte[k].programma[c] = m->programma[c];
+    porte[k].programma[MAX_PERCORSO_PROGRAMMA - 1] = 0;
+    scrivi_testo("compositore: porta dell'app ");
+    scrivi_testo(porte[k].programma);
+    scrivi_testo("\n");
+    scollega(i);
+}
+
+/* Un messaggio sulla porta 'k': NUOVO_COLLEGAMENTO con il capo allegato diventa una finestra
+ * dell'app della porta. L'app chiusa, o un messaggio sbagliato: la porta si chiude. */
+static void da_porta(int k) {
+    struct nuovo_collegamento m;
+    int capo = -1;
+    int n = ricevi_foglio(porte[k].d, &m, sizeof m, &capo);
+    if (n == sizeof m && m.tipo == NUOVO_COLLEGAMENTO && capo >= 0) {
+        int i = nuova_finestra(capo);
+        if (i >= 0) {
+            for (int c = 0; c < MAX_PERCORSO_PROGRAMMA; c++) finestre[i].programma[c] = porte[k].programma[c];
+            finestre[i].dalla_porta = 1;
+        }
+        return;
+    }
+    if (capo >= 0) chiudi(capo);
+    chiudi(porte[k].d);
+    porte[k].usata = 0;
 }
 
 /* Il primo messaggio: la finestra, con il suo foglio. Tutto si controlla. */
@@ -881,7 +936,7 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
     f->a = a;
     for (int k = 0; k < MAX_TITOLO; k++) f->titolo[k] = m->titolo[k];
     f->titolo[MAX_TITOLO - 1] = 0;
-    programma_di(f->collegamento, f->programma);
+    if (!f->dalla_porta) programma_di(f->collegamento, f->programma);
     f->id = prossimo_id++;
     f->ruolo = m->ruolo;
     f->pannello = m->pannello;
@@ -1028,11 +1083,13 @@ static void da_applicazione(int i) {
         struct trascinami t;
         struct mostra_puntatore u;
         struct pong p;
+        struct porta_app a;
     } m;
     int foglio = -1;
     int n = ricevi_foglio(finestre[i].collegamento, &m, sizeof m, &foglio);
     if (n <= 0) { if (foglio >= 0) chiudi(foglio); scollega(i); return; }   /* ha chiuso */
     if (m.tipo == VOGLIO_FINESTRA && n == sizeof m.v) { voglio_finestra(i, &m.v, foglio); return; }
+    if (m.tipo == PORTA_APP && n == sizeof m.a) { porta_app(i, &m.a, foglio); return; }
     if (foglio >= 0) chiudi(foglio);   /* un foglio va solo col primo messaggio */
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }
@@ -1514,13 +1571,15 @@ static void al_tasto(const struct evento *e) {
  * risorse di init non ci sono piu'. */
 static int servi(int ms) {
     const int eventi = D_EVENTI, ascolto = D_ASCOLTO;   /* prestati da init */
-    struct da_guardare g[2 + MAX_FINESTRE];
-    int chi[2 + MAX_FINESTRE];
+    struct da_guardare g[2 + MAX_FINESTRE + MAX_PORTE];
+    int chi[2 + MAX_FINESTRE + MAX_PORTE];   /* una finestra (>= 0), una porta (-2 - k), o -1 */
     int n = 0;
     g[n].descrittore = eventi;  chi[n++] = -1;
     g[n].descrittore = ascolto; chi[n++] = -1;
     for (int i = 0; i < MAX_FINESTRE; i++)
         if (finestre[i].usata) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
+    for (int k = 0; k < MAX_PORTE; k++)
+        if (porte[k].usata) { g[n].descrittore = porte[k].d; chi[n++] = -2 - k; }
     int pronti = aspetta(g, n, ms);
     if (pronti <= 0) return pronti;
 
@@ -1535,8 +1594,12 @@ static int servi(int ms) {
     /* prima i messaggi, poi i collegamenti nuovi: un collegamento nuovo potrebbe
      * riusare il numero di uno appena scollegato, e prendersi il suo 'pronto' */
     for (int k = 2; k < n; k++)
-        if (g[k].pronto && finestre[chi[k]].usata && finestre[chi[k]].collegamento == g[k].descrittore)
+        if (g[k].pronto && chi[k] >= 0 && finestre[chi[k]].usata && finestre[chi[k]].collegamento == g[k].descrittore)
             da_applicazione(chi[k]);
+    for (int k = 2; k < n; k++) {
+        int p = -2 - chi[k];
+        if (g[k].pronto && chi[k] <= -2 && porte[p].usata && porte[p].d == g[k].descrittore) da_porta(p);
+    }
     if (g[1].pronto) nuovo_collegamento(ascolto);
     return pronti;
 }

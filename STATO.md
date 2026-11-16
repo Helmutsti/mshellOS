@@ -446,6 +446,20 @@ Primo passo fatto il 16/11/2026: la prova `recinto` (`utente/prove/recinto.c`,
 direttamente al kernel senza CoreKit, che dentro non si vedano Home, file del sistema, disco,
 launcher, internet e altri programmi, con la controprova fuori. Passa su arm64. Non c'è ancora
 seccomp: dentro si può ancora creare un mondo utente nuovo. Il launcher non usa ancora il recinto.
+Lo stesso giorno la prova aggancia anche le cartelle concesse (APPLICAZIONI.md, "I permessi sulle
+cartelle"): la Home in sola lettura e una sua sottocartella in scrittura; dentro la Home si legge
+e non si scrive, la sottocartella si scrive, e ".." non porta fuori.
+Decisi lo stesso giorno: fuori dalle sue cartelle un'app può avere solo la Home della persona in
+uso, con `files.read` (sola lettura) o `files.write` (lettura e scrittura, comprende la lettura).
+Il launcher, aprendo un'app, legge questi permessi dal manifesto e scrive nel registro cosa il
+recinto le agganciherà (`launcher: files: nel recinto Home in lettura e scrittura ...`); la prova
+`applicazioni` lo controlla. Non aggancia ancora niente: il recinto nel launcher non c'è.
+Fatto lo stesso giorno: **la porta dell'app verso il compositore**. Il launcher crea una coppia di
+socket, dà un capo all'app (descrittore 3; 0, 1 e 2 ora sono /dev/null invece che chiusi) e manda
+l'altro al compositore con il programma dell'app; ogni finestra dell'app arriva dalla porta e il
+compositore sa di chi è senza chiederlo al kernel (`gkit/sistema/protocollo.h`, "LA PORTA
+DELL'APP"). La prova `applicazioni` lo controlla. Prossimi: il servizio delle impostazioni (tema,
+sfondo, lingua alle app, solo lettura), poi il recinto vero nel launcher.
 
 **Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
 

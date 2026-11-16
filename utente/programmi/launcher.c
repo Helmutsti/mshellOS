@@ -8,7 +8,8 @@
  *   - open_app: controlla che sia un'applicazione installata (una cartella con il suo
  *     manifest.toml in /system/apps o, se li' non c'e', in /data/apps: descrizione.h),
  *     prende dal manifesto quale programma far partire e lo fa partire come APPLICAZIONE
- *     (uid 1000), con l'argomento della richiesta se c'e'. E' per questo che il launcher e'
+ *     (uid 1000), con l'argomento della richiesta se c'e', e con la sua porta verso il
+ *     compositore (fai_partire_app). E' per questo che il launcher e'
  *     del sistema (uid 0): solo il sistema puo' far partire un programma con un altro uid;
  *   - open_program: un programma normale di /system/bin (non un'app; per ora nessuno lo
  *     usa), come la persona (uid 1000);
@@ -39,6 +40,7 @@
 #include "corekit/sistema/privilegi.h"   /* avvia_come...: le app partono come la persona */
 #include "corekit/sistema/descrizione.h"
 #include "corekit/sistema/pacchetto.h"
+#include "gkit/sistema/protocollo.h"     /* PORTA_APP: la porta dell'app verso il compositore */
 
 #define D_ASCOLTO 0      /* prestato da init */
 #define MAX_CLIENTI 8
@@ -83,6 +85,80 @@ static const char *dato(const struct messaggio *q, const char *chiave, int massi
     return v && lunghezza(v) < massimo ? v : 0;
 }
 
+/* LA HOME NEL RECINTO (APPLICAZIONI.md, sezione 5, "I permessi sulle cartelle"). Fuori dalle
+ * sue cartelle, un'app puo' avere solo la Home della persona in uso, intera: in sola lettura
+ * con "files.read", in lettura e scrittura con "files.write" (che comprende la lettura). */
+#define HOME_NIENTE    0
+#define HOME_LETTURA   1
+#define HOME_SCRITTURA 2
+
+/* Cosa dice il manifesto dell'app sulla Home. Il permesso dichiarato vale come concesso finche'
+ * non c'e' la domanda del primo avvio (ha_permesso e' ancora provvisorio). */
+static int home_dell_app(const struct descrizione *d) {
+    static struct manifesto m;    /* grande: non sulla pila (le richieste sono una alla volta) */
+    char cartella[MAX_PERCORSO];
+    descrizione_copia(cartella, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
+                      sizeof cartella);
+    descrizione_aggiungi(cartella, "/", sizeof cartella);
+    descrizione_aggiungi(cartella, d->id, sizeof cartella);
+    if (manifesto_dell_app(cartella, &m) < 0) return HOME_NIENTE;
+    int home = HOME_NIENTE;
+    for (int i = 0; i < m.quanti_permessi; i++) {
+        if (descrizione_uguali(m.permessi[i], "files.write")) home = HOME_SCRITTURA;
+        else if (descrizione_uguali(m.permessi[i], "files.read") && home == HOME_NIENTE) home = HOME_LETTURA;
+    }
+    return home;
+}
+
+/* Scrive nel registro cosa il recinto agganciera' all'app. Per ora solo questo: il recinto
+ * nel launcher non c'e' ancora (STATO.md). */
+static void registra_home(const struct descrizione *d) {
+    static const char *modi[] = {"niente Home", "Home in sola lettura (files.read)",
+                                 "Home in lettura e scrittura (files.write)"};
+    char riga[MAX_ID + 160];
+    descrizione_copia(riga, d->id, sizeof riga);
+    descrizione_aggiungi(riga, ": nel recinto ", sizeof riga);
+    descrizione_aggiungi(riga, modi[home_dell_app(d)], sizeof riga);
+    registro(riga, " (da agganciare: il recinto non c'e' ancora)");
+}
+
+/* FAR PARTIRE UN'APP CON LA SUA PORTA (protocollo.h, LA PORTA DELL'APP). Una coppia di socket:
+ * un capo al compositore, su un collegamento fatto apposta, con il programma dell'app (cosi' il
+ * compositore sa di chi sono le sue finestre senza chiederlo al kernel); l'altro all'app, al
+ * descrittore D_PORTA_APP. Poi il launcher li chiude tutti e due: app e compositore parlano da
+ * soli. Se il compositore non risponde, l'app parte senza porta (e lo si scrive nel registro).
+ * I descrittori 0, 1 e 2 (ingresso, uscita, errori: la convenzione di ogni programma) sono
+ * /dev/null: se restassero chiusi, il primo file o collegamento che l'app apre finirebbe li', e
+ * quello che l'app stampa (Doom stampa molto) ci andrebbe dentro. */
+static int fai_partire_app(const char *programma, const char *argomento) {
+    int porta[2];
+    int data = 0;
+    if (coppia(porta) == 0) {
+        int c = collega(NOME_COMPOSITORE);
+        struct porta_app m = { .tipo = PORTA_APP };
+        descrizione_copia(m.programma, programma, sizeof m.programma);
+        data = c >= 0 && manda_foglio(c, &m, sizeof m, porta[1]) >= 0;
+        if (c >= 0) chiudi(c);
+        chiudi(porta[1]);
+        if (!data) chiudi(porta[0]);
+    }
+    if (!data) {
+        registro("niente porta verso il compositore per ", programma);
+        return avvia_come_con(programma, UID_APPLICAZIONI, argomento);
+    }
+    int nulla = apri_nulla();
+    int numero = -1;
+    if (nulla >= 0) {
+        int passati[D_PORTA_APP + 1] = { nulla, nulla, nulla, porta[0] };
+        numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, D_PORTA_APP + 1);
+        chiudi(nulla);
+    } else {
+        registro("non riesco ad aprire /dev/null per ", programma);
+    }
+    chiudi(porta[0]);
+    return numero;
+}
+
 static void apri_app(const struct messaggio *q, struct messaggio *r) {
     const char *app = dato(q, CHIAVE_APP, MAX_NOME_FILE);
     const char *argomento = messaggio_valore(q, CHIAVE_ARGOMENTO);   /* facoltativo */
@@ -95,7 +171,8 @@ static void apri_app(const struct messaggio *q, struct messaggio *r) {
         risposta(r, q, ESITO_ERRORE, MOTIVO_NON_INSTALLATA, "Quest'app non \xc3\xa8 installata.");
         return;
     }
-    partito(r, q, avvia_come_con(desc.programma, UID_APPLICAZIONI, argomento ? argomento : ""));
+    registra_home(&desc);
+    partito(r, q, fai_partire_app(desc.programma, argomento ? argomento : ""));
 }
 
 static void apri_un_file(const struct messaggio *q, struct messaggio *r) {
@@ -114,7 +191,7 @@ static void apri_un_file(const struct messaggio *q, struct messaggio *r) {
         registro("le app vanno installate prima di aprirle: ", percorso);
         return;
     }
-    partito(r, q, avvia_come_con(store.programma, UID_APPLICAZIONI, percorso));
+    partito(r, q, fai_partire_app(store.programma, percorso));
 }
 
 /* Un programma normale di /system/bin (non un'app), come la persona. Il percorso deve stare

@@ -10,6 +10,10 @@ posto sta ancora tutta nello schermo). Per ognuna:
 Alla fine il pulsante App (la griglia in cima alla userbar) apre il vassoio delle app; un
 clic su Esempio nel vassoio lo chiude e riporta davanti Esempio (gia' aperta). Poi il
 vassoio si riapre e un clic sullo sfondo lo chiude.
+Il launcher, per ogni app aperta, scrive nel registro cosa il recinto le agganciera'
+(APPLICAZIONI.md, "I permessi sulle cartelle"): Files (files.write) la Home in lettura e
+scrittura, Attivita' ed Esempio niente Home. E a ogni app consegna la sua porta verso il
+compositore (gkit/sistema/protocollo.h, LA PORTA DELL'APP): il compositore lo scrive nel registro.
 """
 
 import time
@@ -65,6 +69,18 @@ def esegui(p):
     m.clic(1200, 760)
     m.muovi(*PUNTO_VUOTO)
     s.aspetta_zona(m, chiuso, VASSOIO_SINISTRA, uguale=True, cosa="il vassoio chiuso dallo sfondo")
+
+    # la Home che il recinto agganciera' a ogni app (per ora solo scritta nel registro)
+    seriale = m.testo_seriale()
+    for app, modo in [("files", "Home in lettura e scrittura (files.write)"),
+                      ("attivita", "niente Home"), ("esempio", "niente Home")]:
+        p.controlla(f"launcher: {app}: nel recinto {modo}" in seriale,
+                    f"manca nel registro la Home di {app}: '{modo}'")
+    # la porta verso il compositore, data dal launcher a ogni app
+    for app in ["attivita", "esempio", "impostazioni", "files"]:
+        p.controlla(f"compositore: porta dell'app /system/apps/{app}/code" in seriale,
+                    f"il compositore non ha ricevuto la porta di {app}")
+    p.controlla("niente porta verso il compositore" not in seriale, "un'app e' partita senza porta")
 
 
 DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

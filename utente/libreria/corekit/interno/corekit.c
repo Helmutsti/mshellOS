@@ -173,6 +173,12 @@ int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int
     return lancia(percorso, descrittori, quanti, (int)uid, 0);
 }
 
+int apri_nulla(void) { return open("/dev/null", O_RDWR | O_CLOEXEC); }
+
+int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti) {
+    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0);
+}
+
 #ifndef SYS_pidfd_open
 #define SYS_pidfd_open 434
 #endif

@@ -61,6 +61,15 @@
  * Da chi non puo', CAMBIA_TEMA si ignora.
  *
  * Una finestra per collegamento: per due finestre, due collegamenti.
+ *
+ * LA PORTA DELL'APP (APPLICAZIONI.md, "Come funzionano le chiavi"). Un'app non cerca il
+ * compositore per nome: quando la fa partire, il launcher crea una coppia di socket, ne da' un
+ * capo all'app (lo trova al descrittore D_PORTA_APP) e manda l'altro al compositore con
+ * PORTA_APP, dicendo di quale programma e'. Per ogni finestra l'app crea una coppia sua e ne
+ * manda un capo sulla porta (NUOVO_COLLEGAMENTO): quel collegamento e' dell'app della porta,
+ * lo dice il launcher, non il kernel e non l'app. Da li' si parla come sopra, senza il launcher.
+ * I programmi del sistema (la scrivania) e chi non ha la porta si collegano ancora per nome, e
+ * per loro chi sono lo dice il kernel.
  * Ogni messaggio comincia con il suo tipo.
  *
  * I pixel nelle immagini: 4 byte ciascuno, 0xAARRGGBB PREMOLTIPLICATI (AA e' l'opacita',
@@ -99,6 +108,17 @@
                              * ne arriva un'altra: l'attesa la mostra anche quando un'app e'
                              * bloccata. Una forma che non c'e': la finestra si scollega */
 
+#define PORTA_APP       11  /* (solo il sistema: il launcher) "ecco la porta di un'app che sto
+                             * facendo partire": allegato il capo del compositore, nel messaggio
+                             * il programma dell'app. Su un collegamento fatto apposta, che il
+                             * compositore chiude subito dopo */
+#define NUOVO_COLLEGAMENTO 12 /* (sulla porta di un'app) "ecco il collegamento per una mia
+                             * finestra": allegato un capo di una coppia fatta dall'app */
+
+#define D_PORTA_APP     3   /* dove un'app fatta partire dal launcher trova la sua porta: dopo
+                             * 0, 1 e 2, che restano l'ingresso, l'uscita e gli errori di ogni
+                             * programma (il launcher li collega a /dev/null) */
+
 /* I ruoli speciali (RUOLO_FINESTRA, la finestra normale, e' in gkit.h) */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
 #define RUOLO_PANNELLO  2   /* sopra tutte le finestre (solo il sistema) */
@@ -117,6 +137,15 @@ struct voglio_finestra {
 };
 
 struct chiedi_schermo {
+    unsigned int tipo;
+};
+
+struct porta_app {
+    unsigned int tipo;
+    char programma[MAX_PERCORSO_PROGRAMMA];   /* /system/apps/<id>/code: di chi e' la porta */
+};
+
+struct nuovo_collegamento {
     unsigned int tipo;
 };
 

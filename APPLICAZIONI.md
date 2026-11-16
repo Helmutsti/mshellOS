@@ -87,6 +87,20 @@ e la persona ne viene informata.
   manifesto e i permessi concessi, crea un canale verso ogni servizio permesso, dice al servizio
   quale app c'è dall'altra parte e passa i canali all'app.
 - L'app non può aprirsi canali da sola: nel suo mondo isolato i servizi non si vedono.
+- **L'identità sta nel canale** (16 novembre 2026, con la persona). Il launcher crea una coppia di
+  socket, ne dà un capo all'app e manda l'altro al servizio dicendo di quale app è: tutto quello che
+  arriva da quel canale è di quell'app. Il servizio non chiede al kernel chi c'è dall'altra parte e
+  non crede a quello che l'app dice di sé; si fida solo del launcher. Dopo, app e servizio si
+  parlano da soli: il launcher fa da centralino solo all'inizio. I figli dell'app ereditano il
+  canale e parlano come l'app. I programmi del sistema, che non partono dal launcher, si collegano
+  ancora per nome e il servizio chiede al kernel chi sono.
+- **Fatto per il compositore** (16 novembre 2026): ogni app parte con la sua porta verso il
+  compositore (al descrittore 3; 0, 1 e 2 sono /dev/null), e per ogni finestra apre un collegamento
+  dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"). Gli altri servizi ancora no.
+- **Le impostazioni comuni** (tema, sfondo, lingua) arriveranno da un servizio delle impostazioni,
+  solo in lettura e solo con le voci permesse, che avvisa le app aperte quando cambiano; le
+  preferenze dell'app stanno nel suo database, nella sua cartella dei dati (sezione 8). Idea
+  discussa con la persona il 16 novembre 2026, non ancora fatta.
 - **I dettagli** (per esempio, per i file, "solo leggere" o "anche scrivere") li controlla il
   servizio, in base all'identità dell'app.
 - **I canali sono uno per servizio, non uno per permesso** (14 novembre 2026): i permessi sono
@@ -130,17 +144,69 @@ Deciso il 14 novembre 2026.
   7. *due app d'accordo* che hanno tutte e due la rete e si parlano via internet: rischio accettato,
      come su Mac e Android.
 
+### I permessi sulle cartelle: il kernel aggancia le cartelle concesse
+
+Deciso dalla persona il 16 novembre 2026.
+
+- **Un permesso sui file è un permesso su una cartella**, in uno di due modi: **lettura** oppure
+  **lettura e scrittura**. Vale per la cartella, per tutti i file e per tutte le sottocartelle
+  dentro di lei. Non ci sono permessi su singoli file.
+- **Basta dichiararlo e il kernel lo fa rispettare.** L'app scrive nel manifesto quali cartelle le
+  servono e in che modo; la persona le concede (come ogni permesso, sezione "Come si chiedono").
+  Non serve nessun servizio in mezzo, e non conta se l'app usa CoreKit o no.
+- **Come lo fa il kernel: un aggancio (bind mount) per ogni cartella concessa.** Quando il launcher
+  costruisce il recinto, aggancia dentro il mondo dell'app ogni cartella concessa, con il segno di
+  sola lettura se il modo è "lettura". L'app la vede e la sfoglia come una cartella normale, alla
+  velocità normale. Dettagli tecnici:
+  1. ogni processo ha il suo elenco dei montaggi (mount namespace): il launcher ne fa una copia
+     privata per l'app (`unshare(CLONE_NEWNS)`, montaggi resi privati), e quello che aggancia lì
+     lo vede solo l'app e i suoi figli;
+  2. un aggancio è "quel disco, da quella cartella in giù": seguendo i nomi il kernel non sale mai
+     sopra la cartella di partenza, e ".." dalla cima dell'aggancio torna nel mondo dell'app, non
+     nel disco vero;
+  3. il segno di sola lettura è dell'aggancio: il kernel rifiuta ogni scrittura, creazione,
+     cancellazione e cambio di nome lì dentro, anche se il file in sé sarebbe scrivibile. Sotto
+     restano i permessi normali di Unix (proprietario, lettura/scrittura): due muri;
+  4. il mount che vedeva tutto il disco viene staccato dal mondo dell'app (`pivot_root`, poi via la
+     vecchia radice), e l'app non può montare niente da sola (ha perso i poteri e il disco come
+     dispositivo nel suo mondo non c'è). Lo mostra la prova `recinto` (`STATO.md`).
+- **Mai cartelle consegnate aperte.** Una cartella vera già aperta, data all'app, permette di
+  risalire con ".." nel disco vero: i servizi consegnano solo file. Le cartelle passano solo
+  dagli agganci del launcher.
+- **I collegamenti** dentro una cartella concessa che puntano fuori si seguono nel mondo dell'app:
+  non portano da nessuna parte. Va bene così.
+
+**Per ora solo la Home** (decisione della persona, 16 novembre 2026): tra le cartelle fuori da
+quelle dell'app (pacchetto e dati), il launcher può agganciare **soltanto la Home della persona che
+sta usando il computer**, intera, in lettura oppure in lettura e scrittura. Nessun'altra cartella.
+Si chiede con i permessi di sempre (deciso dalla persona lo stesso giorno): `files.read` = Home in
+lettura, `files.write` = Home in lettura e scrittura (sezione 9). Dentro il recinto la Home si vede allo stesso percorso di fuori (`/data/users/<uid>/home`), così le
+app non cambiano. I punti qui sotto restano per quando si allargherà.
+
+**Da decidere** (16 novembre 2026):
+1. come si scrivono nel manifesto le cartelle e il modo (per esempio relative alla Home:
+   "Documents", oppure tutta la Home), e se questi permessi prendono il posto di `files.read` e
+   `files.write` (sezione 9);
+2. cartelle una dentro l'altra con modi diversi (per esempio la Home in lettura e "Documents" in
+   scrittura): si aggancia prima la più grande e poi la più piccola sopra, e vince la più interna;
+   funziona (prova `recinto`, 16 novembre 2026: Home in lettura con una sottocartella in
+   scrittura; ".." non esce, nemmeno da una cartella aperta dentro l'aggancio);
+3. una cartella dichiarata che non c'è: il launcher la crea o la salta;
+4. una cartella concessa mentre l'app è aperta: vale dal prossimo avvio, oppure si aggancia dal
+   vivo (il kernel lo permette con un punto preparato apposta nel recinto, come fa il Mac con la
+   finestra "Apri");
+5. un secondo muro con Landlock (regole del kernel sui percorsi, che non si tolgono più): da
+   aggiungere dopo, se il nostro kernel lo ha acceso.
+
 ### Problemi che l'idea porta con sé (da risolvere, 14 novembre 2026)
 
 Oggi niente di questo c'è: le app vedono tutto il disco e `ha_permesso` dice sempre sì. Passare al
 recinto tocca quasi ogni pezzo:
 
-1. **Le cartelle consegnate aperte non sono sicure.** Un file aperto va bene; una *cartella* aperta
-   no: da una cartella aperta si risale con ".." anche fuori dal recinto (Linux ferma ".." solo
-   alla radice del programma). Quindi il servizio può consegnare file, non cartelle. Ma Files
-   (`files.write`) deve sfogliare tutta la Home: per le app con `files.read`/`files.write` la Home
-   va forse **montata dentro il recinto** (come Flatpak con il permesso sulla Home), e il servizio
-   dei file resta per le app senza permesso (la finestra "Apri"). Da decidere.
+1. ~~**Le cartelle consegnate aperte non sono sicure.**~~ Deciso il 16 novembre 2026: i servizi
+   consegnano solo file; le cartelle concesse le aggancia il launcher dentro il recinto (sezione
+   "I permessi sulle cartelle" qui sopra). Il servizio dei file resta per le app senza permesso
+   (la finestra "Apri").
 2. **La finestra "Apri"/"Salva" del sistema non esiste.** Senza, un'app senza permessi sui file non
    può aprire niente.
 3. **La finestra di domanda del sistema non esiste** (serve anche al firewall e al primo avvio
@@ -257,8 +323,8 @@ quello che tocca le cose della persona o il sistema intero.
 
 | Permesso | Cosa permette |
 |---|---|
-| `files.read` | leggere tutti i file della persona (la sua Home) |
-| `files.write` | leggere e modificare tutti i file della persona (comprende `files.read`) |
+| `files.read` | leggere tutti i file della persona: il launcher aggancia la sua Home nel recinto in sola lettura (sezione 5, "I permessi sulle cartelle"; deciso il 16 novembre 2026) |
+| `files.write` | leggere e modificare tutti i file della persona (comprende `files.read`): il launcher aggancia la sua Home in lettura e scrittura |
 | `notifications` | mandare notifiche |
 | `network.use` | usare la rete e internet (oggi l'app non vede nessuna rete) |
 | `audio` | riprodurre suoni (quando il sistema avrà l'audio) |

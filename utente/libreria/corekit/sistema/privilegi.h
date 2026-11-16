@@ -26,6 +26,15 @@ int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento
  * -1. */
 int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti);
 
+/* Tutto insieme: l'uid, l'argomento (come avvia_come_con) e i descrittori da prestare (come
+ * avvia_con: il programma nuovo li trova a 0, 1, 2...). Lo usa il launcher per le app, che
+ * ricevono cosi' i loro canali gia' aperti (APPLICAZIONI.md, "Come funzionano le chiavi"). */
+int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti);
+
+/* /dev/null, aperto in lettura e scrittura: da prestare come ingresso, uscita ed errori a un
+ * programma che non ne ha (apri, in corekit.h, i dispositivi non li apre). Il descrittore, o -1. */
+int apri_nulla(void);
+
 /* --- i file --- */
 
 /* Da' il file (o la cartella) 'percorso' al proprietario 'proprietario' (un uid). Se e'

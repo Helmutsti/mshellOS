@@ -4,8 +4,32 @@
 #include "gkit/gkit.h"
 #include "gkit/sistema/protocollo.h"
 
-/* Si collega al compositore; se non e' ancora pronto riprova per qualche secondo. */
+/* La porta dell'app (protocollo.h, LA PORTA DELL'APP): il descrittore D_PORTA_APP, se e' un
+ * collegamento il cui altro capo l'ha fatto il sistema (il launcher: lo dice il kernel). Si
+ * guarda una volta sola. -1 se non c'e' (la scrivania, o un programma partito in altro modo). */
+static int porta_dell_app(void) {
+    static int porta = -2;
+    if (porta == -2) porta = chi(D_PORTA_APP) == UID_SISTEMA ? D_PORTA_APP : -1;
+    return porta;
+}
+
+/* Un collegamento nuovo dalla porta: una coppia, un capo al compositore, l'altro per noi. */
+static int collega_dalla_porta(int porta) {
+    int c[2];
+    if (coppia(c) < 0) return -1;
+    struct nuovo_collegamento m = { .tipo = NUOVO_COLLEGAMENTO };
+    int fatto = manda_foglio(porta, &m, sizeof m, c[1]) >= 0;
+    chiudi(c[1]);
+    if (fatto) return c[0];
+    chiudi(c[0]);
+    return -1;
+}
+
+/* Si collega al compositore: dalla porta, se l'app ce l'ha; se no per nome, e se non e'
+ * ancora pronto riprova per qualche secondo. */
 static int collega_compositore(void) {
+    int porta = porta_dell_app();
+    if (porta >= 0) return collega_dalla_porta(porta);
     int d = -1;
     for (int prove = 0; prove < 100 && d < 0; prove++) {
         d = collega(NOME_COMPOSITORE);

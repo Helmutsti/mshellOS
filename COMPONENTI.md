@@ -63,7 +63,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Poteri**: super sì (accesso ai dispositivi). Nessun controllo di permessi.
 
 ### compositore (`utente/programmi/compositore.c`)
-- **Cosa fa**: padrone dello schermo. Compone finestre (con ombre e sfocatura), sfondo e pannelli, smista tastiera e mouse, sposta le finestre. Le app disegnano da sole in memoria condivisa.
+- **Cosa fa**: padrone dello schermo. Compone finestre (con ombre e sfocatura), sfondo e pannelli, smista tastiera e mouse, sposta le finestre. Le app disegnano da sole in memoria condivisa. Riceve dal launcher la porta di ogni app (PORTA_APP, solo da uid 0) e lega a quell'app le finestre che arrivano dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"); i programmi del sistema si collegano ancora per nome.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con schermo, tubo eventi e porta "compositore" già aperti).
 - **Lancia**: nessuno.
@@ -74,7 +74,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con la porta "launcher" già aperta).
-- **Lancia**: le app (uid 1000, `avvia_come_con`), lo Store per i file `.app`, i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
+- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, il cui altro capo manda al compositore con il programma dell'app), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
 - **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
 - **Poteri**: super sì. Permessi controllati con `ha_permesso` (provvisorio, sempre sì): "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati). Per "apps.manage" c'è anche un controllo vero: uid 0, oppure app di sistema con "apps.manage" nel manifesto (`pacchetto_puo_gestire`).
 
