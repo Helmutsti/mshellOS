@@ -37,14 +37,19 @@ static struct {
     struct chi_chiede chi;  /* chi c'e' dall'altra parte (lo dice il kernel all'arrivo) */
 } clienti[MAX_CLIENTI];
 
+/* LE PORTE DELLE APP (messaggi.h e sistema/servizi.h, "le porte delle app"): il capo che il
+ * launcher ci ha dato con attach, e chi e' l'app (dal launcher). Ogni connect sulla porta diventa
+ * un cliente con quell'identita'. Una porta si chiude quando l'app la chiude (o finisce). */
+#define MAX_PORTE MAX_CLIENTI
+static struct {
+    int d;                  /* -1: posto libero */
+    int usata;              /* e' gia' arrivato un connect (per scriverlo nel registro una volta) */
+    struct chi_chiede chi;
+} porte[MAX_PORTE];
+
 static struct messaggio richiesta, risposta;
 
-static void registro(const char *a, const char *b) {
-    scrivi_testo("catalog: ");
-    scrivi_testo(a);
-    scrivi_testo(b);
-    scrivi_testo("\n");
-}
+static void registro(const char *a, const char *b) { scrivi_riga("catalog", a, b); }
 
 /* --- i file --- */
 
@@ -155,12 +160,63 @@ static void cambia(int k) {
     if (strcmp(prima.tema, dopo.tema) || strcmp(prima.sfondo, dopo.sfondo)) avvisa(&dopo);
 }
 
+/* attach dal cliente k: solo dal sistema (il launcher), con il capo e il programma dell'app. */
+static void attacca(int k) {
+    const char *programma = messaggio_valore(&richiesta, CHIAVE_PROGRAMMA);
+    int capo = richiesta.allegato;
+    richiesta.allegato = -1;
+    int p = 0;
+    while (p < MAX_PORTE && porte[p].d >= 0) p++;
+    if (clienti[k].chi.uid != UID_SISTEMA) {
+        messaggio_risposta(&risposta, &richiesta, ESITO_NEGATO);
+    } else if (capo < 0 || !programma || !programma[0] || strlen(programma) >= MAX_PERCORSO_PROGRAMMA ||
+               p == MAX_PORTE) {
+        messaggio_risposta(&risposta, &richiesta, ESITO_NON_VALIDO);
+    } else {
+        porte[p].d = capo;
+        porte[p].usata = 0;
+        porte[p].chi.uid = UID_APPLICAZIONI;
+        strcpy(porte[p].chi.programma, programma);
+        capo = -1;
+        messaggio_risposta(&risposta, &richiesta, ESITO_OK);
+    }
+    if (capo >= 0) chiudi(capo);
+}
+
+/* Un collegamento nuovo 'd', di chi e' 'c'. */
+static void nuovo_collegamento(int d, const struct chi_chiede *c) {
+    int k = 0;
+    while (k < MAX_CLIENTI && clienti[k].d >= 0) k++;
+    if (k == MAX_CLIENTI) { chiudi(d); return; }   /* troppi */
+    clienti[k].d = d;
+    clienti[k].osserva = 0;
+    clienti[k].chi = *c;
+}
+
+/* Un messaggio sulla porta p: connect con il capo allegato diventa un cliente dell'app della
+ * porta. L'app chiusa (o un messaggio sbagliato): la porta si chiude. */
+static void da_porta(int p) {
+    static struct messaggio m;
+    int n = messaggio_ricevi(porte[p].d, &m);
+    if (n == 1 && m.allegato >= 0 && messaggio_vale(&m, CHIAVE_RICHIESTA, RICHIESTA_COLLEGA)) {
+        if (!porte[p].usata) registro("collegamento dalla porta di ", porte[p].chi.programma);
+        porte[p].usata = 1;
+        nuovo_collegamento(m.allegato, &porte[p].chi);
+        return;
+    }
+    if (n == 1 && m.allegato >= 0) chiudi(m.allegato);
+    chiudi(porte[p].d);
+    porte[p].d = -1;
+}
+
 /* Un messaggio dal cliente k. */
 static void da_cliente(int k) {
     int n = messaggio_ricevi(clienti[k].d, &richiesta);
     if (n == 0 || n == -1) { scollega(k); return; }   /* ha chiuso */
     if (n == MESSAGGIO_NON_VALIDO) {
         messaggio_risposta(&risposta, 0, ESITO_NON_VALIDO);
+    } else if (messaggio_vale(&richiesta, CHIAVE_RICHIESTA, RICHIESTA_ATTACCA)) {
+        attacca(k);
     } else {
         if (richiesta.allegato >= 0) { chiudi(richiesta.allegato); richiesta.allegato = -1; }
         struct catalog_valori v;
@@ -179,33 +235,37 @@ static void da_cliente(int k) {
     if (clienti[k].d >= 0 && messaggio_manda(clienti[k].d, &risposta) < 0) scollega(k);
 }
 
+/* Un collegamento per nome: chi e' lo dice il kernel. */
 static void nuovo_cliente(void) {
     int d = accetta(D_ASCOLTO);
     if (d < 0) return;
-    int k = 0;
-    while (k < MAX_CLIENTI && clienti[k].d >= 0) k++;
-    if (k == MAX_CLIENTI || chi_chiede(d, &clienti[k].chi) < 0) { chiudi(d); return; }   /* troppi, o sconosciuto */
-    clienti[k].d = d;
-    clienti[k].osserva = 0;
+    struct chi_chiede c;
+    if (chi_chiede(d, &c) < 0) { chiudi(d); return; }   /* sconosciuto */
+    nuovo_collegamento(d, &c);
 }
 
 int main(void) {
     for (int k = 0; k < MAX_CLIENTI; k++) clienti[k].d = -1;
+    for (int p = 0; p < MAX_PORTE; p++) porte[p].d = -1;
     for (;;) {
-        struct da_guardare g[1 + MAX_CLIENTI];
-        int chi[1 + MAX_CLIENTI];
+        struct da_guardare g[1 + MAX_CLIENTI + MAX_PORTE];
+        int chi[1 + MAX_CLIENTI + MAX_PORTE];   /* un cliente (>= 0), una porta (-2 - p), o -1 */
         int n = 0;
         g[n].descrittore = D_ASCOLTO;
         chi[n++] = -1;
         for (int k = 0; k < MAX_CLIENTI; k++)
             if (clienti[k].d >= 0) { g[n].descrittore = clienti[k].d; chi[n++] = k; }
+        for (int p = 0; p < MAX_PORTE; p++)
+            if (porte[p].d >= 0) { g[n].descrittore = porte[p].d; chi[n++] = -2 - p; }
         if (aspetta(g, n, -1) < 0) {
             registro("non riesco ad aspettare: ", "mi fermo (init mi fara' ripartire)");
             return 1;
         }
         /* prima i messaggi, poi i collegamenti nuovi (un nuovo potrebbe riusare un numero) */
         for (int i = 1; i < n; i++)
-            if (g[i].pronto && clienti[chi[i]].d == g[i].descrittore) da_cliente(chi[i]);
+            if (g[i].pronto && chi[i] >= 0 && clienti[chi[i]].d == g[i].descrittore) da_cliente(chi[i]);
+        for (int i = 1; i < n; i++)
+            if (g[i].pronto && chi[i] <= -2 && porte[-2 - chi[i]].d == g[i].descrittore) da_porta(-2 - chi[i]);
         if (g[0].pronto) nuovo_cliente();
     }
 }

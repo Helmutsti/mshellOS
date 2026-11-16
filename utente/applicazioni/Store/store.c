@@ -37,12 +37,7 @@ static void aggiungi(char *dove, const char *da, int massimo) { descrizione_aggi
 /* Traduce sul posto da UTF-8 alla code page 437 (il testo non si allunga mai). */
 static void in_437_qui(char *s, int massimo) { in_437(s, s, massimo); }
 
-static void registro(const char *a, const char *b) {
-    scrivi_testo("store: ");
-    scrivi_testo(a);
-    scrivi_testo(b);
-    scrivi_testo("\n");
-}
+static void registro(const char *a, const char *b) { scrivi_riga("store", a, b); }
 
 static void numero_in(char *dove, int n) {
     char c[12];

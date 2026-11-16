@@ -16,6 +16,7 @@
  * componenti di UIKit. */
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
+#include "corekit/catalog.h"
 
 #define LARGHEZZA 320
 #define ALTEZZA   220
@@ -71,6 +72,15 @@ int main(void) {
         return 0;
     }
     if (!ridisegna(&f)) return 0;
+
+    /* il tema da catalog, solo per scriverlo nel registro: la prova applicazioni controlla che
+     * arrivi dalla porta che il launcher le ha dato (catalog.h, D_PORTA_CATALOG) */
+    struct catalog_valori impostazioni;
+    if (catalog_leggi(&impostazioni) == 0) {
+        scrivi_testo("esempio: tema da catalog: ");
+        scrivi_testo(impostazioni.tema);
+        scrivi_testo("\n");
+    }
 
     unsigned int pulsanti_prima = 0;
     struct notizia n;

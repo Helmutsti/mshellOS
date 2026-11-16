@@ -117,6 +117,34 @@ comando della persona: il commento in `messaggi.c` dice come. La usa il launcher
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
 
+### Le porte delle app
+
+Deciso con la persona il 16 novembre 2026 (`APPLICAZIONI.md`, "Come funzionano le chiavi"). Un'app
+non cerca i servizi per nome: quando la fa partire, il launcher le dà una **porta** per ogni
+servizio, cioè un collegamento già aperto, a un descrittore fisso. L'altro capo lo dà al servizio
+dicendo di quale app è. Così il servizio sa chi è l'app dal launcher, non dal kernel (dentro il
+recinto il percorso del programma sarebbe un altro) e non da quello che l'app dice di sé.
+
+| Descrittore | Servizio | Come |
+|---|---|---|
+| 0, 1, 2 | nessuno: ingresso, uscita, errori | `/dev/null` |
+| 3 | compositore | il suo formato: `PORTA_APP` dal launcher, `NUOVO_COLLEGAMENTO` dall'app (`gkit/sistema/protocollo.h`) |
+| 4 | catalog | lo standard: `attach` dal launcher, `connect` dall'app (`corekit/messaggi.h` e `sistema/servizi.h`) |
+
+Per i servizi dello standard:
+1. il launcher crea una coppia di socket, si collega al servizio per nome e manda `request=attach`
+   con `program` (il programma dell'app) e un capo allegato; il servizio accetta `attach` solo dal
+   sistema e risponde `ok`;
+2. l'app, per ogni collegamento, crea una coppia sua e ne manda un capo sulla porta
+   (`request=connect`, senza risposta); il servizio lo tratta come un collegamento normale, che è
+   dell'app della porta. Lo fa la libreria (`collega_servizio`): chi scrive l'app non lo vede;
+3. da lì app e servizio parlano da soli: il launcher fa solo da centralino all'inizio.
+
+I programmi del sistema e i comandi, che non partono dal launcher, si collegano ancora per nome, e
+il servizio chiede al kernel chi sono. Oggi le porte sono due (compositore e catalog); gli altri
+servizi (launcher, network) arriveranno, e quelli che chiedono un permesso daranno la porta solo
+alle app che lo hanno.
+
 ## 4. Domande aperte
 
 - **Comandi distribuiti dalla persona.** Già deciso: i comandi della persona stanno in `/data/users/<uid>/bin`, cercati dopo `/system/bin`. Da decidere: come si distribuiscono (un'app che li dichiara nel manifesto, un pacchetto di soli comandi, o solo copia a mano) e con quali poteri girano. Oggi un comando ha tutti i permessi della persona, come su Linux e Mac: va bene per i propri, è un rischio per quelli di altri.

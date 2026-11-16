@@ -125,6 +125,24 @@ int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta);
  * richiesta che si sa lenta. */
 int chiedi_entro(int d, struct messaggio *richiesta, struct messaggio *risposta, int ms);
 
+/* --- le porte delle app (SISTEMA.md, sezione 3, "Le porte delle app") ---
+ * Un'app fatta partire dal launcher non cerca i servizi per nome: per ognuno ha una PORTA, un
+ * collegamento gia' aperto che trova a un descrittore fisso (il servizio lo dice nel suo
+ * contratto, es. D_PORTA_CATALOG in catalog.h). L'altro capo il launcher l'ha dato al servizio,
+ * dicendo di quale app e'. Per parlare con il servizio l'app non usa la porta direttamente:
+ * per ogni collegamento crea una coppia e ne manda un capo sulla porta (request=connect, con il
+ * capo allegato, senza risposta). Il servizio lo tratta come un collegamento normale, che e'
+ * dell'app della porta: lo sa dal launcher, non dal kernel e non dall'app. */
+#define RICHIESTA_COLLEGA "connect"
+
+/* 1 se 'd' e' una porta data dal sistema: un collegamento il cui altro capo l'ha fatto il
+ * sistema (il kernel lo dice). 0 se no (chiuso, un file, un collegamento di qualcun altro). */
+int e_una_porta(int d);
+
+/* Si collega al servizio 'nome': dalla porta 'porta' se il programma ce l'ha (e_una_porta), se
+ * no per nome (collega, corekit.h), come i programmi del sistema. Il collegamento, o -1. */
+int collega_servizio(const char *nome, int porta);
+
 /* --- il servizio ---
  * Il lato di chi risponde (chi c'e' dall'altra parte, chi_chiede, e se ha il permesso,
  * ha_permesso) lo usano solo i servizi del sistema: e' in sistema/servizi.h. */

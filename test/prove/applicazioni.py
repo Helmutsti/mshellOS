@@ -81,6 +81,11 @@ def esegui(p):
         p.controlla(f"compositore: porta dell'app /system/apps/{app}/code" in seriale,
                     f"il compositore non ha ricevuto la porta di {app}")
     p.controlla("niente porta verso il compositore" not in seriale, "un'app e' partita senza porta")
+    # la porta verso catalog: Esempio chiede il tema, e catalog sa che e' Esempio dalla porta
+    p.controlla("niente porta verso catalog" not in seriale, "un'app e' partita senza la porta verso catalog")
+    p.controlla("catalog: collegamento dalla porta di /system/apps/esempio/code" in seriale,
+                "catalog non ha ricevuto il collegamento di Esempio dalla sua porta")
+    p.controlla("esempio: tema da catalog: light" in seriale, "Esempio non ha avuto il tema da catalog")
 
 
 DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

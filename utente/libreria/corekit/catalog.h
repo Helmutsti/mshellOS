@@ -41,6 +41,13 @@
 
 #define NOME_CATALOG "catalog"
 
+/* LA PORTA (messaggi.h, "le porte delle app"). Un'app fatta partire dal launcher trova la sua
+ * porta verso catalog a questo descrittore; le funzioni qui sotto la usano da sole (se non c'e',
+ * si collegano per nome, come i programmi del sistema). Catalog accetta anche attach dal
+ * sistema (sistema/servizi.h) e connect sulle porte: chi si collega da una porta e' l'app che il
+ * launcher ha detto. */
+#define D_PORTA_CATALOG 4
+
 /* le richieste (il valore di request) */
 #define CATALOG_RICHIESTA_LEGGI   "get"
 #define CATALOG_RICHIESTA_CAMBIA  "set"

@@ -42,6 +42,16 @@ int scrivi(const char *testo, int byte) {
     return byte < 0 ? -1 : (int)write(REGISTRO, testo, (size_t)byte);
 }
 
+void scrivi_riga(const char *chi, const char *a, const char *b) {
+    char riga[512];
+    size_t n = 0;
+    const char *pezzi[] = { chi, ": ", a, b };
+    for (int i = 0; i < 4; i++)
+        for (const char *s = pezzi[i]; s && *s && n < sizeof riga - 1; s++) riga[n++] = *s;
+    riga[n++] = '\n';
+    scrivi(riga, (int)n);
+}
+
 /* --- il tempo --- */
 
 void dormi(unsigned int millisecondi) {

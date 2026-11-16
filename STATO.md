@@ -468,7 +468,18 @@ cambia con `settings.system` (`set`); gira come la persona e il nome glielo pres
 2. le app (UIKit) e la scrivania chiedono tema e sfondo a catalog invece di leggere i file;
    Impostazioni li cambia con catalog;
 3. gli avvisi di catalog al posto del cambio di tema che oggi passa dal compositore.
-Poi il recinto vero nel launcher.
+
+**Le porte di tutti i servizi dal launcher** (16/11/2026, punto 2 dell'elenco della persona):
+il meccanismo per i servizi dello standard (`attach` dal launcher, `connect` dall'app,
+`collega_servizio`; `SISTEMA.md`, sezione 3, "Le porte delle app"). Fatto per catalog: ogni app
+ha la porta al descrittore 4; Esempio chiede il tema all'avvio e catalog sa che è Esempio dalla
+porta (prova `applicazioni`). Restano il launcher (lo Store installa, Files apre) e network, che
+daranno la porta solo a chi ha il permesso. Poi il controllo vero dei permessi, poi il recinto
+vero nel launcher.
+Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
+pezzi si mescolavano con quelle di altri programmi (la prova `store` falliva per questo, quando il
+compositore scrive la porta di un'app); la usano launcher, Store, catalog e compositore. Gli altri
+programmi che scrivono a pezzi (per esempio `avvio`, la prova `avvio`) restano da passare.
 
 **Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
 

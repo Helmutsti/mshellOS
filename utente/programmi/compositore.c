@@ -883,9 +883,7 @@ static void porta_app(int i, const struct porta_app *m, int capo) {
     porte[k].d = capo;
     for (int c = 0; c < MAX_PERCORSO_PROGRAMMA; c++) porte[k].programma[c] = m->programma[c];
     porte[k].programma[MAX_PERCORSO_PROGRAMMA - 1] = 0;
-    scrivi_testo("compositore: porta dell'app ");
-    scrivi_testo(porte[k].programma);
-    scrivi_testo("\n");
+    scrivi_riga("compositore", "porta dell'app ", porte[k].programma);
     scollega(i);
 }
 

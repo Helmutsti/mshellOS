@@ -55,6 +55,12 @@ typedef unsigned long parola;
 
 /* --- i programmi --- */
 
+/* Scrive sul registro una RIGA INTERA, "<chi>: <a><b>" e l'a capo, in una sola scrittura: cosi'
+ * la riga di un altro programma, scritta nello stesso momento, non le finisce in mezzo (come
+ * succede scrivendola a pezzi con scrivi_testo). 'b' puo' essere 0. Una riga piu' lunga di 512
+ * byte si taglia. */
+void scrivi_riga(const char *chi, const char *a, const char *b);
+
 /* Scrive 'byte' byte di 'testo' sul registro del sistema: la console del kernel (la
  * seriale). Quanti byte ha scritto, o -1 (anche se 'byte' e' negativo). */
 int scrivi(const char *testo, int byte);

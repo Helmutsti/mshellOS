@@ -41,16 +41,12 @@
 #include "corekit/sistema/descrizione.h"
 #include "corekit/sistema/pacchetto.h"
 #include "gkit/sistema/protocollo.h"     /* PORTA_APP: la porta dell'app verso il compositore */
+#include "corekit/catalog.h"             /* NOME_CATALOG, D_PORTA_CATALOG: la porta verso catalog */
 
 #define D_ASCOLTO 0      /* prestato da init */
 #define MAX_CLIENTI 8
 
-static void registro(const char *a, const char *b) {
-    scrivi_testo("launcher: ");
-    scrivi_testo(a);
-    scrivi_testo(b);
-    scrivi_testo("\n");
-}
+static void registro(const char *a, const char *b) { scrivi_riga("launcher", a, b); }
 
 /* Finisce con 'ext'? */
 static int finisce_con(const char *s, const char *ext) {
@@ -122,40 +118,59 @@ static void registra_home(const struct descrizione *d) {
     registro(riga, " (da agganciare: il recinto non c'e' ancora)");
 }
 
-/* FAR PARTIRE UN'APP CON LA SUA PORTA (protocollo.h, LA PORTA DELL'APP). Una coppia di socket:
- * un capo al compositore, su un collegamento fatto apposta, con il programma dell'app (cosi' il
- * compositore sa di chi sono le sue finestre senza chiederlo al kernel); l'altro all'app, al
- * descrittore D_PORTA_APP. Poi il launcher li chiude tutti e due: app e compositore parlano da
- * soli. Se il compositore non risponde, l'app parte senza porta (e lo si scrive nel registro).
+/* FAR PARTIRE UN'APP CON LE SUE PORTE (SISTEMA.md, sezione 3, "Le porte delle app"). Per ogni
+ * servizio una coppia di socket: un capo al servizio, con il programma dell'app (cosi' il
+ * servizio sa di chi e' senza chiederlo al kernel), l'altro all'app, a un descrittore fisso:
+ *     3  il compositore (D_PORTA_APP, protocollo.h: il suo formato, PORTA_APP)
+ *     4  catalog (D_PORTA_CATALOG, catalog.h: lo standard dei messaggi, attach)
+ * Poi il launcher chiude i suoi capi: app e servizi parlano da soli. Se un servizio non risponde,
+ * al posto della porta c'e' /dev/null (l'app si collega per nome) e lo si scrive nel registro.
  * I descrittori 0, 1 e 2 (ingresso, uscita, errori: la convenzione di ogni programma) sono
  * /dev/null: se restassero chiusi, il primo file o collegamento che l'app apre finirebbe li', e
  * quello che l'app stampa (Doom stampa molto) ci andrebbe dentro. */
-static int fai_partire_app(const char *programma, const char *argomento) {
+_Static_assert(D_PORTA_APP == 3 && D_PORTA_CATALOG == 4, "le porte delle app: 3 compositore, 4 catalog");
+
+/* La porta verso il compositore (il suo formato): il capo dell'app, o -1. */
+static int porta_compositore(const char *programma) {
     int porta[2];
-    int data = 0;
-    if (coppia(porta) == 0) {
-        int c = collega(NOME_COMPOSITORE);
-        struct porta_app m = { .tipo = PORTA_APP };
-        descrizione_copia(m.programma, programma, sizeof m.programma);
-        data = c >= 0 && manda_foglio(c, &m, sizeof m, porta[1]) >= 0;
-        if (c >= 0) chiudi(c);
-        chiudi(porta[1]);
-        if (!data) chiudi(porta[0]);
-    }
-    if (!data) {
-        registro("niente porta verso il compositore per ", programma);
-        return avvia_come_con(programma, UID_APPLICAZIONI, argomento);
-    }
-    int nulla = apri_nulla();
-    int numero = -1;
-    if (nulla >= 0) {
-        int passati[D_PORTA_APP + 1] = { nulla, nulla, nulla, porta[0] };
-        numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, D_PORTA_APP + 1);
-        chiudi(nulla);
-    } else {
-        registro("non riesco ad aprire /dev/null per ", programma);
-    }
+    if (coppia(porta) < 0) return -1;
+    int c = collega(NOME_COMPOSITORE);
+    struct porta_app m = { .tipo = PORTA_APP };
+    descrizione_copia(m.programma, programma, sizeof m.programma);
+    int data = c >= 0 && manda_foglio(c, &m, sizeof m, porta[1]) >= 0;
+    if (c >= 0) chiudi(c);
+    chiudi(porta[1]);
+    if (data) return porta[0];
     chiudi(porta[0]);
+    return -1;
+}
+
+/* La porta verso un servizio dello standard dei messaggi (attacca_porta): il capo dell'app, o -1. */
+static int porta_servizio(const char *nome, const char *programma) {
+    int porta[2];
+    if (coppia(porta) < 0) return -1;
+    int data = attacca_porta(nome, programma, porta[1]) == 0;
+    chiudi(porta[1]);
+    if (data) return porta[0];
+    chiudi(porta[0]);
+    return -1;
+}
+
+static int fai_partire_app(const char *programma, const char *argomento) {
+    int nulla = apri_nulla();
+    if (nulla < 0) {
+        registro("non riesco ad aprire /dev/null per ", programma);
+        return -1;
+    }
+    int compositore = porta_compositore(programma);
+    int catalog = porta_servizio(NOME_CATALOG, programma);
+    if (compositore < 0) registro("niente porta verso il compositore per ", programma);
+    if (catalog < 0) registro("niente porta verso catalog per ", programma);
+    int passati[] = { nulla, nulla, nulla, compositore >= 0 ? compositore : nulla, catalog >= 0 ? catalog : nulla };
+    int numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, (int)(sizeof passati / sizeof passati[0]));
+    chiudi(nulla);
+    if (compositore >= 0) chiudi(compositore);
+    if (catalog >= 0) chiudi(catalog);
     return numero;
 }
 

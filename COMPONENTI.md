@@ -75,7 +75,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con la porta "launcher" già aperta).
-- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, il cui altro capo manda al compositore con il programma dell'app), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
+- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore e al 4 quella verso catalog, i cui altri capi manda ai servizi con il programma dell'app: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
 - **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
 - **Poteri**: super sì. Permessi controllati con `ha_permesso` (provvisorio, sempre sì): "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati). Per "apps.manage" c'è anche un controllo vero: uid 0, oppure app di sistema con "apps.manage" nel manifesto (`pacchetto_puo_gestire`).
 
@@ -93,7 +93,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Lanciato da**: init (con la porta "catalog" già aperta).
 - **Lancia**: nessuno.
 - **Gira come**: la persona (uid 1000): tocca solo i suoi file, e quelli che scrive sono di lei.
-- **Poteri**: nessuno speciale. `get` e `watch` a tutti; `set` chiede `ha_permesso` per "settings.system" (provvisorio, sempre sì) e in più il controllo vero: uid 0 o app di sistema con "settings.system" nel manifesto (`pacchetto_ha_permesso`). Oggi le app non lo usano ancora: leggono i file da sole.
+- **Poteri**: nessuno speciale. `get` e `watch` a tutti; `set` chiede `ha_permesso` per "settings.system" (provvisorio, sempre sì) e in più il controllo vero: uid 0 o app di sistema con "settings.system" nel manifesto (`pacchetto_ha_permesso`). Riceve dal launcher la porta di ogni app (`attach`, solo da uid 0): chi si collega da una porta è l'app che il launcher ha detto. Oggi le app non lo usano ancora (solo Esempio, per la prova): leggono i file da sole.
 
 ### network (servizio) (`utente/programmi/network.c`)
 - **Cosa fa**: all'avvio mette il firewall, accende la scheda, ottiene l'indirizzo (DHCP o fisso), la strada predefinita e i DNS; resta acceso per rinnovare il prestito. Ha una porta di controllo (stato, riavvia, ferma).

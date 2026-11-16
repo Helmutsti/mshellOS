@@ -286,6 +286,42 @@ int chiedi(int d, struct messaggio *richiesta, struct messaggio *risposta) {
     return chiedi_entro(d, richiesta, risposta, TEMPO_CHIEDI);
 }
 
+/* --- le porte delle app (messaggi.h e sistema/servizi.h) --- */
+
+int e_una_porta(int d) { return d >= 0 && chi(d) == UID_SISTEMA; }
+
+/* Una coppia: un capo va al servizio sulla porta (request=connect), l'altro e' il nostro. */
+static int collega_dalla_porta(int porta) {
+    static struct messaggio m;
+    int c[2];
+    if (coppia(c) < 0) return -1;
+    messaggio_inizia(&m);
+    messaggio_aggiungi(&m, CHIAVE_RICHIESTA, RICHIESTA_COLLEGA);
+    m.allegato = c[1];
+    int fatto = messaggio_manda(porta, &m) == 0;
+    chiudi(c[1]);
+    if (fatto) return c[0];
+    chiudi(c[0]);
+    return -1;
+}
+
+int collega_servizio(const char *nome, int porta) {
+    return e_una_porta(porta) ? collega_dalla_porta(porta) : collega(nome);
+}
+
+int attacca_porta(const char *nome, const char *programma, int capo) {
+    static struct messaggio q, r;
+    int d = collega(nome);
+    if (d < 0) return -1;
+    messaggio_inizia(&q);
+    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, RICHIESTA_ATTACCA);
+    messaggio_aggiungi(&q, CHIAVE_PROGRAMMA, programma);
+    q.allegato = capo;
+    int fatto = chiedi_entro(d, &q, &r, 1000) == 0 && messaggio_vale(&r, CHIAVE_ESITO, ESITO_OK);
+    chiudi(d);
+    return fatto ? 0 : -1;
+}
+
 /* --- il servizio: chi c'e' dall'altra parte --- */
 
 int chi_chiede(int d, struct chi_chiede *c) {

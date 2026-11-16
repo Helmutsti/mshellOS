@@ -32,7 +32,7 @@ static int chiedi_semplice(int d, const char *richiesta, struct messaggio *r) {
 int catalog_leggi(struct catalog_valori *v) {
     static struct messaggio r;
     catalog_predefiniti(v);
-    int d = collega(NOME_CATALOG);
+    int d = collega_servizio(NOME_CATALOG, D_PORTA_CATALOG);
     if (d < 0) return -1;
     int fatto = chiedi_semplice(d, CATALOG_RICHIESTA_LEGGI, &r) == 0 && valori_da(&r, v) == 0;
     chiudi(d);
@@ -42,7 +42,7 @@ int catalog_leggi(struct catalog_valori *v) {
 
 int catalog_cambia(const char *tema, const char *sfondo) {
     static struct messaggio q, r;
-    int d = collega(NOME_CATALOG);
+    int d = collega_servizio(NOME_CATALOG, D_PORTA_CATALOG);
     if (d < 0) return -1;
     messaggio_inizia(&q);
     messaggio_aggiungi(&q, CHIAVE_RICHIESTA, CATALOG_RICHIESTA_CAMBIA);
@@ -63,7 +63,7 @@ int catalog_cambia(const char *tema, const char *sfondo) {
 int catalog_osserva(struct catalog_valori *v) {
     static struct messaggio r;
     catalog_predefiniti(v);
-    int d = collega(NOME_CATALOG);
+    int d = collega_servizio(NOME_CATALOG, D_PORTA_CATALOG);
     if (d < 0) return -1;
     if (chiedi_semplice(d, CATALOG_RICHIESTA_OSSERVA, &r) < 0 || valori_da(&r, v) < 0) {
         chiudi(d);

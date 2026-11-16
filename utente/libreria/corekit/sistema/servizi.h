@@ -22,4 +22,17 @@ int chi_chiede(int d, struct chi_chiede *c);
  * cosa fara' quando sara' vera e' spiegato accanto al codice, in interno/messaggi.c. */
 int ha_permesso(const struct chi_chiede *c, const char *nome);
 
+/* LE PORTE DELLE APP, il lato del sistema (messaggi.h, "le porte delle app"). Il launcher, quando
+ * fa partire un'app, da' a ogni servizio il capo della porta di quell'app: si collega al servizio
+ * per nome e manda request=attach, con program (il programma dell'app, che diventa il suo
+ * chi_chiede: uid UID_APPLICAZIONI e quel programma) e il capo allegato. Il servizio accetta
+ * attach solo dal sistema (uid 0), risponde ok, e da li' tratta ogni request=connect che arriva
+ * sulla porta come un collegamento di quell'app. */
+#define RICHIESTA_ATTACCA "attach"
+#define CHIAVE_PROGRAMMA  "program"
+
+/* (il launcher) Da' al servizio 'nome' il capo 'capo' della porta dell'app 'programma'. 0 se il
+ * servizio ha risposto ok, -1 se no (non risponde entro un secondo, o rifiuta). */
+int attacca_porta(const char *nome, const char *programma, int capo);
+
 #endif

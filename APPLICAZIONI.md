@@ -96,7 +96,9 @@ e la persona ne viene informata.
   ancora per nome e il servizio chiede al kernel chi sono.
 - **Fatto per il compositore** (16 novembre 2026): ogni app parte con la sua porta verso il
   compositore (al descrittore 3; 0, 1 e 2 sono /dev/null), e per ogni finestra apre un collegamento
-  dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"). Gli altri servizi ancora no.
+  dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"). **E per catalog** (stesso
+  giorno): la porta al descrittore 4, con lo standard dei messaggi (`SISTEMA.md`, sezione 3, "Le
+  porte delle app"). Gli altri servizi (launcher, network) ancora no.
 - **Le impostazioni comuni** arrivano dal servizio **catalog** (deciso il 16 novembre 2026): solo
   impostazioni (oggi tema e sfondo), della persona, in lettura per tutte le app; avvisa le app
   aperte quando cambiano; cambiarle chiede `settings.system`. Le preferenze dell'app stanno nel
