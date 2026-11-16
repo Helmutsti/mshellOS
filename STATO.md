@@ -444,8 +444,8 @@ Primo passo fatto il 16/11/2026: la prova `recinto` (`utente/prove/recinto.c`,
 `test/prove/recinto.py`, disco `disco_recinto.img`, solo QEMU) costruisce un recinto a mano
 (namespaces, radice nuova con pivot_root, uid 1000, NO_NEW_PRIVS) e controlla, chiedendo
 direttamente al kernel senza CoreKit, che dentro non si vedano Home, file del sistema, disco,
-launcher, internet e altri programmi, con la controprova fuori. Passa su arm64. Non c'è ancora
-seccomp: dentro si può ancora creare un mondo utente nuovo. Il launcher non usa ancora il recinto.
+launcher, internet e altri programmi, con la controprova fuori. Passa su arm64. Il recinto della prova ha anche
+seccomp (elenco di chiamate vietate, EPERM): dentro non si crea piu' un mondo utente nuovo. Il launcher non usa ancora il recinto.
 Lo stesso giorno la prova aggancia anche le cartelle concesse (APPLICAZIONI.md, "I permessi sulle
 cartelle"): la Home in sola lettura e una sua sottocartella in scrittura; dentro la Home si legge
 e non si scrive, la sottocartella si scrive, e ".." non porta fuori.
