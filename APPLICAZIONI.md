@@ -243,8 +243,9 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
    (da decidere: niente eccezioni sarebbe meglio).
 7. ~~**La rete dentro l'app.**~~ Deciso il 16 novembre 2026 (la persona, come Android e Flatpak):
    con `network.use` l'app vede la rete del computer, senza una rete vuota; il servizio di rete non
-   fa da tramite. Restano le regole del firewall per app (cgroup) e la richiesta di ricevere
-   connessioni da fuori (sezione 7).
+   fa da tramite. Per ora nessuna regola del firewall per singola app: basta il permesso della
+   rete (deciso dalla persona lo stesso giorno). Le regole per app (cgroup) e la richiesta di
+   ricevere connessioni da fuori arriveranno con l'app del ruolo firewall (sezione 7).
 8. **I comandi non sono nel recinto.** Un comando lanciato dalla persona ha tutti i suoi poteri
    (come su Linux e Mac): `curl` usa la rete direttamente. Due modelli diversi convivono; come si
    distribuiscono e con quali poteri girano i comandi degli altri è già una domanda aperta

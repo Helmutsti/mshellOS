@@ -502,7 +502,8 @@ servizio che la mostra.
 **Decisioni per il recinto** (della persona, 16/11/2026):
 - **Attività nel recinto**: vede e ferma i programmi tramite un servizio dei processi, solo con
   un permesso speciale. Quel set di permessi fa da "task manager" (oggi `processes.view` e
-  `processes.stop`) e Attività lo soddisfa.
+  `processes.stop`) e Attività lo soddisfa. Il servizio si chiama **tasks** (deciso dalla persona).
+- **Firewall**: per ora nessuna regola per singola app, basta il permesso della rete.
 - **Il Terminale resta un'app senza recinto**, ancora per un po'.
 - **Un servizio che riparte**: deciso, le porte le tiene init (vedi sotto: fatto).
 Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
