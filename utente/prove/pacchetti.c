@@ -6,6 +6,7 @@
  * l'altra, le cose che domani fara' lo Store con contatore.app (sul Desktop della
  * persona), e scrive nella seriale come va ogni passo. Alla fine "pacchetti: tutto bene",
  * oppure "pacchetti: fallita" con il passo. */
+#include <stdio.h>
 #include "corekit/corekit.h"
 #include "corekit/sistema/launcher.h"
 
@@ -16,26 +17,18 @@ static struct resoconto r;
 static struct elenco_app e;
 static int fallite;
 
-static void scrivi_numero(int n) {
-    char cifre[12];
-    int k = 0;
-    if (n < 0) { scrivi_testo("-"); n = -n; }
-    do cifre[k++] = (char)('0' + n % 10); while (n /= 10);
-    while (k) scrivi(&cifre[--k], 1);
-}
 
 static void passo(const char *cosa, int esito, int atteso) {
-    scrivi_testo("pacchetti: ");
-    scrivi_testo(cosa);
-    scrivi_testo(" -> ");
-    scrivi_numero(esito);
+    /* la riga intera in un buffer, una sola write */
+    char riga[512];
+    int n = snprintf(riga, sizeof riga, "pacchetti: %s -> %d", cosa, esito);
     if (esito != atteso) {
-        scrivi_testo(" (atteso ");
-        scrivi_numero(atteso);
-        scrivi_testo(") FALLITA");
+        n += snprintf(riga + n, sizeof riga - (size_t)n, " (atteso %d) FALLITA", atteso);
         fallite++;
     }
-    scrivi_testo("\n");
+    if (n > (int)sizeof riga - 2) n = (int)sizeof riga - 2;
+    riga[n++] = '\n';
+    scrivi(riga, n);
 }
 
 static int ha_contatore(void) {
@@ -77,9 +70,7 @@ int main(void) {
     passo("apri l'app contatore (installata)", apri_applicazione("contatore") >= 0, 1);
     dormi(1500);    /* che sia partita */
     passo("togli contatore mentre e' accesa", togli_app("contatore", 0, perche, sizeof perche), LAUNCHER_IN_USO);
-    scrivi_testo("pacchetti: messaggio: ");
-    scrivi_testo(perche);
-    scrivi_testo("\n");
+    scrivi_riga("pacchetti", "messaggio: ", perche);
 
     scrivi_testo(fallite ? "pacchetti: fallita\n" : "pacchetti: tutto bene\n");
     return 0;

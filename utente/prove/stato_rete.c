@@ -28,9 +28,7 @@
 static int fallite;
 
 static void passo(const char *cosa, int giusto) {
-    scrivi_testo("stato_rete: ");
-    scrivi_testo(cosa);
-    scrivi_testo(giusto ? " -> si'\n" : " -> no FALLITA\n");
+    scrivi_riga("stato_rete", cosa, giusto ? " -> si'" : " -> no FALLITA");
     if (!giusto) fallite = 1;
 }
 
@@ -110,9 +108,7 @@ static void prova_comando(int accesa) {
     for (char *r = u, *a; *r; r = a ? a + 1 : r + strlen(r)) {
         a = strchr(r, '\n');
         if (a) *a = 0;
-        scrivi_testo("stato_rete: network| ");
-        scrivi_testo(r);
-        scrivi_testo("\n");
+        scrivi_riga("stato_rete", "network| ", r);
         if (a) *a = '\n';
         if (!a) break;
     }

@@ -26,6 +26,7 @@
 #include "corekit/sistema/privilegi.h"    /* avvia_come_con_descrittori: catalog come la persona */
 #include "corekit/catalog.h"              /* NOME_CATALOG */
 #include <fcntl.h>
+#include <stdio.h>
 #include <unistd.h>
 
 /* I SERVIZI: i programmi del sistema che init fa partire e tiene in vita. Eventi riceve
@@ -83,9 +84,7 @@ static void avvia_servizio(struct servizio *s) {
                                   : avvia_come_con_descrittori(s->percorso, s->uid, s->risorse, s->quante);
     s->processo = n < 0 ? -1 : processo(n);
     if (s->processo < 0) {
-        scrivi_testo("init: non riesco ad avviare ");
-        scrivi_testo(s->percorso);
-        scrivi_testo("\n");
+        scrivi_riga("init", "non riesco ad avviare ", s->percorso);
     }
 }
 
@@ -109,9 +108,7 @@ static void avvia_prove(void) {
         for (const char *s = v.nome; *s && n < MAX_PERCORSO - 1; s++) percorso[n++] = *s;
         percorso[n] = 0;
         if (avvia(percorso) < 0) {
-            scrivi_testo("init: non riesco ad avviare ");
-            scrivi_testo(percorso);
-            scrivi_testo("\n");
+            scrivi_riga("init", "non riesco ad avviare ", percorso);
         }
     }
     chiudi(d);
@@ -140,11 +137,11 @@ int main(void) {
         struct servizio *s = &servizi[i];
         if (s->dispositivo && !dispositivo_presente(s->dispositivo)) {
             s->non_qui = 1;
-            scrivi_testo("init: manca ");
-            scrivi_testo(s->dispositivo);
-            scrivi_testo(", non avvio ");
-            scrivi_testo(s->percorso);
-            scrivi_testo("\n");
+            /* quattro pezzi: si compone la riga e si scrive con una sola write */
+            char riga[512];
+            int n = snprintf(riga, sizeof riga, "init: manca %s, non avvio %s\n", s->dispositivo, s->percorso);
+            if (n >= (int)sizeof riga) n = (int)sizeof riga - 1;
+            scrivi(riga, n);
         }
         avvia_servizio(s);
     }
@@ -172,9 +169,7 @@ int main(void) {
             struct servizio *s = &servizi[chi_e[k]];
             chiudi(s->processo);
             s->processo = -1;
-            scrivi_testo("init: ");
-            scrivi_testo(s->percorso);
-            scrivi_testo(" e' finito, lo faccio ripartire\n");
+            scrivi_riga("init", s->percorso, " e' finito, lo faccio ripartire");
             dormi(500);   /* se cade subito ogni volta, almeno non si gira a vuoto */
         }
         for (int i = 0; i < QUANTI_SERVIZI; i++)

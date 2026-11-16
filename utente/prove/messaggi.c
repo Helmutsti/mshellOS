@@ -41,9 +41,7 @@ static int uguali(const char *a, const char *b) {
 }
 
 static void passo(const char *cosa, int giusto) {
-    scrivi_testo("messaggi: ");
-    scrivi_testo(cosa);
-    scrivi_testo(giusto ? " -> si'\n" : " -> no FALLITA\n");
+    scrivi_riga("messaggi", cosa, giusto ? " -> si'" : " -> no FALLITA");
     if (!giusto) fallite++;
 }
 
@@ -149,9 +147,15 @@ static void echo(int d) {
     q.allegato = f;
     passo("chiedi echo", chiedi(d, &q, &r) == 0);
     chiudi(f);
-    scrivi_testo("messaggi: risposta:");
-    for (unsigned int i = 0; i < r.byte; i++) scrivi(r.testo[i] ? &r.testo[i] : " ", 1);
-    scrivi_testo("\n");
+    {
+        /* la riga intera in un buffer (un byte nullo si mostra come spazio), una sola write */
+        char riga[1024];
+        unsigned int n = 0;
+        for (const char *s = "messaggi: risposta:"; *s; s++) riga[n++] = *s;
+        for (unsigned int i = 0; i < r.byte && n < sizeof riga - 2; i++) riga[n++] = r.testo[i] ? r.testo[i] : ' ';
+        riga[n++] = '\n';
+        scrivi(riga, (int)n);
+    }
     passo("result=ok", messaggio_vale(&r, CHIAVE_ESITO, ESITO_OK));
     long id;
     passo("la risposta ha l'id della richiesta (non 999999)",

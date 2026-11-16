@@ -53,22 +53,30 @@ static void di(const char *s) {
     (void)n;
 }
 
-static void numero(unsigned int n) {
-    char c[12];
+/* Una riga del registro va scritta con UNA sola write: se la si scrive a pezzi, il kernel
+ * (EXT4-fs ... mounted) o un altro programma puo' infilarsi in mezzo e la riga si spezza.
+ * Qui si compone la riga in un buffer (fino a sei pezzi, NULL = nessuno) e la si scrive in una volta. */
+static void riga(const char *a, const char *b, const char *c, const char *d, const char *e, const char *f) {
+    char buf[512];
+    size_t n = 0;
+    const char *pezzi[6] = { a, b, c, d, e, f };
+    for (int i = 0; i < 6; i++)
+        for (const char *s = pezzi[i]; s && *s && n < sizeof buf - 1; s++) buf[n++] = *s;
+    buf[n++] = '\n';
+    ssize_t w = write(1, buf, n);
+    (void)w;
+}
+
+/* Scrive le cifre di n in c (almeno 12 caratteri) e dice da dove iniziano. */
+static const char *numero(unsigned int n, char *c) {
     int k = 11;
     c[k] = 0;
     do { c[--k] = (char)('0' + n % 10); n /= 10; } while (n);
-    di(&c[k]);
+    return &c[k];
 }
 
 static void errore(const char *cosa, const char *chi) {
-    di("avvio: non riesco a ");
-    di(cosa);
-    di(" ");
-    di(chi);
-    di(": ");
-    di(strerror(errno));
-    di("\n");
+    riga("avvio: non riesco a ", cosa, " ", chi, ": ", strerror(errno));
 }
 
 static void ferma(void) {
@@ -161,9 +169,8 @@ int main(void) {
 
     /* 2. */
     int caricati = carica_moduli();
-    di("avvio: ");
-    numero((unsigned int)caricati);
-    di(" moduli del kernel caricati\n");
+    char cifre[12];
+    riga("avvio: ", numero((unsigned int)caricati, cifre)," moduli del kernel caricati", NULL, NULL, NULL);
 
     /* 3. */
     char sistema[64], dati[64];
@@ -179,13 +186,9 @@ int main(void) {
     /* 4. "/" in sola lettura (MS_RDONLY): il kernel rifiuta ogni scrittura (EROFS) */
     mkdir("/nuova", 0755);
     if (mount(sistema, "/nuova", "ext4", MS_RDONLY, 0) < 0) { errore("montare", sistema); ferma(); }
-    di("avvio: / montato (ext4 su ");
-    di(sistema);
-    di(", sola lettura)\n");
+    riga("avvio: / montato (ext4 su ", sistema, ", sola lettura)", NULL, NULL, NULL);
     if (mount(dati, "/nuova/data", "ext4", MS_NOSUID | MS_NODEV, 0) < 0) { errore("montare", dati); ferma(); }
-    di("avvio: /data montato (ext4 su ");
-    di(dati);
-    di(")\n");
+    riga("avvio: /data montato (ext4 su ", dati, ")", NULL, NULL, NULL);
     sposta("/dev", "/nuova/dev");
     sposta("/proc", "/nuova/proc");
     sposta("/sys", "/nuova/sys");

@@ -39,9 +39,7 @@ int main(void) {
         if (c < 0) continue;
         char ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &da.sin_addr, ip, sizeof ip);
-        scrivi_testo("firewall: connessione arrivata da ");
-        scrivi_testo(ip);
-        scrivi_testo("\n");
+        scrivi_riga("firewall", "connessione arrivata da ", ip);
         const char riga[] = "mshell: connessione arrivata\n";
         if (write(c, riga, sizeof riga - 1) < 0) { /* il PC se n'e' gia' andato: niente */ }
         close(c);

@@ -23,6 +23,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
@@ -140,13 +141,11 @@ static int scala(const struct dispositivo *p, int asse, int valore) {
 }
 
 static void scrivi_dispositivo(const char *cosa, const char *nome, const char *file) {
-    scrivi_testo("eventi: ");
-    scrivi_testo(cosa);
-    scrivi_testo(" \"");
-    scrivi_testo(nome);
-    scrivi_testo("\" (");
-    scrivi_testo(file);
-    scrivi_testo(")\n");
+    /* cinque pezzi variabili: si compone la riga e si scrive con una sola write */
+    char riga[512];
+    int n = snprintf(riga, sizeof riga, "eventi: %s \"%s\" (%s)\n", cosa, nome, file);
+    if (n >= (int)sizeof riga) n = (int)sizeof riga - 1;
+    scrivi(riga, n);
 }
 
 /* Prova ad aprire /dev/input/<nome>: si tiene solo se e' una tastiera o un puntatore. */

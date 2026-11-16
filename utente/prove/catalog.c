@@ -23,9 +23,7 @@
 static int fallite;
 
 static void passo(const char *cosa, int giusto) {
-    scrivi_testo("prova catalog: ");
-    scrivi_testo(cosa);
-    scrivi_testo(giusto ? " -> si'\n" : " -> no FALLITA\n");
+    scrivi_riga("prova catalog", cosa, giusto ? " -> si'" : " -> no FALLITA");
     if (!giusto) fallite = 1;
 }
 

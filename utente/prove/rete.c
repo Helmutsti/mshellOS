@@ -11,6 +11,7 @@
  *   2. apre una connessione TCP alla porta 80;
  *   3. manda una richiesta HTTP HEAD e scrive la prima riga della risposta.
  * Alla fine "rete: tutto bene", oppure "rete: fallita" con il passo. */
+#include <stdio.h>
 #include "corekit/corekit.h"
 #include <netdb.h>
 #include <string.h>
@@ -22,9 +23,7 @@
 #define NOME "example.com"
 
 static void fallita(const char *perche) {
-    scrivi_testo("rete: fallita, ");
-    scrivi_testo(perche);
-    scrivi_testo("\n");
+    scrivi_riga("rete", "fallita, ", perche);
     for (;;) dormi(60 * 60 * 1000);   /* non finisce: init non lo fa ripartire, ma resta li' */
 }
 
@@ -39,16 +38,12 @@ int main(void) {
         if (e != 0) dormi(2000);
     }
     if (e != 0) {
-        scrivi_testo("rete: " NOME " non si traduce: ");
-        scrivi_testo(gai_strerror(e));
-        scrivi_testo("\n");
+        scrivi_riga("rete", NOME " non si traduce: ", gai_strerror(e));
         fallita("nome");
     }
     char ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &((struct sockaddr_in *)trovati->ai_addr)->sin_addr, ip, sizeof ip);
-    scrivi_testo("rete: " NOME " e' ");
-    scrivi_testo(ip);
-    scrivi_testo("\n");
+    scrivi_riga("rete", NOME " e' ", ip);
 
     int s = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (s < 0 || connect(s, trovati->ai_addr, trovati->ai_addrlen) < 0) fallita("connessione");
@@ -65,9 +60,12 @@ int main(void) {
     char *fine = strstr(risposta, "\r\n");
     if (fine) *fine = 0;
     if (strncmp(risposta, "HTTP/", 5) != 0) fallita("risposta");
-    scrivi_testo("rete: risposta \"");
-    scrivi_testo(risposta);
-    scrivi_testo("\"\n");
+    {
+        char riga[512];
+        int n = snprintf(riga, sizeof riga, "rete: risposta \"%s\"\n", risposta);
+        if (n >= (int)sizeof riga) n = (int)sizeof riga - 1;
+        scrivi(riga, n);
+    }
     scrivi_testo("rete: tutto bene\n");
     for (;;) dormi(60 * 60 * 1000);
 }
