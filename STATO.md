@@ -490,6 +490,15 @@ registro. Il Terminale ora dichiara `system.shell`. La prova `applicazioni` cont
 con Esempio (cambiare il tema, riavviare la rete). Restano: la finestra di domanda del primo avvio, il database dei permessi concessi, la
 pagina dei permessi in Impostazioni. Poi il recinto vero nel launcher.
 
+**La rete nel recinto** (decisione della persona, 16/11/2026, come Android e Flatpak): con
+`network.use` l'app vede la rete del computer, senza una rete vuota; il servizio di rete non fa da
+tramite (APPLICAZIONI.md, sezione 5). Provato nella prova `recinto` (secondo recinto "con la rete").
+
+**La finestra "Apri/Salva"** (decisione della persona, 16/11/2026): la mostra un servizio del
+sistema, fuori dall'app, che consegna solo il file scelto. Disegno fatto e approvato: finestra
+minima in sovraimpressione sopra l'app (`disegni/ApriSalva/`, pagina Figma 289:674). Prossimo: il
+servizio che la mostra.
+
 **Decisioni per il recinto** (della persona, 16/11/2026):
 - **Attività nel recinto**: vede e ferma i programmi tramite un servizio dei processi, solo con
   un permesso speciale. Quel set di permessi fa da "task manager" (oggi `processes.view` e

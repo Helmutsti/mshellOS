@@ -120,9 +120,10 @@ Deciso il 14 novembre 2026.
 - **I muri (il kernel).** Il launcher fa partire ogni app in un recinto fatto con gli
   strumenti di Linux (namespaces, seccomp, cgroups). Dentro l'app vede **solo** la sua cartella
   del pacchetto, la sua cartella dei dati e, in sola lettura, font, icone e sfondi del sistema
-  (`/system/resources`, come l'iPhone). Non vede il disco della persona, la rete, gli altri
-  programmi né gli indirizzi dei servizi.
-- **Le porte (i servizi).** Tutto il resto, anche i file della persona e la rete, si chiede dai
+  (`/system/resources`, come l'iPhone). Non vede il disco della persona, gli altri programmi né
+  gli indirizzi dei servizi. **La rete** (decisione della persona, 16 novembre 2026, come Android
+  e Flatpak): un'app con `network.use` vede la rete del computer; un'app senza vede una rete vuota.
+- **Le porte (i servizi).** Tutto il resto, anche i file della persona, si chiede dai
   canali. Il servizio controlla il permesso e **non fa da tramite per i dati**: apre il file o la
   connessione e la consegna all'app già aperta (Linux passa un file aperto da un programma
   all'altro). Da lì l'app legge, scrive e trasmette alla velocità normale; il costo è un messaggio
@@ -137,9 +138,10 @@ Deciso il 14 novembre 2026.
   2. *il file consegnato con poteri sbagliati o che dura troppo*: il servizio apre sempre con i
      poteri esatti del permesso (solo lettura se il permesso è `files.read`); per la revoca, l'app
      si chiude (sezione "Come si chiedono");
-  3. *la rete*: dentro il recinto l'app non ha nessuna rete sua e usa solo le connessioni che
-     riceve; il firewall riconosce l'app dal suo gruppo (cgroup) e applica le regole per app anche
-     se i dati non passano dal servizio;
+  3. *la rete*: un'app senza `network.use` ha una rete vuota; un'app con il permesso usa la rete
+     del computer, e il firewall la riconosce dal suo gruppo (cgroup) e le applica le regole per
+     app. (Prima era scritto che il servizio di rete apriva le connessioni e le consegnava: la
+     persona ha scelto il 16 novembre 2026 il modo di Android e Flatpak, più semplice);
   4. *il launcher è il pezzo più potente* (recinti, canali, identità): va tenuto piccolo
      e semplice, e solo lui fa questo lavoro;
   5. *un'app che si prende tutte le risorse*: limiti per gruppo su memoria, processore e spazio
@@ -215,7 +217,9 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
    "I permessi sulle cartelle" qui sopra). Il servizio dei file resta per le app senza permesso
    (la finestra "Apri").
 2. **La finestra "Apri"/"Salva" del sistema non esiste.** Senza, un'app senza permessi sui file non
-   può aprire niente.
+   può aprire niente. Deciso il 16 novembre 2026 (la persona): la mostra un **servizio del sistema**,
+   fuori dall'app (come il portale di Flatpak e la finestra "Apri" del Mac), che consegna all'app
+   solo il file scelto; prima si disegna in Figma (`disegni/ApriSalva/`), partendo da Files.
 3. **La finestra di domanda del sistema non esiste** (serve anche al firewall e al primo avvio
    per i permessi).
 4. **Come si trovano i servizi.** Oggi ogni programma si collega da sé agli indirizzi in
@@ -229,9 +233,10 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
    (nel recinto non c'è: serve un servizio dei processi); lo Store scrive in `/data/apps`; il
    Terminale apre una shell come sistema. Vanno rifatte sulle porte, o tenute fuori dal recinto
    (da decidere: niente eccezioni sarebbe meglio).
-7. **La rete dentro l'app.** Senza rete propria l'app non legge i server DNS né apre connessioni:
-   il servizio di rete deve sapere "collegami a questo nome e porta" e consegnare la connessione;
-   per ricevere connessioni da fuori c'è la richiesta al firewall (sezione 7).
+7. ~~**La rete dentro l'app.**~~ Deciso il 16 novembre 2026 (la persona, come Android e Flatpak):
+   con `network.use` l'app vede la rete del computer, senza una rete vuota; il servizio di rete non
+   fa da tramite. Restano le regole del firewall per app (cgroup) e la richiesta di ricevere
+   connessioni da fuori (sezione 7).
 8. **I comandi non sono nel recinto.** Un comando lanciato dalla persona ha tutti i suoi poteri
    (come su Linux e Mac): `curl` usa la rete direttamente. Due modelli diversi convivono; come si
    distribuiscono e con quali poteri girano i comandi degli altri è già una domanda aperta
@@ -333,7 +338,7 @@ quello che tocca le cose della persona o il sistema intero.
 | `files.read` | leggere tutti i file della persona: il launcher aggancia la sua Home nel recinto in sola lettura (sezione 5, "I permessi sulle cartelle"; deciso il 16 novembre 2026) |
 | `files.write` | leggere e modificare tutti i file della persona (comprende `files.read`): il launcher aggancia la sua Home in lettura e scrittura |
 | `notifications` | mandare notifiche |
-| `network.use` | usare la rete e internet (oggi l'app non vede nessuna rete) |
+| `network.use` | usare la rete e internet: nel recinto l'app vede la rete del computer (senza il permesso, una rete vuota); in più la porta verso il servizio di rete, per lo stato |
 | `audio` | riprodurre suoni (quando il sistema avrà l'audio) |
 
 ### Permessi di sistema: poteri sul sistema intero
