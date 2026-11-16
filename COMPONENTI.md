@@ -75,7 +75,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con la porta "launcher" già aperta).
-- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore e al 4 quella verso catalog, i cui altri capi manda ai servizi con il programma dell'app: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
+- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
 - **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
 - **Poteri**: super sì. Permessi controllati con `ha_permesso` (provvisorio, sempre sì): "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati). Per "apps.manage" c'è anche un controllo vero: uid 0, oppure app di sistema con "apps.manage" nel manifesto (`pacchetto_puo_gestire`).
 
@@ -101,7 +101,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`) oggi risponde S
 - **Lanciato da**: init (lo fa ripartire se cade).
 - **Lancia**: nessuno.
 - **Gira come**: sistema (uid 0): servono CAP_NET_ADMIN e CAP_NET_RAW.
-- **Poteri**: super sì. Permessi con `ha_permesso` (provvisorio): "network.use" per lo stato, "network.settings" per riavvia e ferma.
+- **Poteri**: super sì. Permessi con `ha_permesso` (provvisorio): "network.use" per lo stato, "network.settings" per riavvia e ferma. Riceve dal launcher la porta delle app che hanno uno di quei due permessi nel manifesto (`attach`, solo da uid 0): chi si collega da una porta è l'app che il launcher ha detto. Il restart passa le porte al programma rilanciato (argomenti `<descrittore>=<programma>`), così le app non le trovano morte.
 - Legge `/system/config/network/network.conf` e `firewall.conf` (vedi Configurazioni).
 
 ### shell (`utente/programmi/shell.c`)
@@ -226,7 +226,7 @@ Collegate dentro ogni programma (statico): non girano da sole e non hanno uid. O
 
 ## Programmi di prova (`utente/prove/`)
 
-Programmi di prova, solo per i test automatici, non fanno parte del sistema: `argomenti`, `firewall`, `messaggi`, `pacchetti`, `rete`, `riempitivo`, `stato_rete` (messi in `/data/tests`, avviati da init come sistema, uid 0, quando esiste quella cartella) e le app di prova `applicazioni/Contatore` e `applicazioni/Esempio`.
+Programmi di prova, solo per i test automatici, non fanno parte del sistema: `argomenti`, `firewall`, `messaggi`, `pacchetti`, `rete`, `riempitivo`, `stato_rete` (messi in `/data/tests`, avviati da init come sistema, uid 0, quando esiste quella cartella) e le app di prova `applicazioni/Contatore` e `applicazioni/Esempio` (Esempio ha `network.use` nel manifesto: all'avvio chiede il tema a catalog e lo stato a network dalle sue porte, per provarle).
 
 ---
 

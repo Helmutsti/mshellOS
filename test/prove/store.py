@@ -73,6 +73,10 @@ def esegui(p):
     passo(lambda: doppio_clic(m, *PACCHETTO), "store: richiesta di installazione: contatore", "richiesta")
     passo(lambda: m.clic(*INSTALLA), "store: installata contatore", "installata")
     p.controlla("launcher: installata contatore" in m.testo_seriale(), "il launcher non dice 'installata contatore'")
+    # lo Store chiede l'installazione al launcher dalla porta che il launcher stesso gli ha dato
+    # (D_PORTA_LAUNCHER): il launcher sa che e' lo Store senza chiederlo al kernel
+    p.controlla("launcher: collegamento dalla porta di /system/apps/store/code" in m.testo_seriale(),
+                "il launcher non ha ricevuto il collegamento dello Store dalla sua porta")
     passo(lambda: m.clic(*APRI), "store: apro contatore", "contatore_aperta")
     time.sleep(2)                                    # che Contatore abbia la sua finestra
     passo(lambda: m.clic(*CHIUDI_CONTATORE), None, "contatore_chiusa")

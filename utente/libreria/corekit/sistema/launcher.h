@@ -139,6 +139,11 @@
 
 #define NOME_LAUNCHER "launcher"
 
+/* LA PORTA (messaggi.h, "le porte delle app"). Un'app fatta partire dal launcher trova la porta
+ * verso il launcher a questo descrittore; le funzioni qui sotto la usano da sole (se non c'e', si
+ * collegano per nome). Il capo del servizio lo tiene il launcher stesso. */
+#define D_PORTA_LAUNCHER 5
+
 /* le richieste (il valore di request) */
 #define APRI_APPLICAZIONE  "open_app"
 #define APRI_FILE          "open_file"

@@ -98,7 +98,8 @@ e la persona ne viene informata.
   compositore (al descrittore 3; 0, 1 e 2 sono /dev/null), e per ogni finestra apre un collegamento
   dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"). **E per catalog** (stesso
   giorno): la porta al descrittore 4, con lo standard dei messaggi (`SISTEMA.md`, sezione 3, "Le
-  porte delle app"). Gli altri servizi (launcher, network) ancora no.
+  porte delle app"). **E per launcher e network**: la porta al 5 (verso il launcher, a tutte le app)
+  e al 6 (verso la rete, solo con `network.use` o `network.settings` nel manifesto).
 - **Le impostazioni comuni** arrivano dal servizio **catalog** (deciso il 16 novembre 2026): solo
   impostazioni (oggi tema e sfondo), della persona, in lettura per tutte le app; avvisa le app
   aperte quando cambiano; cambiarle chiede `settings.system`. Le preferenze dell'app stanno nel

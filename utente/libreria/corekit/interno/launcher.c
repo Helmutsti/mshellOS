@@ -36,7 +36,7 @@ static int esito_di(const struct messaggio *r) {
 }
 
 int launcher_chiedi(struct messaggio *richiesta, struct messaggio *risposta, int ms) {
-    int d = collega(NOME_LAUNCHER);
+    int d = collega_servizio(NOME_LAUNCHER, D_PORTA_LAUNCHER);
     int e = d >= 0 ? chiedi_entro(d, richiesta, risposta, ms) : -1;
     if (d >= 0) chiudi(d);
     if (e == -1) {

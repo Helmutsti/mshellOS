@@ -17,6 +17,7 @@
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
 #include "corekit/catalog.h"
+#include "corekit/sistema/network.h"   /* rete_stato: la porta verso la rete (D_PORTA_NETWORK) */
 
 #define LARGHEZZA 320
 #define ALTEZZA   220
@@ -81,6 +82,11 @@ int main(void) {
         scrivi_testo(impostazioni.tema);
         scrivi_testo("\n");
     }
+
+    /* la rete, dalla porta che il launcher le ha dato solo perche' il manifesto ha network.use
+     * (network.h, D_PORTA_NETWORK): se il servizio risponde, una riga sola nel registro */
+    struct stato_rete rete;
+    if (rete_stato(&rete) == RETE_FATTO) scrivi_riga("esempio", "rete risponde", 0);
 
     unsigned int pulsanti_prima = 0;
     struct notizia n;
