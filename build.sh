@@ -64,6 +64,7 @@
 #                      (vedi in fondo)
 #       disco_messaggi.img  per la prova dei messaggi tra servizi: il programma messaggi
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
+#       disco_recinto.img     per la prova del recinto delle app (programma recinto)
 #   build/scarico/     i pacchetti di Alpine e i sorgenti di curl scaricati, tenuti per la
 #                      prossima volta
 #
@@ -726,12 +727,23 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_stato_rete.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_stato_rete.img pronto: con il programma stato_rete in /data/tests"
 
+# IL DISCO DELLA PROVA DEL RECINTO: lo stesso, con in /data/tests solo il programma recinto
+# (utente/prove/recinto.c), che prova che un programma chiuso in un recinto (namespaces di
+# Linux, radice nuova, uid 1000) non vede disco, internet, servizi e altri programmi. Serve la
+# scheda di rete per la controprova (RETE = True in test/prove/recinto.py).
+cp "$B/disco_app.img" "$B/disco_recinto.img"
+rm -f "$(vero /data/tests)"/stato_rete
+metti_file "$P/bin/prove/recinto" "/data/tests/recinto" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_recinto.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_recinto.img pronto: con il programma recinto in /data/tests"
+
 # IL DISCO DELLA PROVA DELLA SHELL: come disco_app.img, con in piu' il programma argomenti
 # (utente/prove/argomenti.c) tra i comandi del sistema, in /data/users/0/bin (dove la shell
 # cerca i comandi di uid 0, dopo /system/bin). Non in /data/tests: non deve partire da solo.
 # La prova si fa a mano sulla seriale, in QEMU, come spiegato in argomenti.c.
 cp "$B/disco_app.img" "$B/disco_shell.img"
-rm -f "$(vero /data/tests)"/stato_rete
+rm -f "$(vero /data/tests)"/recinto
 rmdir "$(vero /data/tests)"
 metti_cartella /data/users/0 0 700 >/dev/null
 metti_file "$P/bin/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null

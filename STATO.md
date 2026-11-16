@@ -408,6 +408,9 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 
 ## 8. Da confermare (domande che aspettano la persona)
 
+**16/11/2026, decisione della persona: tutte le domande di questa sezione sono chiuse come
+"ok", così come sono oggi nel codice e nel disegno.**
+
 1. ~~**Il pezzo grigio "Altro" nel Disco di Attività**~~: tolto (15/11/2026, deciso dalla persona).
 2. ~~**Nomi in minuscolo**~~ di cartelle delle app e processi: vanno bene (deciso dalla persona).
 3. ~~**Servizi come file singoli**~~: ogni servizio ha la sua cartella anche in
@@ -428,6 +431,25 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
    il codice) o i simboli monocromatici (come il disegno).
 
 ## 9. Da fare
+
+**16/11/2026, decisione della persona: tutto quello che è elencato qui sotto e nella sezione 12
+è segnato come ok. Le uniche cose ancora da fare sono la sicurezza, i permessi e il recinto
+delle app:**
+- il controllo vero dei permessi (oggi risponde sempre sì);
+- la shell come sistema che il launcher apre a chiunque la chieda;
+- i poteri con cui partono le app (oggi tutte con lo stesso uid della persona);
+- il recinto delle app (APPLICAZIONI.md, sezione 5).
+
+Primo passo fatto il 16/11/2026: la prova `recinto` (`utente/prove/recinto.c`,
+`test/prove/recinto.py`, disco `disco_recinto.img`, solo QEMU) costruisce un recinto a mano
+(namespaces, radice nuova con pivot_root, uid 1000, NO_NEW_PRIVS) e controlla, chiedendo
+direttamente al kernel senza CoreKit, che dentro non si vedano Home, file del sistema, disco,
+launcher, internet e altri programmi, con la controprova fuori. Passa su arm64. Non c'è ancora
+seccomp: dentro si può ancora creare un mondo utente nuovo. Il launcher non usa ancora il recinto.
+
+**Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
+
+Il resto dell'elenco resta qui solo come memoria.
 
 Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
 persona sono nella sezione 8.
