@@ -56,7 +56,7 @@ int finestra_schermo(int *larghezza, int *altezza) {
  * finestra_apri_pannello. */
 static int finestra_apri_superficie(struct finestra *f, int larghezza, int altezza, const char *titolo,
                                     unsigned int ruolo, unsigned int pannello, int x, int y,
-                                    unsigned int raggio) {
+                                    unsigned int raggio, const char *sopra) {
     f->collegamento = collega_compositore();
     if (f->collegamento < 0) return -1;
 
@@ -77,18 +77,25 @@ static int finestra_apri_superficie(struct finestra *f, int larghezza, int altez
                                  .ruolo = ruolo, .x = x, .y = y, .raggio = raggio,
                                  .pannello = pannello };
     for (int i = 0; i < MAX_TITOLO - 1 && titolo[i]; i++) m.titolo[i] = titolo[i];
+    for (int i = 0; sopra && i < MAX_PERCORSO_PROGRAMMA - 1 && sopra[i]; i++) m.sopra[i] = sopra[i];
     return manda_foglio(f->collegamento, &m, sizeof m, f->foglio) < 0 ? -1 : 0;
 }
 
 int finestra_apri_come(struct finestra *f, int larghezza, int altezza, const char *titolo,
                        unsigned int ruolo, int x, int y, unsigned int raggio) {
-    return finestra_apri_superficie(f, larghezza, altezza, titolo, ruolo, PANNELLO_BARRA, x, y, raggio);
+    return finestra_apri_superficie(f, larghezza, altezza, titolo, ruolo, PANNELLO_BARRA, x, y, raggio, 0);
+}
+
+int finestra_apri_scelta(struct finestra *f, int larghezza, int altezza, const char *titolo,
+                         const char *sopra, unsigned int raggio) {
+    return finestra_apri_superficie(f, larghezza, altezza, titolo, RUOLO_SCELTA, PANNELLO_BARRA, 0, 0,
+                                    raggio, sopra);
 }
 
 int finestra_apri_pannello(struct finestra *f, int larghezza, int altezza, const char *titolo,
                            unsigned int pannello, int x, int y, unsigned int raggio) {
     return finestra_apri_superficie(f, larghezza, altezza, titolo, RUOLO_PANNELLO, pannello, x, y,
-                                    raggio);
+                                    raggio, 0);
 }
 
 void finestra_chiudi(struct finestra *f) {

@@ -88,7 +88,7 @@ PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
 # i dischi delle prove di build.sh, e cosa vuol dire per la sandbox (avvio_sandbox.c)
 DISCHI = {"disco.img": "nessuna", "disco_app.img": "nessuna", "disco_prove.img": "riempitivi", "disco_pacchetti.img": "pacchetti",
-          "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog"}
+          "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog", "disco_scelta.img": "scelta"}
 
 # I codici dei tasti di Linux (KEY_*, linux/input-event-codes.h) per i nomi dei tasti di
 # QEMU (i "qcode" che usano le prove: "a", "ret", "shift"...).

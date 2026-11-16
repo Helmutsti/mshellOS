@@ -47,6 +47,20 @@
  * Le racconta anche quale finestra ha il fuoco (FINESTRA_ATTIVA), e un pannello puo'
  * chiedere di riportarne una davanti (PORTA_DAVANTI), anche se era stata ridotta.
  *
+ * LA FINESTRA DI SCELTA (RUOLO_SCELTA, "Apri/Salva"). Il servizio picker mostra la scelta di un
+ * file SOPRA l'app che l'ha chiesta, in sovraimpressione: nel messaggio dice il programma
+ * dell'app ('sopra'). Il compositore accetta questo ruolo solo dal collegamento per nome il
+ * cui programma (lo dice il kernel) e' /system/services/picker/picker; da chiunque altro scollega.
+ *   - sta centrata sopra la finestra dell'app 'sopra' piu' in primo piano (o al centro dello
+ *     schermo se l'app non ne ha), in uno strato proprio: sopra tutte le finestre normali (e'
+ *     sempre davanti, anche se ci si clicca) e sotto i pannelli della scrivania. Non e'
+ *     annunciata alla scrivania (non e' un'app in piu') e prende il fuoco quando compare;
+ *   - finche' e' aperta, ogni finestra dell'app 'sopra' e' velata (il velo lo disegna il
+ *     compositore, con SUPERFICIE_VELO di UIKit, sulla forma della finestra) e non riceve ne'
+ *     puntatore, ne' rotella, ne' tasti: un clic su una finestra velata porta davanti la
+ *     scelta e le da' il fuoco;
+ *   - quando si scollega, il velo sparisce e il fuoco torna alla finestra dell'app.
+ *
  * IL "RIDUCI". Un'applicazione chiede RIDUCIMI (il pulsante nella sua barra): il
  * compositore nasconde la finestra, che non si vede e non sente il puntatore finche'
  * la scrivania non la fa tornare con PORTA_DAVANTI.
@@ -116,6 +130,8 @@
 /* I ruoli speciali (RUOLO_FINESTRA, la finestra normale, e' in gkit.h) */
 #define RUOLO_SFONDO    1   /* sotto tutto (solo il sistema) */
 #define RUOLO_PANNELLO  2   /* sopra tutte le finestre (solo il sistema) */
+#define RUOLO_SCELTA    3   /* una finestra di scelta del sistema sopra le finestre dell'app
+                             * 'sopra' (solo il servizio picker: /system/services/picker/picker) */
 #define PANNELLO_BARRA  0   /* (solo un PANNELLO) una barra, sempre li' */
 #define PANNELLO_SOPRA  1   /* (solo un PANNELLO) si apre sopra il resto, come un menu */
 
@@ -128,6 +144,8 @@ struct voglio_finestra {
     unsigned int raggio;               /* gli angoli arrotondati: li usa il compositore per
                                         * l'ombra e il vetro smerigliato sotto */
     unsigned int pannello;             /* PANNELLO_...: solo per un PANNELLO */
+    char sopra[MAX_PERCORSO_PROGRAMMA];   /* solo per RUOLO_SCELTA: il programma dell'app che ha
+                                        * chiesto la scelta (/system/apps/<id>/code) */
 };
 
 struct chiedi_schermo {

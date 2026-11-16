@@ -72,6 +72,12 @@ void barra_congelata_disegna(struct pennello *p, int x, int y, int l, int a, con
     contorna_forma(p, &tutta, 256);
 }
 
+void velo_finestra_disegna(struct pennello *p, int x, int y, int l, int a, int raggio) {
+    struct tondo velo = tondo(x, y, l, a, raggio);
+    pennello_colore(p, SUPERFICIE_VELO);
+    riempi_forma(p, &velo);
+}
+
 const struct strato_ombra *ombra_finestra(int *quanti) {
     *quanti = OMBRA_N(finestra);
     return OMBRA_TAB(finestra);

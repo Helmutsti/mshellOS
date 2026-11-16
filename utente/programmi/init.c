@@ -85,6 +85,8 @@ static struct servizio servizi[] = {
     { "/system/services/compositore/compositore", risorse_compositore, 3, -1 },
     { "/system/services/launcher/launcher", risorse_launcher, 2, -1, 0, 0, UID_SISTEMA, 1 },
     { "/system/services/scrivania/scrivania", 0, 0, -1 },
+    /* il servizio della finestra "Apri/Salva", come la persona (per ora provvisorio: picker.c) */
+    { "/system/services/picker/picker", 0, 0, -1, 0, 0, UID_APPLICAZIONI },
     /* la rete. Se la sua scheda non c'e', non e' init a saperlo (la scheda e' scritta
      * nella configurazione della rete): il servizio lo dice e aspetta, senza finire */
     { "/system/services/network/network", risorse_network, 1, -1, 0, 0, UID_SISTEMA, 1 },

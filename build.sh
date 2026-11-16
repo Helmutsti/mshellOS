@@ -67,6 +67,7 @@
 #       disco_custode.img   per la prova delle porte delle app custodite da init (programma custode)
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #       disco_recinto.img     per la prova del recinto delle app (programma recinto)
+#       disco_scelta.img      per la prova della finestra di scelta (cartella /data/tests/scelta)
 #   build/scarico/     i pacchetti di Alpine e i sorgenti di curl scaricati, tenuti per la
 #                      prossima volta
 #
@@ -761,12 +762,23 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_recinto.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_recinto.img pronto: con il programma recinto in /data/tests"
 
+# IL DISCO DELLA PROVA DELLA FINESTRA DI SCELTA: come disco_app.img, con in piu' la cartella
+# /data/tests/scelta (init la salta: non e' un programma). La cerca il picker provvisorio
+# (utente/programmi/picker.c): se c'e', apre ogni tanto una finestra di scelta sopra Esempio;
+# senza, non fa niente. Lo usa test/prove/scelta.py.
+cp "$B/disco_app.img" "$B/disco_scelta.img"
+rm -f "$(vero /data/tests)"/recinto
+metti_cartella /data/tests/scelta 0 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_scelta.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_scelta.img pronto: con la cartella scelta in /data/tests"
+
 # IL DISCO DELLA PROVA DELLA SHELL: come disco_app.img, con in piu' il programma argomenti
 # (utente/prove/argomenti.c) tra i comandi del sistema, in /data/users/0/bin (dove la shell
 # cerca i comandi di uid 0, dopo /system/bin). Non in /data/tests: non deve partire da solo.
 # La prova si fa a mano sulla seriale, in QEMU, come spiegato in argomenti.c.
 cp "$B/disco_app.img" "$B/disco_shell.img"
-rm -f "$(vero /data/tests)"/recinto
+rmdir "$(vero /data/tests)"/scelta
 rmdir "$(vero /data/tests)"
 metti_cartella /data/users/0 0 700 >/dev/null
 metti_file "$P/bin/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null

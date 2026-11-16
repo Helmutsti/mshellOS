@@ -195,6 +195,13 @@ int finestra_apri(struct finestra *f, int larghezza, int altezza, const char *ti
 int finestra_apri_come(struct finestra *f, int larghezza, int altezza, const char *titolo,
                        unsigned int ruolo, int x, int y, unsigned int raggio);
 
+/* Solo per il servizio picker (sistema/protocollo.h, LA FINESTRA DI SCELTA): come
+ * finestra_apri_come con RUOLO_SCELTA. 'sopra' e' il programma dell'app a cui si mette sopra
+ * (/system/apps/<id>/code); il posto lo sceglie il compositore. Da chiunque altro il
+ * compositore chiude il collegamento. */
+int finestra_apri_scelta(struct finestra *f, int larghezza, int altezza, const char *titolo,
+                         const char *sopra, unsigned int raggio);
+
 /* Chiude la finestra: il compositore la toglie dallo schermo (se ne accorge dal collegamento
  * chiuso) e la sua memoria si restituisce. Per riaverla si riapre. */
 void finestra_chiudi(struct finestra *f);
