@@ -130,6 +130,8 @@ recinto il percorso del programma sarebbe un altro) e non da quello che l'app di
 | 0, 1, 2 | nessuno: ingresso, uscita, errori | `/dev/null` |
 | 3 | compositore | il suo formato: `PORTA_APP` dal launcher, `NUOVO_COLLEGAMENTO` dall'app (`gkit/sistema/protocollo.h`) |
 | 4 | catalog | lo standard: `attach` dal launcher, `connect` dall'app (`corekit/messaggi.h` e `sistema/servizi.h`) |
+| 5 | launcher | lo standard, ma senza `attach`: il launcher crea la coppia e tiene lui il capo del servizio, con il programma dell'app. A tutte le app |
+| 6 | network | lo standard (`attach` dal launcher, `connect` dall'app). Solo alle app con `network.use` o `network.settings` nel manifesto; alle altre `/dev/null` |
 
 Per i servizi dello standard:
 1. il launcher crea una coppia di socket, si collega al servizio per nome e manda `request=attach`
@@ -141,9 +143,10 @@ Per i servizi dello standard:
 3. da lì app e servizio parlano da soli: il launcher fa solo da centralino all'inizio.
 
 I programmi del sistema e i comandi, che non partono dal launcher, si collegano ancora per nome, e
-il servizio chiede al kernel chi sono. Oggi le porte sono due (compositore e catalog); gli altri
-servizi (launcher, network) arriveranno, e quelli che chiedono un permesso daranno la porta solo
-alle app che lo hanno.
+il servizio chiede al kernel chi sono. Oggi le porte sono quattro (compositore, catalog, launcher e
+network): i servizi che chiedono un permesso (network) danno la porta solo alle app che lo hanno
+nel manifesto. Per ogni app che fa partire, il launcher scrive nel registro una riga con le porte
+date (`launcher: esempio: porte compositore catalog launcher network`).
 
 ## 4. Domande aperte
 

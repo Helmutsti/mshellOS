@@ -95,6 +95,13 @@
  * protetto) e da li' non torna piu' al lavoro di prima: resta a servire la porta, in attesa
  * di un restart. Cosi' chi lo ferma non deve "srotolare" l'attesa in cui si trova.
  *
+ * LE PORTE DELLE APP (messaggi.h, "le porte delle app"). Un'app con network.use o network.settings
+ * nel manifesto riceve dal launcher una porta verso la rete: il launcher ne da' il capo qui
+ * (request=attach, accettato solo dal sistema, con il programma dell'app) e ogni connect che
+ * arriva su quella porta e' un collegamento di quell'app (uid UID_APPLICAZIONI e quel programma),
+ * senza chiederlo al kernel. Un restart rilancia il programma: le porte restano aperte e si
+ * passano negli argomenti ("<descrittore>=<programma>"), cosi' le app non le trovano morte.
+ *
  * Scrive nel registro righe brevi, come gli altri servizi, per esempio:
  *   network: firewall attivo (ingresso bloccato, uscita libera, inoltro bloccato, ping ammesso)
  *   network: eth0 10.0.2.15/24, gateway 10.0.2.2, dns 10.0.2.3 */
@@ -1167,8 +1174,43 @@ static void stato(struct messaggio *r, const struct messaggio *q) {
  * il collegamento con chi chiede morirebbe senza risposta). */
 enum azione { NIENTE, RIAVVIA, FERMA };
 
-/* Una richiesta e la sua risposta, sul collegamento 'd'. */
-static enum azione rispondi(int d) {
+/* LE PORTE DELLE APP (messaggi.h e sistema/servizi.h, "le porte delle app"): il capo che il
+ * launcher ci ha dato con attach, e chi e' l'app (dal launcher). Ogni connect sulla porta diventa
+ * un cliente con quell'identita'. Una porta si chiude quando l'app la chiude (o finisce). */
+#define MAX_PORTE 32
+static struct {
+    int d;                  /* -1: posto libero */
+    int usata;              /* e' gia' arrivato un connect (per scriverlo nel registro una volta) */
+    struct chi_chiede chi;
+} porte[MAX_PORTE];
+
+/* attach dal collegamento di chi e' 'c': solo dal sistema (il launcher), con il capo allegato e
+ * il programma dell'app. Il capo allegato passa alla porta, o si chiude. */
+static void attacca(const struct chi_chiede *c, struct messaggio *q, struct messaggio *r) {
+    const char *programma = messaggio_valore(q, CHIAVE_PROGRAMMA);
+    int capo = q->allegato;
+    q->allegato = -1;
+    int p = 0;
+    while (p < MAX_PORTE && porte[p].d >= 0) p++;
+    if (c->uid != UID_SISTEMA) {
+        messaggio_risposta(r, q, ESITO_NEGATO);
+    } else if (capo < 0 || !programma || !programma[0] || strlen(programma) >= MAX_PERCORSO_PROGRAMMA ||
+               p == MAX_PORTE) {
+        messaggio_risposta(r, q, ESITO_NON_VALIDO);
+    } else {
+        porte[p].d = capo;
+        porte[p].usata = 0;
+        porte[p].chi.uid = UID_APPLICAZIONI;
+        strcpy(porte[p].chi.programma, programma);
+        capo = -1;
+        messaggio_risposta(r, q, ESITO_OK);
+    }
+    if (capo >= 0) chiudi(capo);
+}
+
+/* Una richiesta e la sua risposta, sul collegamento 'd'. 'dalla_porta': chi e', se il
+ * collegamento e' arrivato da una porta (lo dice il launcher); 0 se lo dice il kernel. */
+static enum azione rispondi(int d, const struct chi_chiede *dalla_porta) {
     struct messaggio q, r;
     enum azione dopo = NIENTE;
     int e = messaggio_ricevi(d, &q);
@@ -1177,13 +1219,17 @@ static enum azione rispondi(int d) {
         messaggio_risposta(&r, 0, ESITO_NON_VALIDO);
     } else {
         struct chi_chiede c;
-        if (chi_chiede(d, &c) < 0) {   /* il kernel non lo sa: nessuno */
+        if (dalla_porta) {             /* da una porta: lo sa il launcher, non il kernel */
+            c = *dalla_porta;
+        } else if (chi_chiede(d, &c) < 0) {   /* il kernel non lo sa: nessuno */
             c.uid = -1;
             c.programma[0] = 0;
         }
         const char *richiesta = messaggio_valore(&q, CHIAVE_RICHIESTA);
         if (!richiesta) richiesta = "";
-        if (!strcmp(richiesta, RETE_RICHIESTA_STATO)) {
+        if (!strcmp(richiesta, RICHIESTA_ATTACCA)) {
+            attacca(&c, &q, &r);
+        } else if (!strcmp(richiesta, RETE_RICHIESTA_STATO)) {
             if (ha_permesso(&c, PERMESSO_RETE_USARE)) stato(&r, &q);
             else messaggio_risposta(&r, &q, ESITO_NEGATO);
         } else if (!strcmp(richiesta, RETE_RICHIESTA_RIAVVIA) || !strcmp(richiesta, RETE_RICHIESTA_FERMA)) {
@@ -1210,11 +1256,42 @@ static enum azione rispondi(int d) {
 static void riavvia(void) {
     di("riavvio richiesto, rileggo la configurazione");
     if (ha_indirizzo) togli_indirizzo(&attuale);
-    char *argomenti[] = { (char *)SERVIZIO, 0 };
+    /* Le porte delle app devono sopravvivere: il loro capo sta qui, e se si chiudesse le app
+     * resterebbero con una porta morta. Si lasciano aperte nel nuovo programma (senza
+     * CLOEXEC, allo stesso numero) e gli argomenti dicono quali sono e di chi: "<numero>=<programma>"
+     * (leggi_porte_ereditate). */
+    static char testi[MAX_PORTE][16 + MAX_PERCORSO_PROGRAMMA];
+    char *argomenti[MAX_PORTE + 2];
+    int n = 0, nelle_porte[MAX_PORTE];
+    argomenti[n++] = (char *)SERVIZIO;
+    for (int p = 0; p < MAX_PORTE; p++) {
+        if (porte[p].d < 0) continue;
+        snprintf(testi[p], sizeof testi[p], "%d=%s", porte[p].d, porte[p].chi.programma);
+        argomenti[n] = testi[p];
+        nelle_porte[n++ - 1] = p;
+        fcntl(porte[p].d, F_SETFD, 0);
+    }
+    argomenti[n] = 0;
     execv(SERVIZIO, argomenti);
+    for (int i = 0; i < n - 1; i++) fcntl(porte[nelle_porte[i]].d, F_SETFD, FD_CLOEXEC);
     metti("network: non riesco a rilanciarmi: ");
     metti(strerror(errno));
     fine_riga();
+}
+
+/* Dopo un restart: le porte che il programma di prima ha lasciato aperte, negli argomenti
+ * ("<numero>=<programma>", vedi riavvia). Senza argomenti (avvio normale) non c'e' niente. */
+static void leggi_porte_ereditate(int argc, char **argv) {
+    for (int i = 1; i < argc && i <= MAX_PORTE; i++) {
+        char *uguale = strchr(argv[i], '=');
+        int d = atoi(argv[i]);
+        if (!uguale || d <= 2 || !uguale[1] || strlen(uguale + 1) >= MAX_PERCORSO_PROGRAMMA) continue;
+        porte[i - 1].d = d;
+        porte[i - 1].usata = 1;       /* il collegamento l'ha gia' scritto il programma di prima */
+        porte[i - 1].chi.uid = UID_APPLICAZIONI;
+        strcpy(porte[i - 1].chi.programma, uguale + 1);
+        fcntl(d, F_SETFD, FD_CLOEXEC);
+    }
 }
 
 /* stop: indirizzo e DNS via, scheda giu'; il firewall resta (vedi network.h). Il servizio
@@ -1229,19 +1306,42 @@ static void __attribute__((noreturn)) ferma(void) {
     resta_fermo();
 }
 
+/* Un messaggio sulla porta p: un connect con il capo allegato da' il collegamento nuovo (chi c'e'
+ * lo dice il launcher, porte[p].chi); l'app chiusa o un messaggio sbagliato chiudono la porta.
+ * Ritorna il collegamento nuovo, o -1. */
+static int da_porta(int p) {
+    static struct messaggio m;
+    int n = messaggio_ricevi(porte[p].d, &m);
+    if (n == 1 && m.allegato >= 0 && messaggio_vale(&m, CHIAVE_RICHIESTA, RICHIESTA_COLLEGA)) {
+        if (!porte[p].usata) scrivi_riga("network", "collegamento dalla porta di ", porte[p].chi.programma);
+        porte[p].usata = 1;
+        return m.allegato;
+    }
+    if (n == 1 && m.allegato >= 0) chiudi(m.allegato);
+    chiudi(porte[p].d);
+    porte[p].d = -1;
+    return -1;
+}
+
 static int servi(long long fino, int fd) {
     static int clienti[MAX_CLIENTI];
+    static int da_porta_di[MAX_CLIENTI];   /* -1: chi e' lo dice il kernel; altrimenti il numero della porta */
+    static struct chi_chiede identita[MAX_CLIENTI];   /* per i collegamenti dalle porte, copiata alla nascita */
     static int quanti;
     for (;;) {
         long long resta = fino - adesso();
         if (resta <= 0) return 0;
-        struct da_guardare g[2 + MAX_CLIENTI];
+        struct da_guardare g[2 + MAX_CLIENTI + MAX_PORTE];
+        int numero_porta[MAX_PORTE];
         int n = 0;
         int i_fd = -1, i_porta = -1;
         if (fd >= 0) { i_fd = n; g[n++].descrittore = fd; }
         if (porta >= 0) { i_porta = n; g[n++].descrittore = porta; }
         int primo_cliente = n;
         for (int i = 0; i < quanti; i++) g[n++].descrittore = clienti[i];
+        int prima_porta = n;
+        for (int p = 0; p < MAX_PORTE; p++)
+            if (porte[p].d >= 0) { numero_porta[n - prima_porta] = p; g[n++].descrittore = porte[p].d; }
         int ms = resta > 60 * 60 * 1000 ? 60 * 60 * 1000 : (int)resta;
         if (aspetta(g, n, ms) <= 0) continue;
 
@@ -1249,14 +1349,32 @@ static int servi(long long fino, int fd) {
         enum azione dopo = NIENTE;
         for (int i = quanti - 1; i >= 0; i--) {
             if (!g[primo_cliente + i].pronto) continue;
-            enum azione a = rispondi(clienti[i]);
+            enum azione a = rispondi(clienti[i], da_porta_di[i] >= 0 ? &identita[i] : 0);
             if (a != NIENTE) dopo = a;
             chiudi(clienti[i]);
-            clienti[i] = clienti[--quanti];
+            quanti--;
+            clienti[i] = clienti[quanti];
+            da_porta_di[i] = da_porta_di[quanti];
+            identita[i] = identita[quanti];
+        }
+        /* i collegamenti arrivati dalle porte: un cliente con l'identita' dell'app */
+        for (int k = prima_porta; k < n; k++) {
+            int p = numero_porta[k - prima_porta];
+            if (!g[k].pronto || porte[p].d != g[k].descrittore) continue;
+            int d = da_porta(p);
+            if (d < 0) continue;
+            if (quanti < MAX_CLIENTI) {
+                clienti[quanti] = d;
+                da_porta_di[quanti] = p;
+                identita[quanti] = porte[p].chi;
+                quanti++;
+            } else {
+                chiudi(d);
+            }
         }
         if (i_porta >= 0 && g[i_porta].pronto) {
             int d = accetta(porta);
-            if (d >= 0 && quanti < MAX_CLIENTI) clienti[quanti++] = d;
+            if (d >= 0 && quanti < MAX_CLIENTI) { da_porta_di[quanti] = -1; clienti[quanti++] = d; }
             else if (d >= 0) chiudi(d);
         }
         if (dopo == FERMA) ferma();
@@ -1325,7 +1443,9 @@ static void __attribute__((noreturn)) con_dhcp(void) {
     }
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    for (int p = 0; p < MAX_PORTE; p++) porte[p].d = -1;
+    leggi_porte_ereditate(argc, argv);   /* dopo un restart: le porte delle app non si perdono */
     /* la porta SUBITO, prima di tutto il resto: anche se poi il servizio resta fermo per
      * un guasto, si puo' chiedere come sta (state=failed) */
     porta = ascolta(NOME_NETWORK);

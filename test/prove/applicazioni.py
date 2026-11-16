@@ -86,6 +86,15 @@ def esegui(p):
     p.controlla("catalog: collegamento dalla porta di /system/apps/esempio/code" in seriale,
                 "catalog non ha ricevuto il collegamento di Esempio dalla sua porta")
     p.controlla("esempio: tema da catalog: light" in seriale, "Esempio non ha avuto il tema da catalog")
+    # le porte date a ogni app, una riga per app: network solo a chi ha network.use (Esempio)
+    p.controlla("launcher: attivita: porte compositore catalog launcher\n" in seriale,
+                "Attivita non ha avuto le porte compositore, catalog e launcher (e basta)")
+    p.controlla("launcher: esempio: porte compositore catalog launcher network\n" in seriale,
+                "Esempio non ha avuto le porte compositore, catalog, launcher e network")
+    # la porta verso network: Esempio chiede lo stato della rete, e network sa che e' Esempio
+    p.controlla("network: collegamento dalla porta di /system/apps/esempio/code" in seriale,
+                "network non ha ricevuto il collegamento di Esempio dalla sua porta")
+    p.controlla("esempio: rete risponde\n" in seriale, "Esempio non ha avuto risposta dalla rete")
 
 
 DISCO = "disco_app.img"   # con Esempio e Contatore, le app di prova (utente/prove/applicazioni): non sono nel disco normale

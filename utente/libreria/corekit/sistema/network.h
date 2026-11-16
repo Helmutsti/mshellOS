@@ -66,6 +66,12 @@
 
 #define NOME_NETWORK "network"
 
+/* LA PORTA (messaggi.h, "le porte delle app"). Un'app fatta partire dal launcher con network.use
+ * o network.settings nel manifesto trova la porta verso la rete a questo descrittore; le funzioni
+ * qui sotto la usano da sole (se non c'e', si collegano per nome). La rete accetta attach solo dal
+ * sistema e connect sulle porte. */
+#define D_PORTA_NETWORK 6
+
 /* le richieste (il valore di request) */
 #define RETE_RICHIESTA_STATO    "status"
 #define RETE_RICHIESTA_RIAVVIA  "restart"

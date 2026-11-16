@@ -42,6 +42,7 @@
 #include "corekit/sistema/pacchetto.h"
 #include "gkit/sistema/protocollo.h"     /* PORTA_APP: la porta dell'app verso il compositore */
 #include "corekit/catalog.h"             /* NOME_CATALOG, D_PORTA_CATALOG: la porta verso catalog */
+#include "corekit/sistema/network.h"     /* NOME_NETWORK, D_PORTA_NETWORK: la porta verso la rete */
 
 #define D_ASCOLTO 0      /* prestato da init */
 #define MAX_CLIENTI 8
@@ -88,6 +89,21 @@ static const char *dato(const struct messaggio *q, const char *chiave, int massi
 #define HOME_LETTURA   1
 #define HOME_SCRITTURA 2
 
+/* L'app ha uno di questi due permessi nel manifesto? (Come per la Home: dichiarato vale come
+ * concesso, finche' non c'e' la domanda del primo avvio.) */
+static int ha_nel_manifesto(const struct descrizione *d, const char *uno, const char *altro) {
+    static struct manifesto m;
+    char cartella[MAX_PERCORSO];
+    descrizione_copia(cartella, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
+                      sizeof cartella);
+    descrizione_aggiungi(cartella, "/", sizeof cartella);
+    descrizione_aggiungi(cartella, d->id, sizeof cartella);
+    if (manifesto_dell_app(cartella, &m) < 0) return 0;
+    for (int i = 0; i < m.quanti_permessi; i++)
+        if (descrizione_uguali(m.permessi[i], uno) || descrizione_uguali(m.permessi[i], altro)) return 1;
+    return 0;
+}
+
 /* Cosa dice il manifesto dell'app sulla Home. Il permesso dichiarato vale come concesso finche'
  * non c'e' la domanda del primo avvio (ha_permesso e' ancora provvisorio). */
 static int home_dell_app(const struct descrizione *d) {
@@ -118,17 +134,32 @@ static void registra_home(const struct descrizione *d) {
     registro(riga, " (da agganciare: il recinto non c'e' ancora)");
 }
 
+/* LE PORTE VERSO IL LAUNCHER STESSO. Una porta per app: il launcher tiene lui il capo del
+ * servizio (non c'e' attach: la crea lui) e sa di chi e' (il programma dell'app). Un connect con
+ * un capo allegato su una porta diventa un cliente con quell'identita', al posto di chiederla al
+ * kernel. Una porta si chiude quando l'app la chiude (o finisce). */
+#define MAX_PORTE 32
+static struct {
+    int d;                  /* -1: posto libero */
+    int usata;              /* e' gia' arrivato un connect (per scriverlo nel registro una volta) */
+    struct chi_chiede chi;
+} porte[MAX_PORTE];
+
 /* FAR PARTIRE UN'APP CON LE SUE PORTE (SISTEMA.md, sezione 3, "Le porte delle app"). Per ogni
  * servizio una coppia di socket: un capo al servizio, con il programma dell'app (cosi' il
  * servizio sa di chi e' senza chiederlo al kernel), l'altro all'app, a un descrittore fisso:
  *     3  il compositore (D_PORTA_APP, protocollo.h: il suo formato, PORTA_APP)
  *     4  catalog (D_PORTA_CATALOG, catalog.h: lo standard dei messaggi, attach)
- * Poi il launcher chiude i suoi capi: app e servizi parlano da soli. Se un servizio non risponde,
- * al posto della porta c'e' /dev/null (l'app si collega per nome) e lo si scrive nel registro.
+ *     5  il launcher stesso (D_PORTA_LAUNCHER, launcher.h): il capo del servizio lo tiene lui
+ *     6  network (D_PORTA_NETWORK, network.h), solo con network.use o network.settings nel manifesto
+ * Poi il launcher chiude i suoi capi: app e servizi parlano da soli. Se un servizio non risponde
+ * (o il permesso manca), al posto della porta c'e' /dev/null (l'app si collega per nome) e lo si
+ * scrive nel registro. Per ogni app una riga dice quali porte ha avuto.
  * I descrittori 0, 1 e 2 (ingresso, uscita, errori: la convenzione di ogni programma) sono
  * /dev/null: se restassero chiusi, il primo file o collegamento che l'app apre finirebbe li', e
  * quello che l'app stampa (Doom stampa molto) ci andrebbe dentro. */
-_Static_assert(D_PORTA_APP == 3 && D_PORTA_CATALOG == 4, "le porte delle app: 3 compositore, 4 catalog");
+_Static_assert(D_PORTA_APP == 3 && D_PORTA_CATALOG == 4 && D_PORTA_LAUNCHER == 5 && D_PORTA_NETWORK == 6,
+               "le porte delle app: 3 compositore, 4 catalog, 5 launcher, 6 network");
 
 /* La porta verso il compositore (il suo formato): il capo dell'app, o -1. */
 static int porta_compositore(const char *programma) {
@@ -156,7 +187,22 @@ static int porta_servizio(const char *nome, const char *programma) {
     return -1;
 }
 
-static int fai_partire_app(const char *programma, const char *argomento) {
+/* La porta verso il launcher stesso: il capo dell'app, o -1. Il capo del servizio resta in porte[]. */
+static int porta_launcher(const char *programma) {
+    int p = 0;
+    while (p < MAX_PORTE && porte[p].d >= 0) p++;
+    if (p == MAX_PORTE) return -1;
+    int porta[2];
+    if (coppia(porta) < 0) return -1;
+    porte[p].d = porta[0];
+    porte[p].usata = 0;
+    porte[p].chi.uid = UID_APPLICAZIONI;
+    descrizione_copia(porte[p].chi.programma, programma, sizeof porte[p].chi.programma);
+    return porta[1];
+}
+
+static int fai_partire_app(const struct descrizione *d, const char *argomento) {
+    const char *programma = d->programma;
     int nulla = apri_nulla();
     if (nulla < 0) {
         registro("non riesco ad aprire /dev/null per ", programma);
@@ -164,13 +210,31 @@ static int fai_partire_app(const char *programma, const char *argomento) {
     }
     int compositore = porta_compositore(programma);
     int catalog = porta_servizio(NOME_CATALOG, programma);
+    int launcher = porta_launcher(programma);
+    /* la rete solo a chi la chiede nel manifesto: senza il permesso la porta non c'e' (e non e'
+     * un errore); con il permesso ma senza risposta del servizio si scrive come per gli altri */
+    int vuole_rete = ha_nel_manifesto(d, "network.use", "network.settings");
+    int rete = vuole_rete ? porta_servizio(NOME_NETWORK, programma) : -1;
+    if (vuole_rete && rete < 0) registro("niente porta verso network per ", programma);
     if (compositore < 0) registro("niente porta verso il compositore per ", programma);
     if (catalog < 0) registro("niente porta verso catalog per ", programma);
-    int passati[] = { nulla, nulla, nulla, compositore >= 0 ? compositore : nulla, catalog >= 0 ? catalog : nulla };
+    if (launcher < 0) registro("niente porta verso il launcher per ", programma);
+    int passati[] = { nulla, nulla, nulla, compositore >= 0 ? compositore : nulla, catalog >= 0 ? catalog : nulla,
+                      launcher >= 0 ? launcher : nulla, rete >= 0 ? rete : nulla };
+    char riga[MAX_ID + 96];
+    descrizione_copia(riga, d->id, sizeof riga);
+    descrizione_aggiungi(riga, ": porte", sizeof riga);
+    if (compositore >= 0) descrizione_aggiungi(riga, " compositore", sizeof riga);
+    if (catalog >= 0) descrizione_aggiungi(riga, " catalog", sizeof riga);
+    if (launcher >= 0) descrizione_aggiungi(riga, " launcher", sizeof riga);
+    if (rete >= 0) descrizione_aggiungi(riga, " network", sizeof riga);
+    registro(riga, "");
     int numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, (int)(sizeof passati / sizeof passati[0]));
     chiudi(nulla);
     if (compositore >= 0) chiudi(compositore);
     if (catalog >= 0) chiudi(catalog);
+    if (launcher >= 0) chiudi(launcher);
+    if (rete >= 0) chiudi(rete);
     return numero;
 }
 
@@ -187,7 +251,7 @@ static void apri_app(const struct messaggio *q, struct messaggio *r) {
         return;
     }
     registra_home(&desc);
-    partito(r, q, fai_partire_app(desc.programma, argomento ? argomento : ""));
+    partito(r, q, fai_partire_app(&desc, argomento ? argomento : ""));
 }
 
 static void apri_un_file(const struct messaggio *q, struct messaggio *r) {
@@ -206,7 +270,7 @@ static void apri_un_file(const struct messaggio *q, struct messaggio *r) {
         registro("le app vanno installate prima di aprirle: ", percorso);
         return;
     }
-    partito(r, q, fai_partire_app(store.programma, percorso));
+    partito(r, q, fai_partire_app(&store, percorso));
 }
 
 /* Un programma normale di /system/bin (non un'app), come la persona. Il percorso deve stare
@@ -325,7 +389,7 @@ static void togli_o_svuota(const struct chi_chiede *c, const struct messaggio *q
 }
 
 /* Una richiesta e la sua risposta, sul collegamento 'd'. */
-static void rispondi(int d) {
+static void rispondi(int d, const struct chi_chiede *dalla_porta) {
     struct messaggio q, r;
     int e = messaggio_ricevi(d, &q);
     if (e == 0 || e == -1) return;
@@ -333,7 +397,9 @@ static void rispondi(int d) {
         messaggio_risposta(&r, 0, ESITO_NON_VALIDO);
     } else {
         struct chi_chiede c;
-        if (chi_chiede(d, &c) < 0) {   /* il kernel non lo sa: nessuno, nessun permesso vero */
+        if (dalla_porta) {             /* da una porta: lo sa il launcher, non il kernel */
+            c = *dalla_porta;
+        } else if (chi_chiede(d, &c) < 0) {   /* il kernel non lo sa: nessuno, nessun permesso vero */
             c.uid = -1;
             c.programma[0] = 0;
         }
@@ -357,25 +423,67 @@ static void rispondi(int d) {
     if (r.allegato >= 0) chiudi(r.allegato);
 }
 
+/* Un messaggio sulla porta p: un connect con il capo allegato da' il collegamento nuovo (chi c'e'
+ * lo dice il launcher, porte[p].chi); l'app chiusa o un messaggio sbagliato chiudono la porta.
+ * Ritorna il collegamento nuovo, o -1. */
+static int da_porta(int p) {
+    static struct messaggio m;
+    int n = messaggio_ricevi(porte[p].d, &m);
+    if (n == 1 && m.allegato >= 0 && messaggio_vale(&m, CHIAVE_RICHIESTA, RICHIESTA_COLLEGA)) {
+        if (!porte[p].usata) registro("collegamento dalla porta di ", porte[p].chi.programma);
+        porte[p].usata = 1;
+        return m.allegato;
+    }
+    if (n == 1 && m.allegato >= 0) chiudi(m.allegato);
+    chiudi(porte[p].d);
+    porte[p].d = -1;
+    return -1;
+}
+
 int main(void) {
     int clienti[MAX_CLIENTI];
+    int da_porta_di[MAX_CLIENTI];   /* -1: chi e' lo dice il kernel; altrimenti il numero della porta */
+    struct chi_chiede identita[MAX_CLIENTI];   /* per i collegamenti dalle porte, copiata alla nascita */
     int quanti = 0;
+    for (int p = 0; p < MAX_PORTE; p++) porte[p].d = -1;
     for (;;) {
-        struct da_guardare g[1 + MAX_CLIENTI];
+        struct da_guardare g[1 + MAX_CLIENTI + MAX_PORTE];
+        int numero_porta[MAX_PORTE];
+        int n = 1 + quanti, inizio_porte = n;
         g[0].descrittore = D_ASCOLTO;
         for (int i = 0; i < quanti; i++) g[1 + i].descrittore = clienti[i];
-        if (aspetta(g, 1 + quanti, -1) < 0) return 1;
+        for (int p = 0; p < MAX_PORTE; p++)
+            if (porte[p].d >= 0) { numero_porta[n - inizio_porte] = p; g[n++].descrittore = porte[p].d; }
+        if (aspetta(g, n, -1) < 0) return 1;
 
         /* le richieste: una per collegamento, poi lo si chiude */
         for (int i = quanti - 1; i >= 0; i--) {
             if (!g[1 + i].pronto) continue;
-            rispondi(clienti[i]);
+            rispondi(clienti[i], da_porta_di[i] >= 0 ? &identita[i] : 0);
             chiudi(clienti[i]);
-            clienti[i] = clienti[--quanti];
+            quanti--;
+            clienti[i] = clienti[quanti];
+            da_porta_di[i] = da_porta_di[quanti];
+            identita[i] = identita[quanti];
+        }
+        /* i collegamenti arrivati dalle porte: un cliente con l'identita' dell'app */
+        for (int k = inizio_porte; k < n; k++) {
+            int p = numero_porta[k - inizio_porte];
+            if (!g[k].pronto || porte[p].d != g[k].descrittore) continue;
+            int d = da_porta(p);
+            if (d < 0) continue;
+            if (quanti < MAX_CLIENTI) {
+                clienti[quanti] = d;
+                da_porta_di[quanti] = p;
+                identita[quanti] = porte[p].chi;
+                quanti++;
+            } else {
+                chiudi(d);
+            }
         }
         if (g[0].pronto) {
             int d = accetta(D_ASCOLTO);
-            if (d >= 0 && quanti < MAX_CLIENTI) clienti[quanti++] = d;
+            if (d >= 0 && quanti < MAX_CLIENTI) { da_porta_di[quanti] = -1; clienti[quanti++] = d; }
             else if (d >= 0) chiudi(d);
         }
     }
