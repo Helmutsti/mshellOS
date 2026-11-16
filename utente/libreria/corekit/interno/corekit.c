@@ -11,10 +11,9 @@
  *   avvia_con                  setuid/setgid (l'uid nuovo) ed execve
  *   processo                   pidfd_open: un descrittore che diventa pronto quando il
  *                              processo finisce
- *   elenco_processi            /proc/<numero>/stat (anche il padre) e /proc/<numero>/status
- *   termina_processo           kill(numero, SIGKILL): le regole sugli uid le controlla
- *                              il kernel
- *   stato_memoria              /proc/meminfo
+ *   elenco_processi,           una richiesta al servizio tasks (tasks.c, qui accanto): lui
+ *   termina_processo,          legge /proc e ferma i processi, e decide chi puo'
+ *   stato_memoria, stato_disco
  *   apri, leggi, info...       open, read, stat, mkdir, rename... (file.c)
  *   socket e fogli, aspetta    socket AF_UNIX, memfd, mmap, poll (comunicazione.c)
  *   lo schermo                 il DRM di Linux, /dev/dri/card0 (gkit/interno/schermo.c)
@@ -185,6 +184,8 @@ int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int
     return lancia(percorso, descrittori, quanti, (int)uid, 0, 0);
 }
 
+unsigned int uid_mio(void) { return (unsigned int)getuid(); }
+
 int apri_nulla(void) { return open("/dev/null", O_RDWR | O_CLOEXEC); }
 
 int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti,
@@ -200,9 +201,7 @@ int processo(int numero) {
     return (int)syscall(SYS_pidfd_open, numero, 0);   /* gia' O_CLOEXEC */
 }
 
-/* --- i processi e la memoria: da /proc --- */
-
-/* Due aiuti per scrivere i percorsi di /proc senza printf: la printf di musl si porta
+/* Due aiuti per scrivere i percorsi senza printf: la printf di musl si porta
  * dietro i numeri con la virgola, che su ARM64 chiedono funzioni in piu' al compilatore. */
 static char *metti_testo(char *d, const char *s) {
     while (*s) *d++ = *s++;
@@ -219,137 +218,6 @@ static char *metti_numero(char *d, unsigned long n) {
     return d;
 }
 
-/* /proc/<numero>/<file> in 'dove' */
-static void percorso_proc(char *dove, int numero, const char *file) {
-    metti_testo(metti_numero(metti_testo(dove, "/proc/"), (unsigned long)numero), file);
-}
-
-/* Legge un file piccolo di /proc in 'dove' (con lo 0 in fondo). I byte, o -1. */
-static int leggi_proc(const char *percorso, char *dove, int massimo) {
-    int f = open(percorso, O_RDONLY | O_CLOEXEC);
-    if (f < 0) return -1;
-    int n = 0;
-    while (n < massimo - 1) {
-        ssize_t r = read(f, dove + n, (size_t)(massimo - 1 - n));
-        if (r < 0 && errno == EINTR) continue;
-        if (r <= 0) break;
-        n += (int)r;
-    }
-    close(f);
-    dove[n] = 0;
-    return n;
-}
-
-/* Il numero dopo "chiave:" in un testo come /proc/meminfo o status, o 0. */
-static unsigned long long valore_di(const char *testo, const char *chiave) {
-    size_t l = strlen(chiave);
-    for (const char *riga = testo; riga && *riga; riga = strchr(riga, '\n') ? strchr(riga, '\n') + 1 : 0)
-        if (!strncmp(riga, chiave, l) && riga[l] == ':') return strtoull(riga + l + 1, 0, 10);
-    return 0;
-}
-
-/* IL NOME DI UN'APPLICAZIONE. Linux chiama un processo come il file del suo programma; il
- * programma di ogni applicazione pero' si chiama "code" (/system/apps/<app>/code, o in
- * /data/apps). Allora, per un processo che si chiama "code", il nome e' quello della
- * cartella dell'applicazione, preso dal percorso del programma: e' il primo argomento
- * (avvia lo passa sempre), in /proc/<numero>/cmdline, che tutti possono leggere. */
-static void nome_applicazione(int numero, char *nome, int massimo) {
-    if (strcmp(nome, "code")) return;
-    char percorso[48], testo[MAX_PERCORSO];
-    percorso_proc(percorso, numero, "/cmdline");
-    if (leggi_proc(percorso, testo, sizeof testo) <= 0) return;   /* fino al primo 0 */
-    char *fine = strrchr(testo, '/');
-    if (!fine || strcmp(fine, "/code")) return;
-    *fine = 0;
-    char *inizio = strrchr(testo, '/');
-    if (!inizio || !inizio[1]) return;
-    int l = (int)strlen(inizio + 1);
-    if (l > massimo - 1) l = massimo - 1;
-    memcpy(nome, inizio + 1, (size_t)l);
-    nome[l] = 0;
-}
-
-#define PF_KTHREAD 0x00200000   /* in /proc/<n>/stat: e' un lavoro del kernel, non un programma */
-
-/* Un processo, da /proc/<numero>: 1 se e' un programma (e lo scrive in p), 0 se no. */
-static int leggi_processo(int numero, struct info_processo *p) {
-    char percorso[48], testo[1024];
-    /* stat: "numero (nome) stato padre ..." e, al nono campo, i "flag" */
-    percorso_proc(percorso, numero, "/stat");
-    if (leggi_proc(percorso, testo, sizeof testo) <= 0) return 0;
-    char *apre = strchr(testo, '('), *chiude = strrchr(testo, ')');
-    if (!apre || !chiude || chiude < apre) return 0;
-    if (chiude[1] != ' ' || !chiude[2]) return 0;
-    char stato = chiude[2], *dopo = chiude + 3;
-    int padre = (int)strtol(dopo, &dopo, 10);                          /* il padre (PPid) */
-    for (int campo = 0; campo < 4; campo++) strtol(dopo, &dopo, 10);   /* gruppo, sessione... */
-    unsigned long flag = strtoul(dopo, 0, 10);
-    if (flag & PF_KTHREAD) return 0;
-
-    *p = (struct info_processo){ .numero = numero, .padre = padre };
-    int l = (int)(chiude - apre - 1);
-    if (l > (int)sizeof p->nome - 1) l = (int)sizeof p->nome - 1;
-    memcpy(p->nome, apre + 1, (size_t)l);
-    p->nome[l] = 0;
-    nome_applicazione(numero, p->nome, (int)sizeof p->nome);
-    /* R: gira o aspetta il suo turno; S e D: aspetta qualcosa; Z e X: e' finito */
-    p->stato = stato == 'R' ? (numero == getpid() ? STATO_IN_ESECUZIONE : STATO_PRONTO)
-             : stato == 'Z' || stato == 'X' ? STATO_FINITO : STATO_IN_ATTESA;
-
-    /* status: l'uid ("Uid: reale effettivo ...") e la memoria sua, non condivisa (RssAnon) */
-    percorso_proc(percorso, numero, "/status");
-    if (leggi_proc(percorso, testo, sizeof testo) > 0) {
-        p->uid = (unsigned int)valore_di(testo, "Uid");
-        p->memoria = (unsigned int)(valore_di(testo, "RssAnon") * 1024);
-    }
-    return 1;
-}
-
-static int per_numero(const void *a, const void *b) { return *(const int *)a - *(const int *)b; }
-
-int elenco_processi(struct info_processo *v, int max) {
-    /* i numeri: le cartelle di /proc che sono numeri */
-    int numeri[1024], quanti = 0;
-    int d = open("/proc", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
-    if (d < 0) return -1;
-    char blocco[4096];
-    for (;;) {
-        long n = syscall(SYS_getdents64, d, blocco, sizeof blocco);
-        if (n <= 0) break;
-        for (long k = 0; k < n;) {
-            struct { unsigned long long ino; long long dopo; unsigned short lung; unsigned char tipo; char nome[]; }
-                *voce = (void *)(blocco + k);
-            char *fine;
-            long numero = strtol(voce->nome, &fine, 10);
-            if (!*fine && numero > 0 && quanti < (int)(sizeof numeri / sizeof numeri[0]))
-                numeri[quanti++] = (int)numero;
-            k += voce->lung;
-        }
-    }
-    close(d);
-    qsort(numeri, (size_t)quanti, sizeof numeri[0], per_numero);
-    int n = 0;
-    for (int i = 0; i < quanti && n < max; i++)
-        if (leggi_processo(numeri[i], &v[n])) n++;
-    return n;
-}
-
-/* Il kernel controlla gli uid (si possono terminare solo i processi del proprio uid,
- * tranne il sistema); init (1) non si termina mai: per Linux "terminare" init vorrebbe
- * dire fermare tutto. */
-int termina_processo(int numero) {
-    if (numero <= 1) return -1;
-    return kill(numero, SIGKILL) == 0 ? 0 : -1;
-}
-
-int stato_memoria(struct info_memoria *m) {
-    char testo[4096];
-    if (leggi_proc("/proc/meminfo", testo, sizeof testo) <= 0) return -1;
-    m->totale = valore_di(testo, "MemTotal") * 1024;
-    m->libera = valore_di(testo, "MemFree") * 1024;
-    m->condivisa = valore_di(testo, "Shmem") * 1024;   /* i fogli (memfd) stanno qui */
-    return 0;
-}
 
 /* --- percorsi ed errori --- */
 

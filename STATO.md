@@ -505,6 +505,9 @@ picker) sopra l'app, con il velo sulle sue finestre e l'input bloccato; `finestr
 - **Attività nel recinto**: vede e ferma i programmi tramite un servizio dei processi, solo con
   un permesso speciale. Quel set di permessi fa da "task manager" (oggi `processes.view` e
   `processes.stop`) e Attività lo soddisfa. Il servizio si chiama **tasks** (deciso dalla persona).
+  **Fatto** (16/11/2026): `utente/programmi/tasks.c`, contratto in `corekit/tasks.h`, porta 8; Attività
+  chiede tutto a tasks (prova `attivita`). Per fare posto alla porta 8 il registro (la console) si è
+  spostato dal descrittore 8 al 16 (`MAX_PASSATI` 16).
 - **Firewall**: per ora nessuna regola per singola app, basta il permesso della rete.
 - **Il Terminale resta un'app senza recinto**, ancora per un po'.
 - **Un servizio che riparte**: deciso, le porte le tiene init (vedi sotto: fatto).

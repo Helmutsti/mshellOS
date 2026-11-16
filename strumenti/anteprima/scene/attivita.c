@@ -1,8 +1,8 @@
 /* L'applicazione Attivita, vera, con dei numeri finti (quelli della pagina "Disegno -
  * Attivita'" del Figma) al posto di quelli del kernel. La pagina si sceglie con la
  * variabile PAGINA=processi|memoria|disco (senza: processi, con la riga di "attivita"
- * scelta e quella di "compositore" sotto il puntatore). Il disco non c'e' (apri dice
- * "non trovato"): Sistema, Applicazioni e Utenti valgono 0 e la barra e' tutta "Libero". */
+ * scelta e quella di "compositore" sotto il puntatore). Le cartelle del disco non ci
+ * sono (dimensione_cartella dice "non trovato"): Sistema, Applicazioni e Utenti valgono 0 e la barra e' tutta "Libero". */
 #include <stdlib.h>
 #include <string.h>
 
@@ -31,6 +31,12 @@ int stato_disco(const char *percorso, struct info_disco *d) {
     d->libero = strcmp(percorso, "/data") ? 30ull << 20 : 28ull << 20;
     return 0;
 }
+
+int dimensione_cartella(const char *percorso, unsigned long long *byte) {
+    (void)percorso; (void)byte;
+    return -4;   /* ERRORE_NON_TROVATO: il disco non c'e' */
+}
+unsigned int uid_mio(void) { return 1000; }
 
 #include "../../../utente/applicazioni/Attivita/attivita.c"
 

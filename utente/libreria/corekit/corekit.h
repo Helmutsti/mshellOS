@@ -133,6 +133,9 @@ int chiudi(int d);
  * quanti sono pronti (0: tempo scaduto), o -1. */
 int aspetta(struct da_guardare *elenco, int quanti, int ms);
 
+/* L'uid di questo programma (0: il sistema; 1000: la persona). */
+unsigned int uid_mio(void);
+
 /* L'uid del programma all'altro capo del collegamento 'd', o -1. Lo sa il kernel: non
  * si puo' fingere. */
 int chi(int d);
@@ -219,16 +222,25 @@ int rinomina(const char *da, const char *a);
  * cambia_proprietario, in sistema/privilegi.h. */
 int cambia_permessi(const char *percorso, unsigned int permessi);
 
-/* Quanto e' grande, e quanto e' libera, la partizione in cui sta 'percorso', in *d. 0, o
- * un ERRORE_... */
+/* --- il disco, i processi e la memoria (vedi chiamate.h) ---
+ * Non si leggono da Linux in questo programma: si chiedono al servizio tasks (tasks.h), che
+ * li da' solo a chi ha il permesso di "task manager" (processes.view; fermare, processes.stop).
+ * Senza permesso, o se tasks non risponde, tutte danno -1 (stato_disco, un ERRORE_...). */
+
+/* Quanto e' grande, e quanto e' libera, la partizione in cui sta 'percorso' (oggi /system o
+ * /data), in *d. 0, o un ERRORE_... */
 int stato_disco(const char *percorso, struct info_disco *d);
 
-/* --- i processi e la memoria (vedi chiamate.h) --- */
+/* Quanto pesano i file di una cartella e di tutte quelle dentro (oggi /system, /system/apps,
+ * /data/apps, /data/users), in *byte. 0, o un ERRORE_... */
+int dimensione_cartella(const char *percorso, unsigned long long *byte);
 
-/* I processi che ci sono (al massimo 'max'): quanti sono, o -1. */
+/* I processi che ci sono (al massimo 'max'): quanti sono, o -1 (tasks non risponde) o
+ * TASKS_NEGATO (-2, tasks.h: manca il permesso). */
 int elenco_processi(struct info_processo *v, int max);
 
-/* Termina il processo 'numero' (vedi chiamate.h per chi si puo'). 0, o -1. */
+/* Termina il processo 'numero': solo uno della persona (uid 1000), mai uno del sistema e mai
+ * init (la regola la applica tasks). 0, o -1. */
 int termina_processo(int numero);
 
 /* Com'e' usata la RAM, in *m. 0, o -1. */

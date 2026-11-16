@@ -87,8 +87,8 @@ def esegui(p):
                 "catalog non ha ricevuto il collegamento di Esempio dalla sua porta")
     p.controlla("esempio: tema da catalog: light" in seriale, "Esempio non ha avuto il tema da catalog")
     # le porte date a ogni app, una riga per app: network solo a chi ha network.use (Esempio)
-    p.controlla("launcher: attivita: porte compositore catalog launcher\n" in seriale,
-                "Attivita non ha avuto le porte compositore, catalog e launcher (e basta)")
+    p.controlla("launcher: attivita: porte compositore catalog launcher tasks\n" in seriale,
+                "Attivita non ha avuto le porte compositore, catalog, launcher e tasks (e basta)")
     p.controlla("launcher: esempio: porte compositore catalog launcher network\n" in seriale,
                 "Esempio non ha avuto le porte compositore, catalog, launcher e network")
     # la porta verso network: Esempio chiede lo stato della rete, e network sa che e' Esempio
@@ -98,6 +98,16 @@ def esegui(p):
     # il controllo vero dei permessi: Esempio non ha settings.system ne' network.settings
     p.controlla("esempio: cambiare il tema: negato\n" in seriale, "a Esempio non e' stato negato di cambiare il tema")
     p.controlla("esempio: riavviare la rete: negato\n" in seriale, "a Esempio non e' stato negato di riavviare la rete")
+    # la porta verso tasks: solo a chi ha processes.view o processes.stop (Attivita'), non a Esempio
+    p.controlla("tasks: collegamento dalla porta di /system/apps/attivita/code" in seriale,
+                "tasks non ha ricevuto il collegamento di Attivita dalla sua porta")
+    p.controlla("launcher: esempio: porte" in seriale and " tasks" not in
+                seriale.split("launcher: esempio: porte", 1)[1].split("\n", 1)[0],
+                "Esempio ha avuto la porta verso tasks")
+    # Esempio chiede l'elenco dei processi senza porta (per nome): tasks lo vede come un programma
+    # della persona, senza permessi di sistema
+    p.controlla("esempio: elenco dei processi: negato\n" in seriale,
+                "a Esempio non e' stato negato l'elenco dei processi")
     for permesso, servizio in [("settings.system", "catalog"), ("network.settings", "network")]:
         p.controlla(f"permesso {permesso} a /system/apps/esempio/code (uid 1000): negato" in seriale,
                     f"{servizio}: manca nel registro il rifiuto di {permesso} a Esempio")

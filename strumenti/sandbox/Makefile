@@ -14,7 +14,7 @@ include strumenti/compilazione/programmi.mk
 #   - eventi: mouse e tastiera da una presa TCP (eventi_sandbox.c) al posto di evdev;
 #   - avvio: il primo programma del container (avvio_sandbox.c).
 SCHERMO_SANDBOX := $(O)/strumenti/sandbox/schermo_sandbox.o
-SB_PROGRAMMI := init compositore launcher scrivania network catalog picker shell
+SB_PROGRAMMI := init compositore launcher scrivania network catalog picker tasks shell
 
 $(O)/strumenti/sandbox/%.o: strumenti/sandbox/%.c $(O)/.firma
 	@mkdir -p $(@D)

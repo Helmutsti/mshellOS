@@ -18,6 +18,7 @@
 #include "gkit/gkit_disegno.h"
 #include "corekit/catalog.h"
 #include "corekit/sistema/network.h"   /* rete_stato: la porta verso la rete (D_PORTA_NETWORK) */
+#include "corekit/tasks.h"             /* TASKS_NEGATO: elenco_processi senza il permesso */
 
 #define LARGHEZZA 320
 #define ALTEZZA   220
@@ -89,6 +90,13 @@ int main(void) {
      * sistema: non li avrebbe comunque, non e' un'app del sistema) */
     scrivi_riga("esempio", "cambiare il tema: ", catalog_cambia(CATALOG_TEMA_SCURO, 0) == CATALOG_NEGATO ? "negato" : "NON negato");
     scrivi_riga("esempio", "riavviare la rete: ", rete_riavvia() == RETE_NON_PERMESSO ? "negato" : "NON negato");
+
+    /* Anche l'elenco dei processi chiede un permesso (processes.view), che Esempio non ha: il launcher
+     * non le da' la porta verso tasks, quindi collega_servizio si collega per NOME. Allora tasks
+     * non vede un'app: il kernel gli dice che e' un programma della persona (uid 1000), e a
+     * quello vanno solo i permessi normali, nessuno di sistema (ha_permesso, servizi.h): denied. */
+    static struct info_processo processi[8];
+    scrivi_riga("esempio", "elenco dei processi: ", elenco_processi(processi, 8) == TASKS_NEGATO ? "negato" : "NON negato");
 
     unsigned int pulsanti_prima = 0;
     struct notizia n;
