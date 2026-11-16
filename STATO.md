@@ -479,8 +479,19 @@ manifesto: Esempio ne ha uno e chiede lo stato della rete). Il launcher scrive u
 con le porte date. Poi il controllo vero dei permessi, poi il recinto vero nel launcher.
 Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
 pezzi si mescolavano con quelle di altri programmi (la prova `store` falliva per questo, quando il
-compositore scrive la porta di un'app); la usano launcher, Store, catalog e compositore. Gli altri
-programmi che scrivono a pezzi (per esempio `avvio`, la prova `avvio`) restano da passare.
+compositore scrive la porta di un'app); la usano launcher, Store, catalog e compositore. Lo stesso
+giorno anche avvio, init, eventi e i programmi di prova scrivono ogni riga in una sola volta: la
+prova `avvio` non fallisce più per la riga spezzata dal kernel.
+
+**Da decidere: un servizio che riparte e le porte delle app.** Il capo di ogni porta sta nel
+servizio. Se il servizio cade e init lo fa ripartire, le porte delle app aperte muoiono e quelle
+app non lo raggiungono più finché non ripartono (vale per catalog, network, il compositore). Per
+il `restart` di network, che si rilancia da solo, oggi le porte sopravvivono: il programma nuovo
+le eredita aperte, con i loro programmi scritti negli argomenti (`riavvia` e
+`leggi_porte_ereditate` in network.c; nessuna prova lo copre). È una soluzione solo per quel caso:
+va deciso come si comporta il sistema in generale (es. l'app chiede al launcher una porta nuova,
+come i clienti di D-Bus che si ricollegano quando un servizio riparte; oppure network che rilegge
+la configurazione senza rilanciarsi).
 
 **Prossimo passo** (deciso dalla persona, 16/11/2026): servizi e permessi.
 
