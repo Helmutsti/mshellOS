@@ -464,10 +464,12 @@ DELL'APP"). La prova `applicazioni` lo controlla.
 per la persona). Primo passo fatto: il servizio (`utente/programmi/catalog.c`, contratto in
 `corekit/catalog.h`) dà tema e sfondo (`get`), avvisa chi lo chiede quando cambiano (`watch`) e li
 cambia con `settings.system` (`set`); gira come la persona e il nome glielo presta init. Prova
-`catalog` (disco `disco_catalog.img`, anche nella sandbox). Passi che restano:
-2. le app (UIKit) e la scrivania chiedono tema e sfondo a catalog invece di leggere i file;
-   Impostazioni li cambia con catalog;
-3. gli avvisi di catalog al posto del cambio di tema che oggi passa dal compositore.
+`catalog` (disco `disco_catalog.img`, anche nella sandbox). Fatti lo stesso giorno anche gli altri
+due passi: le app (UIKit), la scrivania e il compositore chiedono tema e sfondo a catalog e ne
+osservano gli avvisi; Impostazioni li cambia con catalog; il compositore non fa più da tramite
+(tolti CAMBIA_TEMA e TEMA_CAMBIATO dal protocollo delle finestre). Prova `tema`. L'elenco dei
+file degli sfondi (Impostazioni) e le foto (scrivania) si leggono ancora dalla cartella degli
+sfondi: nel recinto andrà decisa.
 
 **Le porte di tutti i servizi dal launcher** (16/11/2026, punto 2 dell'elenco della persona):
 il meccanismo per i servizi dello standard (`attach` dal launcher, `connect` dall'app,
@@ -485,9 +487,7 @@ il launcher le concede quando la fa partire e passa ai servizi con le porte (`at
 Provvisorio finché non c'è la finestra del primo avvio: **concessi = dichiarati nel manifesto**,
 quelli di sistema solo alle app del sistema (`permessi_concessi` nel launcher). I rifiuti vanno nel
 registro. Il Terminale ora dichiara `system.shell`. La prova `applicazioni` controlla i rifiuti
-con Esempio (cambiare il tema, riavviare la rete). Il compositore controlla ancora CAMBIA_TEMA a
-modo suo (`pacchetto_ha_permesso`): andrà sui permessi della porta quando il tema passerà a
-catalog. Restano: la finestra di domanda del primo avvio, il database dei permessi concessi, la
+con Esempio (cambiare il tema, riavviare la rete). Restano: la finestra di domanda del primo avvio, il database dei permessi concessi, la
 pagina dei permessi in Impostazioni. Poi il recinto vero nel launcher.
 Insieme: `scrivi_riga` (CoreKit) scrive una riga del registro in una sola volta. Le righe scritte a
 pezzi si mescolavano con quelle di altri programmi (la prova `store` falliva per questo, quando il

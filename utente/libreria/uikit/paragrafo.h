@@ -12,7 +12,7 @@
  *
  * IL COLORE non e' un valore ma un modo della raccolta "Colore icona" (tema.h: COLORE_ICONA_PRIMARIO,
  * _SECONDARIO...), come il testo dei pulsanti della barra: il valore lo si chiede quando si
- * disegna, cosi' il paragrafo segue il tema anche quando cambia (TEMA_CAMBIATO).
+ * disegna, cosi' il paragrafo segue il tema anche quando cambia (un avviso di catalog).
  *
  * Il testo e' gia' nella code page 437 del font (come per l'etichetta). Il codice e' in
  * interno/paragrafo.c; il taglio in righe (paragrafo_a_capo), che usano anche il messaggio e la

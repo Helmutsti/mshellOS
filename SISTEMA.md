@@ -23,9 +23,10 @@ Dettagli sui servizi di oggi:
   È l'unico a leggere e scrivere quei file: le app e la scrivania chiedono a lui (`get`), si fanno
   avvisare quando cambiano (`watch`) e, con il permesso `settings.system`, le cambiano (`set`).
   Gira come la persona (uid 1000), non come sistema: tocca solo i file di lei. Il nome glielo
-  presta init. Contratto in `corekit/catalog.h`; prova `test/prove/catalog.py`. Oggi le app
-  leggono ancora il file da sole e il cambio di tema passa ancora dal compositore: i passi dopo
-  le portano su catalog.
+  presta init. Contratto in `corekit/catalog.h`; prova `test/prove/catalog.py`. Dal 16 novembre
+  2026 nessun altro programma tocca quei file: le app (UIKit), la scrivania e il compositore
+  chiedono tema e sfondo a catalog e osservano i suoi avvisi; Impostazioni li cambia con catalog.
+  Il compositore non fa più da tramite per il tema (prova `tema`).
 
 ## 2. Un servizio, tanti clienti
 

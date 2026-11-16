@@ -94,4 +94,4 @@ int colori_puntatore(unsigned int *contorno, unsigned int *riempimento) {
     return 0;   /* il puntatore e' uguale nei due temi, ombra compresa: quella del chiaro */
 }
 
-void compositore_rileggi_tema(void) { tema_leggi(); }
+void compositore_scegli_tema(const struct catalog_valori *v) { tema_da_catalog(v); }

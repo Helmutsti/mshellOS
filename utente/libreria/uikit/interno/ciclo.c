@@ -215,17 +215,33 @@ static void uikit_consegna(struct finestra_tk *f, const struct notizia *n) {
         f->attiva = n->fuoco;
         if (!n->fuoco) f->modificatori = 0;    /* i tasti lasciati altrove non li sentiremo */
         uikit_cambiata_testata(f);             /* il fuoco cambia solo il titolo e i comandi */
-    } else if (n->tipo == TEMA_CAMBIATO) {
-        /* il tema e' cambiato (gkit/sistema/protocollo.h, IL TEMA): lo si rilegge e si ridisegna tutto. I colori
-         * i widget li chiedono quando disegnano (tema.h), quindi basta questo */
-        tema_leggi();
-        uikit_cambiata_tutta(f);
     }
 }
 
 int uikit_cambia_tema(struct finestra_tk *f, const char *nome) {
-    if (tema_salva(nome) < 0) return -1;
-    return finestra_cambia_tema(&f->finestra) < 0 ? -1 : 0;
+    (void)f;
+    return tema_salva(nome);   /* catalog avvisa tutti, anche noi (uikit_avviso_catalog) */
+}
+
+/* GLI AVVISI DI CATALOG (corekit/catalog.h). Il ciclo tiene d'occhio, oltre alle finestre, il
+ * collegamento con cui catalog avvisa che le impostazioni sono cambiate: il tema nuovo si sceglie
+ * e si ridisegna tutto (i colori i widget li chiedono quando disegnano, tema.h). Uno per
+ * programma; -2 finche' non si e' provato, -1 se catalog non risponde. */
+static int avvisi_catalog = -2;
+
+static void uikit_avviso_catalog(struct finestra_tk *f) {
+    struct catalog_valori v;
+    int r = catalog_avviso(avvisi_catalog, &v);
+    if (r == 0) {                            /* catalog e' ripartito: ci si ricollega, una volta */
+        chiudi(avvisi_catalog);
+        avvisi_catalog = catalog_osserva(&v);
+        if (avvisi_catalog < 0) return;
+        r = 1;
+    }
+    if (r != 1) return;
+    tema_da_catalog(&v);
+    uikit_cambiata_tutta(f);
+    if (f->altra) uikit_cambiata_tutta(f->altra);
 }
 
 /* Consegna una notizia, ma i movimenti del puntatore li tiene da parte (in 'sospesa'): se
@@ -267,6 +283,11 @@ int uikit_esegui(struct finestra_tk *f) {
     finestra_tasti_fisici(&f->finestra);        /* per le scorciatoie (tasti.h) */
     f->aperta = 1;
     f->quante_cambiate = 0;
+    if (avvisi_catalog == -2) {
+        struct catalog_valori v;
+        avvisi_catalog = catalog_osserva(&v);
+        if (avvisi_catalog >= 0) tema_da_catalog(&v);   /* se e' cambiato dopo l'avvio */
+    }
     uikit_cambiata_tutta(f);
 
     struct notizia n;
@@ -289,17 +310,23 @@ int uikit_esegui(struct finestra_tk *f) {
                     resta = prima ? (int)(prima->scadenza - tempo()) : -1;
                     if (prima && resta < 0) resta = 0;
                 }
-                /* la finestra, l'altra (se c'e') e il descrittore guardato (se c'e') */
-                struct da_guardare g[3] = { { .descrittore = f->finestra.collegamento } };
-                int quanti = 1, altra = 0, guardato = 0;
+                /* la finestra, l'altra (se c'e'), il descrittore guardato (se c'e') e gli avvisi di
+                 * catalog (se ci sono) */
+                struct da_guardare g[4] = { { .descrittore = f->finestra.collegamento } };
+                int quanti = 1, altra = 0, guardato = 0, catalog = 0;
                 if (f->altra) { altra = quanti; g[quanti++].descrittore = f->altra->finestra.collegamento; }
                 if (f->al_pronto) { guardato = quanti; g[quanti++].descrittore = f->guardato; }
+                if (avvisi_catalog >= 0) { catalog = quanti; g[quanti++].descrittore = avvisi_catalog; }
                 int pronti = aspetta(g, quanti, resta);
                 if (pronti == 0) break;           /* niente (o e' scaduta una chiamata) */
                 if (pronti < 0) {                 /* interrotta: si riprova */
                     if (servite) break;
                     servite--;
                     continue;
+                }
+                if (catalog && g[catalog].pronto) {
+                    uikit_avviso_catalog(f);
+                    if (!g[0].pronto && !(altra && g[altra].pronto) && !(guardato && g[guardato].pronto)) continue;
                 }
                 if (guardato && g[guardato].pronto) {
                     f->al_pronto(f, f->dati_pronto);

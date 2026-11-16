@@ -104,9 +104,6 @@ void zone_aggiungi(struct zona_finestra *zone, int *quante, int massimo, struct 
 #define TASTO_FISICO 12  /* (solo a chi l'ha chiesto con finestra_tasti_fisici) il tasto
                           * Linux 'tasto' (KEY_...) e' stato premuto ('premuto' = 1) o
                           * lasciato (0). Senza ripetizioni. Arriva in piu' di TASTO. */
-#define TEMA_CAMBIATO 13  /* (a tutte le finestre) il tema del sistema (Chiaro o Scuro) e'
-                          * cambiato: rileggilo dalle preferenze e ridisegnati. Le app di
-                          * UIKit lo fanno da sole */
 
 struct notizia {
     unsigned int tipo;
@@ -261,11 +258,6 @@ int finestra_riducimi(struct finestra *f);
  * solo (uikit.h, finestra_tk_forma). 0, o -1 se il compositore ha chiuso. */
 int finestra_forma_puntatore(struct finestra *f, unsigned int forma);
 
-/* Chiede al compositore di dire a tutte le finestre che il tema e' cambiato (TEMA_CAMBIATO):
- * il tema nuovo va scritto PRIMA nelle preferenze. Lo puo' chiedere solo il sistema o un'app
- * con il permesso "settings.system" nel manifesto; per gli altri non succede niente.
- * 0 se il messaggio e' partito, -1 se no. */
-int finestra_cambia_tema(struct finestra *f);
 
 /* La prossima notizia per l'applicazione (un clic, un tasto...): prima quelle messe da
  * parte, poi dorme finche' ne arriva una. 1, o 0 se il compositore ha chiuso. */

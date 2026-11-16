@@ -6,7 +6,7 @@ vetro del suo corpo: chiaro nel tema chiaro, scuro nello scuro. Di Impostazioni 
 pannello del contenuto (FAFAFA nel chiaro, scuro nello scuro), della userbar il vetro tra il
 pulsante App e la prima app.
   1. Un clic su "Scuro" nella scelta del tema di Impostazioni: diventano scuri il pannello di
-     Impostazioni, il vetro di Files e quello della userbar (il compositore lo dice a tutti).
+     Impostazioni, il vetro di Files e quello della userbar (catalog lo dice a tutti).
   2. Un clic su "Chiaro": tutto torna com'era, pixel per pixel (icone delle app comprese).
 """
 

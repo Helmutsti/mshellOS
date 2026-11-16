@@ -6,20 +6,15 @@
  * UNA copia per programma, come di 'tema_corrente': cosi' "il tema in uso e' lo scuro?" si
  * chiede confrontando gli indirizzi (TEMA_SCURO_IN_USO, stile.h).
  *
- * IL TEMA (Chiaro o Scuro) si sceglie quando il programma parte, e di nuovo ogni volta che il
- * compositore dice che e' cambiato (TEMA_CAMBIATO, gkit.h): sta nel file
- * /data/users/1000/preferences/tema ("chiaro" o "scuro"), che scrive Impostazioni (tema_salva). Se il file
- * manca o non si legge (primo avvio, /data non ancora montato, permesso negato) resta il
- * chiaro, quello di partenza di tema_corrente.
- *
- * Il percorso e' quello della persona 1000 (UID_APPLICAZIONI) scritto per intero, non
- * "/home/..." : i servizi (compositore, scrivania) girano con un altro uid e per loro /home
- * sarebbe un'altra cartella, ma le preferenze sono sempre quelle della persona. Il sistema
- * (uid 0) puo' leggerle comunque.
+ * IL TEMA (Chiaro o Scuro) si sceglie quando il programma parte, chiedendolo a catalog, il
+ * servizio delle impostazioni della persona (corekit/catalog.h), e di nuovo ogni volta che
+ * catalog avvisa che e' cambiato (UIKit lo guarda nel suo ciclo, ciclo.c; la scrivania e il
+ * compositore nei loro). Nessun programma legge piu' il file delle preferenze: lo tocca solo
+ * catalog. Se catalog non risponde resta il chiaro, quello di partenza di tema_corrente.
  *
  * Perche' un "constructor": parte da solo prima di main, cosi' nessun programma deve
  * ricordarsi di chiamare tema_leggi() e tutti, applicazioni e servizi, hanno il tema giusto
- * fin dal primo disegno. (Si puo' richiamare a mano per rileggere il file.) Il constructor
+ * fin dal primo disegno. (Si puo' richiamare a mano per richiederlo a catalog.) Il constructor
  * sta in questo file insieme a 'tema_corrente', e non per caso: UIKit e' una libreria statica
  * (libuikit.a), da cui chi lega prende solo i file che usa. Ogni colore del tema legge
  * 'tema_corrente' (le macro di stile.h), quindi un programma che disegna con i colori del
@@ -29,8 +24,6 @@
 
 #include "corekit/corekit.h"
 #include "uikit/tema.h"
-
-#define FILE_TEMA "/data/users/1000/preferences/tema"
 
 const struct tema tema_chiaro = {
     .superficie_scena               = OPACO(0xE3E3E5),
@@ -203,23 +196,18 @@ void tema_scegli(const char *nome) {
         tema_corrente = &tema_chiaro;
 }
 
+void tema_da_catalog(const struct catalog_valori *v) {
+    tema_scegli(strcmp(v->tema, CATALOG_TEMA_SCURO) ? "chiaro" : "scuro");
+}
+
 void tema_leggi(void) {
-    char testo[16] = { 0 };
-    int d = apri(FILE_TEMA, APRI_LEGGERE);
-    if (d < 0) return;                       /* manca o illeggibile: resta com'e' */
-    int n = leggi(d, testo, sizeof testo - 1);
-    chiudi(d);
-    if (n > 0) tema_scegli(testo);
+    struct catalog_valori v;
+    if (catalog_leggi(&v) == 0) tema_da_catalog(&v);   /* catalog non risponde: resta com'e' */
 }
 
 int tema_salva(const char *nome) {
     if (!nome || (strcmp(nome, "chiaro") && strcmp(nome, "scuro"))) return -1;
-    int l = (int)strlen(nome);
-    int d = apri(FILE_TEMA, APRI_SCRIVERE | APRI_CREARE | APRI_SVUOTARE);
-    if (d < 0) return -1;
-    int n = scrivi_in(d, nome, (unsigned int)l);
-    chiudi(d);
-    return n == l ? 0 : -1;
+    return catalog_cambia(strcmp(nome, "scuro") ? CATALOG_TEMA_CHIARO : CATALOG_TEMA_SCURO, 0) == 0 ? 0 : -1;
 }
 
 __attribute__((constructor)) static void tema_all_avvio(void) { tema_leggi(); }

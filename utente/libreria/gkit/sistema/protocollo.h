@@ -51,14 +51,11 @@
  * compositore nasconde la finestra, che non si vede e non sente il puntatore finche'
  * la scrivania non la fa tornare con PORTA_DAVANTI.
  *
- * IL TEMA (Chiaro o Scuro) DI TUTTO IL SISTEMA. Chi lo cambia (Impostazioni) lo scrive nelle
- * preferenze e chiede CAMBIA_TEMA al compositore; il compositore controlla che possa (il sistema,
- * uid 0, o un'app del sistema con il permesso "settings.system" nel manifesto: lo chiede al
- * kernel quale programma c'e' all'altro capo, come il launcher per "apps.manage"), rilegge lui
- * stesso il tema (le ombre intorno alle finestre sono sue) e manda TEMA_CAMBIATO a tutte le
- * finestre e a tutti i pannelli aperti. Chi lo riceve rilegge il tema dalle preferenze e si
- * ridisegna: le app di UIKit lo fanno da sole, la scrivania ricarica anche le icone delle app.
- * Da chi non puo', CAMBIA_TEMA si ignora.
+ * IL TEMA (Chiaro o Scuro) DI TUTTO IL SISTEMA non passa di qui: lo tiene catalog
+ * (corekit/catalog.h), che lo cambia per chi ha il permesso "settings.system" e avvisa chi osserva.
+ * Il compositore osserva per le sue ombre; le app di UIKit e la scrivania osservano da sole e si
+ * ridisegnano. (Fino al 16 novembre 2026 passava dal compositore, con CAMBIA_TEMA e TEMA_CAMBIATO:
+ * i numeri 9 e 13 restano liberi.)
  *
  * Una finestra per collegamento: per due finestre, due collegamenti.
  *
@@ -99,9 +96,6 @@
                              * UIKit non lo fa; serve ai giochi) */
 #define PORTA_DAVANTI   7   /* (solo un PANNELLO) la finestra 'numero' torna visibile,
                              * davanti a tutte, con il fuoco */
-#define CAMBIA_TEMA     9   /* "il tema nelle preferenze e' cambiato: dillo a tutti" (vedi
-                             * IL TEMA, sopra). Solo il sistema o un'app con il permesso
-                             * "settings.system"; dagli altri si ignora */
 
 #define MOSTRA_PUNTATORE 10 /* "il puntatore, mentre sta sulla mia finestra, deve avere la forma
                              * 'forma'" (FORMA_..., gkit.h). Il compositore la tiene finche' non
@@ -167,9 +161,6 @@ struct mostra_puntatore {
     unsigned int forma;                /* FORMA_... (gkit.h) */
 };
 
-struct cambia_tema {
-    unsigned int tipo;
-};
 
 /* Con MOSTRA l'applicazione dice anche DOVE l'immagine nuova e' diversa da quella di prima:
  * le zone cambiate (vedi gkit.h, "le zone cambiate"). */

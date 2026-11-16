@@ -69,7 +69,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Lanciato da**: init (con schermo, tubo eventi e porta "compositore" già aperti).
 - **Lancia**: nessuno.
 - **Gira come**: sistema (uid 0).
-- **Poteri**: super sì. Controlli: i ruoli speciali (sfondo, pannello) solo a chi ha uid 0 (controllo vero, via kernel); CAMBIA_TEMA solo a uid 0 o a un'app di sistema con "settings.system" (controllo vero: `pacchetto_ha_permesso`, non usa `ha_permesso`).
+- **Poteri**: super sì. Controlli: i ruoli speciali (sfondo, pannello) solo a chi ha uid 0 (controllo vero, via kernel). Il tema lo prende da catalog e ne osserva gli avvisi (per le ombre); non fa più da tramite per il cambio di tema.
 
 ### launcher (`utente/programmi/launcher.c`)
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
@@ -93,7 +93,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Lanciato da**: init (con la porta "catalog" già aperta).
 - **Lancia**: nessuno.
 - **Gira come**: la persona (uid 1000): tocca solo i suoi file, e quelli che scrive sono di lei.
-- **Poteri**: nessuno speciale. `get` e `watch` a tutti; `set` chiede `ha_permesso` per "settings.system" (il sistema, e le app del sistema che lo dichiarano: Impostazioni). Riceve dal launcher la porta di ogni app (`attach`, solo da uid 0): chi si collega da una porta è l'app che il launcher ha detto. Oggi le app non lo usano ancora (solo Esempio, per la prova): leggono i file da sole.
+- **Poteri**: nessuno speciale. `get` e `watch` a tutti; `set` chiede `ha_permesso` per "settings.system" (il sistema, e le app del sistema che lo dichiarano: Impostazioni). Riceve dal launcher la porta di ogni app (`attach`, solo da uid 0): chi si collega da una porta è l'app che il launcher ha detto. Lo usano le app (con UIKit), la scrivania e il compositore: chiedono tema e sfondo e osservano gli avvisi; Impostazioni li cambia. Nessun altro tocca i file delle preferenze.
 
 ### network (servizio) (`utente/programmi/network.c`)
 - **Cosa fa**: all'avvio mette il firewall, accende la scheda, ottiene l'indirizzo (DHCP o fisso), la strada predefinita e i DNS; resta acceso per rinnovare il prestito. Ha una porta di controllo (stato, riavvia, ferma).
@@ -160,7 +160,7 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Lanciato da**: launcher (anche su richiesta dello Store).
 - **Lancia**: nessuno.
 - **Gira come**: persona (uid 1000).
-- **Poteri**: super no. Manifesto: "settings.system". Controllo VERO: il compositore, per CAMBIA_TEMA, controlla il manifesto (`pacchetto_ha_permesso`).
+- **Poteri**: super no. Manifesto: "settings.system" (permesso di sistema, concesso perché è un'app del sistema): con questo catalog le lascia cambiare tema e sfondo.
 
 ### Store (`applicazioni/Store/store.c`)
 - **Cosa fa**: elenca le app installate con il dettaglio (permessi, azioni "Svuota dati" e "Togli app"); con un percorso `.app` mostra la richiesta di installazione o aggiornamento.

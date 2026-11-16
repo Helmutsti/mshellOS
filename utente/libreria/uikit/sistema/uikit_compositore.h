@@ -12,8 +12,8 @@
  *     "ombra/finestra", diverso nei temi Chiaro e Scuro), anche se stanno fuori dalla finestra;
  *   - IL PUNTATORE: i colori delle sue forme nel tema in uso (cursore/contorno e cursore/riempimento) e
  *     se il tema e' lo scuro (l'ombra e' piu' forte);
- *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia (CAMBIA_TEMA, gkit/sistema/protocollo.h)
- *     il compositore lo rilegge dalle preferenze.
+ *   - IL TEMA IN USO, da cui dipendono le due cose sopra: quando cambia, catalog lo dice al
+ *     compositore (corekit/catalog.h) e lui lo sceglie (compositore_scegli_tema).
  *
  * E' un header DEL SISTEMA (uikit/sistema/): lo include solo il compositore, un'app non lo
  * deve includere.
@@ -25,6 +25,7 @@
 #define UIKIT_COMPOSITORE_H
 
 #include "gkit/gkit_disegno.h"
+#include "corekit/catalog.h"   /* struct catalog_valori */
 
 /* Quante righe copre la barra congelata, dall'alto della finestra: quelle dell'applicazione
  * li' sotto non si disegnano. */
@@ -58,8 +59,9 @@ int sfocatura_finestra(void);
  * chiaro e nello scuro. Restituisce sempre 0: l'ombra e' quella del chiaro. */
 int colori_puntatore(unsigned int *contorno, unsigned int *riempimento);
 
-/* Rilegge il tema dalle preferenze (tema_leggi, tema.h): da qui in poi barra congelata e
- * ombre sono quelle del tema nuovo. Le ombre gia' calcolate vanno rifatte. */
-void compositore_rileggi_tema(void);
+/* Sceglie il tema dalle impostazioni date da catalog (una risposta o un avviso: tema_da_catalog,
+ * tema.h): da qui in poi barra congelata e ombre sono quelle del tema nuovo. Le ombre gia'
+ * calcolate vanno rifatte. */
+void compositore_scegli_tema(const struct catalog_valori *v);
 
 #endif

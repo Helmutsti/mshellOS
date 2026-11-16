@@ -176,11 +176,6 @@ int finestra_forma_puntatore(struct finestra *f, unsigned int forma) {
     return manda(f->collegamento, &m, sizeof m);
 }
 
-int finestra_cambia_tema(struct finestra *f) {
-    struct cambia_tema m = { .tipo = CAMBIA_TEMA };
-    return manda(f->collegamento, &m, sizeof m);
-}
-
 int finestra_notizia(struct finestra *f, struct notizia *n) {
     if (f->quante) {
         *n = f->messe_da_parte[0];

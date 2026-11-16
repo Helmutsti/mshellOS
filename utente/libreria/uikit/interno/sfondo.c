@@ -3,8 +3,9 @@
 
 #include "uikit/uikit.h"
 
+/* La scelta (il nome del file) la tiene catalog (corekit/catalog.h); i file degli sfondi stanno
+ * ancora qui, e si leggono da qui. */
 #define CARTELLA_SFONDI "/data/users/1000/wallpapers"
-#define FILE_SFONDO     "/data/users/1000/preferences/sfondo"
 
 static int finisce_con_jpg(const char *s) {
     int n = (int)strlen(s);
@@ -42,26 +43,20 @@ void sfondo_nome_mostrato(const char *file, char *nome, int dimensione) {
     if (n > 0 && nome[0] >= 'a' && nome[0] <= 'z') nome[0] = (char)(nome[0] - 32);
 }
 
-void sfondo_leggi(char *file, int dimensione) {
+void sfondo_da_catalog(const struct catalog_valori *v, char *file, int dimensione) {
     file[0] = 0;
-    int d = apri(FILE_SFONDO, APRI_LEGGERE);
-    if (d < 0) return;
-    int n = leggi(d, file, (unsigned int)dimensione - 1);
-    chiudi(d);
-    if (n < 0) n = 0;
-    file[n] = 0;
-    for (int i = 0; i < n; i++) if (file[i] == '\n') file[i] = 0;
-    if (!nome_valido(file)) file[0] = 0;
+    if ((int)strlen(v->sfondo) < dimensione && nome_valido(v->sfondo)) strcpy(file, v->sfondo);
+}
+
+void sfondo_leggi(char *file, int dimensione) {
+    struct catalog_valori v;
+    catalog_leggi(&v);                       /* se catalog non risponde: lo sfondo predefinito */
+    sfondo_da_catalog(&v, file, dimensione);
 }
 
 int sfondo_salva(const char *file) {
     if (file[0] && !nome_valido(file)) return -1;
-    int l = (int)strlen(file);
-    int d = apri(FILE_SFONDO, APRI_SCRIVERE | APRI_CREARE | APRI_SVUOTARE);
-    if (d < 0) return -1;
-    int n = l ? scrivi_in(d, file, (unsigned int)l) : 0;
-    chiudi(d);
-    return n == l ? 0 : -1;
+    return catalog_cambia(0, file) == 0 ? 0 : -1;
 }
 
 int sfondo_disegna_foto(const char *file, unsigned int *pixel, int l, int a) {

@@ -992,12 +992,10 @@ void finestra_tk_chiudi_altra(struct finestra_tk *f);
  * c'e' gia' un'altra finestra aperta, prima la si chiude. 0 se fatto, -1 se no. */
 int finestra_tk_apri_altra(struct finestra_tk *f, struct finestra_tk *altra);
 
-/* CAMBIA IL TEMA DI TUTTO IL SISTEMA ("chiaro" o "scuro"): lo scrive nelle preferenze
- * (tema_salva) e chiede al compositore di dirlo a tutte le finestre e ai pannelli aperti
- * (CAMBIA_TEMA, gkit/sistema/protocollo.h): ognuno rilegge il tema e si ridisegna, anche questa finestra (con
- * TEMA_CAMBIATO, come le altre). Funziona solo per chi ha il permesso "settings.system"
- * (Impostazioni): per gli altri il file cambia, ma il compositore non dice niente a nessuno.
- * 0, o -1. */
+/* CAMBIA IL TEMA DI TUTTO IL SISTEMA ("chiaro" o "scuro"): lo chiede a catalog (tema_salva),
+ * che avvisa tutti quelli che osservano: le app di UIKit (anche questa), la scrivania e il
+ * compositore, che si ridisegnano. Funziona solo per chi ha il permesso "settings.system"
+ * (Impostazioni): per gli altri catalog dice di no e non cambia niente. 0, o -1. */
 int uikit_cambia_tema(struct finestra_tk *f, const char *nome);
 
 /* Apre la finestra e la fa vivere: torna quando si preme "chiudi" (0) o se il

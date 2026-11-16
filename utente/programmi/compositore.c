@@ -62,7 +62,7 @@
 #include "gkit/sistema/schermo.h"      /* lo schermo (il DRM) */
 #include "gkit/sistema/pixel.h"        /* i conti per pixel: comporre le finestre */
 #include "uikit/sistema/uikit_compositore.h"
-#include "corekit/sistema/pacchetto.h"   /* chi puo' cambiare il tema (CAMBIA_TEMA) */
+#include "corekit/catalog.h"             /* il tema, e i suoi avvisi */
 
 /* Le risorse che init gli passa gia' aperte (vedi sopra). */
 #define D_SCHERMO 0
@@ -1050,21 +1050,30 @@ static void porta_davanti(int pannello, unsigned int numero) {
     }
 }
 
-/* CAMBIA_TEMA (gkit/sistema/protocollo.h, IL TEMA): solo dal sistema o da un'app del sistema con il permesso
- * "settings.system" (lo dice il kernel: il programma all'altro capo). Il tema nuovo e' gia'
- * nelle preferenze: lo si rilegge, si rifanno le ombre di tutte le finestre (dipendono dal
- * tema) e tutto il fotogramma, e lo si dice a tutte le finestre e ai pannelli, che si
- * ridisegnano. Da chi non puo', non succede niente. */
-static void cambia_tema(int i) {
-    struct finestra_compositore *f = &finestre[i];
-    if (chi(f->collegamento) != UID_SISTEMA && !pacchetto_ha_permesso(f->programma, "settings.system"))
-        return;
-    compositore_rileggi_tema();
+/* IL TEMA (gkit/sistema/protocollo.h): lo tiene catalog (corekit/catalog.h), che avvisa chi
+ * osserva quando cambia. Il compositore osserva per le sue cose (le ombre intorno alle finestre
+ * e la barra di emergenza dipendono dal tema); le app e la scrivania osservano da sole, e si
+ * ridisegnano da sole. -1 se catalog non risponde. */
+static int avvisi_catalog = -1;
+
+/* Il tema nuovo: si sceglie, si rifanno le ombre di tutte le finestre e tutto il fotogramma. */
+static void tema_nuovo(const struct catalog_valori *v) {
+    compositore_scegli_tema(v);
     for (int k = 0; k < MAX_FINESTRE; k++)
         if (finestre[k].usata && finestre[k].immagini[0] && finestre[k].ruolo != RUOLO_SFONDO) prepara_ombra(k);
     tutto_da_rifare = 1;
-    for (int k = 0; k < MAX_FINESTRE; k++)
-        if (finestre[k].usata && finestre[k].immagini[0]) avvisa(k, (struct notizia){ .tipo = TEMA_CAMBIATO });
+}
+
+/* Un avviso di catalog. Se catalog e' ripartito, ci si ricollega una volta. */
+static void avviso_catalog(void) {
+    struct catalog_valori v;
+    int r = catalog_avviso(avvisi_catalog, &v);
+    if (r == 0) {
+        chiudi(avvisi_catalog);
+        avvisi_catalog = catalog_osserva(&v);
+        r = avvisi_catalog >= 0;
+    }
+    if (r == 1) tema_nuovo(&v);
 }
 
 /* Un messaggio da un'applicazione. */
@@ -1075,7 +1084,6 @@ static void da_applicazione(int i) {
         struct riducimi r;
         struct voglio_tasti_fisici k;
         struct porta_davanti d;
-        struct cambia_tema e;
         struct voglio_finestra v;
         struct mostra m;
         struct trascinami t;
@@ -1099,7 +1107,6 @@ static void da_applicazione(int i) {
     if (m.tipo == VOGLIO_TASTI_FISICI && n == sizeof m.k) { finestre[i].tasti_fisici = 1; return; }
     if (m.tipo == RIDUCIMI && n == sizeof m.r) { riducimi(i); return; }
     if (m.tipo == PORTA_DAVANTI && n == sizeof m.d) { porta_davanti(i, m.d.numero); return; }
-    if (m.tipo == CAMBIA_TEMA && n == sizeof m.e && finestre[i].immagini[0]) { cambia_tema(i); return; }
     if (m.tipo == CHIEDI_SCHERMO && n == sizeof m.c) {
         avvisa(i, (struct notizia){ .tipo = SCHERMO, .x = larghezza, .y = altezza });
         return;
@@ -1569,8 +1576,8 @@ static void al_tasto(const struct evento *e) {
  * risorse di init non ci sono piu'. */
 static int servi(int ms) {
     const int eventi = D_EVENTI, ascolto = D_ASCOLTO;   /* prestati da init */
-    struct da_guardare g[2 + MAX_FINESTRE + MAX_PORTE];
-    int chi[2 + MAX_FINESTRE + MAX_PORTE];   /* una finestra (>= 0), una porta (-2 - k), o -1 */
+    struct da_guardare g[3 + MAX_FINESTRE + MAX_PORTE];
+    int chi[3 + MAX_FINESTRE + MAX_PORTE];   /* una finestra (>= 0), una porta (-2 - k), o -1 */
     int n = 0;
     g[n].descrittore = eventi;  chi[n++] = -1;
     g[n].descrittore = ascolto; chi[n++] = -1;
@@ -1578,8 +1585,11 @@ static int servi(int ms) {
         if (finestre[i].usata) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
     for (int k = 0; k < MAX_PORTE; k++)
         if (porte[k].usata) { g[n].descrittore = porte[k].d; chi[n++] = -2 - k; }
+    int catalog = 0;   /* gli avvisi di catalog, in fondo (se ci sono) */
+    if (avvisi_catalog >= 0) { catalog = n; g[n].descrittore = avvisi_catalog; chi[n++] = -1; }
     int pronti = aspetta(g, n, ms);
     if (pronti <= 0) return pronti;
+    if (catalog && g[catalog].pronto) avviso_catalog();
 
     if (g[0].pronto) {
         struct evento e;
@@ -1621,6 +1631,9 @@ int main(void) {
     altezza = schermo.altezza;
     px = larghezza / 2;
     py = altezza / 2;
+    struct catalog_valori impostazioni;
+    avvisi_catalog = catalog_osserva(&impostazioni);   /* il tema, e i suoi avvisi */
+    if (avvisi_catalog >= 0) compositore_scegli_tema(&impostazioni);
     immagine_prima = immagine_forma(FORMA_NORMALE, 0);
     scena = (struct tela){ disegno, larghezza, altezza };
     pennello_prepara(&pennello, &scena);

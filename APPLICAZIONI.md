@@ -104,7 +104,8 @@ e la persona ne viene informata.
   impostazioni (oggi tema e sfondo), della persona, in lettura per tutte le app; avvisa le app
   aperte quando cambiano; cambiarle chiede `settings.system`. Le preferenze dell'app stanno nel
   suo database, nella sua cartella dei dati (sezione 8). Il servizio c'è (`SISTEMA.md`, sezione
-  1); le app non lo usano ancora.
+  1) e dal 16 novembre 2026 le app lo usano (lo fa UIKit): nessuna app legge più i file delle
+  preferenze.
 - **I dettagli** (per esempio, per i file, "solo leggere" o "anche scrivere") li controlla il
   servizio, in base all'identità dell'app.
 - **I canali sono uno per servizio, non uno per permesso** (14 novembre 2026): i permessi sono

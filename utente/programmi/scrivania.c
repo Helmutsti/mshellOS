@@ -27,9 +27,10 @@
  * uso con la misura piu' vicina a quella del posto (USERBAR_PNG_BARRA e USERBAR_PNG_VASSOIO, in userbar.h); se
  * nel tema non ce n'e' nessuna, quella dell'altro tema (APPLICAZIONI.md, "Icone mancanti").
  * Gli SVG non si sanno ancora disegnare: un'app che ha solo l'SVG ha il simbolo "pacchetto".
- * QUANDO CAMBIA IL TEMA il compositore lo dice a tutti (TEMA_CAMBIATO, gkit.h): la scrivania
- * rilegge il tema, ricarica le icone del tema nuovo e ridisegna la userbar e il vassoio. Lo
- * sfondo non cambia (e' un'immagine sola, per tutti e due i temi).
+ * QUANDO CAMBIANO IL TEMA O LO SFONDO lo dice catalog a chi osserva (corekit/catalog.h): la
+ * scrivania sceglie il tema nuovo, ricarica le icone del tema nuovo e ridisegna la userbar e il
+ * vassoio; lo sfondo si ridisegna se e' cambiata la scelta (e' un'immagine sola, per tutti e due
+ * i temi).
  *
  * IL CLIC SU UN'APPLICAZIONE (nella userbar o nel vassoio):
  *   - se e' chiusa, la scrivania chiede al launcher (il servizio che fa partire le
@@ -177,10 +178,10 @@ static void leggi_applicazioni(void) {
     prepara_voci();
 }
 
-/* Il tema e' cambiato (TEMA_CAMBIATO): lo si rilegge e si ricaricano le icone del tema nuovo.
- * Poi userbar e vassoio vanno ridisegnati. */
-static void tema_cambiato(void) {
-    tema_leggi();
+/* Il tema e' cambiato (un avviso di catalog): lo si sceglie e si ricaricano le icone del tema
+ * nuovo. Poi userbar e vassoio vanno ridisegnati. */
+static void tema_cambiato(const struct catalog_valori *v) {
+    tema_da_catalog(v);
     for (int i = 0; i < quante_app; i++) carica_icone(&app[i]);
     prepara_voci();
 }
@@ -418,15 +419,16 @@ static void prepara_sfondo(unsigned int *pixel, int l, int a) {
 
 /* --- lo sfondo --- */
 
-/* Lo sfondo, disegnato all'avvio e quando la persona lo cambia (notizia_tema): la foto scelta
- * in Impostazioni (sfondo.h) o, senza scelta, il Predefinito. Le icone della scrivania non ci sono: torneranno quando la
- * scrivania mostrera' i file della cartella Desktop della persona. Le app si aprono dal
- * vassoio delle app. */
-static int disegna_sfondo(void) {
+/* Lo sfondo, disegnato all'avvio e quando la persona lo cambia (avviso_catalog): la foto scelta
+ * in Impostazioni ('scelto', sfondo.h: "" = Predefinito) o, senza scelta, il Predefinito. Le icone
+ * della scrivania non ci sono: torneranno quando la scrivania mostrera' i file della cartella
+ * Desktop della persona. Le app si aprono dal vassoio delle app. */
+static int disegna_sfondo(const char *scelto) {
     unsigned int *pixel = finestra_tela(&sfondo);
     if (!pixel) return 0;
     char file[SFONDO_FILE_MAX];
-    sfondo_leggi(file, sizeof file);   /* la scelta della persona ("" = Predefinito) */
+    for (int i = 0; i < SFONDO_FILE_MAX; i++) file[i] = scelto[i];
+    file[SFONDO_FILE_MAX - 1] = 0;
     if (!file[0] || sfondo_disegna_foto(file, pixel, schermo_l, schermo_a) < 0) {
         file[0] = 0;                   /* Predefinito, o la foto non si legge */
         prepara_sfondo(pixel, schermo_l, schermo_a);
@@ -447,15 +449,26 @@ static int notizia_sfondo(const struct notizia *n) {
     return 1;
 }
 
-/* La notizia del tema cambiato (arriva alla userbar, come a tutte le superfici): icone del
- * tema nuovo, e il vassoio, se e' aperto, ridisegnato. 1 se la userbar va ridisegnata. */
-static int notizia_tema(const struct notizia *n) {
-    if (n->tipo != TEMA_CAMBIATO) return 0;
-    tema_cambiato();
-    /* Lo sfondo scelto da Impostazioni arriva con la stessa notizia: se e' cambiato, si ridisegna. */
+/* GLI AVVISI DI CATALOG (corekit/catalog.h): le impostazioni della persona sono cambiate. Il
+ * tema nuovo (icone, userbar, vassoio se e' aperto) e lo sfondo, se e' cambiato. -1 se catalog
+ * non risponde. */
+static int avvisi_catalog = -1;
+
+/* Un avviso arrivato: 1 se la userbar va ridisegnata. */
+static int avviso_catalog(void) {
+    struct catalog_valori v;
+    int r = catalog_avviso(avvisi_catalog, &v);
+    if (r == 0) {                            /* catalog e' ripartito: ci si ricollega, una volta */
+        chiudi(avvisi_catalog);
+        avvisi_catalog = catalog_osserva(&v);
+        if (avvisi_catalog < 0) return 0;
+        r = 1;
+    }
+    if (r != 1) return 0;
+    tema_cambiato(&v);
     char file[SFONDO_FILE_MAX];
-    sfondo_leggi(file, sizeof file);
-    if (!uguali(file, sfondo_disegnato)) disegna_sfondo();
+    sfondo_da_catalog(&v, file, sizeof file);
+    if (!uguali(file, sfondo_disegnato)) disegna_sfondo(file);
     if (vassoio_aperto && !disegna_vassoio()) chiudi_vassoio();
     return 1;
 }
@@ -467,11 +480,16 @@ int main(void) {
         scrivi_testo("scrivania: non trovo il compositore\n");
         return 1;
     }
+    struct catalog_valori impostazioni;
+    avvisi_catalog = catalog_osserva(&impostazioni);   /* se non risponde: i predefiniti */
+    tema_da_catalog(&impostazioni);
     leggi_applicazioni();
     rileggi_ora(0);
 
+    char scelto[SFONDO_FILE_MAX];
+    sfondo_da_catalog(&impostazioni, scelto, sizeof scelto);
     if (finestra_apri_come(&sfondo, schermo_l, schermo_a, "sfondo", RUOLO_SFONDO, 0, 0, 0) < 0 ||
-        !disegna_sfondo())
+        !disegna_sfondo(scelto))
         return 1;
 
     userbar_posto(schermo_a, quante_fissate, &barra_x, &barra_y);
@@ -483,12 +501,16 @@ int main(void) {
     /* Si aspettano le notizie del compositore: le finestre che compaiono e spariscono, il
      * puntatore sui pannelli e sullo sfondo, e i suoi "ci sei?", a cui risponde la libreria. */
     for (;;) {
-        struct da_guardare g[3] = { { sfondo.collegamento, 0 }, { barra.collegamento, 0 },
-                                    { vassoio.collegamento, 0 } };
+        /* lo sfondo, la userbar, gli avvisi di catalog (se ci sono) e il vassoio (se e' aperto) */
+        struct da_guardare g[4] = { { sfondo.collegamento, 0 }, { barra.collegamento, 0 } };
+        int quanti = 2, catalog = 0, vassoio_qui = 0;
+        if (avvisi_catalog >= 0) { catalog = quanti; g[quanti++] = (struct da_guardare){ avvisi_catalog, 0 }; }
+        if (vassoio_aperto) { vassoio_qui = quanti; g[quanti++] = (struct da_guardare){ vassoio.collegamento, 0 }; }
         int ms, minuto_nuovo = rileggi_ora(&ms);
-        if (aspetta(g, vassoio_aperto ? 3 : 2, ms) < 0) return 1;
+        if (aspetta(g, quanti, ms) < 0) return 1;
         struct notizia n;
         int ridisegna = minuto_nuovo | rileggi_ora(0), fuoco_cambiato = 0;
+        if (catalog && g[catalog].pronto) ridisegna |= avviso_catalog();
         if (g[0].pronto) {
             if (!finestra_ricevi(&sfondo, &n)) return 1;   /* il compositore ha chiuso */
             ridisegna |= notizia_sfondo(&n);
@@ -497,9 +519,8 @@ int main(void) {
             if (!finestra_ricevi(&barra, &n)) return 1;
             ridisegna |= notizia_barra(&n);
             ridisegna |= notizia_finestre(&n, &fuoco_cambiato);
-            ridisegna |= notizia_tema(&n);
         }
-        if (vassoio_aperto && g[2].pronto) {
+        if (vassoio_aperto && vassoio_qui && g[vassoio_qui].pronto) {
             /* del vassoio conta solo il puntatore: le notizie sulle finestre arrivano
              * uguali alla userbar */
             if (finestra_ricevi(&vassoio, &n)) ridisegna |= notizia_vassoio(&n);
@@ -518,7 +539,6 @@ int main(void) {
             for (int i = 0; i < barra.quante; i++) {
                 ancora |= notizia_barra(&barra.messe_da_parte[i]);
                 ancora |= notizia_finestre(&barra.messe_da_parte[i], &fuoco_cambiato);
-                ancora |= notizia_tema(&barra.messe_da_parte[i]);
             }
             barra.quante = 0;
             if (fuoco_cambiato && vassoio_aperto) { chiudi_vassoio(); ancora = 1; }

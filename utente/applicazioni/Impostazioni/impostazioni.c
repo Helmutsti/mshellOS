@@ -116,7 +116,7 @@ static int sfondo_spuntato(int azione, void *dati) {
     return azione == sfondo_scelto;
 }
 
-/* Una voce scelta: si salva, si aggiorna l'anteprima e si avvisa la scrivania. */
+/* Una voce scelta: la si chiede a catalog (che avvisa la scrivania) e si aggiorna l'anteprima. */
 static void sfondo_scelta(struct menu_tk *m, int azione, void *dati) {
     (void)m; (void)dati;
     const char *file = azione > 0 ? file_sfondi[azione - 1] : "";
@@ -124,7 +124,6 @@ static void sfondo_scelta(struct menu_tk *m, int azione, void *dati) {
     sfondo_scelto = azione;
     anteprima_calcola(file);
     widget_cambiato(&anteprima);
-    uikit_cambia_tema(&finestra, TEMA_SCURO_IN_USO ? "scuro" : "chiaro");   /* la notizia a tutti; il tema resta */
 }
 
 static void apri_sfondi(struct pulsante *b, void *dati) {

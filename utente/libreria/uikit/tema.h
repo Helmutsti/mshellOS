@@ -23,8 +23,8 @@
  *
  * LA SCELTA DEL TEMA e' a tempo di esecuzione: 'tema_corrente' punta a uno dei due, e le
  * macro di stile.h (SUPERFICIE_ELEVATA, TESTO_PRIMARIO...) leggono sempre da lui. Parte sul
- * chiaro; tema_leggi() lo cambia in base al file delle preferenze, all'avvio del
- * programma e ogni volta che il compositore dice che e' cambiato (TEMA_CAMBIATO).
+ * chiaro; tema_leggi() lo chiede a catalog all'avvio del programma, e tema_da_catalog() lo
+ * cambia ogni volta che catalog avvisa che e' cambiato.
  * Per questo un colore NON si copia in una variabile che dura (un campo di un widget):
  * si chiede alle macro quando si disegna, cosi' segue il tema anche quando cambia.
  * 'tema_corrente' e i due temi sono definiti una volta sola, in interno/tema.c (nella
@@ -33,6 +33,7 @@
 #define TEMA_H
 
 #include "gkit/gkit_disegno.h"
+#include "corekit/catalog.h"   /* struct catalog_valori: il tema viene da catalog */
 
 /* I colori di sistema, nell'ordine del disegno. Si usano come indice di tema->sistema[]
  * (per esempio il colore di un'etichetta salvato come numero). */
@@ -130,15 +131,17 @@ unsigned int colore_icona_di(const struct tema *t, int modo);
 /* Sceglie il tema per nome ("chiaro" o "scuro"); un nome che non si conosce non cambia niente. */
 void tema_scegli(const char *nome);
 
-/* Sceglie il tema leggendo /data/users/1000/preferences/tema. La chiama da sola, prima di
- * main, ogni programma che usa i colori del tema (interno/tema.c dice come); e la richiama
- * quando il compositore dice che il tema e' cambiato (TEMA_CAMBIATO, gkit.h: UIKit lo fa da
- * sola). */
+/* Sceglie il tema chiedendolo a catalog (corekit/catalog.h). La chiama da sola, prima di main,
+ * ogni programma che usa i colori del tema (interno/tema.c dice come). Se catalog non risponde,
+ * il tema resta com'e'. */
 void tema_leggi(void);
 
-/* Scrive il tema ("chiaro" o "scuro") nelle preferenze. Non cambia quello in uso: per farlo
- * cambiare a tutto il sistema c'e' uikit_cambia_tema (uikit.h). 0, o -1 (un nome che non si
- * conosce, o il file non si scrive). */
+/* Sceglie il tema dalle impostazioni che ha dato catalog (una risposta o un avviso). */
+void tema_da_catalog(const struct catalog_valori *v);
+
+/* Chiede a catalog di cambiare il tema ("chiaro" o "scuro") a tutto il sistema: catalog avvisa
+ * tutti, anche chi lo chiede, che allora lo cambia. Serve il permesso "settings.system". 0, o -1
+ * (un nome che non si conosce, il permesso che manca, catalog che non risponde). */
 int tema_salva(const char *nome);
 
 #endif
