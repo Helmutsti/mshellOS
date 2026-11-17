@@ -497,10 +497,15 @@ static void esegui_programma(char **parola) {
     if (programma < 0) { errore_programma(nome, programma); return; }
     int qui = apri(cartella, APRI_LEGGERE);
     if (qui < 0) { chiudi(programma); errore(nome, cartella, qui); return; }
-    /* l'ambiente: la cartella e la casa, come le vede la shell */
+    /* l'ambiente: la cartella e la casa, come le vede la shell, e il tipo di terminale.
+     * TERM=xterm-256color e' una decisione della persona (17/11/2026): la shell gira nel
+     * Terminale (libvterm, che parla come xterm) e sulla seriale di QEMU, guardata da un
+     * terminale che capisce xterm; tutti e due capiscono xterm con 256 colori. I programmi
+     * che disegnano a schermo intero (vim) leggono TERM per sapere quali sequenze usare, e
+     * la descrizione di xterm-256color sta in /etc/terminfo (strumenti/compilazione/vim.sh). */
     static char pwd[MAX_PERCORSO + 8];
     metti(metti(pwd, "PWD="), cartella);
-    char *ambiente[] = { pwd, "HOME=/home", 0 };
+    char *ambiente[] = { pwd, "HOME=/home", "TERM=xterm-256color", 0 };
 
     /* i modi del terminale, da rimettere se il programma li cambia e non li rimette */
     struct termios modi;

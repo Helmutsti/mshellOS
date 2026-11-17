@@ -30,7 +30,7 @@ $(O)/sandbox/avvio: $(O)/strumenti/sandbox/avvio_sandbox.o
 	$(call lega,$@,$<)
 
 sandbox: $(addprefix $(O)/sandbox/,$(SB_PROGRAMMI) eventi avvio) \
-         $(addprefix $(O)/bin/comandi/,$(COMANDI)) $(addprefix $(O)/bin/prove/,$(PROVE)) \
+         $(addprefix $(O)/bin/comandi/,$(COMANDI)) $(addprefix $(O)/bin/prove/,$(PROVE)) $(VIM) \
          $(foreach a,$(APP_ID),$(O)/app/$(a)/code)
 .PHONY: sandbox
 .DEFAULT_GOAL := sandbox

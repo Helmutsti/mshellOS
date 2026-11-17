@@ -68,7 +68,7 @@
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #       disco_recinto.img     per la prova del recinto delle app (programma recinto)
 #       disco_picker.img      per la prova del servizio picker (il picker con la finestra finta)
-#   build/scarico/     i pacchetti di Alpine e i sorgenti di curl e libvterm scaricati, tenuti per la
+#   build/scarico/     i pacchetti di Alpine e i sorgenti di curl, libvterm e vim scaricati, tenuti per la
 #                      prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
@@ -210,6 +210,9 @@ apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = 
 #   - musl-dev: la libreria C (libc.a) e i suoi header, da legare dentro i programmi;
 #   - linux-headers: gli header del kernel (input, DRM...);
 #   - mbedtls-dev, mbedtls-static: mbedTLS, la libreria per HTTPS (la lega dentro curl);
+#   - ncurses-dev, ncurses-static: ncurses, la libreria che dice come si parla a un
+#     terminale (la lega dentro vim), con le descrizioni dei terminali (terminfo) da cui
+#     strumenti/compilazione/vim.sh prende quelle che vanno nel disco;
 #   - ca-certificates-bundle: i certificati radice (le autorita' di cui ci si fida per HTTPS),
 #     che vanno in /etc/ssl/certs/ca-certificates.crt.
 # Le firme dei pacchetti si controllano con le chiavi di Alpine per quella CPU.
@@ -219,7 +222,8 @@ rm -rf "$RADICE"
 apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \
     --repositories-file /etc/apk/repositories --keys-dir "/usr/share/apk/keys/$ARCH" \
     --cache-dir "$SCARICO/$ARCH" add musl-dev linux-headers compiler-rt \
-    mbedtls-dev mbedtls-static ca-certificates-bundle $PACCHETTI_KERNEL >/dev/null
+    mbedtls-dev mbedtls-static ncurses-dev ncurses-static ca-certificates-bundle \
+    $PACCHETTI_KERNEL >/dev/null
 VERSIONE_K=$(ls "$RADICE/lib/modules")
 MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
 
@@ -391,6 +395,16 @@ for f in utente/comandi/*.c; do
 done
 # curl, compilato a parte (vedi sopra): un comando come gli altri
 metti_file "$B/curl" /system/bin/curl 755
+# vim, l'editor (la versione piu' piccola), compilato dai sorgenti ufficiali da
+# strumenti/compilazione/vim.sh (lo chiama programmi.mk): un comando come gli altri. Accanto,
+# le descrizioni dei terminali che gli servono, nel posto dove ncurses le cerca da solo
+# (/etc/terminfo/<prima lettera>/<nome>): sono del sistema, in sola lettura.
+metti_file "$P/vim/vim" /system/bin/vim 755
+# le impostazioni di fabbrica di vim (il suo defaults.vim, tale e quale: vim.sh dice perche')
+metti_file "$P/vim/defaults.vim" /system/share/vim/vim92/defaults.vim 644
+for f in "$P"/vim/terminfo/*/*; do
+    metti_file "$f" "/etc/terminfo/${f#"$P"/vim/terminfo/}" 644
+done
 
 # Le applicazioni (utente/applicazioni/<Nome>/): il pacchetto di ognuna lo prepara
 # programmi.mk (con strumenti/compilazione/impacchetta.sh): scompattato in P/pacchetti/<id>/

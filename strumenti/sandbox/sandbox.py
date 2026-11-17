@@ -18,7 +18,7 @@ solo i capi "di hardware" (strumenti/sandbox/sandbox.h): lo schermo e' un file i
 sistema), /data scrivibile (un volume che sparisce alla fine), /run e /tmp in memoria.
 
 LE IMMAGINI DOCKER
-    mshell-sandbox-attrezzi-2-<arch>   alpine con clang, lld, make, zip e la radice di musl (come
+    mshell-sandbox-attrezzi-3-<arch>   alpine con clang, lld, make, zip e la radice di musl e ncurses (come
                               build.sh, con la stessa cartella di pacchetti build/scarico/<arch>):
                               si fa una volta sola
     mshell-sandbox            il sistema: FROM scratch, con dentro solo l'albero di
@@ -82,7 +82,7 @@ def processore():
 CPU, ARCH, PIATTAFORMA = processore()
 # attrezzi e oggetti compilati sono per processore: non si mescolano (l'immagine "mshell-sandbox"
 # no, e' una sola e si rifa' a ogni compilazione)
-ATTREZZI = f"mshell-sandbox-attrezzi-2-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
+ATTREZZI = f"mshell-sandbox-attrezzi-3-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
 OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", f"mshell-sandbox-oggetti-{ARCH}")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
@@ -142,7 +142,7 @@ def prepara_attrezzi():
     comando = (f"apk add --cache-dir /w/build/scarico/{ARCH} clang lld binutils make zip tar >/dev/null && "
                f"apk --arch {ARCH} --root /radice --initdb --no-scripts "
                f"--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/{ARCH} "
-               f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt >/dev/null")
+               f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt ncurses-dev ncurses-static >/dev/null")
     (REPO / "build" / "scarico" / ARCH).mkdir(parents=True, exist_ok=True)
     r = subprocess.run(["docker", "run", "--name", nome, "--platform", PIATTAFORMA,
                         "-v", f"{REPO}:/w", "alpine:3.24", "sh", "-c", comando])
