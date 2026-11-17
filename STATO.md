@@ -4,6 +4,72 @@ Questo documento serve a riprendere il lavoro da un altro computer, anche dopo g
 Dice cos'è mshell oggi, come si compila e si prova, cosa è stato fatto, cosa è deciso,
 cosa aspetta una risposta e cosa resta da fare.
 
+## 0. PER RIPARTIRE (aggiornato il 17/11/2026)
+
+**Lo scopo del lavoro in corso:** ogni app può fare solo quello che dichiara e che la persona le
+concede, e il kernel lo fa rispettare anche se l'app non usa le nostre librerie (sicurezza,
+permessi, recinto). Per decisione della persona tutto il resto della sezione 9 è "ok" e non si
+tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1 e 3).
+
+**Fatto e in `main`** (16-17/11/2026; prove in QEMU arm64: passano tutte tranne `files` e
+`immagini`, che hanno le foto di riferimento vecchie):
+1. **Prova del recinto** (`utente/prove/recinto.c`, prova `recinto`, solo QEMU): namespaces,
+   radice nuova, uid 1000, NO_NEW_PRIVS, seccomp (elenco di chiamate vietate), la Home agganciata
+   in sola lettura con una sottocartella in scrittura, un secondo recinto "con la rete". Il
+   launcher NON usa ancora il recinto: le app girano come prima.
+2. **Permessi sulle cartelle**: per ora solo la Home, `files.read` (lettura) e `files.write`
+   (lettura e scrittura); gli sfondi solo a chi ha `settings.system` (Impostazioni).
+3. **catalog**: il servizio delle impostazioni della persona (tema, sfondo), gira come la
+   persona; le app, la scrivania e il compositore le chiedono a lui e ne ricevono gli avvisi.
+4. **Le porte delle app**: il launcher dà a ogni app un canale già aperto per servizio
+   (3 compositore, 4 catalog, 5 launcher, 6 network solo con il permesso della rete, 7 picker
+   (non ancora), 8 tasks solo con processes.*) e scrive l'elenco nella variabile d'ambiente
+   `MSHELL_PORTE`; il servizio sa chi è l'app dal launcher. I programmi del sistema chiamano
+   per nome.
+5. **Il controllo vero dei permessi** (`ha_permesso`): sistema = tutto; app = dichiarati nel
+   manifesto (quelli di sistema solo alle app del sistema) finché non c'è la finestra del
+   primo avvio; altri programmi della persona = permessi normali.
+6. **init custodisce le porte**: se catalog, launcher o network cadono, ripartono e riavono
+   le porte con i permessi (prova `custode`).
+7. **La rete come Android**: con `network.use` la rete del computer, senza una rete vuota;
+   nessuna regola del firewall per app (decisione della persona).
+8. **tasks**: il servizio dei processi (elenco, memoria, disco, fermare); Attività lo usa; solo
+   con `processes.view`/`processes.stop`; ferma solo i processi della persona.
+9. **Il compositore sa mostrare una finestra di scelta** (`RUOLO_SCELTA`) sopra l'app che chiede,
+   con il velo e i clic bloccati; la accetta solo dal programma `/system/services/picker/picker`
+   (prova `scelta`). Il registro dei programmi è passato dal descrittore 8 al 16.
+10. **Il disegno della finestra "Apri/Salva"** approvato (`disegni/ApriSalva/`, Figma 289:674).
+
+**A metà:** il **servizio picker vero** (mostra la finestra "Apri/Salva" e consegna all'app solo
+il file scelto). In `main` c'è solo un picker provvisorio minimo (`utente/programmi/picker.c`,
+fa qualcosa solo se esiste `/data/tests/scelta`, per la prova `scelta`). Il lavoro a metà è sul
+ramo `servizio-picker-wip` (se c'è sul server), con il file `disegni/ApriSalva/PICKER_DA_FINIRE.md`
+che dice cosa è fatto e cosa manca. Il compito completo: contratto `corekit/picker.h`
+(`open`, `save`, file consegnato già aperto, "cancelled" per Annulla), servizio che gira come la
+persona e apre solo dentro la Home (openat2 + RESOLVE_BENEATH), l'interfaccia come il disegno
+(finestra minima, padding e gap 16), porta 7 a tutte le app, nome prestato da init, prova con
+Esempio (tasto "o" apre, "s" salva).
+
+**Cosa resta, nell'ordine:**
+1. finire picker (sopra);
+2. il **recinto vero nel launcher**: unire quello che la prova `recinto` dimostra (Home secondo
+   `files.*`, sfondi per `settings.system`, rete secondo `network.use`, seccomp, porte e
+   `MSHELL_PORTE`). Il Terminale resta senza recinto (decisione della persona). Prima di
+   accenderlo, controllare che le app non leggano più niente fuori dalle loro cartelle;
+3. la **finestra del primo avvio** per i permessi (da disegnare in Figma), con il posto dove il
+   sistema ricorda cosa ha concesso la persona (database del sistema, APPLICAZIONI.md sezione 8),
+   e la pagina dei permessi in Impostazioni; poi via la regola "dichiarati = concessi";
+4. da decidere poi: con la finestra del primo avvio, le app del sistema ricevono i permessi di
+   sistema senza chiedere o decide anche lì la persona;
+5. la **compilazione e le prove sul PC Windows (x86_64)**: tutto questo è stato provato solo su
+   arm64 (Mac); unito in `main` con l'ok della persona senza la build x86_64.
+
+**Come si lavora sul Mac** (manca `uv`): un python con Pillow, per esempio
+`python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pillow`, poi
+`/tmp/venv/bin/python3 test/collaudo.py` e `/tmp/venv/bin/python3 strumenti/sandbox/sandbox.py prova ...`.
+Con più agenti in parallelo: ogni agente usa un volume suo per la sandbox
+(`SANDBOX_OGGETTI=mshell-sandbox-oggetti-<nome>`) e una porta sua per QEMU (`--porte 4xx5`).
+
 ## 1. In breve
 
 - mshell è un sistema operativo con la sua interfaccia grafica (scrivania, finestre,
