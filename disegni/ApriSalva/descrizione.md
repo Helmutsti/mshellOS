@@ -18,14 +18,14 @@ Usa il layout "finestra minima" (mini finestra) della libreria: Titolo finestra 
 
 ## Struttura della finestra di scelta
 Frame verticale (libreria "mini finestra", effetti di finestra della libreria), larghezza 480, gap 0, senza fondo proprio:
-- Titolo finestra: Stato=Attiva, Comandi=No, Dimensione=Mini (altezza 29, solo pulsante chiudi, nessun riduci a icona). Testo "Apri" o "Salva". Linea sotto il titolo nascosta.
+- Titolo finestra: Stato=Attiva, Comandi=No, Dimensione=Mini (altezza 28, solo pulsante chiudi, nessun riduci a icona). Testo "Apri" o "Salva". Linea sotto il titolo nascosta.
 - Contenuto (verticale): padding spazio/16 su tutti i lati (come la mini finestra della libreria), gap spazio/16 (uguale al padding, come nelle finestre normali dove sono 8 e 8; il gap e dato dal frame Contenuto stesso), non ritaglia. Dall'alto:
   1. Solo Salva: "Barra del nome" (orizzontale, padding 0, gap spazio/8, altezza 32): etichetta "Nome" + Campo (93:930, Dimensione=S, Stato=Attivo, icona nascosta, riempie la larghezza).
   2. Barra degli strumenti (altezza 32, padding 0, gap spazio/8): Indietro e avanti (Dimensione=S, Contenuto=Icone) + Percorso ("Home", testo come l'ultimo elemento del percorso di Files).
   3. Pannello contenuto: superficie/elevata, raggio/pannello, padding spazio/8; dentro la Tabella (componente, colonne Nome, Tipo, Dimensione) con 5 righe (Desktop, Documenti, Immagini cartelle; appunti.txt, lista-spesa.txt file).
   4. Barra dei pulsanti (orizzontale, padding 0, gap spazio/8, a destra): Pulsante Secondario S Normale "Annulla" e Pulsante S "Apri"/"Salva" (icona spenta): Primario Disabilitato (schermata 1) o Primario Normale (schermate 2 e 3).
 - Riga selezionata (schermata 2): Riga di tabella Stato=Selezionata e cella Nome Stato=Selezionato.
-- Altezza: 29 (titolo) + 16 (padding) + 32 (barra degli strumenti) + 16 (gap) + 265 (pannello: 8 + tabella 249 + 8) + 16 (gap) + 32 (pulsanti) + 16 (padding) = 421 (arrotondato). Salva aggiunge barra del nome 32 + 16 = 469.
+- Altezza: 28 (titolo) + 16 (padding) + 32 (barra degli strumenti) + 16 (gap) + 265 (pannello: 8 + tabella 249 + 8) + 16 (gap) + 32 (pulsanti) + 16 (padding) = 421 (arrotondato). Salva aggiunge barra del nome 32 + 16 = 469.
 
 ## Decisioni della persona (16 novembre 2026)
 - Finestra minima in sovraimpressione sopra l'app che la chiede, non dentro Files.
@@ -34,14 +34,14 @@ Frame verticale (libreria "mini finestra", effetti di finestra della libreria), 
 - Spazio uguale in verticale: gap tra le aree = padding = 16, dato dal frame "Contenuto". Pannello -> pulsanti = pulsanti -> fondo della finestra.
 
 ## Distanze misurate sulla foto (salva-chiaro.png, 480 x 469)
-- Titolo (29) -> campo Nome (45) 16; campo Nome (45-76) -> barra degli strumenti (92) 16; barra degli strumenti (92-124) -> pannello (140) 16; pannello (140-405) -> pulsanti (421-453) 16; pulsanti -> fondo della finestra (469) 16. Apri: stesse distanze senza la barra del nome.
+- Titolo (28) -> campo Nome (44) 16; campo Nome (44-76) -> barra degli strumenti (92) 16; barra degli strumenti (92-124) -> pannello (140) 16; pannello (140-405) -> pulsanti (421-453) 16; pulsanti -> fondo della finestra (469) 16. Apri: stesse distanze senza la barra del nome.
 
 ## Somme della spaziatura (punto 5)
 - Primo testo della barra degli strumenti ("Home"), orizzontale: 16 (contenuto) + percorso senza padding; il pulsante Indietro parte a x = 16 dal bordo della finestra.
 - Pannello -> primo testo della tabella: x = 8 (pannello) + 8 (intestazione come le righe) = 16; y = 8 + 8 (intestazione 32, testo 16) = 16. Dal bordo della finestra: x 16 + 16 = 32.
 - Bordo della finestra -> pannello, -> pulsanti, -> barra degli strumenti: 16 su x e y (solo il livello "Contenuto" ha padding).
 - Pulsante principale -> bordo destro e fondo della finestra: 16 e 16.
-- Misurato sulle foto (480 x 421): pannello a x 16 e fino a 464 (16 dal bordo destro), testo "Nome" della tabella a x 32 (16 dal pannello), sfondo della riga selezionata a x 24 (8 dal pannello), pulsanti finiscono a 16 dal bordo destro e dal fondo; titolo alto 29.
+- Misurato sulle foto (480 x 421): pannello a x 16 e fino a 464 (16 dal bordo destro), testo "Nome" della tabella a x 32 (16 dal pannello), sfondo della riga selezionata a x 24 (8 dal pannello), pulsanti finiscono a 16 dal bordo destro e dal fondo; titolo alto 28 (il codice Figma del titolo mini dice 28: 28 + 441 = 469).
 
 ## Componenti usati
 Titolo finestra (Mini), Indietro e avanti, Tabella 105:446 (Riga di tabella), Pulsante 92:1001, Campo 93:970, Velo della finestra 138:455 (solo nella finestra dietro). Variabili: Semantici (colori), Misure (spazio/8, spazio/16, raggio/pannello).
