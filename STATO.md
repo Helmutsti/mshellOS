@@ -43,8 +43,12 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
 **A metà:** il **servizio picker vero** (mostra la finestra "Apri/Salva" e consegna all'app solo
 il file scelto). In `main` c'è solo un picker provvisorio minimo (`utente/programmi/picker.c`,
 fa qualcosa solo se esiste `/data/tests/scelta`, per la prova `scelta`). Il lavoro a metà è sul
-ramo `servizio-picker-wip` (se c'è sul server), con il file `disegni/ApriSalva/PICKER_DA_FINIRE.md`
-che dice cosa è fatto e cosa manca. Il compito completo: contratto `corekit/picker.h`
+ramo `servizio-picker-wip` (pubblicato, partito da `compositore-scelta`; non compilato né
+provato), con il file `disegni/ApriSalva/PICKER_DA_FINIRE.md` che dice cosa è fatto (il contratto
+`corekit/picker.h` e le funzioni per le app; un campo `secondaria` nell'etichetta di UIKit) e cosa
+manca (il servizio vero, l'interfaccia, la porta 7 nel launcher, init, la prova, i documenti).
+**Domanda aperta per la persona:** in "Salva", se il file esiste già, si sovrascrive senza
+chiedere? (E una differenza da controllare: la barra del titolo mini è 28 nel codice, 29 in Figma.) Il compito completo: contratto `corekit/picker.h`
 (`open`, `save`, file consegnato già aperto, "cancelled" per Annulla), servizio che gira come la
 persona e apre solo dentro la Home (openat2 + RESOLVE_BENEATH), l'interfaccia come il disegno
 (finestra minima, padding e gap 16), porta 7 a tutte le app, nome prestato da init, prova con
