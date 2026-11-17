@@ -32,3 +32,7 @@ letti dai metadati di Commons. Modifica fatta a tutte: ritagliata e ridimensiona
 - Licenza: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/deed.it)
 - Pagina: https://commons.wikimedia.org/wiki/File:Night_sky_unsplash.jpg
 - Modifica: ritagliata e ridimensionata
+
+## samurai.jpg
+- Fornita dalla persona (17/11/2026); autore e licenza non noti.
+- Modifica: ritaglio centrale 16:10 (1256x785, l'originale e' 1280x786: non ingrandita), JPEG qualità 85, senza metadati

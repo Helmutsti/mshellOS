@@ -36,3 +36,4 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt).
 - Il pulsante App nella schermata del vassoio e' in stato Premuto (variante "Pulsante App=Premuto" 148:710) finche' il vassoio e' aperto, come nel codice.
 - Vassoio app (componente 148:534, 3 colonne): 8 voci nell'ordine del codice, prima le app del sistema (Attività 148:536, Doom 148:547, Files 148:557, Impostazioni 148:565, Store 148:574, Terminale 148:582), poi le altre per nome (Contatore 285:5883, Esempio 285:5888, simbolo pacchetto). Altezza 252.
 - Vassoio delle app aperto (148:862): centrato in altezza sulla userbar (centro del vassoio = centro della pillola = y 400; vassoio alto 252, a y 274).
+- Puntatore 24×24 (decisione della persona): scala 0,75 dal disegno a 32, foto `figma/puntatore-24-chiaro.png` e `figma/puntatore-24-scuro.png`. Ombra `ombra/puntatore` nuova: 1ª y=0,75 sfocatura 0,75 spread 0; 2ª y=2,25 sfocatura 4,5 spread -0,75. Dettagli in `disegni/Puntatore/descrizione.md`.
