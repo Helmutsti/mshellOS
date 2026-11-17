@@ -12,7 +12,7 @@ permessi, recinto). Per decisione della persona tutto il resto della sezione 9 �
 tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1 e 3).
 
 **Fatto e in `main`** (16-17/11/2026; prove in QEMU arm64: passano tutte tranne `files` e
-`immagini`, che hanno le foto di riferimento vecchie):
+`immagini`, che hanno le foto di riferimento vecchie; su x86_64 passano tutte):
 1. **Prova del recinto** (`utente/prove/recinto.c`, prova `recinto`, solo QEMU): namespaces,
    radice nuova, uid 1000, NO_NEW_PRIVS, seccomp (elenco di chiamate vietate), la Home agganciata
    in sola lettura con una sottocartella in scrittura, un secondo recinto "con la rete". Il
@@ -40,38 +40,34 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
    (la provava la prova `scelta`, tolta con il picker provvisorio). Il registro dei programmi è
    passato dal descrittore 8 al 16.
 10. **Il disegno della finestra "Apri/Salva"** approvato (`disegni/ApriSalva/`, Figma 289:674).
-
-**A metà:** il **picker** (mostra la finestra "Apri/Salva" e consegna all'app solo il file
-scelto). Fatti (ramo `servizio-picker`): il contratto `corekit/picker.h` con le funzioni per le
-app, il servizio (`utente/programmi/picker.c`), la porta 7 nel launcher, init, la prova `picker`
-con una finestra finta, i documenti. Manca la finestra vera (`utente/programmi/picker_finestra.c`,
-l'interfaccia `picker_finestra.h`): senza, il picker del sistema non si lega e build.sh si ferma.
-`disegni/ApriSalva/PICKER_DA_FINIRE.md` dice i dettagli. In "Salva", se il file esiste già, lo
-chiede la finestra ("Sostituire il file?"). (Una differenza da controllare: la barra del titolo
-mini è 28 nel codice, 29 in Figma.) Il compito completo: contratto `corekit/picker.h`
-(`open`, `save`, file consegnato già aperto, "cancelled" per Annulla), servizio che gira come la
-persona e apre solo dentro la Home (openat2 + RESOLVE_BENEATH), l'interfaccia come il disegno
-(finestra minima, padding e gap 16), porta 7 a tutte le app, nome prestato da init, prova con
-Esempio (tasto "o" apre, "s" salva).
+11. **Il picker** (17/11/2026): il servizio mostra la finestra "Apri/Salva" vera e consegna
+   all'app solo il file scelto; in "Salva", se il file esiste, chiede "Sostituire il file?"
+   (Annulla / Sostituisci). Un'app con sopra la finestra non viene giudicata "non risponde"
+   (decisione della persona, sezione 7). Dettagli in `disegni/ApriSalva/PICKER_DA_FINIRE.md`.
+12. **x86_64**: build completa e prove passate sul PC Windows (17/11/2026).
 
 **Cosa resta, nell'ordine:**
-1. finire picker (sopra);
-2. il **recinto vero nel launcher**: unire quello che la prova `recinto` dimostra (Home secondo
+1. il **recinto vero nel launcher**: unire quello che la prova `recinto` dimostra (Home secondo
    `files.*`, sfondi per `settings.system`, rete secondo `network.use`, seccomp, porte e
    `MSHELL_PORTE`). Il Terminale resta senza recinto (decisione della persona). Prima di
    accenderlo, controllare che le app non leggano più niente fuori dalle loro cartelle;
-3. la **finestra del primo avvio** per i permessi (da disegnare in Figma), con il posto dove il
+2. la **finestra del primo avvio** per i permessi (da disegnare in Figma), con il posto dove il
    sistema ricorda cosa ha concesso la persona (database del sistema, APPLICAZIONI.md sezione 8),
    e la pagina dei permessi in Impostazioni; poi via la regola "dichiarati = concessi";
-4. da decidere poi: con la finestra del primo avvio, le app del sistema ricevono i permessi di
+3. da decidere poi: con la finestra del primo avvio, le app del sistema ricevono i permessi di
    sistema senza chiedere o decide anche lì la persona;
-5. la **compilazione e le prove sul PC Windows (x86_64)**: tutto questo è stato provato solo su
-   arm64 (Mac); unito in `main` con l'ok della persona senza la build x86_64.
-5b. ~~la prova `mouse` a volte falliva~~: fatto, scambiava il cambio di minuto dell'ora della userbar per il puntatore; ora l'ora e' coperta;
-6. **sul Mac**: rifare le foto di riferimento arm64 di `files` e `immagini`
+4. **sul Mac**: provare una volta la nuova prova `recinto` (ora apre un ascoltatore sul
+   computer), e rifare le foto di riferimento arm64 di `files` e `immagini`
    (`test/collaudo.py --riferimenti --solo files immagini`, poi guardarle): sono ancora quelle
    con la userbar vecchia, la cartella "Scrivania" (ora "Desktop") e il puntatore vecchio.
    Quelle x86_64 sono già rifatte; l'ora della userbar ora è sempre coperta nel confronto.
+
+**Sul tavolo (domande aperte della persona):**
+- in "Apri", il doppio clic su un file lo apre subito?
+- quali modifiche fare per rendere le prove più veloci (più macchine QEMU insieme, più prove
+  della sandbox insieme, attese vere al posto di quelle fisse, disco non copiato);
+- una prova automatica con la finestra vera del picker ("Sostituire il file?", app che muore
+  con la finestra aperta).
 
 **Come si lavora sul Mac** (manca `uv`): un python con Pillow, per esempio
 `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pillow`, poi
