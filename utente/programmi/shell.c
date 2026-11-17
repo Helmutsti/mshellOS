@@ -13,7 +13,7 @@
  *     pwd           la cartella in cui siamo
  *     cd [cartella] ci si sposta ("cd" da solo: la radice, "cd .." sale)
  *     ls [-l] [percorso]   cosa c'e' dentro; -l: tipo, permessi, proprietario, misura
- *     help          l'elenco dei comandi
+ *     help          l'elenco dei comandi e dei programmi che si possono far partire
  *     exit          finisce (init la rifa' partire)
  * Ogni altra parola e' un PROGRAMMA da far partire (un comando e' un programma, non
  * un'app: SISTEMA.md). Una parola con '/' e' un percorso, assoluto o relativo alla
@@ -299,16 +299,17 @@ static int larghezze_colonne(int quante, int righe, int *largo) {
 }
 
 /* L'elenco nel terminale della finestra, in colonne come "ls": meno righe possibile, nella
- * larghezza del terminale. */
-static void elenco_in_colonne(int quante) {
+ * larghezza del terminale, ogni riga spostata a destra di 'rientro' caselle. */
+static void elenco_in_colonne(int quante, int rientro) {
     struct winsize w = { 0, 0, 0, 0 };
-    int larghezza = ioctl(tty, TIOCGWINSZ, &w) == 0 && w.ws_col > 0 ? w.ws_col : 80;
+    int larghezza = (ioctl(tty, TIOCGWINSZ, &w) == 0 && w.ws_col > 0 ? w.ws_col : 80) - rientro;
     static int largo[MAX_VOCI];
     int righe = 1;
     while (righe < quante && larghezze_colonne(quante, righe, largo) > larghezza) righe++;
     int colonne = (quante + righe - 1) / righe;
     larghezze_colonne(quante, righe, largo);
     for (int r = 0; r < righe; r++) {
+        for (int n = 0; n < rientro; n++) dici(" ");
         for (int c = 0; c < colonne && c * righe + r < quante; c++) {
             const struct voce_cartella *v = &voci[c * righe + r];
             dici_nome(v->nome, v->tipo, v->permessi);
@@ -341,7 +342,7 @@ static void comando_ls(const char *dove, int lungo) {
     }
     chiudi(d);
     if (a_colori && !lungo) {            /* nel terminale: in colonne */
-        if (quante) elenco_in_colonne(quante);
+        if (quante) elenco_in_colonne(quante, 0);
         return;
     }
     for (int k = 0; k < quante; k++) {   /* sulla seriale, e con -l: uno per riga */
@@ -372,7 +373,47 @@ static void riga_help(const char *comando, const char *descrizione) {
     dici("\n");
 }
 
+static char *metti(char *d, const char *s) { while (*s) *d++ = *s++; *d = 0; return d; }
+
+static char *metti_numero(char *d, unsigned long long n) {
+    char c[24];
+    int k = 0;
+    do { c[k++] = (char)('0' + n % 10); n /= 10; } while (n);
+    while (k) *d++ = c[--k];
+    *d = 0;
+    return d;
+}
+
+/* I programmi che si possono far partire per nome: i file di /system/bin e poi di
+ * /data/users/<uid>/bin, gli stessi posti e lo stesso ordine di trova_programma. Un nome
+ * che c'e' in tutti e due conta una volta sola (vince /system/bin). Vanno in voci[], in
+ * ordine alfabetico; restituisce quanti sono. */
+static int leggi_programmi(void) {
+    int quante = 0;
+    for (int dove = 0; dove < 2; dove++) {
+        char cartella[MAX_PERCORSO];
+        if (dove == 0) metti(cartella, "/system/bin");
+        else metti(metti_numero(metti(cartella, "/data/users/"), getuid()), "/bin");
+        int d = apri(cartella, APRI_LEGGERE);
+        if (d < 0) continue;              /* la cartella della persona puo' non esserci */
+        struct voce_cartella v;
+        while (quante < MAX_VOCI && leggi(d, &v, sizeof v) == (int)sizeof v) {
+            v.nome[MAX_NOME_FILE - 1] = 0;
+            if (v.tipo != TIPO_FILE) continue;
+            int k = 0;
+            while (k < quante && strcmp(voci[k].nome, v.nome) < 0) k++;
+            if (k < quante && strcmp(voci[k].nome, v.nome) == 0) continue;
+            for (int j = quante; j > k; j--) voci[j] = voci[j - 1];
+            voci[k] = v;
+            quante++;
+        }
+        chiudi(d);
+    }
+    return quante;
+}
+
 static void comando_help(void) {
+    int programmi = leggi_programmi();
     if (a_colori) {
         riga_help("pwd", "mostra la cartella corrente");
         riga_help("cd", "entra in una cartella");
@@ -385,6 +426,11 @@ static void comando_help(void) {
         dici_numero(getuid(), 0);
         dici("/bin.\nUn percorso (con /) fa partire quel file.\n");
         sgr(NORMALE);
+        if (programmi) {
+            dici("\n");
+            sgr(GRIGIO); dici("programmi\n"); sgr(NORMALE);
+            elenco_in_colonne(programmi, 2);
+        }
         return;
     }
     dici("comandi:\n"
@@ -398,20 +444,14 @@ static void comando_help(void) {
     dici_numero(getuid(), 0);
     dici("/bin; con '/' e' un percorso\n"
          "le parole si dividono agli spazi; \"tra virgolette\" e' una parola sola\n");
+    if (programmi) {
+        dici("programmi:\n ");
+        for (int k = 0; k < programmi; k++) { dici(" "); dici(voci[k].nome); }
+        dici("\n");
+    }
 }
 
 /* --- far partire i programmi --- */
-
-static char *metti(char *d, const char *s) { while (*s) *d++ = *s++; *d = 0; return d; }
-
-static char *metti_numero(char *d, unsigned long long n) {
-    char c[24];
-    int k = 0;
-    do { c[k++] = (char)('0' + n % 10); n /= 10; } while (n);
-    while (k) *d++ = c[--k];
-    *d = 0;
-    return d;
-}
 
 static int ha_barra(const char *s) {
     for (; *s; s++) if (*s == '/') return 1;
