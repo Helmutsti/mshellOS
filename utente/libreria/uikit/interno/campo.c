@@ -7,14 +7,14 @@
 /* Le misure del disegno, una riga per misura: altezza, margine ai lati (dentro), lato
  * dell'icona, spazio dopo di lei, raggio degli angoli (RAGGIO_CAMPO_S/M/L: il campo e' un
  * rettangolo arrotondato, NON una pillola; la ricerca ha il raggio = meta' altezza) e font.
- * Il font e' Plex Regular (non Medium come i pulsanti: si scrive, non si preme) della stessa
- * dimensione del testo dei pulsanti: 13, 14, 16. Larghezza: 280 il campo (di solito si
+ * Il font e' Plex Medium, come i pulsanti, della stessa dimensione del testo dei pulsanti: 13,
+ * 14, 16 (il componente Campo di Figma ha il testo Medium in tutte le misure e gli stati). Larghezza: 280 il campo (di solito si
  * allarga), 180 la ricerca. Il font per numero, come in misure_pulsante. */
 struct misure_campo { int altezza, margine, icona, spazio, raggio, font; };
 static const struct misure_campo misure_campo[] = {
-    { ALTEZZA_S, PADDING_S, ICONA_S, GAP_S, RAGGIO_CAMPO_S, MATERIALE_plex_13 },
-    { ALTEZZA_M, PADDING_M, ICONA_M, GAP_M, RAGGIO_CAMPO_M, MATERIALE_plex_14 },
-    { ALTEZZA_L, PADDING_L, ICONA_L, GAP_L, RAGGIO_CAMPO_L, MATERIALE_plex_16 },
+    { ALTEZZA_S, PADDING_S, ICONA_S, GAP_S, RAGGIO_CAMPO_S, MATERIALE_plex_medio_13 },
+    { ALTEZZA_M, PADDING_M, ICONA_M, GAP_M, RAGGIO_CAMPO_M, MATERIALE_plex_medio_14 },
+    { ALTEZZA_L, PADDING_L, ICONA_L, GAP_L, RAGGIO_CAMPO_L, MATERIALE_plex_medio_16 },
 };
 #define CAMPO_LARGHEZZA_NORMALE 280
 

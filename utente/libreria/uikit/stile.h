@@ -391,7 +391,8 @@ extern const struct ombra_del_design ombre_incassato, ombre_sollevato, ombre_sol
 #define SUGGERIMENTO_DISTANZA     4
 /* la pillola: un gruppo di pulsanti solo icona, attaccati */
 #define PILLOLA_MARGINE         2   /* tra il bordo della pillola e i pulsanti */
-#define PILLOLA_SPAZIO          2   /* tra un pulsante e l'altro */
+#define PILLOLA_SPAZIO          2   /* tra un pulsante e l'altro (il gruppo a scelta) */
+#define PILLOLA_AZIONI_SPAZIO   0   /* tra un pulsante e l'altro nel "Gruppo di azioni" (Figma: gap spazio/0) */
 #define SEGMENTO_LATO          24   /* il pulsante della pillola, quadrato */
 #define SEGMENTO_ICONA         16
 #define RAGGIO_SEGMENTO        (RAGGIO_PICCOLO - PILLOLA_MARGINE)   /* 4: segue la pillola */

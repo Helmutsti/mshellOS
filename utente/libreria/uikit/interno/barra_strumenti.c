@@ -103,6 +103,11 @@ static void pulsante_barra_disegna(struct widget *w, struct pennello *p) {
 }
 
 /* La pillola, il gruppo di pulsanti: com'e' fatta e' spiegato in uikit.h ("LA PILLOLA"). */
+/* Lo spazio tra una voce e l'altra: 0 in M e nel gruppo di azioni (indietro / avanti), 2 nel gruppo a scelta. */
+static int pillola_spazio(struct widget *w, int m) {
+    return m ? GRUPPO_SPAZIO_M : ((struct pillola *)w)->a_scelta ? PILLOLA_SPAZIO : PILLOLA_AZIONI_SPAZIO;
+}
+
 static void pillola_misura(struct widget *w, int *l, int *a) {
     int visti = 0, largo = 0, m = pillola_m(w);
     for (int i = 0; i < w->quanti_figli; i++) {
@@ -112,7 +117,7 @@ static void pillola_misura(struct widget *w, int *l, int *a) {
         largo += fl;
         visti++;
     }
-    *l = 2 * GRUPPO_PADDING + largo + (visti ? visti - 1 : 0) * (m ? GRUPPO_SPAZIO_M : PILLOLA_SPAZIO);
+    *l = 2 * GRUPPO_PADDING + largo + (visti ? visti - 1 : 0) * pillola_spazio(w, m);
     *a = m ? ALTEZZA_M : ALTEZZA_S;
 }
 
@@ -128,7 +133,7 @@ static void pillola_disponi(struct widget *w) {
         f->y = w->y + GRUPPO_PADDING;
         f->l = fl;
         f->a = m ? GRUPPO_ELEMENTO_M : GRUPPO_ELEMENTO;
-        x += fl + (m ? GRUPPO_SPAZIO_M : PILLOLA_SPAZIO);
+        x += fl + pillola_spazio(w, m);
     }
 }
 
