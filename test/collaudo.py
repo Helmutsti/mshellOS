@@ -32,7 +32,9 @@ una prova fallita restano in test/risultati/<cpu>/<prova>/; quelle delle prove r
 si cancellano (con --tieni restano).
 
 Le porte: QEMU apre il QMP sulla porta --porte (4465 se non si dice) e il monitor HMP
-sulla successiva. Se sono occupate (un altro QEMU, un'altra prova) se ne scelgono altre.
+sulla successiva. Una prova con INTERNET = True (oggi recinto) usa anche la terza: li' la
+prova ascolta sul PC, e QEMU ci inoltra i collegamenti della macchina verso 10.0.2.100:80
+(qemu.py, Ascoltatore). Se sono occupate (un altro QEMU, un'altra prova) se ne scelgono altre.
 """
 
 import argparse
@@ -178,7 +180,8 @@ def esegui_una(modulo, cpu, args):
     shutil.rmtree(cartella, ignore_errors=True)
     cartella.mkdir(parents=True)
     m = Macchina(cpu, args.build, cartella, args.porte, args.ram,
-                 getattr(modulo, "DISCO", "disco.img"), getattr(modulo, "RETE", False))
+                 getattr(modulo, "DISCO", "disco.img"), getattr(modulo, "RETE", False),
+                 getattr(modulo, "INTERNET", False))
     p = Prova(modulo.NOME, cpu, m, cartella, args.riferimenti)
     inizio = time.time()
     riuscita, messaggio = True, ""

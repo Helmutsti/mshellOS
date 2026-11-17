@@ -80,7 +80,7 @@ uv run test/collaudo.py --ram 8192             # il PC con 8 GB di RAM (2048 MB 
 uv run test/collaudo.py --solo mouse finestre  # solo alcune prove (--elenco per vederle)
 uv run test/collaudo.py --compila              # prima compila con Docker, come run.sh
 uv run test/collaudo.py --build altra/cartella # usa un'altra cartella compilata (con dentro x86_64/ e arm64/)
-uv run test/collaudo.py --porte 4475           # QMP su 4475, monitor HMP su 4476 (4465 se non si dice)
+uv run test/collaudo.py --porte 4475           # QMP su 4475, monitor HMP su 4476 (4465 se non si dice); 4477 per l'"internet" di recinto
 uv run test/collaudo.py --tieni                # tiene le foto anche delle prove riuscite
 ```
 
@@ -90,6 +90,13 @@ delle differenze, in rosso. `test/risultati/` non va nel repo.
 
 Se QEMU è già aperto (con `run.sh`), le prove funzionano lo stesso: usano una copia del
 disco e porte loro. Se le porte sono occupate, se ne scelgono altre con `--porte`.
+
+La prova `recinto` deve sapere se "internet arriva" senza dipendere da come risponde il
+computer (su Windows la rete di QEMU verso una porta chiusa del PC non risponde mai). Per
+questo apre sul PC un ascoltatore sulla porta `--porte` + 2 prima di accendere QEMU, e QEMU
+inoltra lì i collegamenti della macchina verso l'indirizzo fisso `10.0.2.100:80` (il
+"guestfwd" della rete di QEMU); internet arriva solo se il collegamento riesce. L'ascoltatore
+si chiude quando si spegne la macchina, anche se la prova fallisce (`test/qemu.py`, `Ascoltatore`).
 
 L'orologio del PC virtuale è fisso (`-rtc base=2026-01-01T10:00:00,clock=vm`): le date e
 le ore che le app mostrano sono sempre le stesse, o poco più, prova dopo prova. Sul PC l'accensione dura un po'

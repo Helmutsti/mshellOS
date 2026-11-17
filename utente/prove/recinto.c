@@ -3,8 +3,9 @@
  * se chiede tutto direttamente al kernel, senza CoreKit. C'e' SOLO per le prove.
  *
  * Sta solo nel disco disco_recinto.img (build.sh), in /data/tests: init lo fa partire
- * all'accensione, come sistema. Serve la scheda di rete di QEMU (RETE = True in
- * test/prove/recinto.py), per la controprova di internet.
+ * all'accensione, come sistema. Serve la scheda di rete di QEMU con l'ascoltatore della prova
+ * (INTERNET = True in test/prove/recinto.py, vedi internet() sotto), per la controprova di
+ * internet.
  *
  * Come e' fatto (lo stesso ordine che seguira' il launcher):
  *   1. CONTROPROVA: una copia di se' diventa uid 1000 (come oggi partono le app) e prova a
@@ -105,13 +106,20 @@ static void passo(const char *dove, const char *cosa, int risultato, int giusto)
     if (!giusto) fallite = 1;
 }
 
-/* Collegarsi a internet: 10.0.2.2 porta 80 (il PC, dalla rete di QEMU). 0 se collegato, o
- * -1 con errno; "rifiutato" vuol dire che il pacchetto e' arrivato. Al massimo 3 secondi. */
+/* Collegarsi a internet: 10.0.2.100 porta 80, un indirizzo fisso della rete di QEMU che QEMU
+ * inoltra a un ascoltatore aperto sul PC dalla prova (test/qemu.py, Macchina con
+ * internet=True: "guestfwd"). 0 se collegato, o -1 con errno. Al massimo 3 secondi.
+ * Vale solo un collegamento RIUSCITO: prima si chiedeva la porta 80 del PC e bastava il
+ * rifiuto ("il pacchetto e' arrivato"), ma su Windows la rete di QEMU verso una porta chiusa
+ * del PC non risponde mai (ogni tentativo scade dopo 3 s), e la prova dipendeva da come il PC
+ * risponde. Cosi' risponde sempre qualcuno che la prova stessa ha acceso, sul Mac come sul PC. */
+#define INTERNET_INDIRIZZO "10.0.2.100"
+#define INTERNET_PORTA     80
 static int internet(void) {
     int s = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     if (s < 0) return -1;
-    struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(80)};
-    inet_pton(AF_INET, "10.0.2.2", &a.sin_addr);
+    struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(INTERNET_PORTA)};
+    inet_pton(AF_INET, INTERNET_INDIRIZZO, &a.sin_addr);
     int r = connect(s, (struct sockaddr *)&a, sizeof a);
     if (r < 0 && errno == EINPROGRESS) {
         struct pollfd p = {.fd = s, .events = POLLOUT};
@@ -204,7 +212,7 @@ static void prove_con_rete(void) {
     const char *dove = "dentro con la rete";
     int r;
     r = internet();
-    passo(dove, "collegarsi a internet", r, r == 0 || errno == ECONNREFUSED);
+    passo(dove, "collegarsi a internet", r, r == 0);
     r = apri(CASA, O_RDONLY | O_DIRECTORY);
     passo(dove, "leggere la Home", r, r < 0 && errno == ENOENT);
     r = launcher();
@@ -233,7 +241,7 @@ static void prove(int dentro) {
     passo(dove, "parlare al launcher", r, dentro ? (r < 0 && errno == ENOENT) : r == 0);
     r = internet();
     passo(dove, "collegarsi a internet", r,
-          dentro ? (r < 0 && errno == ENETUNREACH) : (r == 0 || errno == ECONNREFUSED));
+          dentro ? (r < 0 && errno == ENETUNREACH) : r == 0);
     if (!dentro) {
         r = scrivi_file(PROVA "/nuovo.txt");
         passo(dove, "creare un file in ProvaRecinto (permessi del file)", r, r == 0);
@@ -596,9 +604,11 @@ int main(int argc, char **argv) {
         riga("fallita");
         return 0;
     }
-    /* la rete del sistema ci mette qualche secondo ad accendersi: fino a un minuto */
+    /* la rete del sistema ci mette qualche secondo ad accendersi: fino a un minuto. Finche'
+     * non ha l'indirizzo il tentativo risponde subito "rete irraggiungibile"; appena c'e', il
+     * collegamento all'ascoltatore della prova riesce */
     for (int volta = 0; volta < 60; volta++) {
-        if (internet() == 0 || errno == ECONNREFUSED) break;
+        if (internet() == 0) break;
         sleep(1);
     }
     int fuori = in_una_copia(controprova);

@@ -1,7 +1,9 @@
 """recinto: un programma chiuso in un recinto non vede disco, internet, servizi e altri programmi.
 
-Si accende il disco disco_recinto.img (vedi build.sh), con la scheda di rete di QEMU (RETE =
-True, per la controprova di internet): in /data/tests c'e' il programma recinto
+Si accende il disco disco_recinto.img (vedi build.sh), con la scheda di rete di QEMU e
+l'"internet" certo delle prove (INTERNET = True): sul PC un ascoltatore sulla porta --porte + 2,
+a cui QEMU inoltra i collegamenti della macchina verso 10.0.2.100:80 (qemu.py, Ascoltatore);
+internet "arriva" solo se il collegamento RIESCE. In /data/tests c'e' il programma recinto
 (utente/prove/recinto.c), che init fa partire come sistema. Lui prova le stesse cose chiedendo
 direttamente al kernel, senza CoreKit: prima come uid 1000 senza recinto (la controprova: Home,
 launcher e internet ci arrivano), poi dentro un recinto (namespaces, radice nuova con solo il
@@ -18,7 +20,7 @@ NOME = "recinto"
 ORDINE = 92
 DESCRIZIONE = "recinto delle app: dentro niente disco, internet, servizi e altri programmi (controprova fuori)"
 DISCO = "disco_recinto.img"
-RETE = True
+INTERNET = True     # la scheda di rete e l'ascoltatore sul PC (si chiude anche se la prova fallisce)
 SOLO_QEMU = "il recinto chiede al kernel i namespaces, che Docker senza permessi in piu' non da'"
 
 

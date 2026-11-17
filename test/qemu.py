@@ -111,6 +111,63 @@ def porta_libera(porta):
         return s.connect_ex(("127.0.0.1", porta)) != 0
 
 
+# --- "internet" per le prove --------------------------------------------------------
+
+# L'indirizzo fisso, visto da dentro la macchina, a cui una prova si collega per dire
+# "internet arriva" (utente/prove/recinto.c, internet()). QEMU lo inoltra (guestfwd della
+# rete "user") all'ascoltatore qui sotto, aperto sul PC dalla prova su una porta sua.
+INTERNET_OSPITE = ("10.0.2.100", 80)
+
+
+class Ascoltatore:
+    """Un ascoltatore TCP su 127.0.0.1:porta, sul PC, finche' non si chiude: accetta chi si
+    collega e butta quello che riceve. Serve da "internet" certo per le prove, uguale sul
+    Mac e sul PC: prima si chiedeva la porta 80 del PC, e bastava che rispondesse "rifiutato",
+    ma su Windows la rete di QEMU verso una porta chiusa del PC non risponde mai (ogni
+    tentativo scade), e la prova dipendeva dal computer.
+    QEMU si collega qui una volta, all'accensione (il guestfwd e' un "chardev" che si collega
+    subito: per questo l'ascoltatore si apre PRIMA di QEMU), e ci manda i dati dei
+    collegamenti che la macchina apre verso INTERNET_OSPITE."""
+
+    def __init__(self, porta):
+        import threading
+        self.porta = porta
+        self.presa = socket.socket()
+        self.presa.bind(("127.0.0.1", porta))
+        self.presa.listen(8)
+        self.presa.settimeout(0.5)
+        self.aperta = True
+        self.clienti = []
+        self.filo = threading.Thread(target=self._gira, daemon=True)
+        self.filo.start()
+
+    def _gira(self):
+        import select
+        while self.aperta:
+            try:
+                c, _ = self.presa.accept()
+                self.clienti.append(c)
+            except (socket.timeout, OSError):
+                pass
+            vivi = [c for c in self.clienti if c.fileno() >= 0]
+            if vivi:
+                pronti, _, _ = select.select(vivi, [], [], 0)
+                for c in pronti:
+                    try:
+                        if not c.recv(4096):
+                            c.close()
+                    except OSError:
+                        c.close()
+            self.clienti = [c for c in self.clienti if c.fileno() >= 0]
+
+    def chiudi(self):
+        self.aperta = False
+        self.filo.join(2)
+        for c in self.clienti:
+            c.close()
+        self.presa.close()
+
+
 # --- QMP ----------------------------------------------------------------------------
 
 class Qmp:
@@ -170,7 +227,8 @@ class Macchina:
     # La RAM di ARM64 e' fissa (512 MB, come run.sh); quella del PC si sceglie (--ram).
     RAM_ARM64 = 512
 
-    def __init__(self, cpu, build, lavoro, porta, ram=2048, disco="disco.img", rete=False):
+    def __init__(self, cpu, build, lavoro, porta, ram=2048, disco="disco.img", rete=False,
+                 internet=False):
         self.cpu = cpu
         self.ram = self.RAM_ARM64 if cpu == "arm64" else ram     # in MB
         self.build = Path(build) / cpu      # build.sh compila in build/<cpu>/
@@ -180,9 +238,15 @@ class Macchina:
         self.disco = disco
         # con la scheda di rete (virtio-net, rete "user" di QEMU: DHCP e DNS finti, uscita
         # verso Internet) se la prova lo chiede (RETE = True): le altre non ne hanno bisogno
-        self.rete = rete
+        # con internet=True (INTERNET = True nella prova) anche l'"internet" certo delle
+        # prove: un Ascoltatore sul PC sulla porta dopo l'HMP, che QEMU inoltra a
+        # INTERNET_OSPITE; vuol dire anche la scheda di rete
+        self.internet = internet
+        self.rete = rete or internet
         self.porta_qmp = porta
         self.porta_hmp = porta + 1
+        self.porta_internet = porta + 2
+        self.ascoltatore = None
         self.processo = None
         self.qmp = None
         self.seriale = self.lavoro / "seriale.txt"
@@ -219,7 +283,11 @@ class Macchina:
         # Un'ora fissa (clock=vm: corre solo quando corre la macchina): le date dei file
         # e l'ora che le app mostrano sono sempre piu' o meno le stesse, prova dopo prova.
         if self.rete:
-            argomenti += ["-nic", "user,model=virtio-net-pci"]
+            nic = "user,model=virtio-net-pci"
+            if self.internet:
+                ospite, porta = INTERNET_OSPITE
+                nic += f",guestfwd=tcp:{ospite}:{porta}-tcp:127.0.0.1:{self.porta_internet}"
+            argomenti += ["-nic", nic]
         return argomenti + [
             "-rtc", "base=2026-01-01T10:00:00,clock=vm",
             "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet",
@@ -236,12 +304,19 @@ class Macchina:
         for f in [origine] + [self.build / n for n in avvio]:
             if not f.exists():
                 raise ErroreProva(f"manca {f}: compila prima (--compila)")
-        for p in (self.porta_qmp, self.porta_hmp):
+        porte = [self.porta_qmp, self.porta_hmp] + ([self.porta_internet] if self.internet else [])
+        for p in porte:
             if not porta_libera(p):
                 raise ErroreProva(f"la porta {p} e' gia' usata: scegline altre con --porte")
         shutil.copyfile(origine, self.lavoro / "disco.img")
         if self.seriale.exists():
             self.seriale.unlink()
+        if self.internet:
+            # prima di QEMU, che all'accensione ci si collega (si chiude in spegni)
+            try:
+                self.ascoltatore = Ascoltatore(self.porta_internet)
+            except OSError as e:
+                raise ErroreProva(f"non riesco ad ascoltare sulla porta {self.porta_internet}: {e}")
         self.processo = subprocess.Popen(self.comando_qemu(), stdout=subprocess.DEVNULL,
                                          stderr=open(self.lavoro / "qemu_errori.txt", "w"))
         try:
@@ -267,6 +342,9 @@ class Macchina:
                 self.processo.kill()
                 self.processo.wait(5)
             self.processo = None
+        if self.ascoltatore:
+            self.ascoltatore.chiudi()
+            self.ascoltatore = None
 
     def viva(self):
         return self.processo is not None and self.processo.poll() is None
