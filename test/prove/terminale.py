@@ -58,3 +58,6 @@ def esegui(p):
     p.controlla(pixel_diversi(_dentro(fine), _dentro(dopo), None, 40) > 20,
                 "dopo Ctrl+C la finestra non e' cambiata (manca la riga nuova)")
     p.nota("foto in " + str(p.cartella))
+
+
+DISCO = "disco_app.img"   # la userbar con Esempio: le posizioni di scrivania.py valgono per questo disco

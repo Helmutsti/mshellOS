@@ -110,3 +110,6 @@ def esegui(p):
     time.sleep(0.5)
     m.aspetta_schermo_fermo().crop(FINESTRA).save(p.cartella / "vim_fine.png")
     p.nota("foto in " + str(p.cartella))
+
+
+DISCO = "disco_app.img"   # la userbar con Esempio: le posizioni di scrivania.py valgono per questo disco
