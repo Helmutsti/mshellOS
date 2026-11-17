@@ -73,7 +73,7 @@ static void avviso_disegna(struct widget *w, struct pennello *p) {
         char righe[AVVISO_RIGHE][MAX_RIGA_NOME];
         int n = avviso_righe(v, righe);
         y += SPAZIO_8;
-        pennello_colore(p, TESTO_SECONDARIO);
+        pennello_colore(p, TESTO_PRIMARIO);
         for (int i = 0; i < n; i++, y += INTERLINEA_CORPO)
             testo_centrato(p, FONT_CORPO, x, y, INTERLINEA_CORPO, righe[i]);
     }
