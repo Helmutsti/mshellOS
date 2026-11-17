@@ -7,9 +7,12 @@
 Le forme sono quelle del disegno ("Componenti base", Puntatore, frame 95:788, scuro
 160:3786): Normale (Idle), Collegamento (Link, la mano), Attesa (Caricamento, l'anello che
 gira), Testo (Paragrafo, la barra a I), Non disponibile (Disabilitato, la freccia col
-divieto). Ognuna sta su un canvas 32 x 32 con il suo punto caldo; i tracciati qui sotto
-sono copiati a mano dai file SVG del disegno (stesse coordinate, il canvas ha l'origine in
-(0, 0): 'sposta' dice dove cade l'origine di ogni SVG sul canvas).
+divieto). Ognuna sta su un canvas 24 x 24 con il suo punto caldo (decisione della persona, 17/11/2026:
+il puntatore passa da 32 a 24 pixel). I tracciati qui sotto sono copiati a mano dai file SVG
+del disegno a 32 (stesse coordinate, il canvas ha l'origine in (0, 0): 'sposta' dice dove cade
+l'origine di ogni SVG sul canvas). Tutte le misure di questo file (tracciati, spessori,
+spostamenti e sfocature delle ombre, punti caldi) sono quelle del disegno a 32: il solo
+passaggio a pixel (FATTORE = 0,75) le scala insieme.
 
 Ogni forma ha un contorno (bianco) e una forma (scura), piu' l'ombra "ombra/puntatore": due
 ombre nere, la prima spostata di 1 e sfocata 0,5 (opacita' 0,20), la seconda spostata di 3,
@@ -35,8 +38,9 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 SCALA = 8
-MARGINE = 16            # attorno al canvas 32 x 32, per le ombre
-CANVAS = 32
+MARGINE = 16            # attorno al canvas, per le ombre
+CANVAS = 24             # lato del puntatore, in pixel
+FATTORE = 0.75          # dal disegno a 32 al canvas a 24
 FOTOGRAMMI = 12         # l'attesa gira di 360 gradi in 1 secondo: un fotogramma ogni 1/12 s
 SOGLIA = 3              # un'ombra con opacita' fino a 3 (su 255) non si tiene
 
@@ -108,7 +112,7 @@ def ruota(pezzi, gradi, cx=16.0, cy=16.0):
 
 
 def grande(p):
-    return ((p[0] + MARGINE) * SCALA, (p[1] + MARGINE) * SCALA)
+    return ((p[0] * FATTORE + MARGINE) * SCALA, (p[1] * FATTORE + MARGINE) * SCALA)
 
 
 def maschera(pezzi, riempi, tratto):
@@ -121,6 +125,7 @@ def maschera(pezzi, riempi, tratto):
         g = [grande(p) for p in punti]
         if riempi and len(g) > 2: d.polygon(g, fill=255)
         if tratto:
+            tratto *= FATTORE
             r = tratto * SCALA / 2
             seq = g + [g[0]] if chiuso else g
             for a, b in zip(seq, seq[1:]):
@@ -183,10 +188,10 @@ def ombra(unita, dy, sfuma, stringi, opacita_chiaro, opacita_scuro):
     (grande) a opacita' 1; l'opacita' si applica dopo."""
     m = unita
     if stringi:
-        m = m.filter(ImageFilter.MinFilter(2 * stringi * SCALA + 1))
+        m = m.filter(ImageFilter.MinFilter(2 * round(stringi * FATTORE * SCALA) + 1))
     s = Image.new("L", m.size, 0)
-    s.paste(m, (0, round(dy * SCALA)))
-    return s.filter(ImageFilter.GaussianBlur(sfuma * SCALA))
+    s.paste(m, (0, round(dy * FATTORE * SCALA)))
+    return s.filter(ImageFilter.GaussianBlur(sfuma * FATTORE * SCALA))
 
 
 def forma_completa(c, f, caldo):
@@ -201,7 +206,7 @@ def forma_completa(c, f, caldo):
         a = s1.point(lambda v: round(v * o1))
         b = s2.point(lambda v: round(v * o2))
         out.append(ImageChops.invert(ImageChops.multiply(ImageChops.invert(a), ImageChops.invert(b))))
-    return piccola(c), piccola(f), piccola(out[0]), piccola(out[1]), (caldo[0] + MARGINE, caldo[1] + MARGINE)
+    return piccola(c), piccola(f), piccola(out[0]), piccola(out[1]), (math.floor(caldo[0] * FATTORE) + MARGINE, math.floor(caldo[1] * FATTORE) + MARGINE)
 
 
 def tutte_le_forme():
@@ -270,7 +275,7 @@ def scrivi_c():
 
 
 def anteprima(tema, fuori, zoom):
-    """Tutte le forme sul fondo del tema, ciascuna in un riquadro 32 x 32 del disegno (il
+    """Tutte le forme sul fondo del tema, ciascuna in un riquadro 24 x 24 (il
     punto caldo al suo posto), come i riquadri del disegno."""
     t = TEMI[tema]
     forme = tutte_le_forme()

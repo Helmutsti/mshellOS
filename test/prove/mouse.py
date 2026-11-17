@@ -23,9 +23,10 @@ DESCRIZIONE = "puntatore in tondo per 8 s: segue, non si blocca, arriva dove dev
 
 ANGOLO = (1230, 750, 1280, 800)     # dove e' parcheggiato il puntatore nella foto di base
 RITARDO = 70                        # pixel di distanza accettati durante il giro
-# La punta (il punto caldo) sta 2 pixel dentro il riquadro del puntatore: il contorno bianco della
-# freccia (tratto 3, come nel disegno) sporge di 1,5 dalla punta e un po' di sfumatura.
-PUNTA = (2, 2)
+# La punta (il punto caldo) sta 1 pixel dentro il riquadro del puntatore: il contorno bianco della
+# freccia (tratto 3 del disegno a 32, 2,25 a 24) sporge di circa 1 pixel dalla punta (misurato sulla
+# forma a 24 con la stessa soglia del confronto).
+PUNTA = (1, 1)
 
 
 def trova_puntatore(base, foto):
