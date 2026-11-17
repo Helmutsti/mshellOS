@@ -305,6 +305,7 @@ struct etichetta {
     struct widget base;
     char testo[MAX_TESTO_WIDGET];
     const struct font *font;           /* FONT_TESTO, FONT_TITOLO... */
+    int secondaria;                    /* 1: in TESTO_SECONDARIO (l'etichetta di un campo: "Nome") */
 };
 
 /* Prepara un'etichetta con 'testo' (al massimo MAX_TESTO_WIDGET - 1 byte: il resto si

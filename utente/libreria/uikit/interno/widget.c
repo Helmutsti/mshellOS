@@ -218,7 +218,7 @@ static void etichetta_misura(struct widget *w, int *l, int *a) {
 
 static void etichetta_disegna(struct widget *w, struct pennello *p) {
     struct etichetta *e = (struct etichetta *)w;
-    pennello_colore(p, TESTO_PRIMARIO);   /* chiesto qui, non copiato: segue il tema */
+    pennello_colore(p, e->secondaria ? TESTO_SECONDARIO : TESTO_PRIMARIO);   /* chiesto qui, non copiato: segue il tema */
     testo_centrato(p, e->font, w->x, w->y, w->a, e->testo);
 }
 
