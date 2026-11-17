@@ -67,7 +67,7 @@ Esempio (tasto "o" apre, "s" salva).
    sistema senza chiedere o decide anche lì la persona;
 5. la **compilazione e le prove sul PC Windows (x86_64)**: tutto questo è stato provato solo su
    arm64 (Mac); unito in `main` con l'ok della persona senza la build x86_64.
-5b. la prova `mouse` nella sandbox su x86_64 a volte fallisce (puntatore indietro sopra una finestra), causa da cercare;
+5b. ~~la prova `mouse` a volte falliva~~: fatto, scambiava il cambio di minuto dell'ora della userbar per il puntatore; ora l'ora e' coperta;
 6. **sul Mac**: rifare le foto di riferimento arm64 di `files` e `immagini`
    (`test/collaudo.py --riferimenti --solo files immagini`, poi guardarle): sono ancora quelle
    con la userbar vecchia, la cartella "Scrivania" (ora "Desktop") e il puntatore vecchio.

@@ -30,7 +30,8 @@ PUNTA = (2, 2)
 
 def trova_puntatore(base, foto):
     """Dove e' la punta della freccia (il punto caldo), o None."""
-    r = riquadro_diverso(base, foto, ANGOLO, soglia=24)
+    # l'ora della userbar cambia da sola: se cambia il minuto non va scambiata per il puntatore
+    r = riquadro_diverso(base, foto, [ANGOLO, s.ORA], soglia=24)
     return (r[0] + PUNTA[0], r[1] + PUNTA[1]) if r else None
 
 
