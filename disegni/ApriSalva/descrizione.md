@@ -47,14 +47,14 @@ Frame verticale (libreria "mini finestra", effetti di finestra della libreria), 
 Titolo finestra (Mini), Indietro e avanti, Tabella 105:446 (Riga di tabella), Pulsante 92:1001, Campo 93:970, Velo della finestra 138:455 (solo nella finestra dietro). Variabili: Semantici (colori), Misure (spazio/8, spazio/16, raggio/pannello).
 
 ## Salva, il file esiste gia: richiesta "Sostituire il file?"
-Decisioni della persona (17 novembre 2026): in "Salva", se il file con quel nome esiste gia, si chiede con una PICCOLA FINESTRA SOPRA la finestra "Salva", con due pulsanti: "Annulla" e "Sostituisci". La finestra senza titolo ("blank") e la stessa forma degli avvisi: si usa il componente Avviso, Scelte=Due, con le sue misure, senza cambiarlo. Nessun'altra variante.
+Decisioni della persona (17 novembre 2026): in "Salva", se il file con quel nome esiste gia, si chiede con una PICCOLA FINESTRA SOPRA la finestra "Salva", con due pulsanti: "Annulla" e "Sostituisci". La finestra senza titolo ("blank") e la stessa forma degli avvisi: si usa il componente Avviso, Scelte=Due, con le sue misure, senza cambiarlo. Nessun'altra variante. Regola: varianti e stili dei componenti non si cambiano mai rispetto alla libreria senza chiedere (il pulsante Sostituisci resta Pericolo, come nel componente).
 
 - Schermata: 298:992 "Salva – sostituire il file?" (pagina 289:674, x 3300, 1024 x 664, padding spazio/32). Copia di "Salva – con nome" 293:2836, con il campo Nome "appunti.txt" (il file che esiste gia).
 - Ordine dei livelli: Finestra Files (dietro) 298:993, Velo della finestra 298:1016 (960 x 600), Finestra Salva 298:1017 (480 x 469, x 272 y 98), Velo della finestra Salva 298:1300 (istanza del componente Velo 138:455, assoluta, 480 x 469 sulla finestra Salva), Avviso 302:1267.
 - Avviso 302:1267: istanza del componente Avviso 185:3085, Scelte=Due (132:1063), 400 x 160, assoluta a x 312 y 253 nella cornice (centrata sulla finestra Salva, 272+40 e 98+155). Misure del componente, non toccate: padding spazio/24, gap spazio/24, fondo pieno superficie/elevata, effetti di finestra della libreria.
   - Testi (gap spazio/8): "Titolo" "Sostituire il file?" e "Messaggio" "Il file appunti.txt esiste già. Vuoi sostituirlo?" (testo provvisorio, la persona dara quello definitivo). Il Messaggio e colorato testo/primario (Semantici), invece del testo/secondario del componente.
-  - Il componente Avviso non ha una proprieta per nascondere il titolo: resta, con la domanda "Sostituire il file?".
-  - Azioni (a sinistra del bordo destro, gap spazio/8): Pulsante Secondario M Stato=Normale "Annulla" + Pulsante M Primario Normale "Sostituisci" (nel componente era Pericolo: cambiato il tipo, il testo e l'etichetta).
+  - Il componente Avviso non ha una proprieta per nascondere il titolo: resta, con il testo "Sostituire il file?". Decisione della persona: il titolo del componente si tiene.
+  - Azioni (a sinistra del bordo destro, gap spazio/8): Pulsante Secondario M Stato=Normale "Annulla" + Pulsante M Pericolo Normale "Sostituisci" (come nel componente della libreria: cambiato solo il testo).
   - Altezza: 24 + 48 (testi: 20 + 8 + 20) + 24 + 40 + 24 = 160.
 - Componenti: Avviso 185:3085, Pulsante 92:1001, Velo della finestra 138:455, Campo 93:970 (Salva). Variabili: Semantici (colori), Misure.
 - Nella finestra Salva sotto "Annulla" e in Stato=Sopra (come nell'originale 293:3060): lasciato com'e.
