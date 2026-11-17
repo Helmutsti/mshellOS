@@ -47,23 +47,22 @@ Frame verticale (libreria "mini finestra", effetti di finestra della libreria), 
 Titolo finestra (Mini), Indietro e avanti, Tabella 105:446 (Riga di tabella), Pulsante 92:1001, Campo 93:970, Velo della finestra 138:455 (solo nella finestra dietro). Variabili: Semantici (colori), Misure (spazio/8, spazio/16, raggio/pannello).
 
 ## Salva, il file esiste gia: richiesta "Sostituire il file?"
-Decisione della persona (17 novembre 2026): in "Salva", se il file con quel nome esiste gia, si chiede con una PICCOLA FINESTRA SOPRA la finestra "Salva", con due pulsanti: "Annulla" e "Sostituisci". Nessun'altra variante.
+Decisioni della persona (17 novembre 2026): in "Salva", se il file con quel nome esiste gia, si chiede con una PICCOLA FINESTRA SOPRA la finestra "Salva", con due pulsanti: "Annulla" e "Sostituisci". La finestra senza titolo ("blank") e la stessa forma degli avvisi: si usa il componente Avviso, Scelte=Due, con le sue misure, senza cambiarlo. Nessun'altra variante.
 
 - Schermata: 298:992 "Salva – sostituire il file?" (pagina 289:674, x 3300, 1024 x 664, padding spazio/32). Copia di "Salva – con nome" 293:2836, con il campo Nome "appunti.txt" (il file che esiste gia).
-- Ordine dei livelli: Finestra Files (dietro) 298:993, Velo della finestra 298:1016 (960 x 600), Finestra Salva 298:1017 (480 x 469, x 272 y 98), Velo della finestra Salva 298:1300 (istanza del componente Velo 138:455, assoluta, 480 x 469 sulla finestra Salva), Finestra Sostituisci 298:1301.
-- Finestra Sostituisci 298:1301: frame verticale 320 x 124 (larghezza della mini finestra Informazioni), assoluta a x 352 y 270 nella cornice (centrata sulla finestra Salva; centro verticale a 270,5, arrotondato a 270). Effetti di finestra della libreria (blur, bordo interno, tre ombre), non ritaglia, gap 0.
-  - Titolo finestra: Stato=Attiva, Comandi=No, Dimensione=Mini, testo "Salva", altezza 28, linea sotto nascosta.
-  - Contenuto (altezza 96): padding spazio/16 su tutti i lati, gap spazio/16, non ritaglia. Dall'alto:
-    1. Testo "Domanda" 12 px, IBM Plex Sans, colore come l'etichetta "Nome" di Salva: "Il file appunti.txt esiste già. Vuoi sostituirlo?" (larghezza piena, 288, una riga, altezza 16).
-    2. Barra dei pulsanti (orizzontale, padding 0, gap spazio/8, a destra, altezza 32): Pulsante Secondario S Stato=Sopra "Annulla" (come in Salva) + Pulsante Primario S Normale "Sostituisci" (86 di larghezza), icone spente.
-  - Altezza: 28 + 16 + 16 (testo) + 16 + 32 + 16 = 124.
-- Componenti: Titolo finestra (Mini), Pulsante 92:1001, Velo della finestra 138:455, Campo 93:970 (Salva). Variabili: Semantici (colori), Misure (spazio/16, spazio/8).
+- Ordine dei livelli: Finestra Files (dietro) 298:993, Velo della finestra 298:1016 (960 x 600), Finestra Salva 298:1017 (480 x 469, x 272 y 98), Velo della finestra Salva 298:1300 (istanza del componente Velo 138:455, assoluta, 480 x 469 sulla finestra Salva), Avviso 302:1267.
+- Avviso 302:1267: istanza del componente Avviso 185:3085, Scelte=Due (132:1063), 400 x 160, assoluta a x 312 y 253 nella cornice (centrata sulla finestra Salva, 272+40 e 98+155). Misure del componente, non toccate: padding spazio/24, gap spazio/24, fondo pieno superficie/elevata, effetti di finestra della libreria.
+  - Testi (gap spazio/8): "Titolo" "Sostituire il file?" e "Messaggio" "Il file appunti.txt esiste già. Vuoi sostituirlo?" (testo provvisorio, la persona dara quello definitivo). Il Messaggio e colorato testo/primario (Semantici), invece del testo/secondario del componente.
+  - Il componente Avviso non ha una proprieta per nascondere il titolo: resta, con la domanda "Sostituire il file?".
+  - Azioni (a sinistra del bordo destro, gap spazio/8): Pulsante Secondario M Stato=Normale "Annulla" + Pulsante M Primario Normale "Sostituisci" (nel componente era Pericolo: cambiato il tipo, il testo e l'etichetta).
+  - Altezza: 24 + 48 (testi: 20 + 8 + 20) + 24 + 40 + 24 = 160.
+- Componenti: Avviso 185:3085, Pulsante 92:1001, Velo della finestra 138:455, Campo 93:970 (Salva). Variabili: Semantici (colori), Misure.
+- Nella finestra Salva sotto "Annulla" e in Stato=Sopra (come nell'originale 293:3060): lasciato com'e.
 
 ### Foto (`figma/`)
-- `sostituisci-chiaro.png` / `sostituisci-scuro.png`: ritagliate sulla finestra Sostituisci (320 x 124).
+- `sostituisci-chiaro.png` / `sostituisci-scuro.png`: ritagliate sull'Avviso (400 x 160).
 - `sostituisci-sopra-chiaro.png` / `sostituisci-sopra-scuro.png`: cornice intera con margine di ombra. Scuro = collezione Semantici sul modo "Scuro" sulla cornice, poi tolto.
-- Nota: nella foto della cornice il blur di sfondo della finestra Sostituisci lascia intravedere la tabella di Salva sotto (le finestre hanno il fondo al 72%); nel programma vero il blur e quello del compositore.
 
-### Distanze misurate sulla foto (sostituisci-chiaro.png, 320 x 124)
-- Titolo (28) -> testo: 16. Bordo sinistro -> testo: 16. Bordo destro -> pulsante Sostituisci: 16. Testo (44-60) -> pulsanti (76-108): 16. Pulsanti -> fondo (124): 16.
-- Somme della spaziatura: x = 16 (solo il livello Contenuto), y = 16 (solo il livello Contenuto). Titolo, testo e barra dei pulsanti hanno padding 0 (il padding dei pulsanti e il loro sfondo, eccezione del punto 3).
+### Distanze misurate sulla foto (sostituisci-chiaro.png, 400 x 160)
+- Bordo sinistro -> testo (titolo e messaggio): 24. Bordo destro -> pulsante Sostituisci: 24. Alto -> titolo: 24. Pulsanti -> fondo: 24. Titolo -> messaggio 8; messaggio -> pulsanti 24.
+- Somme della spaziatura: x = 24, y = 24 (solo il livello dell'Avviso ha padding; Testi e Azioni hanno padding 0, il padding dei pulsanti e il loro sfondo, eccezione del punto 3). 24 e il margine proprio del componente Avviso (diverso dal 16 della finestra Salva).
