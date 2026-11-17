@@ -86,11 +86,12 @@ def esegui(p):
     p.controlla("catalog: collegamento dalla porta di /system/apps/esempio/code" in seriale,
                 "catalog non ha ricevuto il collegamento di Esempio dalla sua porta")
     p.controlla("esempio: tema da catalog: light" in seriale, "Esempio non ha avuto il tema da catalog")
-    # le porte date a ogni app, una riga per app: network solo a chi ha network.use (Esempio)
-    p.controlla("launcher: attivita: porte compositore catalog launcher tasks\n" in seriale,
-                "Attivita non ha avuto le porte compositore, catalog, launcher e tasks (e basta)")
-    p.controlla("launcher: esempio: porte compositore catalog launcher network\n" in seriale,
-                "Esempio non ha avuto le porte compositore, catalog, launcher e network")
+    # le porte date a ogni app, una riga per app: network solo a chi ha network.use (Esempio),
+    # picker a tutte (e' di base)
+    p.controlla("launcher: attivita: porte compositore catalog launcher picker tasks\n" in seriale,
+                "Attivita non ha avuto le porte compositore, catalog, launcher, picker e tasks (e basta)")
+    p.controlla("launcher: esempio: porte compositore catalog launcher network picker\n" in seriale,
+                "Esempio non ha avuto le porte compositore, catalog, launcher, network e picker")
     # la porta verso network: Esempio chiede lo stato della rete, e network sa che e' Esempio
     p.controlla("network: collegamento dalla porta di /system/apps/esempio/code" in seriale,
                 "network non ha ricevuto il collegamento di Esempio dalla sua porta")

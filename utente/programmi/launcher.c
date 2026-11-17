@@ -43,6 +43,7 @@
 #include "gkit/sistema/protocollo.h"     /* PORTA_APP: la porta dell'app verso il compositore */
 #include "corekit/catalog.h"             /* NOME_CATALOG, D_PORTA_CATALOG: la porta verso catalog */
 #include "corekit/tasks.h"                /* NOME_TASKS, D_PORTA_TASKS: la porta verso tasks */
+#include "corekit/picker.h"               /* NOME_PICKER, D_PORTA_PICKER: la porta verso picker */
 #include "corekit/sistema/network.h"     /* NOME_NETWORK, D_PORTA_NETWORK: la porta verso la rete */
 
 #define D_ASCOLTO 0      /* prestato da init */
@@ -176,7 +177,7 @@ static struct {
  *     4  catalog (D_PORTA_CATALOG, catalog.h: lo standard dei messaggi, attach)
  *     5  il launcher stesso (D_PORTA_LAUNCHER, launcher.h): il capo del servizio lo tiene lui
  *     6  network (D_PORTA_NETWORK, network.h), solo con network.use o network.settings nel manifesto
- *     7  (libero: sara' la porta di picker, il servizio per scegliere i file; per ora /dev/null)
+ *     7  picker (D_PORTA_PICKER, picker.h): la finestra Apri/Salva, di base a tutte le app
  *     8  tasks (D_PORTA_TASKS, tasks.h), solo con processes.view o processes.stop nel manifesto
  * Poi il launcher chiude i suoi capi: app e servizi parlano da soli. Se un servizio non risponde
  * (o il permesso manca), al posto della porta c'e' /dev/null e lo si scrive nel registro. All'app
@@ -186,7 +187,8 @@ static struct {
  * /dev/null: se restassero chiusi, il primo file o collegamento che l'app apre finirebbe li', e
  * quello che l'app stampa (Doom stampa molto) ci andrebbe dentro. */
 _Static_assert(D_PORTA_APP == 3 && D_PORTA_CATALOG == 4 && D_PORTA_LAUNCHER == 5 && D_PORTA_NETWORK == 6 &&
-               D_PORTA_TASKS == 8, "le porte delle app: 3 compositore, 4 catalog, 5 launcher, 6 network, 8 tasks");
+               D_PORTA_PICKER == 7 && D_PORTA_TASKS == 8,
+               "le porte delle app: 3 compositore, 4 catalog, 5 launcher, 6 network, 7 picker, 8 tasks");
 
 /* La porta verso il compositore (il suo formato): il capo dell'app, o -1. */
 static int porta_compositore(const char *programma) {
@@ -240,6 +242,7 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     int compositore = porta_compositore(programma);
     int catalog = porta_servizio(NOME_CATALOG, &app);
     int launcher = porta_launcher(&app);
+    int picker = porta_servizio(NOME_PICKER, &app);   /* di base: scegliere un file non chiede permessi */
     /* la rete solo a chi ha un suo permesso: senza, la porta non c'e' (e non e' un errore); con il
      * permesso ma senza risposta del servizio si scrive come per gli altri */
     int vuole_rete = ha_concesso(&app, "network.use") || ha_concesso(&app, "network.settings");
@@ -252,9 +255,10 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (compositore < 0) registro("niente porta verso il compositore per ", programma);
     if (catalog < 0) registro("niente porta verso catalog per ", programma);
     if (launcher < 0) registro("niente porta verso il launcher per ", programma);
+    if (picker < 0) registro("niente porta verso picker per ", programma);
     int passati[] = { nulla, nulla, nulla, compositore >= 0 ? compositore : nulla, catalog >= 0 ? catalog : nulla,
                       launcher >= 0 ? launcher : nulla, rete >= 0 ? rete : nulla,
-                      nulla /* 7: picker, poi */, tasks >= 0 ? tasks : nulla };
+                      picker >= 0 ? picker : nulla, tasks >= 0 ? tasks : nulla };
     /* L'ELENCO DELLE PORTE (messaggi.h, VARIABILE_PORTE): solo quelle date davvero, cosi' l'app
      * non deve indovinare quali descrittori sono porte. Es. "MSHELL_PORTE=compositore=3 catalog=4" */
     char elenco[128];
@@ -263,6 +267,7 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (catalog >= 0) descrizione_aggiungi(elenco, NOME_CATALOG "=4 ", sizeof elenco);
     if (launcher >= 0) descrizione_aggiungi(elenco, NOME_LAUNCHER "=5 ", sizeof elenco);
     if (rete >= 0) descrizione_aggiungi(elenco, NOME_NETWORK "=6 ", sizeof elenco);
+    if (picker >= 0) descrizione_aggiungi(elenco, NOME_PICKER "=7 ", sizeof elenco);
     if (tasks >= 0) descrizione_aggiungi(elenco, NOME_TASKS "=8 ", sizeof elenco);
     char riga[MAX_ID + 96];
     descrizione_copia(riga, d->id, sizeof riga);
@@ -271,6 +276,7 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (catalog >= 0) descrizione_aggiungi(riga, " catalog", sizeof riga);
     if (launcher >= 0) descrizione_aggiungi(riga, " launcher", sizeof riga);
     if (rete >= 0) descrizione_aggiungi(riga, " network", sizeof riga);
+    if (picker >= 0) descrizione_aggiungi(riga, " picker", sizeof riga);
     if (tasks >= 0) descrizione_aggiungi(riga, " tasks", sizeof riga);
     registro(riga, "");
     int numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, (int)(sizeof passati / sizeof passati[0]),
@@ -280,6 +286,7 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (catalog >= 0) chiudi(catalog);
     if (launcher >= 0) chiudi(launcher);
     if (rete >= 0) chiudi(rete);
+    if (picker >= 0) chiudi(picker);
     if (tasks >= 0) chiudi(tasks);
     return numero;
 }
