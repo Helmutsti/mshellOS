@@ -12,7 +12,7 @@
  * ruolo (anche il simbolo).
  *
  * E' largo quanto il suo contenitore (la pagina gli da' la larghezza prima di misurarlo, vedi
- * pagina.h); alto quanto serve alla spiegazione. Testi nella code page 437. */
+ * pagina.h); alto quanto serve alla spiegazione. Testi in UTF-8. */
 #ifndef UIKIT_MESSAGEBOX_H
 #define UIKIT_MESSAGEBOX_H
 

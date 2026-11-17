@@ -24,12 +24,15 @@
 
 #include "gkit/gkit_disegno.h"
 
-#define VERSIONE_MATERIALI 1
-#define FONT_TESTA         272     /* lettere, versione, misure, conti, indice[256] */
+#define VERSIONE_MATERIALI 1       /* icone e immagini */
+#define VERSIONE_FONT      2       /* i font: gli intervalli di caratteri Unicode al posto dell'indice */
+#define FONT_TESTA         24      /* lettere, versione, misure, conti, sostitutivo */
+#define INTERVALLO_BYTE    8
 #define GLIFO_BYTE         12
 #define IMMAGINE_TESTA     16
 
 _Static_assert(sizeof(struct glifo) == GLIFO_BYTE, "struct glifo deve essere come nel file .font");
+_Static_assert(sizeof(struct intervallo_font) == INTERVALLO_BYTE, "struct intervallo_font deve essere come nel file .font");
 
 /* --- la cartella delle risorse --- */
 
@@ -87,9 +90,10 @@ static unsigned int u32(const unsigned char *p) {
 }
 
 /* Le prime 6 byte: le 4 lettere e la versione giusta. */
-static int testa_giusta(const unsigned char *m, unsigned long n, const char *lettere, const char **perche) {
+static int testa_giusta(const unsigned char *m, unsigned long n, const char *lettere,
+                        unsigned int versione, const char **perche) {
     if (n < 8 || memcmp(m, lettere, 4)) { *perche = "non e' un file di questo tipo"; return 0; }
-    if (u16(m + 4) != VERSIONE_MATERIALI) { *perche = "versione del formato sconosciuta"; return 0; }
+    if (u16(m + 4) != versione) { *perche = "versione del formato sconosciuta"; return 0; }
     return 1;
 }
 
@@ -115,11 +119,14 @@ static const struct glifo riserva_glifi[2] = {
     { 0, 0, 0, 0, 0, 4 },                                   /* lo spazio */
     { 0, 1, RISERVA_A, RISERVA_L, RISERVA_A, RISERVA_L + 2 }, /* ogni altro carattere */
 };
+static const struct intervallo_font riserva_intervalli[1] = { { ' ', 1, 0 } };
 
 static void font_di_riserva(struct font *f) {
     f->glifi = riserva_glifi;
     f->alfa = riserva_alfa;
-    for (int c = 0; c < 256; c++) f->indice[c] = c == ' ' ? 0 : 1;
+    f->intervalli = riserva_intervalli;
+    f->n_intervalli = 1;
+    f->sostitutivo = 1;
     f->altezza = 16;
     f->ascesa = 12;
 }
@@ -130,20 +137,31 @@ int font_da_file(const char *percorso, struct font *f) {
     const char *perche = 0;
     unsigned long n = 0;
     const unsigned char *m = mappa(percorso, &n, &perche);
-    if (m && testa_giusta(m, n, "MSFN", &perche)) {
-        unsigned long glifi = n >= FONT_TESTA ? u32(m + 8) : 0, alfa = n >= FONT_TESTA ? u32(m + 12) : 0;
-        if (n < FONT_TESTA || glifi < 1 || glifi > 256 || n != FONT_TESTA + glifi * GLIFO_BYTE + alfa)
+    if (m && testa_giusta(m, n, "MSFN", VERSIONE_FONT, &perche)) {
+        unsigned long glifi = 0, alfa = 0, intervalli = 0, sostitutivo = 0, parti;
+        if (n >= FONT_TESTA) {
+            glifi = u32(m + 8); alfa = u32(m + 12); intervalli = u32(m + 16); sostitutivo = u32(m + 20);
+        }
+        parti = FONT_TESTA + intervalli * INTERVALLO_BYTE;   /* dove cominciano i glifi */
+        if (n < FONT_TESTA || glifi < 1 || glifi > 65535 || intervalli > 65535 || sostitutivo >= glifi ||
+            n != parti + glifi * GLIFO_BYTE + alfa)
             perche = "la lunghezza del file non torna con quello che dice la testa";
         else {
-            const struct glifo *g = (const struct glifo *)(m + FONT_TESTA);
+            const struct intervallo_font *r = (const struct intervallo_font *)(m + FONT_TESTA);
+            const struct glifo *g = (const struct glifo *)(m + parti);
             for (unsigned long i = 0; i < glifi && !perche; i++)
                 if (g[i].inizio + (unsigned long)g[i].l * g[i].a > alfa) perche = "una lettera esce dal file";
-            for (int c = 0; c < 256 && !perche; c++)
-                if (m[16 + c] >= glifi) perche = "l'indice dei caratteri punta fuori";
+            for (unsigned long i = 0; i < intervalli && !perche; i++) {
+                if (r[i].glifo + (unsigned long)r[i].quanti > glifi) perche = "un intervallo di caratteri punta fuori";
+                else if (r[i].quanti < 1 || (i && r[i].primo < r[i - 1].primo + (unsigned long)r[i - 1].quanti))
+                    perche = "gli intervalli di caratteri non sono in ordine";
+            }
             if (!perche) {
                 f->glifi = g;
-                f->alfa = m + FONT_TESTA + glifi * GLIFO_BYTE;
-                memcpy(f->indice, m + 16, 256);
+                f->alfa = m + parti + glifi * GLIFO_BYTE;
+                f->intervalli = r;
+                f->n_intervalli = (unsigned int)intervalli;
+                f->sostitutivo = (unsigned int)sostitutivo;
                 f->altezza = m[6];
                 f->ascesa = m[7];
                 return 0;
@@ -160,7 +178,7 @@ int icona_da_file(const char *percorso, struct icona *misure, int massimo) {
     const char *perche = 0;
     unsigned long n = 0;
     const unsigned char *m = mappa(percorso, &n, &perche);
-    if (m && testa_giusta(m, n, "MSIC", &perche)) {
+    if (m && testa_giusta(m, n, "MSIC", VERSIONE_MATERIALI, &perche)) {
         int quante = (int)u16(m + 6);
         if (quante < 1 || quante > massimo || n < 8 + 8ul * quante) perche = "il numero delle misure non va";
         for (int i = 0; i < quante && !perche; i++) {
@@ -181,7 +199,7 @@ int immagine_da_file(const char *percorso, struct immagine *im) {
     const char *perche = 0;
     unsigned long n = 0;
     const unsigned char *m = mappa(percorso, &n, &perche);
-    if (m && testa_giusta(m, n, "MSIM", &perche)) {
+    if (m && testa_giusta(m, n, "MSIM", VERSIONE_MATERIALI, &perche)) {
         unsigned long l = n >= IMMAGINE_TESTA ? u32(m + 8) : 0, a = n >= IMMAGINE_TESTA ? u32(m + 12) : 0;
         if (n < IMMAGINE_TESTA || l < 1 || a < 1 || l > 0xFFFF || a > 0xFFFF || n != IMMAGINE_TESTA + l * a * 4)
             perche = "la lunghezza del file non torna con le misure dell'immagine";

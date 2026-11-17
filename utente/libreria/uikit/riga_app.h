@@ -8,7 +8,7 @@
  * ghost): chi la contiene toglie 8 dal suo margine (la regola della spaziatura, punto 3). Dentro,
  * in riga a SPAZIO_12: l'icona, i testi (il nome in FONT_CORPO_MEDIO alto 20, TESTO_PRIMARIO; i
  * dettagli in FONT_PICCOLO_NUOVO alti 16, TESTO_SECONDARIO), la freccia di 16 (TESTO_SECONDARIO).
- * Larga quanto il suo contenitore. Testi nella code page 437. */
+ * Larga quanto il suo contenitore. Testi in UTF-8. */
 #ifndef UIKIT_RIGA_APP_H
 #define UIKIT_RIGA_APP_H
 

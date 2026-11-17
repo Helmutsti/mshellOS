@@ -8,6 +8,7 @@
 #ifndef GKIT_INTERNO_H
 #define GKIT_INTERNO_H
 
+#include "corekit/utf8.h"
 #include "gkit/gkit_disegno.h"
 #include "gkit/sistema/pixel.h"
 

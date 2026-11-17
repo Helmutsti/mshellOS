@@ -13,7 +13,8 @@
   3. L'AVVISO di UIKit: Canc su una cartella piena apre l'avviso "Eliminare ...?"; Esc fa
      come Annulla (l'avviso si chiude e la cartella resta).
   4. UN CAMPO DI TESTO (la ricerca di Files): Maiusc fa le maiuscole, Alt Gr i caratteri
-     della tastiera italiana (Alt Gr+o' = @); con Ctrl giu' non si scrive niente.
+     della tastiera italiana (Alt Gr+o' = @, Alt Gr+e = euro; le lettere sono UTF-8: il tasto di
+     cancellazione toglie il carattere intero e il campo torna vuoto); con Ctrl giu' non si scrive niente.
      Si confrontano le foto del campo: "l" e "L" devono essere diverse, "o'" e "@" pure.
 """
 
@@ -197,9 +198,11 @@ def files(p):
     o_grave = scritto("semicolon", nome="o_grave")
     chiocciola = scritto("alt_r", "semicolon", nome="chiocciola")
     quadra = scritto("alt_r", "bracket_left", nome="quadra")
+    euro = scritto("alt_r", "e", nome="euro")       # U+20AC: 3 byte in UTF-8; cancellarlo li toglie tutti
     p.controlla(pixel_diversi(minuscola, maiuscola) > 0, "con Maiusc la lettera non e' maiuscola")
     p.controlla(pixel_diversi(o_grave, chiocciola) > 0, "con Alt Gr il tasto o' non da' la @")
     p.controlla(pixel_diversi(chiocciola, quadra) > 0, "Alt Gr+o' e Alt Gr+e' danno lo stesso carattere")
+    p.controlla(pixel_diversi(euro, quadra) > 0, "Alt Gr+e da' lo stesso carattere di Alt Gr+e'")
 
     # con Ctrl giu' (e con Alt) non si scrive: il campo resta vuoto
     insieme(m, "ctrl", "l")

@@ -61,10 +61,19 @@ struct glifo {
     unsigned char l, a, avanzo;
 };
 
+/* Un gruppo di caratteri Unicode consecutivi: 'quanti' caratteri da 'primo', e i loro glifi,
+ * uno dopo l'altro, da 'glifo'. Gli intervalli di un font sono in ordine di carattere. */
+struct intervallo_font {
+    unsigned int primo;
+    unsigned short quanti, glifo;
+};
+
 struct font {
     const struct glifo *glifi;
     const unsigned char *alfa;
-    unsigned char indice[256];    /* carattere (code page 437) -> glifo; 0 = non c'e' */
+    const struct intervallo_font *intervalli;   /* i caratteri che il font ha, in ordine */
+    unsigned int n_intervalli;
+    unsigned int sostitutivo;     /* il glifo per un carattere che il font non ha */
     unsigned char altezza;        /* l'altezza di una riga */
     unsigned char ascesa;         /* dalla cima della riga alla linea di base */
 };
@@ -336,14 +345,16 @@ void luce_sopra(struct pennello *p, const struct tondo *t);
 
 /* --- il testo --- */
 
-/* La lettera del font per il carattere 'c' (code page 437); se il font non ce l'ha, quella
- * del '?'. Non e' mai 0. */
-const struct glifo *glifo_di(const struct font *f, unsigned char c);
+/* La lettera del font per il carattere Unicode 'c' (U+0041 e' la A; il testo e' UTF-8, si
+ * legge con utf8_leggi, corekit/utf8.h). Se il font non ce l'ha, il suo glifo SOSTITUTIVO: un
+ * solo segno, uguale per tutti i caratteri mancanti. Non e' mai 0. La ricerca e' binaria sugli
+ * intervalli del font. */
+const struct glifo *glifo_di(const struct font *f, unsigned int c);
 
 /* Quanto e' largo un testo, in pixel: serve per centrarlo o allinearlo a destra. */
 int larghezza_testo(const struct font *f, const char *s);
 
-/* Scrive 's' (code page 437) con la cima della riga in (x, y), nel colore del pennello.
+/* Scrive 's' (UTF-8) con la cima della riga in (x, y), nel colore del pennello.
  * Restituisce dove finisce (la x dopo l'ultima lettera). */
 int testo(struct pennello *p, const struct font *f, int x, int y, const char *s);
 

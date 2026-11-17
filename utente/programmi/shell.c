@@ -39,7 +39,9 @@
  *
  * LA RIGA la legge e la corregge il kernel: la seriale e' un terminale in modo normale,
  * che fa da se' l'eco di quello che si scrive e il tasto di cancellazione (backspace); a
- * noi arriva la riga intera, quando si preme Invio. Ctrl-D, a riga vuota, e' come exit.
+ * noi arriva la riga intera, quando si preme Invio. Il testo e' UTF-8: la shell lo dice al
+ * kernel (IUTF8, qui sotto in main), cosi' il tasto di cancellazione toglie un carattere
+ * intero (da 1 a 4 byte) e non un byte solo. Ctrl-D, a riga vuota, e' come exit.
  * Lo stesso nel terminale della finestra (un pty, che il kernel tratta allo stesso modo).
  * La cartella in cui siamo la tiene la shell (non il kernel): i percorsi si rendono
  * assoluti qui, e poi si danno alle funzioni della libreria, che vogliono solo percorsi
@@ -694,6 +696,13 @@ int main(void) {
      * stesso, ma Ctrl-C non li ferma. */
     setsid();
     terminale_nostro = ioctl(tty, TIOCSCTTY, 0) == 0;
+    /* la riga la corregge il kernel: con IUTF8 sa che il testo e' UTF-8 e cancella un
+     * carattere intero. Si mette prima di salvare i modi per i programmi (esegui). */
+    struct termios riga_modi;
+    if (tcgetattr(tty, &riga_modi) == 0) {
+        riga_modi.c_iflag |= IUTF8;
+        tcsetattr(tty, TCSANOW, &riga_modi);
+    }
     struct sigaction sa = { .sa_handler = al_ctrl_c };   /* senza SA_RESTART: read si ferma */
     sigaction(SIGINT, &sa, 0);
     /* Ctrl-\ e Ctrl-Z non fermano la shell; e quando si riprende il terminale (tcsetpgrp)

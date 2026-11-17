@@ -173,12 +173,15 @@ static unsigned int colore_di(VTermColor c, int e_sfondo) {
     return OPACO(((unsigned int)c.rgb.red << 16) | ((unsigned int)c.rgb.green << 8) | c.rgb.blue);
 }
 
-/* La lettera di una casella, per il font (code page 437): le ASCII; il resto non c'e' nel
- * font e si disegna come '?'. 0: casella vuota. */
-static char lettera_di(const VTermScreenCell *cella) {
+/* La lettera di una casella, in UTF-8 (il font ha i caratteri per numero Unicode; uno che non
+ * ha lo disegna come il segno sostitutivo). Scrive in 'dove' (5 byte) e dice se la casella ha
+ * qualcosa da disegnare: 0 se e' vuota. Si disegna il carattere base: gli accenti combinati
+ * (le altre chars[]) non ci sono. */
+static int lettera_di(const VTermScreenCell *cella, char dove[5]) {
     uint32_t c = cella->chars[0];
     if (c == 0 || c == (uint32_t)-1 || c == ' ') return 0;       /* -1: la seconda meta' di una lettera larga */
-    return c > ' ' && c < 0x7F ? (char)c : '?';
+    dove[utf8_scrivi(dove, c)] = 0;
+    return 1;
 }
 
 static void schermo_disegna(struct widget *w, struct pennello *p) {
@@ -197,8 +200,8 @@ static void schermo_disegna(struct widget *w, struct pennello *p) {
         for (int k = 0; k < COLONNE; k++) {
             VTermScreenCell cella;
             vterm_screen_get_cell(vschermo, (VTermPos){ r, k }, &cella);
-            char lettera[2] = { lettera_di(&cella), 0 };
-            if (!lettera[0] || cella.attrs.conceal) continue;
+            char lettera[5];
+            if (!lettera_di(&cella, lettera) || cella.attrs.conceal) continue;
             unsigned int colore = colore_di(cella.fg, 0);
             if (cella.attrs.reverse) colore = colore_di(cella.bg, 1) ? colore_di(cella.bg, 1) : SUPERFICIE_ELEVATA;
             pennello_colore(p, colore);
@@ -214,8 +217,8 @@ static void schermo_disegna(struct widget *w, struct pennello *p) {
     riempi_rettangolo(p, cx, cy, CURSORE_LARGO, CURSORE_ALTO);
     VTermScreenCell sotto;
     vterm_screen_get_cell(vschermo, (VTermPos){ riga, k }, &sotto);
-    char lettera[2] = { lettera_di(&sotto), 0 };
-    if (lettera[0]) {
+    char lettera[5];
+    if (lettera_di(&sotto, lettera)) {
         pennello_colore(p, SUPERFICIE_ELEVATA);
         testo(p, sotto.attrs.bold ? FONT_GRASSETTO : FONT_TERMINALE, cx, y0 + riga * RIGA_ALTA + giu, lettera);
     }
@@ -225,16 +228,15 @@ static void schermo_puntatore(struct widget *w, int x, int y, unsigned int pulsa
     (void)w; (void)x; (void)y; (void)pulsanti;   /* un clic gli da' solo il fuoco */
 }
 
-/* Un carattere (code page 437) dalla tastiera: Invio, cancella e Tab sono tasti per libvterm,
- * le lettere di stampa (ASCII) sono caratteri. Le lettere oltre l'ASCII (accenti) vanno alla
- * shell come sono, un byte (la shell e il font parlano la code page 437). */
+/* Un carattere dalla tastiera (il suo numero Unicode): Invio, cancella e Tab sono tasti per
+ * libvterm, tutte le lettere di stampa (anche le accentate) sono caratteri, che libvterm manda
+ * alla shell in UTF-8. */
 static void schermo_tasto(struct widget *w, unsigned int tasto) {
     (void)w;
     if (tasto == '\n') vterm_keyboard_key(vt, VTERM_KEY_ENTER, VTERM_MOD_NONE);
     else if (tasto == '\b') vterm_keyboard_key(vt, VTERM_KEY_BACKSPACE, VTERM_MOD_NONE);
     else if (tasto == '\t') vterm_keyboard_key(vt, VTERM_KEY_TAB, VTERM_MOD_NONE);
-    else if (tasto >= ' ' && tasto < 0x7F) vterm_keyboard_unichar(vt, tasto, VTERM_MOD_NONE);
-    else if (tasto >= 0x80 && tasto < 256) { unsigned char c = (unsigned char)tasto; scrivi_alla_shell(&c, 1); }
+    else if ((tasto >= ' ' && tasto < 0x7F) || tasto >= 0xA0) vterm_keyboard_unichar(vt, tasto, VTERM_MOD_NONE);
 }
 
 static const struct tipo_widget tipo_schermo = {
@@ -367,8 +369,7 @@ int main(void) {
     /* il corpo: il pannello chiaro incassato (la finestra a aree gli lascia 8 intorno) */
     pannello_prepara(&pannello, TERMINALE_DENTRO);
     widget_aggiungi(&pannello.base, &schermo.base);
-    /* il trattino lungo del titolo, nei font, e' il codice 0x96 */
-    finestra_tk_prepara(&finestra, "Terminale \x96 super amministratore", &pannello.base);
+    finestra_tk_prepara(&finestra, "Terminale \xe2\x80\x93 super amministratore", &pannello.base);   /* U+2013, il trattino lungo */
     finestra_tk_aree(&finestra);
     /* la misura giusta per la griglia: il testo, il padding del pannello e quello del corpo */
     int l, a, intorno = 2 * (TERMINALE_DENTRO + CORPO_PADDING);

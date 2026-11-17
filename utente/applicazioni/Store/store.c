@@ -26,16 +26,13 @@
  * (test/prove/store.py). */
 #include "uikit/uikit.h"
 #include "corekit/sistema/launcher.h"
-#include "uikit/testo437.h"
 
 #define QUANTI(v) ((int)(sizeof(v) / sizeof((v)[0])))
 
-/* --- piccoli aiuti sui testi (UTF-8; i componenti li vogliono nella code page 437) --- */
+/* --- piccoli aiuti sui testi (tutto UTF-8, come lo vogliono i componenti) --- */
 
 static void aggiungi(char *dove, const char *da, int massimo) { descrizione_aggiungi(dove, da, massimo); }
 
-/* Traduce sul posto da UTF-8 alla code page 437 (il testo non si allunga mai). */
-static void in_437_qui(char *s, int massimo) { in_437(s, s, massimo); }
 
 static void registro(const char *a, const char *b) { scrivi_riga("store", a, b); }
 
@@ -142,14 +139,12 @@ static void sezione_prepara(struct sezione *s, const char *titolo, const char *s
     riga_prepara(&s->testa, SPAZIO_8);
     colonna_prepara(&s->righe, SPAZIO_16);
     paragrafo_prepara(&s->titolo, titolo, FONT_TITOLO_FINESTRA, INTERLINEA_CORPO, COLORE_ICONA_PRIMARIO);
-    in_437_qui(s->titolo.testo, PARAGRAFO_TESTO);
     s->titolo.base.elastico = 1;
     widget_aggiungi(&s->testa.base, &s->titolo.base);
     if (pulsante) widget_aggiungi(&s->testa.base, pulsante);
     widget_aggiungi(&s->colonna.base, &s->testa.base);
     if (spiegazione) {
         paragrafo_prepara(&s->spiegazione, spiegazione, FONT_PICCOLO_NUOVO, INTERLINEA_PICCOLO, COLORE_ICONA_SECONDARIO);
-        in_437_qui(s->spiegazione.testo, PARAGRAFO_TESTO);
         widget_aggiungi(&s->colonna.base, &s->spiegazione.base);
     }
     widget_aggiungi(&s->colonna.base, &s->righe.base);
@@ -161,9 +156,6 @@ static void sezione_riga(struct sezione *s, int simbolo, const char *nome, const
     if (s->quante >= MAX_RIGHE_SEZIONE) return;
     struct riga_permesso *r = &s->riga[s->quante++];
     riga_permesso_prepara(r, simbolo, nome, cosa, stato, tipo_stato);
-    in_437_qui(r->nome, MAX_TESTO_WIDGET);
-    in_437_qui(r->spiegazione, (int)sizeof r->spiegazione);
-    in_437_qui(r->stato, MAX_TESTO_WIDGET);
     widget_aggiungi(&s->righe.base, &r->base);
 }
 
@@ -221,11 +213,8 @@ static void intestazione_app(const struct manifesto *m, const char *sotto, int c
     testi_app.base.elastico = 1;
     icona_app_prepara(&icona_grande, 64);
     paragrafo_prepara(&p_nome, nome_di(m), FONT_TITOLO_NUOVO, INTERLINEA_TITOLO, COLORE_ICONA_PRIMARIO);
-    in_437_qui(p_nome.testo, PARAGRAFO_TESTO);
     paragrafo_prepara(&p_autore, sotto, FONT_CORPO, INTERLINEA_CORPO, COLORE_ICONA_SECONDARIO);
-    in_437_qui(p_autore.testo, PARAGRAFO_TESTO);
     paragrafo_prepara(&p_descrizione, m->descrizione, FONT_CORPO, INTERLINEA_CORPO, COLORE_ICONA_PRIMARIO);
-    in_437_qui(p_descrizione.testo, PARAGRAFO_TESTO);
     widget_aggiungi(&testi_app.base, &p_nome.base);
     widget_aggiungi(&testi_app.base, &p_autore.base);
     if (m->descrizione[0]) widget_aggiungi(&testi_app.base, &p_descrizione.base);
@@ -300,17 +289,9 @@ static const char *titolo_errore(const struct problema *p) {
     return "Non si pu\xc3\xb2 installare";
 }
 
-static void messagebox_utf8(struct messagebox *m, int tipo, const char *titolo, const char *testo) {
-    messagebox_prepara(m, tipo, titolo, testo);
-    in_437_qui(m->titolo, (int)sizeof m->titolo);
-    in_437_qui(m->spiegazione, MESSAGEBOX_TESTO);
-}
-
 /* Lo stato vuoto con testi in UTF-8, in mezzo alla pagina. */
 static void mostra_esito(int simbolo, const char *titolo, const char *spiegazione) {
     stato_vuoto_prepara(&esito, simbolo, titolo, spiegazione);
-    in_437_qui(esito.titolo, MAX_TESTO_WIDGET);
-    in_437_qui(esito.spiegazione, (int)sizeof esito.spiegazione);
     pagina_svuota(&pg_richiesta);
     pagina_aggiungi(&pg_richiesta, &esito.base);
 }
@@ -377,7 +358,6 @@ static void mostra_richiesta(void) {
     char riga[200];
 
     con_nome(riga, sizeof riga, aggiornamento ? "Aggiorna \"" : "Installa \"", nome, "\"");
-    in_437_qui(riga, sizeof riga);
     finestra_tk_titolo(&finestra, riga);
 
     pagina_svuota(&pg_richiesta);
@@ -396,7 +376,7 @@ static void mostra_richiesta(void) {
         for (int i = 0; i < r->quanti && n < QUANTI(avvisi); i++) {
             const struct problema *p = &r->problemi[i];
             if (!p->blocca || !da_mostrare(p, gia)) continue;
-            messagebox_utf8(&avvisi[n], MESSAGEBOX_ERRORE, titolo_errore(p), p->testo);
+            messagebox_prepara(&avvisi[n], MESSAGEBOX_ERRORE, titolo_errore(p), p->testo);
             pagina_aggiungi(&pg_richiesta, &avvisi[n++].base);
         }
         mostra_pulsanti(0, 0, 0, 0, 1);
@@ -408,10 +388,9 @@ static void mostra_richiesta(void) {
                  ": non c'\xc3\xa8 niente da aggiornare.");
         char titolo[120];
         con_nome(titolo, sizeof titolo, "", nome, " \xc3\xa8 gi\xc3\xa0 installata");
-        messagebox_utf8(&avvisi[0], MESSAGEBOX_INFORMAZIONE, titolo, riga);
+        messagebox_prepara(&avvisi[0], MESSAGEBOX_INFORMAZIONE, titolo, riga);
         pagina_aggiungi(&pg_richiesta, &avvisi[0].base);
         con_nome(testo_apri, MAX_TESTO_WIDGET, "Apri ", nome, "");
-        in_437_qui(testo_apri, MAX_TESTO_WIDGET);
         copia_testo(p_apri.testo, testo_apri, MAX_TESTO_WIDGET);
         mostra_pulsanti(0, 0, 0, 1, 1);
         registro("gia' installata: ", app.id);
@@ -434,12 +413,12 @@ static void mostra_richiesta(void) {
         if (descrizione_uguali(p->voce, "icone") && r->svg_presente[0] != r->svg_presente[1]) {
             if (icone_dette++) continue;
             int manca_scuro = !r->svg_presente[1];
-            messagebox_utf8(&avvisi[n], MESSAGEBOX_AVVISO,
+            messagebox_prepara(&avvisi[n], MESSAGEBOX_AVVISO,
                            manca_scuro ? "Manca l'icona per il tema scuro" : "Manca l'icona per il tema chiaro",
                            manca_scuro ? "L'app si installa lo stesso. In tema scuro vedrai l'icona chiara."
                                        : "L'app si installa lo stesso. In tema chiaro vedrai l'icona scura.");
         } else {
-            messagebox_utf8(&avvisi[n], MESSAGEBOX_AVVISO, "Da sapere", p->testo);
+            messagebox_prepara(&avvisi[n], MESSAGEBOX_AVVISO, "Da sapere", p->testo);
         }
         pagina_aggiungi(&pg_richiesta, &avvisi[n++].base);
     }
@@ -471,7 +450,6 @@ static void premi_installa(struct pulsante *b, void *dati) {
                      aggiornare ? "La trovi tra le tue app, con i tuoi dati di prima."
                                 : "La trovi tra le tue app. Al primo avvio ti chieder\xc3\xa0 i permessi.");
         con_nome(testo_apri, MAX_TESTO_WIDGET, "Apri ", nome, "");
-        in_437_qui(testo_apri, MAX_TESTO_WIDGET);
         copia_testo(p_apri.testo, testo_apri, MAX_TESTO_WIDGET);
         mostra_pulsanti(0, 0, 0, 1, 1);
         registro(aggiornare ? "aggiornata " : "installata ", app.id);
@@ -484,7 +462,7 @@ static void premi_installa(struct pulsante *b, void *dati) {
                        : "Il sistema non ha risposto: riprova tra poco.";
     for (int i = 0; i < resoconto.quanti; i++)
         if (resoconto.problemi[i].blocca) { perche = resoconto.problemi[i].testo; break; }
-    messagebox_utf8(&errore, MESSAGEBOX_ERRORE, titolo, perche);
+    messagebox_prepara(&errore, MESSAGEBOX_ERRORE, titolo, perche);
     pagina_svuota(&pg_richiesta);
     pagina_aggiungi(&pg_richiesta, &testa_app.base);
     pagina_aggiungi(&pg_richiesta, &errore.base);
@@ -613,8 +591,6 @@ static void sezione_elenco_riga(struct sezione_elenco *s, int i, int *in_blocco)
     char dettagli[MAX_TESTO_WIDGET * 2];
     autore_versione(dettagli, sizeof dettagli, m, 0);
     riga_app_prepara(&righe[i], nome_di(m), dettagli, apri_dettaglio, 0);
-    in_437_qui(righe[i].nome, MAX_TESTO_WIDGET);
-    in_437_qui(righe[i].dettagli, (int)sizeof righe[i].dettagli);
     widget_aggiungi(&blocchi[blocchi_usati - 1].base, &righe[i].base);
     (*in_blocco)++;
 }
@@ -715,8 +691,6 @@ static void scelta_togli(struct avviso *a, int risposta, void *dati);
 
 static void prepara_avviso(const char *titolo, const char *messaggio, const char *conferma, al_risposta_avviso al_risposta) {
     avviso_prepara(&avviso, titolo, messaggio, conferma, PERICOLO, 1, al_risposta, 0);
-    in_437_qui(avviso.titolo, MAX_TESTO_WIDGET);
-    in_437_qui(avviso.messaggio, (int)sizeof avviso.messaggio);
     finestra_tk_avviso(&finestra, &avviso);
 }
 
@@ -749,9 +723,9 @@ static void scelta_svuota(struct avviso *a, int risposta, void *dati) {
     char testo[200];
     if (fatto) {
         con_nome(testo, sizeof testo, "Al prossimo avvio ", nome_di(m), " ripartir\xc3\xa0 da zero.");
-        messagebox_utf8(&esito_dettaglio, MESSAGEBOX_INFORMAZIONE, "Dati svuotati", testo);
+        messagebox_prepara(&esito_dettaglio, MESSAGEBOX_INFORMAZIONE, "Dati svuotati", testo);
     } else {
-        messagebox_utf8(&esito_dettaglio, MESSAGEBOX_ERRORE, "I dati non sono stati svuotati",
+        messagebox_prepara(&esito_dettaglio, MESSAGEBOX_ERRORE, "I dati non sono stati svuotati",
                        perche[0] ? perche : "Non si \xc3\xa8 riusciti a svuotare i dati.");
     }
     mostra_dettaglio(&esito_dettaglio);
@@ -771,19 +745,19 @@ static void scelta_togli(struct avviso *a, int risposta, void *dati) {
     char titolo[120];
     if (esito_launcher != LAUNCHER_FATTO && esito_launcher != LAUNCHER_ERRORE) {   /* c'e' ancora: si resta li' */
         con_nome(titolo, sizeof titolo, "\"", nome, "\" non \xc3\xa8 stata tolta");
-        messagebox_utf8(&esito_dettaglio, MESSAGEBOX_ERRORE, titolo,
+        messagebox_prepara(&esito_dettaglio, MESSAGEBOX_ERRORE, titolo,
                        perche[0] ? perche : "Non si \xc3\xa8 riusciti a togliere l'app.");
         mostra_dettaglio(&esito_dettaglio);
         return;
     }
     if (esito_launcher == LAUNCHER_FATTO) {
         con_nome(titolo, sizeof titolo, "\"", nome, "\" \xc3\xa8 stata tolta");
-        messagebox_utf8(&esito_elenco, MESSAGEBOX_INFORMAZIONE, titolo,
+        messagebox_prepara(&esito_elenco, MESSAGEBOX_INFORMAZIONE, titolo,
                        tieni_dati ? "I dati che aveva salvato per te restano: se la reinstalli, li ritrover\xc3\xa0."
                                   : "Anche i dati che aveva salvato per te sono stati cancellati.");
     } else {
         con_nome(titolo, sizeof titolo, "\"", nome, "\" forse non \xc3\xa8 stata tolta del tutto");
-        messagebox_utf8(&esito_elenco, MESSAGEBOX_ERRORE, titolo,
+        messagebox_prepara(&esito_elenco, MESSAGEBOX_ERRORE, titolo,
                        perche[0] ? perche : "Non si \xc3\xa8 riusciti a togliere l'app.");
     }
     mostra_elenco_app(&esito_elenco);

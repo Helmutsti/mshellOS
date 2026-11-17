@@ -224,7 +224,7 @@ struct zona_schermo { int x0, y0, x1, y1; };   /* x0 <= x < x1, y0 <= y < y1 */
 
 struct evento {
     unsigned int tipo;
-    unsigned int tasto;      /* EVENTO_TASTO: il carattere (code page 437) */
+    unsigned int tasto;      /* EVENTO_TASTO: il carattere, il suo numero Unicode (U+00E0 = à; ASCII come prima) */
     int dx, dy;              /* EVENTO_MOUSE: lo spostamento in pixel; dy positivo = in basso.
                               * EVENTO_PUNTATORE: la posizione, da 0 a PUNTATORE_MAX.
                               * EVENTO_ROTELLA: gli scatti; dy positivo = in basso */

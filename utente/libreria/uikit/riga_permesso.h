@@ -9,7 +9,7 @@
  * 16 per riga, TESTO_SECONDARIO, che va a capo, al massimo RIGA_PERMESSO_RIGHE righe),
  * l'etichetta. Nessun margine (il disegno: le righe stanno a SPAZIO_16 l'una dall'altra, lo
  * spazio lo da' chi le contiene).
- * Larga quanto il suo contenitore (vedi pagina.h). Testi nella code page 437. */
+ * Larga quanto il suo contenitore (vedi pagina.h). Testi in UTF-8. */
 #ifndef UIKIT_RIGA_PERMESSO_H
 #define UIKIT_RIGA_PERMESSO_H
 

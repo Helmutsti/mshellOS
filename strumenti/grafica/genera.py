@@ -23,8 +23,10 @@ file TrueType o un SVG: qui li si trasforma una volta per tutte in pixel.
   - LO SFONDO: e' una sfumatura molto morbida, quindi lo si tiene piccolo (320x200) e la
     scrivania lo ingrandisce all'avvio.
 
-I caratteri sono quelli della code page 437 (come i tasti e la console): l'ASCII piu'
-le lettere accentate italiane.
+I caratteri sono UTF-8, indicizzati per numero Unicode (vedi INTERVALLI): l'ASCII, il
+Latin-1 e Latin Extended-A, la punteggiatura tipografica, alcuni simboli e, nei font del
+terminale, i riquadri. Un carattere che il font non ha lo disegna chi scrive con un segno
+sostitutivo, che sta nel font stesso (formato.py).
 
 Licenze: font Inter, di Rasmus Andersson (https://rsms.me/inter), e IBM Plex Sans e IBM Plex Mono,
 di IBM (https://github.com/IBM/plex), licenza SIL Open Font License 1.1. Icone Lucide
@@ -34,6 +36,7 @@ Lucide Contributors 2022. Icone, immagini e sfondo vengono dal file Figma "mshel
 interfaccia"."""
 import io, os, subprocess, sys
 from PIL import Image, ImageDraw, ImageFont
+from fontTools.ttLib import TTFont
 
 import formato
 import materiali
@@ -47,11 +50,45 @@ RISORSE = os.path.join(REPO, 'risorse')
 FONT_PLEX = os.path.join(QUI, 'font', 'IBMPlexSans')   # IBM Plex Sans: TTF e OFL.txt nel repo
 FONT_PLEX_MONO = os.path.join(QUI, 'font', 'IBMPlexMono')   # IBM Plex Mono (il terminale): TTF e OFL.txt
 
-# code page 437 -> carattere vero, per le lettere accentate che servono all'italiano
-CP437 = {0x85: 'à', 0x8A: 'è', 0x82: 'é', 0x8D: 'ì', 0x95: 'ò', 0x97: 'ù', 0xA2: 'ó', 0xA0: 'á',
-         0xFA: '·', 0x96: '–'}   # il punto a mezza altezza, per separare ("8 processi · 34,6 MB")
-CARATTERI = [(c, chr(c)) for c in range(32, 127)] + sorted(CP437.items())
+# I CARATTERI dei font: tutto UTF-8, indicizzati per numero Unicode. Si prende ogni numero di
+# questi intervalli che il font ha davvero (il suo cmap); gli altri non ci sono e chi scrive li
+# disegna con il carattere sostitutivo. Plex Sans non ha i riquadri (U+2500-259F): ce li ha
+# solo Plex Mono, che e' il font del terminale.
+INTERVALLI = [
+    (0x0020, 0x007E),   # ASCII
+    (0x00A0, 0x00FF),   # Latin-1: lettere accentate, simboli (c), deg, +-, x, :
+    (0x0100, 0x017F),   # Latin Extended-A: le lettere europee (ceco, polacco, turco...)
+    (0x2010, 0x2027),   # trattini, virgolette tipografiche, punti elenco, puntini (...)
+    (0x2030, 0x203A),   # per mille, apici, virgolette angolari semplici
+    (0x20AC, 0x20AC),   # euro
+    (0x2122, 0x2122),   # marchio
+    (0x2190, 0x2193),   # frecce
+    (0x2212, 0x2212),   # meno
+    (0x2500, 0x259F),   # riquadri e blocchi: i programmi da terminale
+    (0x25A0, 0x25FF),   # forme: quadrati, triangoli, cerchi
+]
+SOSTITUTO = 0xFFFD      # il segno che chi scrive disegna per un carattere che il font non ha
 FILE_IMMAGINI = dict(materiali.immagini())
+
+
+def cmap_di(percorso, _cache={}):
+    if percorso not in _cache:
+        _cache[percorso] = TTFont(percorso).getBestCmap()
+    return _cache[percorso]
+
+
+def glifo_sostitutivo(misura, avanzo_mono):
+    """Il carattere sostitutivo: un riquadro vuoto di un pixel, uguale in tutti i font (si
+    adatta solo alla misura). Alto come una maiuscola; nei font a larghezza fissa largo come
+    una cella. Restituisce (glifo senza inizio, alfa)."""
+    alto = max(6, round(misura * 0.72))
+    largo = avanzo_mono - 2 if avanzo_mono else max(4, round(misura * 0.5))
+    dati = []
+    for r in range(alto):
+        for c in range(largo):
+            dati.append(255 if r in (0, alto - 1) or c in (0, largo - 1) else 0)
+    return (1, alto, largo, alto, avanzo_mono if avanzo_mono else largo + 2), dati
+
 
 
 def svg_in_png(file, l, a):
@@ -83,10 +120,15 @@ def scrivi_immagine(nome, img):
 
 for nome, file, misura in FONT_USATI:
     cartella = FONT_PLEX_MONO if file.startswith('IBMPlexMono') else FONT_PLEX if file.startswith('IBMPlex') else FONT
-    f = ImageFont.truetype(os.path.join(cartella, file), misura)
+    percorso_font = os.path.join(cartella, file)
+    f = ImageFont.truetype(percorso_font, misura)
     ascesa, discesa = f.getmetrics()
-    glifi, alfa, indice = [], [], [0] * 256
-    for codice, ch in CARATTERI:
+    cmap = cmap_di(percorso_font)
+    codici = [c for da, a in INTERVALLI for c in range(da, a + 1) if c in cmap]
+    mono = file.startswith('IBMPlexMono')
+    glifi, alfa, intervalli = [], [], []     # intervalli: [primo codice, quanti, primo glifo]
+    for codice in codici:
+        ch = chr(codice)
         tela = Image.new('L', (misura * 4, misura * 4), 0)
         ImageDraw.Draw(tela).text((misura, misura * 3), ch, font=f, fill=255, anchor='ls')
         riquadro = tela.getbbox()
@@ -99,11 +141,18 @@ for nome, file, misura in FONT_USATI:
         else:
             gx = gy = gl = ga = 0
             dati = []
-        indice[codice] = len(glifi)
+        if intervalli and intervalli[-1][0] + intervalli[-1][1] == codice:
+            intervalli[-1][1] += 1
+        else:
+            intervalli.append([codice, 1, len(glifi)])
         glifi.append((len(alfa), gx, gy, gl, ga, avanzo))
         alfa += dati
+    (gx, gy, gl, ga, avanzo), dati = glifo_sostitutivo(misura, int(round(f.getlength('M'))) if mono else 0)
+    sostitutivo = len(glifi)
+    glifi.append((len(alfa), gx, gy, gl, ga, avanzo))
+    alfa += dati
     formato.font(os.path.join(RISORSE, materiali.file_font(nome)), ascesa + discesa, ascesa,
-                 indice, glifi, alfa)
+                 intervalli, sostitutivo, glifi, alfa)
 
 for icona in ICONE:
     svg = os.path.join(FIGMA, 'icona-%s.svg' % icona)

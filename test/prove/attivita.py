@@ -122,15 +122,20 @@ def lettere_del_font(percorso, caratteri, soglia=180):
     dati = percorso.read_bytes()
     if dati[:4] != b"MSFN":
         raise ErroreProva(f"{percorso.name} non e' un font di mshell")
-    quanti, = struct.unpack_from("<I", dati, 8)
-    indice = dati[16:272]
-    alfa = 272 + 12 * quanti
+    quanti, _alfa, intervalli = struct.unpack_from("<III", dati, 8)
+    glifi = 24 + 8 * intervalli                 # dove cominciano i glifi (dopo gli intervalli)
+    alfa = glifi + 12 * quanti
+    cerca = {}                                  # carattere -> glifo, dagli intervalli
+    for i in range(intervalli):
+        primo, n, g0 = struct.unpack_from("<IHH", dati, 24 + 8 * i)
+        for k in range(n):
+            cerca[primo + k] = g0 + k
     lettere = {}
     for c in caratteri:
-        g = indice[ord(c)]
-        if not g:
+        g = cerca.get(ord(c))
+        if g is None:
             continue
-        inizio, _x, _y, l, a, _avanzo = struct.unpack_from("<IbbBBB", dati, 272 + 12 * g)
+        inizio, _x, _y, l, a, _avanzo = struct.unpack_from("<IbbBBB", dati, glifi + 12 * g)
         im = Image.frombytes("L", (l, a), dati[alfa + inizio: alfa + inizio + l * a])
         im = im.point(lambda v: 255 if v > soglia else 0)
         box = im.getbbox()

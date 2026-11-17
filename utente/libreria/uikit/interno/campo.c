@@ -91,17 +91,20 @@ static void campo_puntatore(struct widget *w, int x, int y, unsigned int pulsant
     (void)w; (void)x; (void)y; (void)pulsanti;
 }
 
-/* I tasti: le lettere si aggiungono in fondo, "cancella" toglie l'ultima. */
+/* I tasti: le lettere (caratteri Unicode, il testo e' UTF-8) si aggiungono in fondo,
+ * "cancella" toglie l'ultima, intera anche se sono piu' byte. */
 static void campo_tasto(struct widget *w, unsigned int tasto) {
     struct campo *c = (struct campo *)w;
     int n = lunghezza(c->testo);
     if (tasto == '\b') {
         if (!n) return;
-        c->testo[n - 1] = 0;
-    } else if (tasto >= ' ' && tasto != 0x7F) {
-        if (n >= MAX_TESTO_WIDGET - 1) return;
-        c->testo[n] = (char)tasto;
-        c->testo[n + 1] = 0;
+        c->testo[utf8_prima(c->testo, n)] = 0;
+    } else if ((tasto >= ' ' && tasto < 0x7F) || tasto >= 0xA0) {   /* non i controlli (anche C1) */
+        char b[4];
+        int k = utf8_scrivi(b, tasto);
+        if (n + k > MAX_TESTO_WIDGET - 1) return;
+        for (int i = 0; i < k; i++) c->testo[n + i] = b[i];
+        c->testo[n + k] = 0;
     } else {
         return;                            /* Invio, Tab...: non sono per lui */
     }

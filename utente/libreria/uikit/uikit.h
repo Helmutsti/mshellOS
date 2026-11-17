@@ -25,8 +25,7 @@
  *                     font e ombre del design), tema.h (i due temi e quello in uso),
  *                     materiali.h e materiali_elenco.h (i font, le icone, gli oggetti del
  *                     sistema; l'elenco e' generato da strumenti/grafica/genera.py), tasti.h
- *                     (i codici dei tasti e gli ascoltatori delle scorciatoie), testo437.h (da
- *                     UTF-8 ai caratteri dei font del sistema), e gli header dei componenti.
+ *                     (i codici dei tasti e gli ascoltatori delle scorciatoie), e gli header dei componenti.
  *   uikit/sistema/    DEL SISTEMA: quello che usano solo i programmi del sistema.
  *                     uikit_compositore.h (le poche cose del design che disegna il
  *                     compositore), userbar.h (la userbar e il vassoio della scrivania).
@@ -41,9 +40,9 @@
  * IL RIORDINO E' IN CORSO. L'obiettivo e' quello di CoreKit e GKit: negli header pubblici solo
  * dichiarazioni, tipi, costanti e i commenti per chi li usa, e il codice tutto nei .c di
  * interno/. A che punto siamo:
- *   1. FATTO: le basi. stile.h, tema.h, materiali.h, tasti.h, testo437.h e
+ *   1. FATTO: le basi. stile.h, tema.h, materiali.h, tasti.h e
  *      sistema/uikit_compositore.h hanno solo dichiarazioni; il codice (e le tabelle dei due
- *      temi e delle ombre) e' in interno/ (tema.c, stile.c, materiali.c, testo437.c,
+ *      temi e delle ombre) e' in interno/ (tema.c, stile.c, materiali.c,
  *      uikit_compositore.c).
  *   2. FATTO: il nucleo, questo file. Qui restano i tipi, le costanti e le dichiarazioni delle
  *      funzioni pubbliche; il codice e' in interno/, diviso per argomento: widget.c (l'albero,

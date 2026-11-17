@@ -46,7 +46,6 @@
 #include "uikit/sistema/userbar.h"
 #include "corekit/sistema/descrizione.h"
 #include "corekit/apertura.h"
-#include "uikit/testo437.h"
 
 /* --- le applicazioni installate --- */
 
@@ -55,7 +54,7 @@
 struct app {
     char cartella[MAX_NOME_FILE];   /* il nome della sua cartella: lo si chiede al launcher */
     char programma[MAX_PERCORSO_PROGRAMMA];   /* il percorso completo del programma */
-    char nome[MAX_NOME_APP];        /* quello che si vede (code page 437, per i font) */
+    char nome[MAX_NOME_APP];        /* quello che si vede (UTF-8) */
     int di_sistema;                 /* sta in /system/apps: e' fissata nella userbar... */
     int nella_barra;                /* ...se il manifesto non dice nella_barra = false */
     int dove;                       /* in quale delle cartelle_applicazioni sta */
@@ -163,7 +162,7 @@ static void leggi_applicazioni_in(int dove) {
         *a = (struct app){ .di_sistema = desc.di_sistema, .dove = dove };
         copia(a->cartella, v.nome, sizeof a->cartella);
         copia(a->programma, desc.programma, sizeof a->programma);
-        in_437(a->nome, desc.nome, sizeof a->nome);
+        copia(a->nome, desc.nome, sizeof a->nome);
         carica_icone(a);
     }
     if (d >= 0) chiudi(d);

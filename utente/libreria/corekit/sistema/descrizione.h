@@ -27,6 +27,7 @@
 #define DESCRIZIONE_H
 
 #include "../chiamate.h"   /* MAX_PERCORSO_PROGRAMMA */
+#include "../utf8.h"       /* utf8_entra */
 
 /* LA VERSIONE DEL SISTEMA. Un'app dice nel manifesto la versione minima che le serve
  * (sistema_minimo): se e' piu' alta di questa, non si installa. Si alza quando il sistema
@@ -155,8 +156,8 @@ static inline int descrizione_uguali(const char *a, const char *b) {
 }
 
 static inline void descrizione_copia(char *dove, const char *da, int massimo) {
-    int i = 0;
-    for (; i < massimo - 1 && da[i]; i++) dove[i] = da[i];
+    int i = utf8_entra(da, massimo - 1);   /* senza tagliare un carattere UTF-8 a meta' */
+    for (int k = 0; k < i; k++) dove[k] = da[k];
     dove[i] = 0;
 }
 

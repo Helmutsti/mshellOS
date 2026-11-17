@@ -43,20 +43,22 @@
  *
  * I codici dei tasti sono quelli di Linux (KEY_...): per i tasti principali (1-88) sono
  * gli stessi degli scancode PS/2 "set 1" (KEY_A = 30 = 0x1E). AltGr e' KEY_RIGHTALT.
- * Si tiene traccia di Shift, AltGr e Caps Lock. Le lettere accentate usano i codici
- * della tabella di caratteri dei font del sistema (code page 437). */
-#define A_GRAVE 0x85   /* à */
-#define E_GRAVE 0x8A   /* è */
-#define E_ACUTA 0x82   /* é */
-#define I_GRAVE 0x8D   /* ì */
-#define O_GRAVE 0x95   /* ò */
-#define U_GRAVE 0x97   /* ù */
-#define C_CEDIG 0x87   /* ç */
-#define STERLINA 0x9C  /* £ */
-#define GRADO   0xF8   /* ° */
-#define PARAGR  0x15   /* § */
+ * Si tiene traccia di Shift, AltGr e Caps Lock. Il carattere e' il suo numero Unicode
+ * (U+00E0 e' à): per le lettere ASCII e' il codice ASCII di sempre; chi riceve lo scrive in
+ * UTF-8 (corekit/utf8.h). */
+#define A_GRAVE 0xE0   /* à */
+#define E_GRAVE 0xE8   /* è */
+#define E_ACUTA 0xE9   /* é */
+#define I_GRAVE 0xEC   /* ì */
+#define O_GRAVE 0xF2   /* ò */
+#define U_GRAVE 0xF9   /* ù */
+#define C_CEDIG 0xE7   /* ç */
+#define STERLINA 0xA3  /* £ */
+#define GRADO   0xB0   /* ° */
+#define PARAGR  0xA7   /* § */
+#define EURO    0x20AC /* € */
 
-static const unsigned char normale[0x59] = {
+static const unsigned short normale[0x59] = {
     [0x02] = '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\'', I_GRAVE, '\b',
     [0x0F] = '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', E_GRAVE, '+', '\n',
     [0x1E] = 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', O_GRAVE, A_GRAVE, '\\',
@@ -64,7 +66,7 @@ static const unsigned char normale[0x59] = {
     [0x37] = '*', [0x39] = ' ', [0x56] = '<',
 };
 
-static const unsigned char maiuscolo[0x59] = {
+static const unsigned short maiuscolo[0x59] = {
     [0x02] = '!', '"', STERLINA, '$', '%', '&', '/', '(', ')', '=', '?', '^', '\b',
     [0x0F] = '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', E_ACUTA, '*', '\n',
     [0x1E] = 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', C_CEDIG, GRADO, '|',
@@ -79,8 +81,9 @@ static void manda_evento(const struct evento *e) {
 }
 
 /* Combinazioni con AltGr sulla tastiera italiana. */
-static unsigned char con_altgr(unsigned int codice) {
+static unsigned int con_altgr(unsigned int codice) {
     switch (codice) {
+    case KEY_E:          return EURO;                /* AltGr+E */
     case KEY_LEFTBRACE:  return shift ? '{' : '[';   /* tasto è */
     case KEY_RIGHTBRACE: return shift ? '}' : ']';   /* tasto + */
     case KEY_SEMICOLON:  return '@';                 /* tasto ò */
@@ -114,7 +117,7 @@ static void tasto(unsigned int codice, int valore) {
     if (codice == KEY_CAPSLOCK) { if (valore == 1) caps = !caps; return; }
     if (codice >= sizeof normale) return;                /* frecce e simili: per ora no */
 
-    unsigned char c;
+    unsigned int c;
     if (altgr) {
         c = con_altgr(codice);
     } else {

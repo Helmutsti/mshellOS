@@ -4,7 +4,7 @@
 # compilazione: solo quando cambia la grafica. Gira nel container alpine:
 #   docker run --rm -v "<cartella del repo>:/w" alpine:3.24 sh /w/strumenti/grafica/genera.sh
 set -e
-apk add --no-cache python3 py3-pillow rsvg-convert curl unzip >/dev/null
+apk add --no-cache python3 py3-pillow py3-fonttools rsvg-convert curl unzip >/dev/null
 mkdir -p /tmp/inter
 cd /tmp/inter
 # Inter 4.1, dal sito ufficiale (rsms/inter): servono i tre pesi statici in TTF

@@ -305,13 +305,13 @@ static void aggiorna_azioni(void) {
     if (cambia && finestra.base.l) uikit_ridisponi(&finestra);
 }
 
-/* Sotto la tabella: "8 processi \xFA 34,6 MB in uso" (\xFA e' il punto a mezza altezza),
+/* Sotto la tabella: "8 processi \xc2\xb7 34,6 MB in uso" (\xc2\xb7 e' il punto a mezza altezza),
  * contando solo le righe che si vedono. */
 static void aggiorna_riassunto_processi(void) {
     unsigned long long in_uso = 0;
     for (int k = 0; k < quante_righe; k++) in_uso += processi[riga_processo[k]].memoria;
     char testo[MAX_TESTO_WIDGET], *d = metti_numero(testo, (unsigned int)quante_righe);
-    d = metti_testo(d, quante_righe == 1 ? " processo \xFA " : " processi \xFA ");
+    d = metti_testo(d, quante_righe == 1 ? " processo \xc2\xb7 " : " processi \xc2\xb7 ");
     d = testo_byte(d, in_uso);
     metti_testo(d, " in uso");
     int prima = larghezza_testo(riassunto_processi.font, riassunto_processi.testo);
@@ -419,7 +419,7 @@ static void premi_termina(struct pulsante *b, void *dati) {
     (void)b; (void)dati;
     if (scelto < 0) return;
     if (termina_processo(scelto) < 0) {
-        scrivi_messaggio("Questo processo non si pu\x95 terminare");
+        scrivi_messaggio("Questo processo non si pu\xc3\xb2 terminare");
         return;
     }
     scrivi_messaggio("");
@@ -432,7 +432,7 @@ static void risposta_riavvia(struct avviso *a, int scelta, void *dati) {
     (void)a; (void)dati;
     if (scelta != AVVISO_CONFERMA || da_riavviare < 0) return;
     int chiuso = termina_processo(da_riavviare) == 0;
-    if (!chiuso) scrivi_messaggio("Questo processo non si pu\x95 riavviare");
+    if (!chiuso) scrivi_messaggio("Questo processo non si pu\xc3\xb2 riavviare");
     else if (apri_applicazione(id_da_riavviare) < 0) scrivi_messaggio("Non si riesce a riaprire l'app");
     else scrivi_messaggio("");
     aggiorna(&finestra, 0);
@@ -526,7 +526,7 @@ int main(void) {
     pagina_aggiungi(&area, &memoria.pagina.base);
     pagina_aggiungi(&area, &disco.pagina.base);
 
-    finestra_tk_prepara(&finestra, "Attivit\x85", &area.base);
+    finestra_tk_prepara(&finestra, "Attivit\xc3\xa0", &area.base);
     finestra_tk_barra(&finestra, &strumenti.base);
     finestra_tk_aree(&finestra);
     finestra_tk_dimensione(&finestra, 768, 526);   /* il disegno, schermata Processi */

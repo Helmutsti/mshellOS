@@ -94,7 +94,7 @@ void zone_aggiungi(struct zona_finestra *zone, int *quante, int massimo, struct 
 #define PUNTATORE  2   /* il puntatore e' in x, y (dentro la finestra), con 'pulsanti'
                         * premuti (PULSANTE_... di chiamate.h) */
 #define USCITO     3   /* il puntatore e' uscito dalla finestra */
-#define TASTO      4   /* e' stato premuto il tasto 'tasto' (code page 437) */
+#define TASTO      4   /* e' stato premuto il tasto 'tasto' (numero Unicode: U+00E0 e' à) */
 #define FUOCO      5   /* 'fuoco' = 1: i tasti ora vengono a te; 0: non piu' */
 #define ROTELLA   11   /* la rotella del mouse ha girato di 'scatti_y' scatti (positivo: in
                         * basso, il contenuto va su), e 'scatti_x' quella orizzontale

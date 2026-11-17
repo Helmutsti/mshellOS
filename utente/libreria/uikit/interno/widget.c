@@ -114,8 +114,8 @@ int ombra_sporgenza(const struct strato_ombra *strati, int n) {
 }
 
 void copia_testo(char *dove, const char *da, int massimo) {
-    int i = 0;
-    for (; i < massimo - 1 && da[i]; i++) dove[i] = da[i];
+    int i = utf8_entra(da, massimo - 1);   /* senza tagliare un carattere UTF-8 a meta' */
+    for (int k = 0; k < i; k++) dove[k] = da[k];
     dove[i] = 0;
 }
 

@@ -9,14 +9,15 @@ int paragrafo_a_capo(const struct font *f, const char *testo, int largo, char ri
     while (testo[pos] == ' ') pos++;
     while (testo[pos] && n < massimo) {
         int fine = pos;
-        while (testo[fine] && fine - pos < PARAGRAFO_RIGA - 4) {
-            if (larghezza_pezzo(f, testo, pos, fine + 1) > largo) break;
-            fine++;
+        while (testo[fine]) {                              /* un carattere intero alla volta (UTF-8) */
+            int dopo = utf8_dopo(testo, fine);
+            if (dopo - pos > PARAGRAFO_RIGA - 4 || larghezza_pezzo(f, testo, pos, dopo) > largo) break;
+            fine = dopo;
         }
-        if (fine == pos) fine++;
+        if (fine == pos) fine = utf8_dopo(testo, fine);
         int taglio = fine;
         if (testo[fine] && n == massimo - 1) {             /* l'ultima riga: si taglia con i puntini */
-            while (fine > pos && larghezza_pezzo(f, testo, pos, fine) + puntini > largo) fine--;
+            while (fine > pos && larghezza_pezzo(f, testo, pos, fine) + puntini > largo) fine = utf8_prima(testo, fine);
             int k = 0;
             for (int i = pos; i < fine; i++) righe[n][k++] = testo[i];
             righe[n][k++] = '.'; righe[n][k++] = '.'; righe[n][k++] = '.';

@@ -58,7 +58,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Poteri**: super sì. Non controlla permessi.
 
 ### eventi (`utente/programmi/eventi.c`)
-- **Cosa fa**: legge tastiera e mouse da `/dev/input` (li prende per sé con EVIOCGRAB), li traduce (tastiera italiana, puntatore) e manda un messaggio per evento nel tubo verso il compositore.
+- **Cosa fa**: legge tastiera e mouse da `/dev/input` (li prende per sé con EVIOCGRAB), li traduce (tastiera italiana: i caratteri sono numeri Unicode, anche le lettere accentate e l'euro con AltGr+E; puntatore) e manda un messaggio per evento nel tubo verso il compositore. La ripetizione dei tasti (dopo circa 500 ms, circa 30 al secondo) la fa il kernel (EVIOCSREP); eventi la passa uguale per tutti i tasti, fisici e caratteri, tranne i modificatori.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con il tubo al descrittore 0).
 - **Lancia**: nessuno.
@@ -228,7 +228,7 @@ Collegate dentro ogni programma (statico): non girano da sole e non hanno uid. O
 - **Poteri**: `ha_permesso` è vera (regola in `sistema/servizi.h`); `pacchetto_ha_permesso` e `pacchetto_puo_gestire` sono vere (leggono il manifesto di un'app in `/system/apps`). Le funzioni di `privilegi.h` riescono solo con uid 0 (controllo del kernel).
 
 ### gkit (`libreria/gkit/`)
-- **Cosa fa**: base della grafica: apre la finestra, dà la tela, parla con il compositore, eventi di mouse e tastiera, strumenti di disegno. Il protocollo delle finestre sta in `sistema/protocollo.h`.
+- **Cosa fa**: base della grafica: apre la finestra, dà la tela, parla con il compositore, eventi di mouse e tastiera, strumenti di disegno. Il testo è UTF-8: i font (`.font`, versione 2) hanno i caratteri per numero Unicode e un segno sostitutivo per quelli che mancano. Il protocollo delle finestre sta in `sistema/protocollo.h`.
 - **Tipo**: libreria. **Lanciato da / Lancia**: non applicabile / nessuno. **Gira come**: quello del programma. **Poteri**: no.
 
 ### uikit (`libreria/uikit/`)

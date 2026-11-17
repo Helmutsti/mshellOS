@@ -10,18 +10,20 @@ int testo_a_capo(const struct font *f, const char *testo, int largo,
     while (testo[pos] == ' ') pos++;
     while (testo[pos] && n < massimo) {
         int fine = pos, l = 0;
-        while (testo[fine] && fine - pos < MAX_RIGA_NOME - 4) {
-            int c = glifo_di(f, (unsigned char)testo[fine])->avanzo;
-            if (l + c > largo) break;
+        while (testo[fine]) {                    /* un carattere intero alla volta (UTF-8) */
+            unsigned int cp;
+            int b = utf8_leggi(testo + fine, &cp);
+            int c = glifo_di(f, cp)->avanzo;
+            if (fine - pos + b > MAX_RIGA_NOME - 4 || l + c > largo) break;
             l += c;
-            fine++;
+            fine += b;
         }
-        if (fine == pos) fine++;                 /* una lettera piu' larga della riga */
+        if (fine == pos) fine = utf8_dopo(testo, fine);   /* una lettera piu' larga della riga */
         int taglio = fine;
         if (!testo[fine]) {
             taglio = fine;                       /* il resto ci sta tutto */
         } else if (n == massimo - 1) {           /* l'ultima riga: si taglia con i puntini */
-            while (fine > pos && larghezza_pezzo(f, testo, pos, fine) + puntini > largo) fine--;
+            while (fine > pos && larghezza_pezzo(f, testo, pos, fine) + puntini > largo) fine = utf8_prima(testo, fine);
             int k = 0;
             for (int i = pos; i < fine; i++) righe[n][k++] = testo[i];
             righe[n][k++] = '.'; righe[n][k++] = '.'; righe[n][k++] = '.';

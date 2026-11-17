@@ -382,13 +382,13 @@ static const struct tipo_widget tipo_avviso_basso = { 0, 0, avviso_basso_disegna
 static void avvisa_errore(const char *cosa, int errore) {
     char t[96], *d = metti_testo(t, cosa);
     switch (errore) {
-    case ERRORE_SOLA_LETTURA: metti_testo(d, ": qui il disco \x8A in sola lettura"); break;
+    case ERRORE_SOLA_LETTURA: metti_testo(d, ": qui il disco \xc3\xa8 in sola lettura"); break;
     case ERRORE_PERMESSO:     metti_testo(d, ": non hai il permesso di farlo qui"); break;
-    case ERRORE_ESISTE:       metti_testo(d, ": c'\x8A gi\x85 un file con questo nome"); break;
-    case ERRORE_NON_VUOTA:    metti_testo(d, ": la cartella non \x8A vuota"); break;
-    case ERRORE_NOME:         metti_testo(d, ": il nome non va bene o \x8A troppo lungo"); break;
-    case ERRORE_PIENO:        metti_testo(d, ": il disco \x8A pieno"); break;
-    case ERRORE_NON_TROVATO:  metti_testo(d, ": non c'\x8A pi\x97"); break;
+    case ERRORE_ESISTE:       metti_testo(d, ": c'\xc3\xa8 gi\xc3\xa0 un file con questo nome"); break;
+    case ERRORE_NON_VUOTA:    metti_testo(d, ": la cartella non \xc3\xa8 vuota"); break;
+    case ERRORE_NOME:         metti_testo(d, ": il nome non va bene o \xc3\xa8 troppo lungo"); break;
+    case ERRORE_PIENO:        metti_testo(d, ": il disco \xc3\xa8 pieno"); break;
+    case ERRORE_NON_TROVATO:  metti_testo(d, ": non c'\xc3\xa8 pi\xc3\xb9"); break;
     default:                  metti_testo(d, ": il disco non ha risposto"); break;
     }
     avvisa(t);
@@ -458,18 +458,18 @@ static void aggiorna_stato_cartella(void) {
         icona_stato = ICONA_LOCK;
         titolo = "Non hai il permesso di aprire questa cartella";
         perche = proprietario_qui == UID_SISTEMA
-                     ? "Appartiene al sistema: solo il sistema pu\x95 leggerla."
-                     : "Appartiene a un altro utente: solo lui pu\x95 leggerla.";
+                     ? "Appartiene al sistema: solo il sistema pu\xc3\xb2 leggerla."
+                     : "Appartiene a un altro utente: solo lui pu\xc3\xb2 leggerla.";
     } else if (errore_qui) {
         icona_stato = ICONA_TRIANGLE_ALERT;
         titolo = "Impossibile leggere la cartella";
-        perche = errore_qui == ERRORE_NOME ? "Il suo percorso \x8A troppo lungo per aprirla."
-               : errore_qui == ERRORE_NON_TROVATO ? "Non c'\x8A pi\x97: forse \x8A stata spostata."
-               : errore_qui == ERRORE_NON_CARTELLA ? "Non \x8A una cartella."
+        perche = errore_qui == ERRORE_NOME ? "Il suo percorso \xc3\xa8 troppo lungo per aprirla."
+               : errore_qui == ERRORE_NON_TROVATO ? "Non c'\xc3\xa8 pi\xc3\xb9: forse \xc3\xa8 stata spostata."
+               : errore_qui == ERRORE_NON_CARTELLA ? "Non \xc3\xa8 una cartella."
                : "Il disco non ha risposto. Riprova tra poco.";
     } else if (!quanti_elementi) {
         icona_stato = NESSUNA_ICONA;            /* come nel disegno: la cartella vuota non ha icona */
-        titolo = "Questa cartella \x8A vuota";
+        titolo = "Questa cartella \xc3\xa8 vuota";
         perche = "Usa il tasto destro per creare una nuova cartella.";
     } else {                                    /* ci sono file, ma il filtro o la ricerca li nascondono */
         icona_stato = ICONA_SEARCH;
@@ -647,7 +647,7 @@ static void elimina(int e) {
         char titolo[MAX_TESTO_WIDGET], testo[160], *d = metti_testo(titolo, "Eliminare \"");
         d = metti_testo(d, elementi[e].nome);
         metti_testo(d, "\"?");
-        if (dentro == 1) d = metti_testo(testo, "Dentro c'\x8A 1 elemento. ");
+        if (dentro == 1) d = metti_testo(testo, "Dentro c'\xc3\xa8 1 elemento. ");
         else {
             d = metti_testo(testo, "Dentro ci sono ");
             d = metti_testo(metti_numero(d, dentro), " elementi. ");
@@ -679,7 +679,7 @@ static void apri_elemento(int e) {
     char p[MAX_LUNGO];
     percorso_di(p, qui, elementi[e].nome);
     if (!p[0] || (e_pacchetto(e) && lunghezza(p) >= MAX_PERCORSO)) {
-        avvisa("Il percorso \x8A troppo lungo");
+        avvisa("Il percorso \xc3\xa8 troppo lungo");
         return;
     }
     if (elementi[e].tipo == TIPO_CARTELLA) { vai(p, 1); return; }
@@ -862,10 +862,12 @@ static void tasto_contenuto(unsigned int tasto) {
     if (rinominato >= 0) {
         int n = lunghezza(nome_nuovo);
         if (tasto == '\n') { finisci_rinomina(); return; }
-        if (tasto == '\b') { if (n) nome_nuovo[n - 1] = 0; }
-        else if (tasto >= ' ' && tasto != 0x7F && tasto != '/' && n < MAX_NOME_FILE - 1) {
-            nome_nuovo[n] = (char)tasto;
-            nome_nuovo[n + 1] = 0;
+        char b[4];
+        int k = tasto >= ' ' ? utf8_scrivi(b, tasto) : 0;
+        if (tasto == '\b') { if (n) nome_nuovo[utf8_prima(nome_nuovo, n)] = 0; }
+        else if (((tasto >= ' ' && tasto < 0x7F) || tasto >= 0xA0) && tasto != '/' && n + k < MAX_NOME_FILE) {
+            for (int i = 0; i < k; i++) nome_nuovo[n + i] = b[i];
+            nome_nuovo[n + k] = 0;
         } else return;
         sincronizza();
         return;

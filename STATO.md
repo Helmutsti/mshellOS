@@ -432,9 +432,9 @@ una barra (trascinamento e X). Si apre dalla scrivania (icona rossa con il trian
   stdout che in mshell non va da nessuna parte).
 
 **Tasti fisici** (premuto/rilasciato): `eventi` manda `EVENTO_TASTO_FISICO` (codice Linux
-KEY_*, senza ripetizione automatica) al compositore, che lo recapita solo alla finestra
+KEY_*, premuto/lasciato/ripetuto) al compositore, che lo recapita solo alla finestra
 attiva che l'ha chiesto con `finestra_tasti_fisici()` (messaggio `VOGLIO_TASTI_FISICI`,
-notizia `TASTO_FISICO`). Il vecchio `TASTO` (caratteri) non è cambiato. UIKit chiede i tasti
+notizia `TASTO_FISICO`; `premuto` vale 1, 0 o 2 = ripetuto: i tasti tenuti giù, anche le frecce, si ripetono come su Windows e Mac, i modificatori no; Doom scarta il 2). Il vecchio `TASTO` (caratteri) porta il numero Unicode del carattere. UIKit chiede i tasti
 fisici per ogni sua finestra e li passa agli "ascoltatori" delle scorciatoie (`uikit/tasti.h`,
 `finestra_tk_ascolta_tasti`); mentre Ctrl o Alt sono giù i caratteri non arrivano ai campi.
 Esc non è un carattere (arriva solo come tasto fisico): su un avviso (bloccante, o con il
@@ -876,7 +876,7 @@ cambiare da Impostazioni), lavoro direttamente su `main`.
 - Impostazioni: la scelta del tema deve scrivere il file e chiamarsi Chiaro/Scuro. I servizi già
   avviati non si accorgono del cambio finché non ripartono.
 - Token del disabilitato di campi, caselle e scelte: oggi è quasi uguale al normale (da rivedere in Figma).
-- Il carattere "…" e "–" non esistono nel font (solo code page 437): usare "..." e "-".
+- I font hanno ora i caratteri per numero Unicode (UTF-8 in tutto il sistema): "…", "–", le virgolette, le frecce, l'euro e le lettere europee si scrivono come sono.
 - Foto di riferimento delle prove (`test/riferimenti`): da rifare con `--riferimenti` solo dopo aver
   guardato le schermate. Sul Mac `uv` non c'è: le prove non partono finché non si installa.
 - Anteprime: `strumenti/anteprima/anteprima.sh <scena>` (campo, pulsanti, impostazioni, files, token,
@@ -945,8 +945,8 @@ i componenti di UIKit.
   messaggio d'errore per motivo (processore, sistema troppo vecchio, nome di un'app del sistema,
   o generico) e "Chiudi". Pacchetto illeggibile: "Impossibile leggere il pacchetto". Dopo
   l'installazione: "<nome> è installata", con "Chiudi" e "Apri <nome>".
-- I testi del launcher e dei manifesti sono in UTF-8, il font ha solo la code page 437: lo
-  Store li traduce (`uikit/testo437.h`, ora nella libreria perché serve anche alla scrivania).
+- I testi del launcher e dei manifesti sono in UTF-8 e si disegnano così come sono: la traduzione
+  nella code page 437 (`testo437.h`) non c'è più (UTF-8 in tutto il sistema, `corekit/utf8.h`).
 - Il launcher sa anche togliere un'app (`RIMUOVI_PACCHETTO`, con o senza i dati delle persone)
   e svuotarne i dati (`SVUOTA_DATI`, anche per quelle del sistema; la cartella resta, della
   persona, 700). Se l'app è accesa risponde "Chiudi <nome> prima di …" e non la ferma. I dati

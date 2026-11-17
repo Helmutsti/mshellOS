@@ -22,7 +22,6 @@
  * vengono dalla picker_sorgente (il servizio). I percorsi sono relativi alla Home. */
 #include <stddef.h>
 #include "uikit/uikit.h"
-#include "uikit/testo437.h"
 #include "picker_finestra.h"
 
 #define LARGHEZZA     480
@@ -211,7 +210,7 @@ static int quante_voci(int k) {
 static void dati_riga(struct tabella_tk *t, int k, struct riga_tk *r, void *d) {
     (void)t; (void)d;
     const struct picker_voce *v = &voci[k];
-    in_437(r->testi[0], v->nome, MAX_CELLA);       /* i nomi sono UTF-8, i font del sistema 437 */
+    copia_testo(r->testi[0], v->nome, MAX_CELLA);
     copia_testo(r->testi[1], tipo_di(v), MAX_CELLA);
     if (!v->cartella) scrivi_byte(r->testi[2], (unsigned long long)v->byte);
     else {
@@ -301,7 +300,7 @@ static void premi_conferma(struct pulsante *b, void *dati) {
     if (sorgente->esiste(sorgente->ctx, qui, campo.testo) == 1) {
         char messaggio[AVVISO_RIGHE * MAX_TESTO_WIDGET], *d = metti_testo(messaggio, "Il file ");
         d = metti_testo(d, campo.testo);
-        in_437(d, " esiste gi\xc3\xa0. Vuoi sostituirlo?", (int)(sizeof messaggio - (size_t)(d - messaggio)));
+        copia_testo(d, " esiste gi\xc3\xa0. Vuoi sostituirlo?", (int)(sizeof messaggio - (size_t)(d - messaggio)));
         copia_testo(sostituire.messaggio, messaggio, (int)sizeof sostituire.messaggio);
         avviso_apri(&sostituire);
         return;

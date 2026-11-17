@@ -48,6 +48,7 @@
 #define COREKIT_H
 
 #include "chiamate.h"
+#include "utf8.h"
 
 /* UNA PAROLA: quello che sta in un registro (un numero, un indirizzo): 64 bit, su
  * tutte e due le CPU. */

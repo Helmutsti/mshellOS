@@ -183,11 +183,14 @@ extern const struct tipo_widget tipo_barra_scorrimento;
 
 #define MAX_RIGA_NOME 96     /* lettere di una riga del nome, compreso lo 0 finale */
 
-/* Quanto e' largo un pezzo di testo (da 'da' a 'a', escluso). Inline: minuscola, la chiamano
+/* Quanto e' largo un pezzo di testo UTF-8 (da 'da' a 'a', escluso: due confini tra un carattere
+ * e l'altro, mai a meta' di uno; si trovano con utf8_dopo e utf8_prima). Inline: minuscola, la chiamano
  * di continuo testo_a_capo e paragrafo_a_capo mentre cercano dove tagliare. */
 static inline int larghezza_pezzo(const struct font *f, const char *s, int da, int a) {
     int sp = spaziatura_del_font(f), c = 0;   /* centesimi di pixel, come larghezza_testo_spaziato */
-    for (int i = da; i < a; i++) c += glifo_di(f, (unsigned char)s[i])->avanzo * 100 + sp;
+    unsigned int cp;
+    for (int i = da, n; i < a && (n = utf8_leggi(s + i, &cp)); i += n)   /* da e a sono confini di carattere */
+        c += glifo_di(f, cp)->avanzo * 100 + sp;
     return c >= 0 ? (c + 50) / 100 : -((-c + 50) / 100);
 }
 

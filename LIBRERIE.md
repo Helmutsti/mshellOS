@@ -100,11 +100,10 @@ spiega). **Il riordino è finito**: le basi, il nucleo (`uikit.h`), i componenti
 | `uikit/tema.h` | **pubblico** | i due temi, quello in uso, `tema_salva` |
 | `uikit/materiali.h`, `uikit/materiali_elenco.h` | **pubblico** | i font, le icone e gli oggetti del sistema per nome (`&plex_14`, `icona()`); l'elenco lo genera `strumenti/grafica/genera.py` |
 | `uikit/tasti.h` | **pubblico** | i codici dei tasti e gli ascoltatori delle scorciatoie (Files, Terminale) |
-| `uikit/testo437.h` | **pubblico** | da UTF-8 ai caratteri dei font del sistema (Store, scrivania): serve a chiunque scriva con i font del sistema testi che arrivano da fuori |
 | `uikit/sistema/uikit_compositore.h` | **del sistema** | la barra congelata, le ombre delle finestre e il tema per il compositore: lo usa solo lui |
 | `uikit.h` (scorrimento orizzontale) | **pubblico** | `barra_scorrimento_prepara_orizzontale`, `_posto_orizzontale`, `_rotella_xy` (rotella orizzontale, o verticale con Maiusc): come la verticale, ruotata (`uikit.h`) |
 | `gkit_disegno.h`, `uikit.h` (spaziatura) | **pubblico** | GKit: `testo_spaziato`, `larghezza_testo_spaziato` (centesimi di pixel); UIKit: `spaziatura_del_font`, `larghezza_testo_stile`, `testo_centrato` la applica (titolo -24, etichetta +24, `stile.h`) |
-| `uikit/interno/` | **interno** | il codice delle basi: `tema.c` (i valori dei due temi, il tema in uso, le preferenze), `stile.c` (le tabelle delle ombre), `materiali.c`, `testo437.c`, `uikit_compositore.c` |
+| `uikit/interno/` | **interno** | il codice delle basi: `tema.c` (i valori dei due temi, il tema in uso, le preferenze), `stile.c` (le tabelle delle ombre), `materiali.c`, `uikit_compositore.c` |
 | `uikit/interno/` | **interno** | il codice del nucleo: `widget.c` (l'albero, riga e colonna, spazi, etichetta), `pulsanti.c` (pulsante, casella, scelta, interruttore), `campo.c`, `stato_vuoto.c`, `avviso.c`, `finestra_tk.c` (la finestra come widget: misure, zone da ridisegnare, testata, opzioni, chiamate "ogni tanto", fuoco), `barra_strumenti.c` (con il pulsante della barra, la pillola — il gruppo di azioni — e il percorso), `suggerimento.c` (il suggerimento: `widget_suggerimento`, compare dopo 500 ms di puntatore fermo, sparisce se esce o si clicca), `scorrimento.c`, `ciclo.c` (il ciclo degli eventi: l'unico che parla con il compositore) |
 | `uikit/menu.h`, `tabella.h`, `griglia.h`, `barra_laterale.h`, `schede.h`, `oggetti.h`, `elemento_file.h`, `pagina.h`, `paragrafo.h`, `pannello.h` | **pubblico** | i componenti complessi: tipi, costanti e dichiarazioni delle funzioni che usano le app (Files, Attività, Impostazioni, Store, Terminale); li include `uikit.h` |
 | `uikit/sistema/userbar.h` | **del sistema** | la userbar e il vassoio delle app: li disegna solo la scrivania |
@@ -145,15 +144,19 @@ a chi scrive un'app):
 
 | livello | cartella | cosa c'è | chi lo usa |
 |---|---|---|---|
-| **pubblico** | `corekit/` | `corekit.h` (l'header principale: file, processi, porte, fogli, tempo), `chiamate.h` (i tipi e le costanti che usa, lo include `corekit.h`), `messaggi.h` (lo standard `chiave=valore`, SISTEMA.md sezione 3: la busta e `chiedi`, il lato di chi chiede), `apertura.h` (chiedere al launcher di aprire un'altra app o un file) | ogni programma, app e comando |
+| **pubblico** | `corekit/` | `corekit.h` (l'header principale: file, processi, porte, fogli, tempo), `chiamate.h` (i tipi e le costanti che usa, lo include `corekit.h`), `messaggi.h` (lo standard `chiave=valore`, SISTEMA.md sezione 3: la busta e `chiedi`, il lato di chi chiede), `apertura.h` (chiedere al launcher di aprire un'altra app o un file), `utf8.h` (leggere, scrivere e spostarsi tra i caratteri UTF-8: lo include `corekit.h`) | ogni programma, app e comando |
 | **del sistema** | `corekit/sistema/` | `launcher.h` (il contratto del launcher, con lo standard dei messaggi, e le funzioni per chiedergli le cose: anche installare e togliere le app, aprire la shell come sistema), `pacchetto.h` (i pacchetti `.app`), `descrizione.h` (il manifesto di un'app), `privilegi.h` (quello che riesce solo al sistema: `avvia_come...`, `cambia_proprietario`), `servizi.h` (il lato del servizio nei messaggi: `chi_chiede`, `ha_permesso`) | solo i programmi del sistema e le app del sistema: come i "framework privati" del Mac, sono header ma possono cambiare senza avviso |
 | **interno** | `corekit/interno/` | il codice (`corekit.c`, `file.c`, `comunicazione.c`, `messaggi.c`, `apertura.c`, `launcher.c` (le richieste al launcher), `descrizione.c`, `pacchetto.c`) e `interno.h`, che si dicono tra loro | solo CoreKit |
 
 Un programma scrive `#include "corekit/corekit.h"` (e `"corekit/messaggi.h"`,
 `"corekit/apertura.h"`... se gli servono). Oggi Files, Attività e la scrivania usano solo
 `apertura.h`; lo Store (installare, aggiornare, togliere le app) e il Terminale (aprire la shell
-come sistema) usano `sistema/launcher.h`. `testo437.h` (da UTF-8 ai caratteri dei font del
-sistema) riguarda i font del sistema: sta in UIKit, `uikit/testo437.h`. Gli header pubblici hanno solo dichiarazioni,
+come sistema) usano `sistema/launcher.h`. **Tutto il sistema scrive in UTF-8**: i font hanno i caratteri per numero Unicode (Latin-1 e Latin
+Extended-A, punteggiatura tipografica, frecce, euro, e nei font del terminale i riquadri U+2500-259F),
+GKit disegna il testo UTF-8 com'e' e un carattere che il font non ha lo disegna come un segno
+sostitutivo (uno solo, uguale ovunque). Le tre operazioni sui testi UTF-8 (leggere un carattere,
+scriverlo, andare al carattere prima o dopo) sono in `corekit/utf8.h`. Non servono traduzioni:
+niente tabella 437, niente `testo437.h`. Gli header pubblici hanno solo dichiarazioni,
 tipi, costanti e i commenti per chi li usa; l'unico codice dentro sono due funzioni di una riga
 (`lunghezza`, `scrivi_testo`).
 

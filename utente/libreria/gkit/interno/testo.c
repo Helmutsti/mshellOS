@@ -3,10 +3,17 @@
  * con il colore del pennello. */
 #include "interno.h"
 
-const struct glifo *glifo_di(const struct font *f, unsigned char c) {
-    unsigned char i = f->indice[c];
-    if (!i && c != ' ') i = f->indice['?'];   /* un carattere che il font non ha */
-    return &f->glifi[i];
+const struct glifo *glifo_di(const struct font *f, unsigned int c) {
+    /* ricerca binaria dell'intervallo che contiene 'c' */
+    unsigned int da = 0, a = f->n_intervalli;
+    while (da < a) {
+        unsigned int m = da + (a - da) / 2;
+        const struct intervallo_font *r = &f->intervalli[m];
+        if (c < r->primo) a = m;
+        else if (c - r->primo >= r->quanti) da = m + 1;
+        else return &f->glifi[r->glifo + (c - r->primo)];
+    }
+    return &f->glifi[f->sostitutivo];   /* un carattere che il font non ha: il segno sostitutivo */
 }
 
 /* La spaziatura e' in centesimi di pixel, aggiunta dopo ogni lettera (come il "letterSpacing"
@@ -18,7 +25,8 @@ static int arrotonda_centesimi(int c) {
 
 int larghezza_testo_spaziato(const struct font *f, const char *s, int spaziatura) {
     int c = 0;
-    for (; *s; s++) c += glifo_di(f, (unsigned char)*s)->avanzo * 100 + spaziatura;
+    unsigned int cp;
+    for (int n; (n = utf8_leggi(s, &cp)); s += n) c += glifo_di(f, cp)->avanzo * 100 + spaziatura;
     return arrotonda_centesimi(c);
 }
 
@@ -35,8 +43,9 @@ int testo_spaziato(struct pennello *p, const struct font *f, int x0, int y, cons
     int base = y + f->ascesa;
     int invisibile = pennello_invisibile(p);
     int pennino = 0;                   /* dove si e' arrivati, in centesimi di pixel dal via */
-    for (; *s; s++) {
-        const struct glifo *g = glifo_di(f, (unsigned char)*s);
+    unsigned int cp;
+    for (int n; (n = utf8_leggi(s, &cp)); s += n) {
+        const struct glifo *g = glifo_di(f, cp);
         const unsigned char *alfa = f->alfa + g->inizio;
         int x = x0 + arrotonda_centesimi(pennino);
         int gx = x + g->x, gy = base - g->y;

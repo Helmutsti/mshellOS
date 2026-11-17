@@ -23,7 +23,7 @@ struct etichetta_stato {
     int tipo;
 };
 
-/* Prepara l'etichetta con il testo 'testo' (code page 437, tagliato a MAX_TESTO_WIDGET) e il
+/* Prepara l'etichetta con il testo 'testo' (UTF-8, tagliato a MAX_TESTO_WIDGET) e il
  * tipo 'tipo' (ETICHETTA_...). E' larga quanto il suo testo. */
 void etichetta_stato_prepara(struct etichetta_stato *e, const char *testo, int tipo);
 

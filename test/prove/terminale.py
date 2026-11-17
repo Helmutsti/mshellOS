@@ -5,7 +5,13 @@ Si apre il Terminale dal vassoio delle app (non e' nella userbar) e si guarda la
   2. "help" e Invio: sotto il prompt compare l'elenco dei comandi (la griglia di libvterm
      si e' aggiornata e le righe cambiate si sono ridisegnate);
   3. un tasto fisico (freccia su) e Ctrl+C: la finestra resta viva (il Ctrl+C da' una riga
-     nuova con il prompt).
+     nuova con il prompt);
+  4. le lettere accentate (tastiera italiana, UTF-8): "a' e' E' i' o' u'" e l'euro (Alt Gr+e)
+     si scrivono e si vedono, e il tasto di cancellazione toglie un carattere intero (7
+     volte: la riga torna com'era);
+  5. un tasto fisico tenuto giu' (la freccia su) si ripete come un carattere: la shell
+     riceve molte volte "ESC [ A" e il kernel le ripete a video ("^[[A"), tante di piu'
+     che con una pressione sola.
 Le foto della finestra restano nella cartella della prova (con --tieni).
 """
 
@@ -57,4 +63,47 @@ def esegui(p):
     fine.crop(FINESTRA).save(p.cartella / "terminale_ctrl_c.png")
     p.controlla(pixel_diversi(_dentro(fine), _dentro(dopo), None, 40) > 20,
                 "dopo Ctrl+C la finestra non e' cambiata (manca la riga nuova)")
-    p.nota("foto in " + str(p.cartella))
+
+    # 4. lettere accentate e cancellazione di un carattere intero
+    m.premi("ret")                             # una riga pulita
+    base = m.aspetta_schermo_fermo()
+    m.premi("apostrophe")                      # a'
+    m.premi("bracket_left")                    # e'
+    m.tasto_giu("shift"); m.premi("bracket_left"); m.tasto_su("shift")   # E' (e acuta)
+    m.premi("equal")                           # i'
+    m.premi("semicolon")                       # o'
+    m.premi("backslash")                       # u'
+    m.tasto_giu("alt_r"); m.premi("e"); m.tasto_su("alt_r")              # l'euro
+    scritto = m.aspetta_che(lambda f: pixel_diversi(_dentro(f), _dentro(base), None, 40) > 100,
+                            5.0, cosa="le lettere accentate scritte")
+    scritto = m.aspetta_schermo_fermo()
+    scritto.crop(FINESTRA).save(p.cartella / "terminale_accenti.png")
+    for _ in range(7):
+        m.premi("backspace")
+    time.sleep(0.3)
+    pulito = m.aspetta_schermo_fermo()
+    p.controlla(pixel_diversi(_dentro(pulito), _dentro(base), None, 40) < 10,
+                "dopo 7 cancellazioni la riga non e' tornata com'era (il tasto cancella un byte, non un carattere?)")
+
+    # 5. un tasto fisico tenuto giu' si ripete
+    m.premi("up")
+    una = m.aspetta_schermo_fermo()
+    n_una = pixel_diversi(_dentro(una), _dentro(pulito), None, 40)
+    m.tasto_giu("ctrl"); m.premi("c"); m.tasto_su("ctrl")                 # riga nuova
+    time.sleep(0.4)
+    prima = m.aspetta_schermo_fermo()
+    m.tasto_giu("up")
+    try:
+        time.sleep(1.6)                        # mezzo secondo, poi circa 30 al secondo
+    finally:
+        m.tasto_su("up")
+    tenuta = m.aspetta_schermo_fermo()
+    tenuta.crop(FINESTRA).save(p.cartella / "terminale_freccia_tenuta.png")
+    n_tenuta = pixel_diversi(_dentro(tenuta), _dentro(prima), None, 40)
+    p.controlla(n_una > 20, "la freccia premuta una volta non ha scritto niente")
+    p.controlla(n_tenuta > 3 * n_una,
+                f"la freccia tenuta giu' non si ripete (una pressione: {n_una} pixel, tenuta: {n_tenuta})")
+    p.nota(f"freccia: {n_una} pixel con una pressione, {n_tenuta} tenuta giu'; foto in " + str(p.cartella))
+
+
+DISCO = "disco_app.img"   # la userbar con Esempio: il vassoio ha le 8 app che scrivania.VASSOIO si aspetta (nel disco normale Esempio non c'e')
