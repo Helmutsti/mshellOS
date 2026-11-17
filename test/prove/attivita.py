@@ -4,20 +4,23 @@ un'applicazione.
 
 Si apre prima Esempio (primo posto) e poi Attivita (secondo posto, angolo in 180,170).
 
-LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 69,6 MB su 1972,1 MB". Il
+LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 109,1 MB su 1,9 GB". Il
 totale e' quello che Linux dice in /proc/meminfo (MemTotal: la RAM meno quello che il
-kernel tiene per se' fin dall'avvio): 1972 MB sul PC con 2 GB, 7946 con --ram 8192. Per leggerlo senza un vero lettore di testo
-(OCR) si fa cosi':
+kernel tiene per se' fin dall'avvio): circa 1972 MB sul PC con 2 GB, 7946 con --ram 8192,
+464 su ARM64 con 512 MB (TOTALE_MB, sotto). Attivita lo scrive con testo_byte di UIKit:
+un decimale TRONCATO (non arrotondato, e senza ",0"), in MB fino a 1024 MB e in GB oltre.
+Quindi "1,9 GB" vuol dire 1,9 GB <= totale < 2,0 GB, cioe' 1945,6 MB <= totale < 2048 MB.
+Il testo si legge senza un vero lettore di testo (OCR), con le lettere del font stesso:
   - si prende la riga, e si tengono solo i pixel scuri (il testo e' scuro, il tema e' chiaro);
   - si divide in PAROLE (colonne vuote larghe) e ogni parola in LETTERE (colonne vuote);
-  - le ultime due parole sono il totale ("2041,7") e "MB"; del totale si tiene la parte
-    prima della virgola ("2041"): la virgola e' la lettera che sta tutta in basso;
-  - quel pezzo di immagine si confronta con quello salvato in riferimenti/<cpu>/
-    (memoria_totale_<MB dati a QEMU>.png: memoria_totale_2048.png, _8192.png, _512.png).
-    Le cifre sono disegnate sempre uguali, quindi basta questo: se il totale cambia
-    (per esempio 1971 al posto di 1972), il disegno e' diverso.
-Il riferimento si rifa' con --riferimenti (con --ram, per un'altra RAM), e va guardato a
-occhio una volta.
+  - le ultime due parole sono il totale e l'unita'. Ogni lettera si confronta con le lettere
+    gia' disegnate del font che usa Attivita per quella riga (risorse/fonts/
+    ibm-plex-sans-semibold-15.font, lo stesso file che legge GKit), passate in bianco e nero
+    allo stesso modo: vince quella con meno pixel diversi;
+  - il numero letto ("1,9") e l'unita' ("GB") devono contenere il totale atteso, con la
+    tolleranza del troncamento: numero <= totale < numero + 0,1 (nell'unita' letta).
+Nella sandbox la RAM e' quella del computer: il totale si legge e si scrive nelle note, ma
+non si controlla.
 
 L'ALBERO. Nella scheda "Processi" le righe sono ad albero (ognuno sotto chi l'ha lanciato).
 Le righe si contano guardando la colonna PID (c'e' scritto qualcosa o no), la freccia del
@@ -35,7 +38,12 @@ quando c'e' una riga scelta): la finestra di Esempio deve sparire, e nella userb
 non deve piu' risultare aperta.
 """
 
+import re
+import struct
 import time
+from pathlib import Path
+
+from PIL import Image, ImageChops
 
 import scrivania as s
 from qemu import ErroreProva, PUNTO_VUOTO
@@ -43,7 +51,13 @@ from qemu import ErroreProva, PUNTO_VUOTO
 NOME = "attivita"
 ORDINE = 60
 DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); l'albero; termina Esempio"
-RIFERIMENTI = True
+
+# Il MemTotal di Linux, in MB interi, per la RAM data a QEMU (--ram): lo stesso kernel e la
+# stessa macchina danno sempre lo stesso numero. Se cambia (kernel nuovo), la prova lo dice
+# e il numero si aggiorna qui, dopo averlo guardato nella foto 'memoria'.
+TOTALE_MB = {2048: 1972, 8192: 7946, 512: 464}
+# il font della riga "In uso ... su ...": FONT_SEZIONE_NUOVO di UIKit (stile.h), Plex semigrassetto 15
+FONT_RIGA = Path(__file__).resolve().parents[2] / "risorse" / "fonts" / "ibm-plex-sans-semibold-15.font"
 
 SERVIZI = 5             # le righe che l'interruttore aggiunge: init, catalog, eventi, compositore, launcher
 RIGA_ESEMPIO = 5        # servizi visibili: 0 init, 1 catalog, 2 eventi, 3 compositore, 4 launcher, 5 esempio
@@ -100,23 +114,75 @@ def pezzi(piene, spazio):
     return corse
 
 
-def parte_intera_del_totale(foto, area):
-    """L'immagine (bianco e nero) delle cifre prima della virgola del totale."""
+def lettere_del_font(percorso, caratteri, soglia=180):
+    """Le lettere 'caratteri' del font gia' disegnato (formato in strumenti/grafica/formato.py),
+    in bianco e nero e ritagliate sul disegno: {carattere: immagine "1"}. Un pixel e' pieno se
+    la sua alfa supera 'soglia': il testo (grigio 66) sul pannello (grigio 250) e' "scuro"
+    (inchiostro, sotto 120 di grigio) quando copre piu' di sette decimi del pixel."""
+    dati = percorso.read_bytes()
+    if dati[:4] != b"MSFN":
+        raise ErroreProva(f"{percorso.name} non e' un font di mshell")
+    quanti, = struct.unpack_from("<I", dati, 8)
+    indice = dati[16:272]
+    alfa = 272 + 12 * quanti
+    lettere = {}
+    for c in caratteri:
+        g = indice[ord(c)]
+        if not g:
+            continue
+        inizio, _x, _y, l, a, _avanzo = struct.unpack_from("<IbbBBB", dati, 272 + 12 * g)
+        im = Image.frombytes("L", (l, a), dati[alfa + inizio: alfa + inizio + l * a])
+        im = im.point(lambda v: 255 if v > soglia else 0)
+        box = im.getbbox()
+        if box:
+            lettere[c] = im.crop(box)
+    return lettere
+
+
+def piu_simile(pezzo, lettere):
+    """La lettera del font piu' simile al pezzo di immagine (bianco e nero, ritagliato):
+    si contano i pixel diversi, allineati in alto a sinistra, su un riquadro grande quanto
+    tutti e due (cosi' anche la differenza di misura conta)."""
+    meglio, costo_meglio = None, None
+    for c, im in lettere.items():
+        l, a = max(im.size[0], pezzo.size[0]), max(im.size[1], pezzo.size[1])
+        x = Image.new("L", (l, a)); x.paste(im, (0, 0))
+        y = Image.new("L", (l, a)); y.paste(pezzo, (0, 0))
+        costo = ImageChops.difference(x, y).histogram()[255]
+        if costo_meglio is None or costo < costo_meglio:
+            meglio, costo_meglio = c, costo
+    return meglio
+
+
+def leggi_totale(foto, area):
+    """Il totale scritto in fondo alla riga 'In uso ... su <numero> <unita'>': (testo del
+    numero, unita'), per esempio ("1,9", "GB")."""
     bn = inchiostro(foto, area)
     parole = pezzi(colonne_piene(bn), 4)
     if len(parole) < 2:
         raise ErroreProva(f"nella riga della memoria non trovo il totale ({len(parole)} parole)")
-    x1, x2 = parole[-2]                       # il numero prima di "MB"
-    numero = bn.crop((x1, 0, x2, bn.size[1]))
-    a = numero.size[1]
-    lettere = pezzi(colonne_piene(numero), 1)
-    fine = x2 - x1
-    for l1, l2 in lettere:
-        box = numero.crop((l1, 0, l2, a)).getbbox()
-        if box and box[1] > a * 0.55:          # tutta in basso: la virgola
-            fine = l1
-            break
-    return numero.crop((0, 0, fine, a)).convert("RGB")
+    lettere = lettere_del_font(FONT_RIGA, "0123456789,KMGTB")
+    letto = []
+    for x1, x2 in parole[-2:]:
+        parola = bn.crop((x1, 0, x2, bn.size[1]))
+        testo = ""
+        for l1, l2 in pezzi(colonne_piene(parola), 1):
+            pezzo = parola.crop((l1, 0, l2, parola.size[1]))
+            pezzo = pezzo.crop(pezzo.getbbox())
+            testo += piu_simile(pezzo, lettere)
+        letto.append(testo)
+    return letto[0], letto[1]
+
+
+def totale_giusto(numero, unita, atteso_mb):
+    """Vero se "<numero> <unita'>" (un decimale troncato, come testo_byte di UIKit) puo' essere
+    il totale atteso, dato in MB interi (il totale vero sta tra atteso_mb e atteso_mb + 1)."""
+    scala = {"MB": 1, "GB": 1024, "TB": 1024 * 1024}.get(unita)
+    if scala is None or not re.fullmatch(r"\d+(,\d)?", numero):
+        return False
+    valore = float(numero.replace(",", "."))
+    # [atteso_mb, atteso_mb + 1) e [valore, valore + 0,1) * scala devono toccarsi
+    return valore * scala < atteso_mb + 1 and atteso_mb < (valore + 0.1) * scala
 
 
 def esegui(p):
@@ -134,17 +200,20 @@ def esegui(p):
                       cosa="la riga 'In uso ... su ...' nella scheda Memoria")
     time.sleep(0.3)
     f = m.foto("memoria")
+    # per leggere serve la riga intera: dal pannello (y + 89) fin sopra la barra (y + 133)
+    numero, unita = leggi_totale(f, (x + 20, y + 100, x + 620, y + 131))
     if not p.ram:
         # nella sandbox la RAM e' quella del computer, diversa da uno all'altro: il totale
-        # non ha un riferimento (lo si controlla in QEMU, con la RAM data)
-        p.nota("totale della memoria non controllato: senza RAM fissa (sandbox)")
+        # si legge ma non si controlla (lo si controlla in QEMU, con la RAM data)
+        p.nota(f"totale della memoria letto: {numero} {unita}, non controllato: senza RAM fissa (sandbox)")
     else:
-        cifre = parte_intera_del_totale(f, riga)
-        try:
-            p.riferimento(f"memoria_totale_{p.ram}", cifre, maschera=None, tollerati=3)
-        except ErroreProva as e:
-            raise ErroreProva(f"il totale della memoria non e' quello atteso ({e}): guarda "
-                              "memoria_totale_ottenuta.png e la foto 'memoria'") from None
+        atteso = TOTALE_MB.get(p.ram)
+        p.controlla(atteso is not None,
+                    f"non so quale totale aspettarmi con {p.ram} MB di RAM: aggiungilo a TOTALE_MB")
+        p.controlla(totale_giusto(numero, unita, atteso),
+                    f"il totale della memoria dice {numero} {unita}, ma con {p.ram} MB di RAM "
+                    f"Linux ne da' {atteso} (guarda la foto 'memoria')")
+        p.nota(f"totale della memoria: {numero} {unita} ({atteso} MB)")
     # --- l'albero: i servizi del sistema nascosti, poi visibili; un ramo chiuso e riaperto ---
     m.clic(x + 132, y + 65)                    # la scheda "Processi"
     m.muovi(*PUNTO_VUOTO)

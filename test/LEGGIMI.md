@@ -16,7 +16,7 @@ viene copiato prima di ogni prova: `build/` non si tocca.
 | `mouse`        | il puntatore gira in tondo per 8 s (e 4 s sopra una finestra): segue, non si blocca, arriva preciso |
 | `tastiera`     | Esempio cambia colore a ogni tasto; un tasto tenuto giù si ripete, e lasciato si ferma |
 | `finestre`     | portare davanti, trascinare per la barra, ridurre e riaprire dalla userbar, chiudere |
-| `attivita`     | la pagina Memoria di Attività dice 1972 MB (PC con 2 GB; 7946 con 8 GB: il MemTotal di Linux); "Termina processo" chiude Esempio |
+| `attivita`     | la pagina Memoria di Attività mostra il MemTotal di Linux (1972 MB sul PC con 2 GB, scritto "1,9 GB"; 7946 con 8 GB; 464 su ARM64): il numero e l'unità si leggono con le lettere del font e si confrontano con il valore vero, con la tolleranza del decimale troncato; "Termina processo" chiude Esempio |
 | `scorrimento`  | con 4 applicazioni aperte e 6 processi "riempitivi" (vedi sotto) la tabella dei processi di Attività trabocca: la rotella la scorre, la barra di scorrimento compare e dopo ~1,3 s sparisce, si trascina; un clic dopo lo scorrimento sceglie la riga giusta |
 | `files`        | Files: la casa a icone e a elenco, entrare in una cartella e tornare indietro, aprire `contatore.app` (si apre lo Store), gli stati (vuota, errore, permesso negato), i menu del tasto destro, nuova cartella / rinomina / elimina, l'avviso, le informazioni, un filtro, Invio |
 | `pacchetti`    | con il disco `disco_pacchetti.img`: il programma `utente/prove/pacchetti.c` chiede al launcher l'elenco delle app, di aprire un file che non è un pacchetto (no), di descrivere `contatore.app`, installarlo (anche due volte: la seconda no), svuotarne i dati, aprirlo e toglierlo mentre è acceso (no); togliere un'app del sistema o un id con `../` non si può; la finestra di Contatore compare. La libreria dei pacchetti da sola si prova senza QEMU con `test/pacchetti/prova.sh` (in Docker) |
@@ -121,16 +121,14 @@ Meglio **aspettare una condizione** (`aspetta_che`) che dormire un tempo fisso.
 
 ## Le foto di riferimento
 
-`immagini`, `attivita` e `files` confrontano lo schermo con le foto in `test/riferimenti/<cpu>/`
-(`x86_64/` e `arm64/`). Per la memoria c'è una foto per ogni RAM provata:
-`memoria_totale_2048.png` e `memoria_totale_8192.png` sul PC, `memoria_totale_512.png` su ARM64.
+`immagini` e `files` confrontano lo schermo con le foto in `test/riferimenti/<cpu>/`
+(`x86_64/` e `arm64/`). Nelle foto di tutto lo schermo l'ora in fondo alla userbar è sempre
+coperta (`scrivania.ORA`): cambia da sola. `attivita` non ha foto: il totale della memoria lo
+legge e lo confronta con il numero atteso per la RAM data (`TOTALE_MB` in `test/prove/attivita.py`).
 Quando il disegno cambia apposta (nuovo stile, nuove applicazioni), si rifanno:
 
 ```sh
 uv run test/collaudo.py --riferimenti            # il processore del computer (PC o Mac)
-uv run test/collaudo.py --riferimenti --ram 8192 --solo attivita  # sul PC, la memoria a 8 GB
 ```
 
-Prima di salvarle nel repo, guardarle: devono mostrare la cosa giusta (per
-`memoria_totale_<MB>.png`, le cifre 1972 sul PC a 2 GB e 7946 a 8 GB; su ARM64 il MemTotal
-di Linux con 512 MB).
+Prima di salvarle nel repo, guardarle: devono mostrare la cosa giusta.
