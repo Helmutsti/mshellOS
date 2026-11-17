@@ -79,6 +79,12 @@ for f in utente/comandi/*.c; do
     nome=$(basename "$f" .c)
     metti_file "$O/bin/comandi/$nome" "/system/bin/$nome" 755
 done
+# vim e le descrizioni dei terminali, come build.sh (strumenti/compilazione/vim.sh)
+metti_file "$O/vim/vim" /system/bin/vim 755
+metti_file "$O/vim/defaults.vim" /system/share/vim/vim92/defaults.vim 644
+for f in "$O"/vim/terminfo/*/*; do
+    metti_file "$f" "/etc/terminfo/${f#"$O"/vim/terminfo/}" 644
+done
 
 # le applicazioni, come build.sh: il pacchetto (manifesto, code, resources); quelle di
 # DA_INSTALLARE solo come .app sul Desktop, le altre scompattate in /system/apps.

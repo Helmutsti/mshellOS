@@ -21,6 +21,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | shell | comando/servizio di prova | init (seriale) o launcher (Terminale) | sistema (uid 0) | sì |
 | network (comando) | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
 | curl | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
+| vim | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
 | Files | app | launcher | persona (uid 1000) | no |
 | Attività | app | launcher | persona (uid 1000) | no |
 | Impostazioni | app | launcher | persona (uid 1000) | no (ha "settings.system") |
@@ -127,7 +128,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Cosa fa**: shell semplice per le prove. Comandi interni (pwd, cd, ls, help, exit); ogni altra parola è un programma, cercato prima in `/system/bin` poi in `/data/users/<uid>/bin`. Niente variabili, tubi o redirezioni.
 - **Tipo**: comando di prova (provvisorio); usata come programma del sistema.
 - **Lanciato da**: init (sulla seriale) oppure il launcher (richiesta APRI_SHELL, dentro il Terminale).
-- **Lancia**: i comandi digitati (con `fexecve`), quindi per esempio network e curl.
+- **Lancia**: i comandi digitati (con `fexecve`), quindi per esempio network, curl e vim. Ai comandi dà un ambiente minimo: `PWD`, `HOME=/home` e `TERM=xterm-256color` (decisione della persona, 17/11/2026: il Terminale e la seriale di QEMU capiscono xterm).
 - **Gira come**: sistema (uid 0), in entrambi i casi. Non cambia uid ai comandi che lancia.
 - **Poteri**: super sì (uid 0). Nessun controllo di permessi; il permesso "system.shell" è controllato dal launcher (il sistema e il Terminale).
 
@@ -150,6 +151,14 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Lancia**: nessuno.
 - **Gira come**: chi lo lancia; oggi, dalla shell, uid 0. Non imposta uid.
 - **Poteri**: no. Non controlla permessi. Non chiaro se in futuro debba dichiarare "network.use": nel codice non c'è alcun controllo.
+
+### vim (`strumenti/compilazione/vim.sh`)
+- **Cosa fa**: l'editor vim nella versione più piccola ("tiny": niente sintassi colorata, niente linguaggio di vim, niente aiuto). Non è nostro: sorgenti ufficiali, la stessa versione del pacchetto di Alpine 3.24, compilato statico con ncurses di Alpine legata dentro. Legge le descrizioni dei terminali da `/etc/terminfo` (xterm-256color, xterm, vt100, linux) e le sue impostazioni di fabbrica da `/system/share/vim/vim92/defaults.vim`; nessun vimrc di sistema.
+- **Tipo**: comando.
+- **Lanciato da**: la shell (che gli passa `TERM=xterm-256color`).
+- **Lancia**: nessuno (`:!` lancerebbe una shell `sh`, che nel sistema non c'è).
+- **Gira come**: chi lo lancia; oggi, dalla shell, uid 0. Non imposta uid.
+- **Poteri**: no. Scrive i file con i permessi di chi lo lancia; il file di scambio (`.swp`) accanto al file, oppure in `/tmp`.
 
 ---
 

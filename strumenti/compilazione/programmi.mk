@@ -14,6 +14,7 @@
 # Cosa esce, in O:
 #   lib{corekit,gkit,uikit}.a      le tre librerie (LIBRERIE.md)
 #   libvterm/                      libvterm.a e le sue intestazioni (solo per il Terminale)
+#   vim/                           il comando vim e le descrizioni dei terminali (vim.sh)
 #   bin/<nome>                     i programmi del sistema (utente/programmi/<nome>.c)
 #   bin/comandi/<nome>             i comandi (utente/comandi/<nome>.c), solo CoreKit
 #   bin/prove/<nome>               i programmi delle prove (utente/prove/<nome>.c)
@@ -123,6 +124,13 @@ $(VTERM): strumenti/compilazione/libvterm.sh $(O)/.firma
 $(O)/utente/applicazioni/Terminale/terminale.o: $(VTERM)
 terminale_ESTERNE := $(VTERM)
 
+# vim (l'editor, la versione piu' piccola), dai sorgenti ufficiali: lo scarica e lo compila
+# vim.sh, che dice come; accanto mette le descrizioni dei terminali (vim/terminfo/) che vanno
+# in /etc/terminfo. Non e' codice nostro: si compila con il suo configure, fuori da make.
+VIM := $(O)/vim/vim
+$(VIM): strumenti/compilazione/vim.sh $(O)/.firma
+	@sh strumenti/compilazione/vim.sh $(ARCH) $(RADICE) $(SCARICO) $(O)/vim "$(CC)"
+
 # --- i programmi ---
 # Un programma del sistema e' di solito un file solo (utente/programmi/<nome>.c). Il picker e'
 # fatto di tre pezzi (il commento in cima a utente/programmi/picker.c):
@@ -186,7 +194,7 @@ $(foreach c,$(APP_CARTELLE),$(eval $(call APP,$(c),$(call minuscolo,$(notdir $(p
 # --- tutto ---
 PROGRAMMI_PRONTI := $(addprefix $(O)/bin/,$(PROGRAMMI) avvio) \
                     $(addprefix $(O)/bin/comandi/,$(COMANDI)) \
-                    $(addprefix $(O)/bin/prove/,$(PROVE))
+                    $(addprefix $(O)/bin/prove/,$(PROVE)) $(VIM)
 PACCHETTI_PRONTI := $(foreach a,$(APP_ID),$(O)/pacchetti/$(a).app)
 
 tutto: $(PROGRAMMI_PRONTI) $(PACCHETTI_PRONTI)
