@@ -29,6 +29,7 @@ Niente e' stato compilato ne' provato.
 No, non e' mai stato compilato. Mai lanciati docker, sandbox o QEMU.
 
 ## Problemi e dubbi
+- Deciso il 17/11/2026: Un'app con sopra la finestra Apri/Salva non viene controllata (non risponde) finché la scelta è aperta. Scelta consapevole: è la più semplice; il limite è che se l'app si blocca davvero mentre aspetta, il sistema non lo vede. Scartate: risposta asincrona come Mac/Flatpak (più pulita, lavoro grosso) e libreria che risponde al posto dell'app come Windows. (Il compositore salta il controllo se `scelta_sopra` e' attiva.)
 - Domanda aperta: in Salva, se il file esiste gia', si sovrascrive senza chiedere (il disegno non ha una conferma). Da chiedere alla persona.
 - Se l'app muore mentre la finestra e' aperta, la finestra resta fino a quando la persona la chiude (si potrebbe guardare il collegamento con `finestra_tk_guarda`): non fatto, non chiesto.
 - Se catalog scollega il picker (casella piena tra una finestra e l'altra), UIKit si ricollega da sola alla prossima finestra: il primo disegno puo' avere il tema vecchio.

@@ -409,6 +409,7 @@ int picker_finestra(enum picker_modo m, const char *sopra, const char *proposto,
                     char *percorso, size_t n_percorso, char *nome, size_t n_nome) {
     costruisci(m, proposto, s);
     int r = uikit_esegui_scelta(&finestra, sopra);
+    finestra_chiudi(&finestra.finestra);          /* in ogni caso: la finestra non resta sopra l'app */
     if (r != 0) return -1;                       /* non si e' potuta mostrare (o il compositore l'ha chiusa) */
     if (!fatto) return 1;                        /* Annulla, Esc, chiudi */
     copia_testo(percorso, qui, (int)n_percorso);

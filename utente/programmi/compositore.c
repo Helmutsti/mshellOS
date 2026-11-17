@@ -1062,7 +1062,10 @@ static void controlla_risposte(void) {
     for (int i = 0; i < MAX_FINESTRE; i++) {
         struct finestra_compositore *f = &finestre[i];
         if (!f->usata || !f->immagini[0]) continue;
-        if (f->ping_atteso && adesso - f->ultimo_ping >= 3000) f->non_risponde = 1;
+        /* Con sopra una finestra di scelta (Apri/Salva) l'app aspetta la risposta e non legge: non si giudica,
+         * e il conto riparte (deciso il 17/11/2026, STATO.md sez. 7). */
+        if (f->ping_atteso && scelta_sopra(i) >= 0) f->ultimo_ping = adesso;
+        else if (f->ping_atteso && adesso - f->ultimo_ping >= 3000) f->non_risponde = 1;
         if (!f->ping_atteso && adesso - f->ultimo_ping >= 1000) {
             f->ultimo_ping = adesso;
             f->ping_numero = prossimo_ping++;

@@ -480,6 +480,7 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 - La voce "Elimina" dei menu è bianca.
 - Le finestre senza fuoco ricevono solo il clic e la rotella, non il puntatore che passa:
   niente illuminato nelle finestre dietro (vedi la sezione 4).
+- Deciso il 17/11/2026: Un'app con sopra la finestra Apri/Salva non viene controllata (non risponde) finché la scelta è aperta. Scelta consapevole: è la più semplice; il limite è che se l'app si blocca davvero mentre aspetta, il sistema non lo vede. Scartate: risposta asincrona come Mac/Flatpak (più pulita, lavoro grosso) e libreria che risponde al posto dell'app come Windows.
 
 ## 8. Da confermare (domande che aspettano la persona)
 

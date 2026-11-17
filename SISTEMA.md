@@ -28,6 +28,7 @@ Dettagli sui servizi di oggi:
   chiedono tema e sfondo a catalog e osservano i suoi avvisi; Impostazioni li cambia con catalog.
   Il compositore non fa più da tramite per il tema (prova `tema`).
 - **picker** fa scegliere alla persona un file da aprire o dove salvarlo, e lo consegna **già
+  Deciso il 17/11/2026: Un'app con sopra la finestra Apri/Salva non viene controllata (non risponde) finché la scelta è aperta. Scelta consapevole: è la più semplice; il limite è che se l'app si blocca davvero mentre aspetta, il sistema non lo vede. Scartate: risposta asincrona come Mac/Flatpak (più pulita, lavoro grosso) e libreria che risponde al posto dell'app come Windows.
   aperto** all'app che l'ha chiesto (`open`, `save`): l'app riceve solo quel file, senza nessun
   permesso sui file. Mostra la finestra "Apri/Salva" (`disegni/ApriSalva/`) sopra l'app, con il
   velo sulle sue finestre; una richiesta alla volta. Gira come la persona (uid 1000) e non esce
