@@ -101,7 +101,7 @@ static int prendi_notizia(struct notizia *n) {
 static void servi_notizie(void) {
     struct notizia n;
     while (prendi_notizia(&n)) {
-        if (n.tipo == TASTO_FISICO) {
+        if (n.tipo == TASTO_FISICO && n.premuto != 2) {   /* le ripetizioni (2) a Doom non servono */
             if (n.tasto < sizeof da_linux && da_linux[n.tasto]) metti_tasto(n.premuto != 0, da_linux[n.tasto]);
         } else if (n.tipo == FUOCO) {
             fuoco = (int)n.fuoco;

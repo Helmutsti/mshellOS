@@ -1638,7 +1638,7 @@ static void alla_rotella(const struct evento *e) {
 
 static void al_tasto_fisico(const struct evento *e) {
     if (fuoco >= 0 && finestre[fuoco].tasti_fisici)
-        avvisa(fuoco, (struct notizia){ .tipo = TASTO_FISICO, .tasto = e->tasto, .premuto = e->pulsanti != 0 });
+        avvisa(fuoco, (struct notizia){ .tipo = TASTO_FISICO, .tasto = e->tasto, .premuto = e->pulsanti });
 }
 
 static void al_tasto(const struct evento *e) {

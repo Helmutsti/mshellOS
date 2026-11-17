@@ -89,12 +89,24 @@ static unsigned char con_altgr(unsigned int codice) {
     }
 }
 
-/* Un tasto: premuto (1), ripetuto (2) o lasciato (0). */
+/* I tasti che non si ripetono mai, come su Windows e Mac: i modificatori e i blocchi. */
+static int e_modificatore(unsigned int codice) {
+    return codice == KEY_LEFTSHIFT || codice == KEY_RIGHTSHIFT || codice == KEY_LEFTCTRL ||
+           codice == KEY_RIGHTCTRL || codice == KEY_LEFTALT || codice == KEY_RIGHTALT ||
+           codice == KEY_LEFTMETA || codice == KEY_RIGHTMETA || codice == KEY_CAPSLOCK ||
+           codice == KEY_NUMLOCK || codice == KEY_SCROLLLOCK;
+}
+
+/* Un tasto: premuto (1), ripetuto (2) o lasciato (0). LA RIPETIZIONE nasce in un posto solo:
+ * il kernel (un tasto tenuto giu' per RIPETI_DOPO ms si ripete ogni RIPETI_OGNI ms, valore 2:
+ * lo si regola con EVIOCSREP in prova()). Qui la si passa uguale per tutti i tasti, fisici e
+ * caratteri, tranne i modificatori. */
 static void tasto(unsigned int codice, int valore) {
-    /* il tasto "fisico", per chi lo vuole (i giochi): premuto o lasciato, senza ripetizioni */
-    if (valore != 2)
-        manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_FISICO, .tasto = codice,
-                                       .pulsanti = valore != 0 });
+    if (valore == 2 && e_modificatore(codice)) return;
+    /* il tasto "fisico" (frecce, Canc, F1-F12, tastierino, Esc...): 'pulsanti' e' 1 premuto,
+     * 2 ripetuto, 0 lasciato. Chi non vuole le ripetizioni (i giochi) scarta il 2. */
+    manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_FISICO, .tasto = codice,
+                                   .pulsanti = (unsigned int)valore });
     /* i tasti che cambiano lo stato, sia quando si premono sia quando si lasciano */
     if (codice == KEY_LEFTSHIFT || codice == KEY_RIGHTSHIFT) { shift = valore != 0; return; }
     if (codice == KEY_RIGHTALT)                              { altgr = valore != 0; return; }

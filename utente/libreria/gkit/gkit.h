@@ -102,8 +102,10 @@ void zone_aggiungi(struct zona_finestra *zone, int *quante, int massimo, struct 
                         * sotto il puntatore, anche se non ha il fuoco: come sul Mac e in
                         * Wayland, si scorre quello che si guarda */
 #define TASTO_FISICO 12  /* (solo a chi l'ha chiesto con finestra_tasti_fisici) il tasto
-                          * Linux 'tasto' (KEY_...) e' stato premuto ('premuto' = 1) o
-                          * lasciato (0). Senza ripetizioni. Arriva in piu' di TASTO. */
+                          * Linux 'tasto' (KEY_...) e' stato premuto ('premuto' = 1),
+                          * lasciato (0) o ripetuto perche' e' tenuto giu' ('premuto' = 2:
+                          * un tasto premuto di nuovo, come su Windows e Mac; i modificatori
+                          * non si ripetono). Arriva in piu' di TASTO. */
 
 struct notizia {
     unsigned int tipo;
@@ -115,7 +117,7 @@ struct notizia {
     unsigned int numero;     /* (della libreria e dei pannelli del sistema) */
     char testo[MAX_PERCORSO_PROGRAMMA];   /* (dei pannelli del sistema) */
     int scatti_x, scatti_y;  /* ROTELLA */
-    unsigned int premuto;    /* TASTO_FISICO */
+    unsigned int premuto;    /* TASTO_FISICO: 1 premuto, 0 lasciato, 2 ripetuto */
 };
 
 /* =====================================================================================
