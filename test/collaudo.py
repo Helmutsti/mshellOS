@@ -49,6 +49,7 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 import qemu
+import scrivania
 from qemu import ErroreProva, Macchina
 
 QUI = Path(__file__).resolve().parent          # test/
@@ -105,6 +106,11 @@ class Prova:
                               "crealo con --riferimenti")
         with Image.open(file) as im:
             atteso = im.convert("RGB")
+        # una foto di tutto lo schermo ha l'ora della userbar, che cambia da sola: si copre
+        # sempre (scrivania.ORA), insieme a quello che la prova chiede di coprire
+        if foto.size == (1280, 800):
+            maschera = [scrivania.ORA] + ([] if not maschera else
+                                         maschera if isinstance(maschera[0], tuple) else [maschera])
         if atteso.size != foto.size:
             foto.save(self.cartella / f"{nome}_ottenuta.png")
             raise ErroreProva(f"'{nome}' e' grande {foto.size[0]}x{foto.size[1]}, "

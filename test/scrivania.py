@@ -40,6 +40,12 @@ APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 234)
 # la prova pacchetti, che la installa e la apre.
 APP = {nome: (VOCE_X, APP_PULSANTE[1] + 40 * (i + 1)) for i, nome in enumerate(FISSATE)}
 SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine a sinistra
+# L'ora in fondo alla userbar, sotto la foto profilo (alta 32): il rettangolo (x1, y1, x2, y2)
+# fino al fondo della barra, (8, 538, 48, 586). Nelle foto di riferimento a schermo intero
+# resta coperta (collaudo.py, Prova.riferimento): in QEMU l'orologio parte sempre dalle
+# 10:00 ma puo' passare alle 10:01 durante una prova lenta, e nella sandbox e' l'ora vera.
+ORA = (BARRA_X, BARRA_Y + 4 + 7 * 32 + 6 * 8 + 16 + 32, BARRA_X + 40,
+       BARRA_Y + 4 + 7 * 32 + 6 * 8 + 16 + 72 + 8)
 
 # Il vassoio con le 7 app del sistema: quelle della userbar e il Terminale, in ordine
 # alfabetico (con Contatore installata le righe restano 3: VASSOIO vale per le 7 e le 8).

@@ -67,6 +67,10 @@ Esempio (tasto "o" apre, "s" salva).
    sistema senza chiedere o decide anche lì la persona;
 5. la **compilazione e le prove sul PC Windows (x86_64)**: tutto questo è stato provato solo su
    arm64 (Mac); unito in `main` con l'ok della persona senza la build x86_64.
+6. **sul Mac**: rifare le foto di riferimento arm64 di `files` e `immagini`
+   (`test/collaudo.py --riferimenti --solo files immagini`, poi guardarle): sono ancora quelle
+   con la userbar vecchia, la cartella "Scrivania" (ora "Desktop") e il puntatore vecchio.
+   Quelle x86_64 sono già rifatte; l'ora della userbar ora è sempre coperta nel confronto.
 
 **Come si lavora sul Mac** (manca `uv`): un python con Pillow, per esempio
 `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pillow`, poi

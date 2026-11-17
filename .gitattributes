@@ -1,4 +1,8 @@
 # Gli script per sistemi Unix (Mac, container Docker) devono avere fine riga LF
 *.sh text eol=lf
+# I file della casa di prova (file/, copiati nel disco da build.sh) vanno nel disco byte per
+# byte come sono nel repo: con le fini riga di Windows leggimi.txt pesa 69 byte invece di 67 e
+# Files lo mostra (foto di riferimento diverse fra Windows e Mac)
+file/** -text
 # Le risorse del sistema (font, icone, sfondi) sono file binari: mai toccarne le fini riga
 risorse/** binary
