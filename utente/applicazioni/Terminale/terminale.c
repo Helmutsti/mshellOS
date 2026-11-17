@@ -3,10 +3,11 @@
  * Figma (pagina "App - Terminale"): barra del titolo, niente barra degli strumenti, e nel
  * corpo il pannello chiaro incassato (uikit/pannello.h) con il testo e la barra di scorrimento.
  *
- * E' un'app (utente/applicazioni/Terminale): la fa partire il launcher come la persona
- * (uid 1000), dal vassoio delle app o dall'icona della scrivania. La shell
- * dentro, invece, la fa partire il launcher come SISTEMA (uid 0), dandole il nostro
- * terminale finto: PROVVISORIO, aperto a chiunque (launcher.h, APRI_SHELL).
+ * E' un'app (utente/applicazioni/Terminale): la fa partire il launcher, dal vassoio delle app
+ * o dall'icona della scrivania, e (unica tra le app) come SISTEMA, uid 0: PROVVISORIO,
+ * decisione della persona del 17/11/2026 (il launcher, uid_dell_app). La shell dentro la
+ * facciamo partire NOI (avvia_shell), e ha i nostri poteri: oggi quelli del sistema. Quando
+ * il Terminale girera' come la persona, anche la shell sara' della persona.
  *
  * COME FUNZIONA. Si apre un TERMINALE FINTO (pty, come xterm o il Terminale del Mac): una
  * coppia di capi, il "padrone" (master) che teniamo noi e lo "schiavo" (/dev/pts/N) che diamo
@@ -23,7 +24,8 @@
  *     righe cambiate (damage) e noi ridisegniamo solo quelle;
  *   - ridisegniamo con il nostro disegno: IBM Plex Mono 13 (larghezza fissa: ogni lettera
  *     una casella, righe da 20) e i colori del tema. I 16 colori ANSI (SGR 30-37, 90-97 e gli
- *     sfondi) sono i colori del tema (mappa_ansi); i colori a 256 e RGB sono quelli che da'
+ *     sfondi) sono i colori del tema (mappa_ansi: il testo pastello per il testo, il pastello
+ *     per lo sfondo); i colori a 256 e RGB sono quelli che da'
  *     libvterm. Le righe che escono dall'alto si perdono: niente storia;
  *   - i tasti li diamo a libvterm (vterm_keyboard_key e vterm_keyboard_unichar) e quello che
  *     produce (le lettere, le frecce come sequenze, Ctrl+lettera) va nel padrone; vanno nel
@@ -40,10 +42,13 @@
 
 #include <vterm.h>
 
-#include "corekit/sistema/launcher.h"
 #include "uikit/uikit.h"
 
 #define SHELL "/system/bin/shell"
+/* Il tipo di terminale che diamo alla shell, che lo passa ai comandi: libvterm parla come
+ * xterm, con 256 colori. I programmi che disegnano a schermo intero (vim) lo leggono per sapere
+ * quali sequenze usare; la descrizione sta in /etc/terminfo (strumenti/compilazione/vim.sh). */
+#define TERM_SHELL "TERM=xterm-256color"
 /* Le misure dal disegno: testo 13 con la riga da 20 e 25 righe. Le lettere di Plex Mono 13
  * avanzano di 7,8 pixel (Figma non li arrotonda): la casella k comincia a k * 39 / 5, arrotondato
  * (il font ha l'avanzo intero, 8: ogni lettera si disegna da sola al suo posto). In 712 pixel di
@@ -144,31 +149,48 @@ static void schermo_disponi(struct widget *w) {
     scorrimento_misure(&s->barra.scorrimento, w->a, w->a);
 }
 
-/* I 16 colori ANSI (i numeri SGR 30-37 e 90-97, e gli sfondi 40-47 e 100-107) sono i colori
- * del tema, dal tema in uso: i colori "testo pastello" dei colori di sistema. Il nero (0) e il
- * bianco (7 e 15) sono il colore del testo; 8 (nero acceso, 90) e' il grigio e 9 (rosso acceso,
- * 91) l'arancio, come la shell li chiede; gli altri accesi (10-14) come i loro normali. */
-static unsigned int mappa_ansi(int indice) {
+/* I 16 COLORI ANSI (i numeri SGR 30-37 e 90-97 per il testo, 40-47 e 100-107 per lo sfondo)
+ * sono i colori del tema in uso, i colori di sistema. Ogni colore di sistema ha nel tema una
+ * COPPIA fatta per stare insieme: il "pastello" (fondi leggeri) e il "testo pastello" (testo
+ * sul pastello e sul pannello, almeno 5:1). Il testo prende il testo pastello, lo sfondo il
+ * pastello: cosi' ogni testo sta su ogni sfondo, in chiaro e in scuro (il meno leggibile e' il
+ * grigio, 8, su un pastello: 3,3:1).
+ * PERCHE' DUE TAVOLOZZE. Con una sola (il testo pastello anche per gli sfondi) un testo del
+ * colore del testo su uno sfondo colorato non si leggeva: i messaggi di errore di vim (bianco,
+ * 15, su rosso, 1) uscivano grigio scuro su rosso scuro nel tema chiaro, e chiaro su rosso
+ * chiaro nello scuro: i testi pastello hanno la stessa luminosita' del testo.
+ * IL TESTO: il nero (0) e il bianco (7 e 15) sono il colore del testo (seguono il tema: in
+ * scuro il testo e' chiaro); 8 (nero acceso, 90) e' il grigio e 9 (rosso acceso, 91)
+ * l'arancio, come la shell li chiede; gli altri accesi (10-14) come i loro normali.
+ * LO SFONDO: gli stessi colori nel pastello; i neutri (0, 7, 8, 15) sono tutti il pastello del
+ * grigio, perche' sopra ci deve stare il colore del testo (che e' 0, 7 e 15 insieme). */
+static unsigned int mappa_ansi(int indice, int e_sfondo) {
+    int sistema;
     switch (indice) {
-    case 1:           return tema_corrente->sistema[COLORE_ROSSO].testo_pastello;
-    case 2: case 10:  return tema_corrente->sistema[COLORE_VERDE].testo_pastello;
-    case 3: case 11:  return tema_corrente->sistema[COLORE_GIALLO].testo_pastello;
-    case 4: case 12:  return tema_corrente->sistema[COLORE_BLU].testo_pastello;
-    case 5: case 13:  return tema_corrente->sistema[COLORE_VIOLA].testo_pastello;
-    case 6: case 14:  return tema_corrente->sistema[COLORE_MENTA].testo_pastello;
-    case 9:           return tema_corrente->sistema[COLORE_ARANCIO].testo_pastello;
-    case 8:           return TESTO_SECONDARIO;
-    default:          return TESTO_PRIMARIO;     /* 0, 7, 15 */
+    case 1:           sistema = COLORE_ROSSO; break;
+    case 2: case 10:  sistema = COLORE_VERDE; break;
+    case 3: case 11:  sistema = COLORE_GIALLO; break;
+    case 4: case 12:  sistema = COLORE_BLU; break;
+    case 5: case 13:  sistema = COLORE_VIOLA; break;
+    case 6: case 14:  sistema = COLORE_MENTA; break;
+    case 9:           sistema = COLORE_ARANCIO; break;
+    default:          sistema = COLORE_GRIGIO; break;   /* 0, 7, 8, 15 */
     }
+    if (e_sfondo) return tema_corrente->sistema[sistema].pastello;
+    if (sistema != COLORE_GRIGIO) return tema_corrente->sistema[sistema].testo_pastello;
+    return indice == 8 ? TESTO_SECONDARIO : TESTO_PRIMARIO;
 }
 
-/* Il colore di un colore di libvterm: quello predefinito e' del tema (il testo; per lo sfondo
- * 0, "non si disegna": c'e' il pannello); i primi 16 sono i colori ANSI del tema; gli altri
- * (256 colori e RGB) li da' libvterm. */
+/* Il colore di un colore di libvterm, come testo o come sfondo: quello predefinito e' del tema
+ * (il testo; per lo sfondo 0, "non si disegna": c'e' il pannello); i primi 16 sono i colori
+ * ANSI del tema (mappa_ansi); gli altri (256 colori e RGB) li da' libvterm, uguali per testo e
+ * sfondo. In inverso (reverse) i due colori si scambiano gia' scelti: lo sfondo prende il
+ * colore del testo e il testo quello dello sfondo (schermo_disegna), come in xterm; la coppia
+ * resta la stessa, quindi resta leggibile. */
 static unsigned int colore_di(VTermColor c, int e_sfondo) {
     if (VTERM_COLOR_IS_DEFAULT_FG(&c) || VTERM_COLOR_IS_DEFAULT_BG(&c))
         return e_sfondo ? 0 : TESTO_PRIMARIO;
-    if (VTERM_COLOR_IS_INDEXED(&c) && c.indexed.idx < 16) return mappa_ansi(c.indexed.idx);
+    if (VTERM_COLOR_IS_INDEXED(&c) && c.indexed.idx < 16) return mappa_ansi(c.indexed.idx, e_sfondo);
     vterm_screen_convert_color_to_rgb(vschermo, &c);
     return OPACO(((unsigned int)c.rgb.red << 16) | ((unsigned int)c.rgb.green << 8) | c.rgb.blue);
 }
@@ -344,8 +366,16 @@ static void prepara_vterm(void) {
     vterm_screen_reset(vschermo, 1);
 }
 
-/* --- la shell nel pty --- */
-
+/* --- la shell nel pty ---
+ *
+ * Apriamo il padrone, diamo la misura della griglia (TIOCSWINSZ: la legge chi disegna a schermo
+ * intero), e facciamo partire la shell con lo schiavo come 0, 1 e 2 (avvia_con_variabile: fork
+ * ed exec, come per ogni programma; il figlio non si porta dietro nient'altro di nostro, tranne
+ * il registro del sistema, e nemmeno le porte verso i servizi). L'ambiente della shell e' solo
+ * TERM. La SESSIONE la fa la shell da se', appena parte: setsid e TIOCSCTTY, cosi' lo schiavo
+ * diventa il suo terminale di controllo (Ctrl-C ai programmi, e SIGHUP a lei quando il padrone
+ * si chiude, cioe' quando la finestra si chiude). Lo schiavo lo apriamo con O_NOCTTY: non e' il
+ * nostro terminale. */
 static int avvia_shell(void) {
     padrone = posix_openpt(O_RDWR | O_NOCTTY | O_CLOEXEC);
     if (padrone < 0 || grantpt(padrone) < 0 || unlockpt(padrone) < 0) return -1;
@@ -354,7 +384,8 @@ static int avvia_shell(void) {
     if (schiavo < 0) return -1;
     struct winsize misura = { .ws_row = RIGHE, .ws_col = COLONNE };
     ioctl(padrone, TIOCSWINSZ, &misura);
-    int numero = apri_shell(schiavo);         /* la shell parte come sistema (launcher.h) */
+    int passati[3] = { schiavo, schiavo, schiavo };
+    int numero = avvia_con_variabile(SHELL, passati, 3, TERM_SHELL);
     close(schiavo);                           /* lo tiene solo la shell: quando finisce, "fine" */
     if (numero < 0) return -1;
     fcntl(padrone, F_SETFL, fcntl(padrone, F_GETFL) | O_NONBLOCK);

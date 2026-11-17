@@ -10,11 +10,10 @@
  *     prende dal manifesto quale programma far partire e lo fa partire come APPLICAZIONE
  *     (uid 1000), con l'argomento della richiesta se c'e', e con la sua porta verso il
  *     compositore (fai_partire_app). E' per questo che il launcher e'
- *     del sistema (uid 0): solo il sistema puo' far partire un programma con un altro uid;
+ *     del sistema (uid 0): solo il sistema puo' far partire un programma con un altro uid.
+ *     Un'eccezione sola, provvisoria: il Terminale parte come SISTEMA (uid_dell_app);
  *   - open_program: un programma normale di /system/bin (non un'app; per ora nessuno lo
  *     usa), come la persona (uid 1000);
- *   - open_shell: la shell di prova come SISTEMA (uid 0), sul terminale finto che chi chiede
- *     gli passa (oggi il Terminale);
  *   - open_file: un pacchetto .app non si apre mai da solo: si fa partire lo Store su di
  *     lui, se e' installato; se no si risponde che le app vanno installate prima;
  *   - remove_app, clear_app_data: togliere un'app della persona, svuotare i dati di un'app
@@ -230,6 +229,27 @@ static int porta_launcher(const struct chi_chiede *app) {
     return porta[1];
 }
 
+/* CHI E' L'APP, per il kernel: ogni app parte come la persona (UID_APPLICAZIONI), tranne UNA.
+ *
+ * IL TERMINALE PARTE COME SISTEMA (uid 0). PROVVISORIO, decisione della persona del 17/11/2026:
+ * la shell di prova serve come super amministratore, e la fa partire il Terminale stesso (con
+ * fork ed exec, sul suo terminale finto): la shell eredita i poteri di chi la fa partire, quindi
+ * e' il Terminale a dover essere sistema. Prima c'era una richiesta apposta al launcher (la
+ * shell come sistema su un terminale allegato), che qualunque app poteva fare; ora non c'e' piu':
+ * questo e' l'unico punto del sistema in cui un'app diventa sistema, e vale solo per l'app
+ * "terminale" di /system/apps (un'app installata dalla persona non puo' avere quell'id, e se
+ * capitasse non e' di_sistema). Il Terminale resta senza recinto, come le altre app oggi.
+ * Le porte verso i servizi restano quelle di un'app con i suoi permessi (permessi_concessi):
+ * cambia solo l'uid del processo.
+ *
+ * Per far girare il Terminale (e la sua shell) come la persona basta togliere questo caso; per
+ * le azioni da sistema servira' poi un comando come sudo (STATO.md, "la shell del Terminale"). */
+#define ID_TERMINALE "terminale"
+static unsigned int uid_dell_app(const struct descrizione *d) {
+    if (d->di_sistema && descrizione_uguali(d->id, ID_TERMINALE)) return UID_SISTEMA;
+    return UID_APPLICAZIONI;
+}
+
 static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     const char *programma = d->programma;
     int nulla = apri_nulla();
@@ -279,7 +299,7 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (picker >= 0) descrizione_aggiungi(riga, " picker", sizeof riga);
     if (tasks >= 0) descrizione_aggiungi(riga, " tasks", sizeof riga);
     registro(riga, "");
-    int numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, (int)(sizeof passati / sizeof passati[0]),
+    int numero = avvia_app(programma, uid_dell_app(d), argomento, passati, (int)(sizeof passati / sizeof passati[0]),
                            elenco);
     chiudi(nulla);
     if (compositore >= 0) chiudi(compositore);
@@ -348,22 +368,6 @@ static void apri_un_programma(const struct chi_chiede *c, const struct messaggio
         return;
     }
     partito(r, q, avvia_come(p, UID_APPLICAZIONI));
-}
-
-/* La shell come SISTEMA sul terminale (lo schiavo del pty) che chi chiede ha allegato.
- * PROVVISORIO, decisione della persona: terminale come sistema aperto a chiunque (oggi
- * ha_permesso dice sempre si'): da proteggere (STATO.md). */
-static void apri_la_shell(const struct chi_chiede *c, const struct messaggio *q, struct messaggio *r) {
-    if (!ha_permesso(c, PERMESSO_SHELL)) {
-        risposta(r, q, ESITO_NEGATO, 0, 0);
-        return;
-    }
-    if (q->allegato < 0) {
-        risposta(r, q, ESITO_NON_VALIDO, 0, "Manca il terminale per la shell.");
-        return;
-    }
-    int passati[3] = { q->allegato, q->allegato, q->allegato };
-    partito(r, q, avvia_come_con_descrittori(PROGRAMMA_SHELL, UID_SISTEMA, passati, 3));
 }
 
 /* Chi chiede puo' installare, aggiornare, togliere e svuotare i dati? "apps.manage" e' un permesso
@@ -458,7 +462,6 @@ static void rispondi(int d, const struct chi_chiede *dalla_porta) {
         if (descrizione_uguali(richiesta, APRI_APPLICAZIONE)) apri_app(&q, &r);
         else if (descrizione_uguali(richiesta, APRI_FILE)) apri_un_file(&q, &r);
         else if (descrizione_uguali(richiesta, APRI_PROGRAMMA)) apri_un_programma(&c, &q, &r);
-        else if (descrizione_uguali(richiesta, APRI_SHELL)) apri_la_shell(&c, &q, &r);
         else if (descrizione_uguali(richiesta, RIMUOVI_PACCHETTO)) togli_o_svuota(&c, &q, &r, 1);
         else if (descrizione_uguali(richiesta, SVUOTA_DATI)) togli_o_svuota(&c, &q, &r, 0);
         else if (descrizione_uguali(richiesta, DESCRIVI_PACCHETTO) || descrizione_uguali(richiesta, INSTALLA_PACCHETTO) ||

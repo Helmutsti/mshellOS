@@ -1,9 +1,11 @@
 /* shell: una shell stupida, SOLO PER LE PROVE (provvisoria, STATO.md). Gira in due posti:
  *   - sulla SERIALE (la console del kernel): init la fa partire come sistema (uid 0) e la fa
  *     ripartire quando finisce;
- *   - nel TERMINALE (utente/programmi/terminale.c, l'icona "Shell" della scrivania), come
- *     SISTEMA (uid 0): la fa partire il launcher (APRI_SHELL), con il terminale finto (pty)
- *     del terminale come 0, 1 e 2.
+ *   - nel TERMINALE (utente/applicazioni/Terminale/terminale.c): la fa partire il Terminale
+ *     stesso, con il suo terminale finto (pty) come 0, 1 e 2, e ha i suoi poteri (oggi il
+ *     Terminale e' sistema, uid 0: provvisorio, vedi uid_dell_app nel launcher).
+ * In tutti e due i casi chi la fa partire le da' il tipo di terminale (TERM, nell'ambiente),
+ * che lei passa ai comandi.
  * Quale dei due lo dice il descrittore 0: se e' un terminale si usa lui, se no la seriale,
  * che la shell apre e mette lei ai posti 0, 1 e 2. Da li' in poi i due casi sono uguali.
  *
@@ -25,7 +27,7 @@
  *
  * FAR PARTIRE UN PROGRAMMA (esegui_programma): fork fa una copia della shell, la copia va
  * nella cartella in cui siamo e con fexecve diventa il programma, con le parole come
- * argomenti e un ambiente minimo (PWD e HOME, vedi sotto). La shell aspetta che finisca e
+ * argomenti e un ambiente minimo (PWD, HOME e TERM, vedi sotto). La shell aspetta che finisca e
  * dice l'esito se non e' 0 ("uscito con 2", "chiuso dal segnale 2 ..."). Il file del
  * programma e la cartella li apre la shell con le funzioni di CoreKit (che conoscono
  * /home), prima di fork: il figlio usa solo i loro descrittori (fexecve, fchdir).
@@ -52,6 +54,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -74,6 +77,9 @@ static int terminale_nostro;            /* 1: e' il terminale di controllo della
                                          * e lo si puo' dare ai programmi (tcsetpgrp) */
 static int a_colori;                    /* nel terminale della finestra: colori e grassetto */
 static char cartella[MAX_PERCORSO] = "/";
+static char *term_ricevuto;             /* "TERM=..." come l'abbiamo ricevuto (main), o 0 */
+
+extern char **environ;                  /* l'ambiente ricevuto, "NOME=valore" (unistd.h) */
 
 /* --- scrivere --- */
 
@@ -500,14 +506,15 @@ static void esegui_programma(char **parola) {
     int qui = apri(cartella, APRI_LEGGERE);
     if (qui < 0) { chiudi(programma); errore(nome, cartella, qui); return; }
     /* l'ambiente: la cartella e la casa, come le vede la shell, e il tipo di terminale.
-     * TERM=xterm-256color e' una decisione della persona (17/11/2026): la shell gira nel
-     * Terminale (libvterm, che parla come xterm) e sulla seriale di QEMU, guardata da un
-     * terminale che capisce xterm; tutti e due capiscono xterm con 256 colori. I programmi
-     * che disegnano a schermo intero (vim) leggono TERM per sapere quali sequenze usare, e
-     * la descrizione di xterm-256color sta in /etc/terminfo (strumenti/compilazione/vim.sh). */
+     * TERM non lo decide la shell: e' quello che ha ricevuto da chi l'ha fatta partire (il
+     * Terminale, che parla come xterm grazie a libvterm; init sulla seriale di QEMU, guardata
+     * da un terminale che capisce xterm), e lo passa cosi' com'e'. Se non l'ha ricevuto, i
+     * comandi non lo ricevono: senza TERM vim non sa quali sequenze usare e lo dice. I programmi
+     * che disegnano a schermo intero leggono TERM, e la descrizione di xterm-256color sta in
+     * /etc/terminfo (strumenti/compilazione/vim.sh). */
     static char pwd[MAX_PERCORSO + 8];
     metti(metti(pwd, "PWD="), cartella);
-    char *ambiente[] = { pwd, "HOME=/home", "TERM=xterm-256color", 0 };
+    char *ambiente[] = { pwd, "HOME=/home", term_ricevuto, 0 };   /* term_ricevuto 0: finisce prima */
 
     /* i modi del terminale, da rimettere se il programma li cambia e non li rimette */
     struct termios modi;
@@ -679,6 +686,10 @@ static void silenzia_kernel(void) {
 }
 
 int main(void) {
+    /* il tipo di terminale che ci hanno dato (il Terminale, o init sulla seriale): lo si
+     * passa ai comandi tale e quale (esegui_programma) */
+    for (char **v = environ; v && *v; v++)
+        if (strncmp(*v, "TERM=", 5) == 0) term_ricevuto = *v;
     if (isatty(0)) {
         a_colori = 1;                          /* il terminale della finestra: e' gia' 0, 1 e 2 */
     } else {

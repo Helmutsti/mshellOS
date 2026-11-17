@@ -123,7 +123,8 @@ static void solo_quelli_passati(int quanti) {
  * uid -1: lo stesso di chi lo fa partire. 'argomento' (0: nessuno) arriva al programma
  * nuovo come secondo argomento di main (argv[1]): per esempio la cartella da aprire.
  * 'variabile' (0: nessuna) e' l'unica variabile d'ambiente del programma nuovo, "NOME=valore":
- * il launcher ci scrive l'elenco delle porte dell'app (messaggi.h, VARIABILE_PORTE). */
+ * il launcher ci scrive l'elenco delle porte dell'app (messaggi.h, VARIABILE_PORTE); il
+ * Terminale e init, per la shell, il tipo di terminale (TERM). */
 static int lancia(const char *percorso, const int *passati, int quanti, int uid,
                   const char *argomento, const char *variabile) {
     char vero[MAX_VERO];
@@ -178,6 +179,10 @@ int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento
 
 int avvia_con(const char *percorso, const int *descrittori, int quanti) {
     return lancia(percorso, descrittori, quanti, -1, 0, 0);
+}
+
+int avvia_con_variabile(const char *percorso, const int *descrittori, int quanti, const char *variabile) {
+    return lancia(percorso, descrittori, quanti, -1, 0, variabile);
 }
 
 int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti) {

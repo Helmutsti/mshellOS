@@ -85,15 +85,6 @@ int apri_programma(const char *percorso) {
     return compito(&r, esito);
 }
 
-int apri_shell(int schiavo) {
-    struct messaggio q, r;
-    messaggio_inizia(&q);
-    messaggio_aggiungi(&q, CHIAVE_RICHIESTA, APRI_SHELL);
-    q.allegato = schiavo;     /* resta di chi chiama: il launcher ne riceve una copia */
-    int esito = launcher_chiedi(&q, &r, TEMPO_CHIEDI);
-    return compito(&r, esito);
-}
-
 int launcher_pacchetto(const char *richiesta, const char *percorso, struct resoconto *res) {
     int f = apri(percorso, APRI_LEGGERE);
     if (f < 0) return LAUNCHER_ERRORE;

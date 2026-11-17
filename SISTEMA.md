@@ -16,7 +16,7 @@ servizio, un comando o un'app. Le regole delle app (pacchetti, permessi, isolame
 
 Dettagli sui servizi di oggi:
 - **eventi** legge tastiera e mouse e li manda in un solo tubo, al compositore. È il compositore a passare ogni evento all'app in primo piano.
-- **la shell sulla seriale** la fa partire init, solo se la seriale c'è. Serve per lo sviluppo.
+- **la shell sulla seriale** la fa partire init, solo se la seriale c'è, con `TERM=xterm-256color` (la seriale di QEMU capisce xterm). Serve per lo sviluppo. Quella del Terminale la fa partire il Terminale stesso, con lo stesso `TERM`; la shell passa ai comandi il `TERM` che ha ricevuto.
 - **catalog** (deciso il 16 novembre 2026) possiede le impostazioni della persona: oggi il tema
   (chiaro o scuro) e lo sfondo; la lingua quando ci sarà. Contiene **solo impostazioni**, niente
   informazioni sul sistema o sull'hardware, e valgono **per la persona** (`/data/users/<uid>/preferences`).
@@ -100,8 +100,8 @@ Lo usa anche catalog (`corekit/catalog.h`): è il primo servizio con collegament
 aperti, perché chi chiede `watch` riceve gli avvisi (messaggi con `notice=changed`, senza `id` né
 `result`) sullo stesso collegamento.
 
-Il primo a usarlo è il launcher (aprire le app e i file, installare e togliere i pacchetti,
-aprire la shell): i dati grandi (il resoconto di un pacchetto, l'elenco delle app) viaggiano
+Il primo a usarlo è il launcher (aprire le app e i file, installare e togliere i
+pacchetti): i dati grandi (il resoconto di un pacchetto, l'elenco delle app) viaggiano
 nel foglio allegato alla risposta. Il servizio network lo usa per la sua porta (contratto in `corekit/sistema/network.h`: `status`, `restart`, `stop`; in sola lettura, la configurazione non si cambia da lì; permessi `network.use` e `network.settings`; prova `test/prove/stato_rete.py`). Il
 compositore si allineerà più avanti.
 
@@ -132,7 +132,7 @@ collegamento si chiude e chi chiede lo sa subito.
   normali, nessuno di sistema.
 
 Ogni rifiuto finisce nel registro: `permesso <nome> a <programma> (uid <uid>): negato`. La usano
-launcher (`apps.manage`, `apps.open`, `system.shell`), network (`network.use`,
+launcher (`apps.manage`, `apps.open`), network (`network.use`,
 `network.settings`) e catalog (`settings.system`): `APPLICAZIONI.md`, sezione 9.
 
 Limite: un messaggio è al massimo 5120 byte (lo stesso di oggi per tutti i messaggi). La prova è `test/prove/messaggi.py`.
@@ -214,4 +214,4 @@ sono in `corekit/sistema/servizi.h` (`custodisci_porta`, `riprendi_porte`).
   4. dove si salvano le regole (in `/data`, del servizio, con il nome dell'app) e quando spariscono (app tolta; regole che valgono solo finché l'app è aperta?);
   5. l'ordine: prima il controllo dei permessi vero (`ha_permesso`: fatto il 16 novembre 2026), poi la finestra di domanda del sistema, poi le richieste al servizio network.
 - ~~**Permessi dei comandi.**~~ Deciso il 16 novembre 2026: un programma della persona che non è un'app ha i permessi normali, nessuno di sistema (`ha_permesso`, sezione 3).
-- **La shell come sistema.** Oggi il Terminale apre una shell come sistema (decisione provvisoria, `STATO.md`): dal 16 novembre 2026 la può chiedere solo chi ha `system.shell` (il sistema e il Terminale, app del sistema che lo dichiara). Quando le porte controlleranno i permessi, la shell girerà come la persona, e le azioni di sistema passeranno dalla porta del servizio, che chiede conferma (come `sudo` o la finestra della password sul Mac).
+- **La shell come sistema.** Oggi la shell del Terminale è del sistema (decisione provvisoria della persona, 17 novembre 2026, `STATO.md`): il launcher fa partire il Terminale come sistema (uid 0), unica app a cui succede (un punto solo nel launcher, `uid_dell_app`), e il Terminale fa partire la shell da sé, che ne eredita i poteri. Non c'è più una richiesta al launcher per aprire la shell, né il permesso `system.shell`. Per farla girare come la persona basta togliere quel caso. Quando le porte controlleranno i permessi, la shell girerà come la persona, e le azioni di sistema passeranno dalla porta del servizio, che chiede conferma (come `sudo` o la finestra della password sul Mac).

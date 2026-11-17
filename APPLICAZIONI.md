@@ -241,7 +241,7 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
    apre il canale, e il servizio si fida solo di lui.
 6. **Le app del sistema che oggi guardano tutto.** Attività legge l'elenco dei programmi da `/proc`
    (nel recinto non c'è: serve un servizio dei processi); lo Store scrive in `/data/apps`; il
-   Terminale apre una shell come sistema. Vanno rifatte sulle porte, o tenute fuori dal recinto
+   Terminale gira come sistema (provvisorio, 17 novembre 2026) e la sua shell pure. Vanno rifatte sulle porte, o tenute fuori dal recinto
    (da decidere: niente eccezioni sarebbe meglio).
 7. ~~**La rete dentro l'app.**~~ Deciso il 16 novembre 2026 (la persona, come Android e Flatpak):
    con `network.use` l'app vede la rete del computer, senza una rete vuota; il servizio di rete non
@@ -252,7 +252,8 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
    (come su Linux e Mac): `curl` usa la rete direttamente. Due modelli diversi convivono; come si
    distribuiscono e con quali poteri girano i comandi degli altri è già una domanda aperta
    (`SISTEMA.md`).
-9. **I permessi `apps.open` e `system.shell`**: da capire come gestirli (sezione 12).
+9. **Il permesso `apps.open`**: da capire come gestirlo (sezione 12). (`system.shell` non c'è
+   più dal 17 novembre 2026: la shell la fa partire il Terminale, che gira come sistema.)
 10. **SQLite dentro i servizi**: i programmi sono statici, circa 1 MB in più per ogni programma che
     lo apre; dipende da chi apre il database (sezione 8).
 11. **Prove.** La sandbox Docker deve poter creare i recinti (namespaces dentro Docker chiedono
@@ -368,7 +369,6 @@ autorizzato ("chiavi a due livelli").
 | `system.power` | spegnere e riavviare il computer | (scrivania) |
 | `apps.manage` | installare, aggiornare e togliere app | Store |
 | `apps.open` | far partire un programma di `/system/bin` come la persona | — (da capire come gestirlo: sezione 12) |
-| `system.shell` | aprire la shell come sistema | Terminale (da capire come gestirlo: sezione 12) |
 
 ### Permessi che i servizi chiedono dalla porta
 
@@ -388,7 +388,6 @@ prova `applicazioni` controlla i rifiuti con Esempio, che non ha `settings.syste
 |---|---|---|---|
 | `apps.manage` | launcher | installare, aggiornare e togliere app, svuotarne i dati | lo Store |
 | `apps.open` | launcher | far partire un programma di `/system/bin` come la persona | nessuna app |
-| `system.shell` | launcher | aprire la shell come sistema (il Terminale) | il Terminale (provvisorio: `STATO.md`) |
 | `settings.system` | catalog | cambiare tema e sfondo | Impostazioni |
 | `network.use` | network | chiedere lo stato della rete (e avere la porta verso network) | Esempio (prova) |
 | `processes.view` | tasks | vedere i programmi in esecuzione, la memoria e il disco (e avere la porta verso tasks) | nessuna app (la comprende `processes.stop`) |
@@ -534,7 +533,8 @@ Da decidere, più o meno in quest'ordine:
    leggere gli zip (per esempio miniz).
 6. **Cosa vede un eseguibile normale avviato dalla scrivania**: oggi ha tutti i poteri della
     persona. macOS, per esempio, avvisa al primo avvio dei file scaricati.
-7. **I permessi `apps.open` e `system.shell`** (aggiunti all'elenco il 14 novembre 2026): capire
-   come gestirli. Chi li riceve (solo le app del sistema? anche le altre, chiedendo alla persona?),
-   se `system.shell` deve restare un permesso di un'app o diventare una conferma della persona
-   ogni volta (come `sudo` o la finestra della password del Mac), e se `apps.open` serve davvero.
+7. **Il permesso `apps.open`** (aggiunto all'elenco il 14 novembre 2026): capire come gestirlo.
+   Chi lo riceve (solo le app del sistema? anche le altre, chiedendo alla persona?) e se serve
+   davvero. (`system.shell`, aggiunto lo stesso giorno, non c'è più dal 17 novembre 2026: il
+   Terminale gira come sistema e fa partire la shell da sé; il miglioramento futuro deciso è il
+   Terminale come la persona, con un comando come `sudo` per le azioni da sistema: `STATO.md`.)

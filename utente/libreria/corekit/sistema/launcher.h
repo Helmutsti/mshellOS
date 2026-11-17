@@ -15,7 +15,7 @@
  * chiave=valore, con la busta (request, id, result) e al massimo un descrittore allegato.
  * Qui sotto il CONTRATTO del servizio: le richieste, le loro chiavi, le risposte, i
  * permessi. Le funzioni per chi chiede (in fondo) lo nascondono: un programma chiama
- * apri_shell o togli_app e riceve un numero, senza vedere i messaggi; stanno in
+ * apri_programma o togli_app e riceve un numero, senza vedere i messaggi; stanno in
  * interno/launcher.c (e quelle di apertura.h in interno/apertura.c).
  *
  * LE RICHIESTE (il valore di request) E LE LORO CHIAVI:
@@ -75,10 +75,8 @@
  *                     nessuno (il Terminale e' un'app). Permesso apps.open. Risposta:
  *                     ok con task; denied per un percorso fuori da /system/bin.
  *
- *   open_shell        ALLEGATO il capo "schiavo" di un terminale finto (pty) di chi chiede.
- *                     Il launcher fa partire /system/bin/shell come SISTEMA (uid 0), con
- *                     quel terminale come 0, 1 e 2. Oggi lo usa il Terminale. Permesso
- *                     system.shell. Risposta: ok con task; invalid senza allegato.
+ * (La shell del Terminale non passa dal launcher: la fa partire il Terminale stesso, che il
+ * launcher fa partire come sistema. Vedi fai_partire_app nel launcher.)
  *
  * LE RISPOSTE. La busta dello standard: id e result. result e' ok, denied (chi chiede non
  * ha il permesso), invalid (manca un dato, o un dato non va bene: un id con "/", un
@@ -96,8 +94,7 @@
  * (chi non conosce il launcher capisce lo stesso "non e' andata"), e i perche' del
  * launcher restano suoi.
  * Le altre chiavi della risposta:
- *     task      il numero del compito appena partito (open_app, open_file, open_program,
- *               open_shell)
+ *     task      il numero del compito appena partito (open_app, open_file, open_program)
  *     message   quando non si puo': la frase per la persona (UTF-8)
  *
  * I DATI GRANDI. Un messaggio e' al massimo MAX_MESSAGGIO byte (5 KB): il resoconto di un
@@ -105,16 +102,15 @@
  * risposta, in un foglio di memoria condivisa che contiene la struct cosi' com'e'
  * (resoconto, elenco_app: pacchetto.h). Sono struct C, non testo: le leggono solo i
  * programmi del sistema, compilati con lo stesso pacchetto.h. Il pacchetto da descrivere o
- * installare e il terminale di open_shell sono allegati della richiesta.
+ * installare e' l'allegato della richiesta.
  *
  * I PERMESSI. Il launcher chiede a chi_chiede chi c'e' dall'altra parte, e a ha_permesso
  * se ha il permesso (sistema/servizi.h: la regola; un rifiuto si scrive nel registro,
- * "permesso apps.manage a ... : negato"). Tutti e tre sono permessi di sistema: li hanno il
- * sistema (uid 0) e le app del sistema che li dichiarano nel manifesto (lo Store apps.manage,
- * il Terminale system.shell); gli altri ricevono denied.
+ * "permesso apps.manage a ... : negato"). Tutti e due sono permessi di sistema: li hanno il
+ * sistema (uid 0) e le app del sistema che li dichiarano nel manifesto (lo Store apps.manage);
+ * gli altri ricevono denied.
  *     apps.manage    install_package, update_package, remove_app, clear_app_data
- *     apps.open  open_program
- *     system.shell   open_shell
+ *     apps.open      open_program
  * open_app, open_file, describe_package e list_apps li puo' chiedere chiunque.
  *
  * IL TEMPO MASSIMO. Chi chiede aspetta la risposta al massimo TEMPO_CHIEDI (5 secondi,
@@ -152,7 +148,6 @@
 #define RIMUOVI_PACCHETTO  "remove_app"
 #define SVUOTA_DATI        "clear_app_data"
 #define APRI_PROGRAMMA     "open_program"
-#define APRI_SHELL         "open_shell"
 
 /* le chiavi del launcher (oltre alla busta: messaggi.h) */
 #define CHIAVE_APP        "app"
@@ -174,13 +169,9 @@
 /* i permessi che il launcher chiede (ha_permesso, sistema/servizi.h) */
 #define PERMESSO_GESTIRE_APP "apps.manage"
 #define PERMESSO_PROGRAMMI   "apps.open"
-#define PERMESSO_SHELL       "system.shell"
 
 /* il tempo massimo delle richieste sui pacchetti, in millisecondi */
 #define TEMPO_LAUNCHER_PACCHETTI 60000
-
-/* la shell che open_shell fa partire */
-#define PROGRAMMA_SHELL "/system/bin/shell"
 
 /* dove stanno i programmi che open_program fa partire */
 #define CARTELLA_PROGRAMMI "/system/bin/"
@@ -210,10 +201,6 @@
 /* Chiede al launcher di far partire il programma 'percorso' (in /system/bin) come la
  * persona. Il numero del compito, o -1. */
 int apri_programma(const char *percorso);
-
-/* Chiede al launcher di far partire la shell come SISTEMA su un terminale finto: 'schiavo' e'
- * il suo capo schiavo (/dev/pts/N, aperto da chi chiede). Il numero del compito, o -1. */
-int apri_shell(int schiavo);
 
 /* Descrive (DESCRIVI_PACCHETTO), installa (INSTALLA_PACCHETTO) o aggiorna
  * (AGGIORNA_PACCHETTO) il pacchetto nel file 'percorso': lo apre chi chiede, con i suoi

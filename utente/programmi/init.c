@@ -75,6 +75,7 @@ struct servizio {
         int d;
         struct chi_chiede chi;
     } porte[MAX_PORTE_CUSTODITE];
+    const char *variabile;   /* se non e' 0, l'unica variabile d'ambiente del servizio ("NOME=valore") */
 };
 
 static int risorse_eventi[1];
@@ -100,8 +101,12 @@ static struct servizio servizi[] = {
     { "/system/services/tasks/tasks", risorse_tasks, 2, -1, 0, 0, UID_SISTEMA, 1 },
     /* la shell di prova sulla seriale (/dev/ttyS0), come sistema: provvisoria, da rivedere.
      * Parte solo se la seriale c'e' (come la getty sulla seriale di Linux): nella sandbox
-     * Docker non c'e', e la shell ripartirebbe ogni 5 secondi senza poter fare niente. */
-    { "/system/bin/shell", 0, 0, -1, "/dev/ttyS0", 0 },
+     * Docker non c'e', e la shell ripartirebbe ogni 5 secondi senza poter fare niente.
+     * Le si dice il tipo di terminale, TERM, che lei passa ai comandi: dall'altra parte della
+     * seriale di QEMU c'e' un terminale che capisce xterm con 256 colori (decisione della
+     * persona, 17/11/2026), cosi' vim funziona anche qui. */
+    { .percorso = "/system/bin/shell", .processo = -1, .dispositivo = "/dev/ttyS0",
+      .variabile = "TERM=xterm-256color" },
 };
 #define QUANTI_SERVIZI ((int)(sizeof servizi / sizeof servizi[0]))
 
@@ -186,7 +191,7 @@ static void riconsegna_porte(struct servizio *s) {
 static void avvia_servizio(struct servizio *s) {
     if (s->non_qui) return;
     if (s->custodisce) riconsegna_porte(s);
-    int n = s->uid == UID_SISTEMA ? avvia_con(s->percorso, s->risorse, s->quante)
+    int n = s->uid == UID_SISTEMA ? avvia_con_variabile(s->percorso, s->risorse, s->quante, s->variabile)
                                   : avvia_come_con_descrittori(s->percorso, s->uid, s->risorse, s->quante);
     s->processo = n < 0 ? -1 : processo(n);
     if (s->processo < 0) {

@@ -68,6 +68,12 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
   della sandbox insieme, attese vere al posto di quelle fisse, disco non copiato);
 - una prova automatica con la finestra vera del picker ("Sostituire il file?", app che muore
   con la finestra aperta).
+- **Miglioramento futuro: la shell del Terminale.** Il passo deciso il 17/11/2026 è fatto: il
+  launcher fa partire il Terminale come sistema (unica app, un punto solo: `uid_dell_app` in
+  `utente/programmi/launcher.c`) e il Terminale fa partire la shell da sé, con
+  `TERM=xterm-256color`; la richiesta `open_shell` e il permesso `system.shell` non ci sono più.
+  Resta il miglioramento futuro: il Terminale (e quindi la shell) come la persona, togliendo quel
+  caso, e un comando come `sudo` per le azioni da sistema.
 
 **Come si lavora sul Mac** (manca `uv`): un python con Pillow, per esempio
 `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pillow`, poi
@@ -466,10 +472,10 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
   permesso esplicito "accedere ai tuoi file", come su macOS. I comandi li facciamo noi
   (`utente/comandi/`), più `curl` dai sorgenti ufficiali.
 - Terminale in finestra (app Terminale, si apre dal vassoio delle app): la shell dentro gira come
-  **sistema** (uid 0), non come la persona, e **chiunque può chiederla** al launcher
-  (`open_shell`, che le passa il terminale finto). Decisione della persona, provvisoria:
-  **terminale come sistema aperto a chiunque: da proteggere** ("poi lo proteggiamo"). I comandi
-  restano quelli della shell (nessuno per modificare); `/system` resta in sola lettura.
+  **sistema** (uid 0), non come la persona. Decisione della persona, provvisoria (17/11/2026): il
+  launcher fa partire il Terminale come sistema (l'unica app) e il Terminale fa partire la shell
+  da sé, che ne eredita i poteri; nessun'altra app può più chiedere una shell. I comandi
+  restano quelli della shell; `/system` resta in sola lettura.
 
 **Interfaccia** (file Figma "mshell – interfaccia", chiave `X9g7EOJgKBlE4QjmjrTLFt`)
 - Font Inter, icone Lucide, aspetto a vetro smerigliato.
@@ -516,7 +522,7 @@ nei programmi: su ARM `printf` e `scanf` di musl lo richiedono (long double a 12
 è segnato come ok. Le uniche cose ancora da fare sono la sicurezza, i permessi e il recinto
 delle app:**
 - ~~il controllo vero dei permessi~~: fatto il 16/11/2026 (sotto, "Il controllo vero dei permessi");
-- la shell come sistema: dal 16/11/2026 la chiede solo chi ha `system.shell` (il Terminale);
+- la shell come sistema: dal 17/11/2026 la fa partire il Terminale, che gira come sistema (sezione 0);
 - i poteri con cui partono le app (oggi tutte con lo stesso uid della persona);
 - il recinto delle app (APPLICAZIONI.md, sezione 5).
 
@@ -566,7 +572,7 @@ il launcher le concede quando la fa partire e passa ai servizi con le porte (`at
 `permission`); un altro programma della persona ha i permessi normali, nessuno di sistema.
 Provvisorio finché non c'è la finestra del primo avvio: **concessi = dichiarati nel manifesto**,
 quelli di sistema solo alle app del sistema (`permessi_concessi` nel launcher). I rifiuti vanno nel
-registro. Il Terminale ora dichiara `system.shell`. La prova `applicazioni` controlla i rifiuti
+registro. (Il Terminale dichiarava `system.shell`: tolto il 17/11/2026, sezione 0.) La prova `applicazioni` controlla i rifiuti
 con Esempio (cambiare il tema, riavviare la rete). Restano: la finestra di domanda del primo avvio, il database dei permessi concessi, la
 pagina dei permessi in Impostazioni. Poi il recinto vero nel launcher.
 
@@ -625,9 +631,9 @@ Il resto dell'elenco resta qui solo come memoria.
 Elenco unico delle cose ancora da fare (aggiornato il 12/11/2026). Le domande che aspettano la
 persona sono nella sezione 8.
 
-**Da proteggere**: il terminale in finestra apre una shell come sistema (uid 0)
-(`open_shell`, `utente/programmi/launcher.c`): decisione provvisoria della persona. Dal 16/11/2026
-la può chiedere solo chi ha `system.shell` (il sistema, e il Terminale che lo dichiara).
+**Da proteggere**: il terminale in finestra gira come sistema (uid 0) e la sua shell pure
+(`uid_dell_app` in `utente/programmi/launcher.c`): decisione provvisoria della persona del
+17/11/2026. Il miglioramento futuro è nella sezione 0.
 
 ~~**I permessi delle porte rispondono sempre sì**~~: fatto il 16/11/2026 (sopra, "Il controllo vero
 dei permessi").
@@ -636,8 +642,8 @@ dei permessi").
 `install_package`... in testo `chiave=valore`, esiti `result=` con `reason=` per i perché del
 launcher; il resoconto dei pacchetti e l'elenco delle app nel foglio allegato. Il contratto è in
 testa a `corekit/sistema/launcher.h`, le funzioni per chi chiede in
-`corekit/interno/launcher.c`. Chiede `ha_permesso` per `apps.manage`, `programs.open`,
-`system.shell` (provvisori). Resta col formato suo il compositore (rimandato: punto 26).
+`corekit/interno/launcher.c`. Chiede `ha_permesso` per `apps.manage` e `apps.open`
+(provvisori). Resta col formato suo il compositore (rimandato: punto 26).
 
 **Fatti per ultimi** (12/11/2026): i tasti speciali (l'errore era nella tabella dei tasti di
 Doom; Esc ora chiude gli avvisi) e le risorse su disco (`/system/resources`, sezione 4). Restano

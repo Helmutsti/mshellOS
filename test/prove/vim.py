@@ -12,7 +12,10 @@
      shell torna;
   4. di nuovo "vim prova.txt": le righe del file sono le stesse di prima del salvataggio
      (si confrontano le foto della parte alta della finestra, senza la riga di stato in
-     fondo, che dice cose diverse); ":q" per uscire.
+     fondo, che dice cose diverse);
+  5. ":w /nessuna/x": vim non puo' scrivere (la cartella non c'e') e lo dice in fondo, in
+     bianco su rosso (ErrorMsg): si controlla che lo sfondo sia il rosso pastello e il testo
+     il colore del testo, cioe' che si legga; ":q" per uscire.
 La tastiera e' italiana: ":" e' Maiuscole + punto, "/" e' Maiuscole + 7. Le foto restano nella cartella della prova
 (con --tieni).
 """
@@ -37,6 +40,26 @@ def _dentro(foto):
 def _righe(foto):
     """Le prime righe del testo (senza la riga di stato di vim, in fondo)."""
     return foto.crop((148, 180, 892, 300))
+
+
+# sistema/rosso/pastello e testo/primario, nei due temi (uikit/interno/tema.c). In QEMU il tema
+# e' sempre il chiaro; nella sandbox lo dice --tema.
+ROSSO_PASTELLO = {"chiaro": (0xFF, 0xD4, 0xD1), "scuro": (0x60, 0x28, 0x26)}
+TESTO_PRIMARIO = {"chiaro": (0x41, 0x41, 0x46), "scuro": (0xEB, 0xEB, 0xEC)}
+
+
+def _riga(foto, r):
+    """La riga r del testo (da 0 a 24): il testo comincia a 24 dal bordo della finestra, sotto
+    la barra del titolo alta 40, e le righe sono da 20."""
+    y = 130 + 40 + 24 + 20 * r
+    return foto.crop((164, y, 164 + 712, y + 20))
+
+
+def _quanti_vicini(foto, colore, tolleranza=24):
+    """Quanti pixel sono di quel colore (ogni canale entro la tolleranza)."""
+    r0, g0, b0 = colore
+    return sum(1 for r, g, b in foto.convert("RGB").getdata()
+               if abs(r - r0) <= tolleranza and abs(g - g0) <= tolleranza and abs(b - b0) <= tolleranza)
 
 
 def _scrivi(m, testo):
@@ -105,6 +128,24 @@ def esegui(p):
     riaperto.crop(FINESTRA).save(p.cartella / "vim_riaperto.png")
     diversi = pixel_diversi(_righe(riaperto), _righe(scritto), None, 40)
     p.controlla(diversi < 20, f"il file riaperto non ha le righe scritte ({diversi} pixel diversi)")
+
+    # 5. un messaggio di errore: ":w" in una cartella che non c'e'. vim scrive "E212: ..." in
+    #    fondo con l'evidenziazione ErrorMsg, bianco (15) su rosso (1): nel Terminale il rosso
+    #    di sfondo e' il pastello del rosso, e sopra il colore del testo (terminale.c, mappa_ansi)
+    _scrivi(m, ":w /nessuna/x")
+    m.premi("ret")
+    time.sleep(0.5)
+    errore = m.aspetta_schermo_fermo()
+    errore.crop(FINESTRA).save(p.cartella / "vim_errore.png")
+    #    la riga del messaggio e' quella con piu' rosso pastello (vim la mette in fondo, sopra
+    #    "Press ENTER"): ci devono essere lo sfondo e, sopra, le lettere nel colore del testo
+    tema = getattr(m, "tema", "chiaro")
+    righe = [_riga(errore, r) for r in range(25)]
+    rosso = [_quanti_vicini(r, ROSSO_PASTELLO[tema]) for r in righe]
+    r = rosso.index(max(rosso))
+    lettere = _quanti_vicini(righe[r], TESTO_PRIMARIO[tema])
+    p.controlla(rosso[r] > 1500, f"il messaggio di errore di vim non ha lo sfondo rosso pastello ({rosso[r]} pixel)")
+    p.controlla(lettere > 150, f"il messaggio di errore di vim non ha il testo nel colore del testo ({lettere} pixel)")
     _scrivi(m, ":q")
     m.premi("ret")
     time.sleep(0.5)

@@ -414,7 +414,7 @@ static const char *const permessi_normali[] = {
 };
 static const char *const permessi_di_sistema[] = {
     "processes.view", "processes.stop", "network.settings", "network.firewall", "settings.system",
-    "system.power", "apps.manage", "apps.open", "system.shell",
+    "system.power", "apps.manage", "apps.open",
 };
 
 static int nell_elenco(const char *nome, const char *const *elenco, int quanti) {

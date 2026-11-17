@@ -83,6 +83,11 @@ int avvia(const char *percorso);
  * 0, 1, 2... Il suo numero, o -1. */
 int avvia_con(const char *percorso, const int *descrittori, int quanti);
 
+/* Come avvia_con, e il programma nuovo trova 'variabile' ("NOME=valore"; 0: nessuna) come
+ * unica variabile d'ambiente. Es. la shell, che riceve TERM=xterm-256color dal Terminale e
+ * (sulla seriale) da init, e lo passa ai comandi. */
+int avvia_con_variabile(const char *percorso, const int *descrittori, int quanti, const char *variabile);
+
 /* Un descrittore del programma 'numero': aspetta lo vede pronto quando e' finito, e ricevi
  * su di lui aspetta che finisca. Il descrittore, o -1 se il numero non e' valido o il
  * programma non c'e'. */

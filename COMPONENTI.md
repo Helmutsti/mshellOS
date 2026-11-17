@@ -18,7 +18,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | network (servizio) | servizio | init | sistema (uid 0) | sì |
 | catalog | servizio | init | persona (uid 1000) | no |
 | tasks | servizio | init | sistema (uid 0) | sì |
-| shell | comando/servizio di prova | init (seriale) o launcher (Terminale) | sistema (uid 0) | sì |
+| shell | comando/servizio di prova | init (seriale) o il Terminale | sistema (uid 0) | sì |
 | network (comando) | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
 | curl | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
 | vim | comando | la shell | chi lo lancia (oggi shell: uid 0) | no |
@@ -26,7 +26,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | Attività | app | launcher | persona (uid 1000) | no |
 | Impostazioni | app | launcher | persona (uid 1000) | no (ha "settings.system") |
 | Store | app | launcher | persona (uid 1000) | no (ha "apps.manage") |
-| Terminale | app | launcher | persona (uid 1000) | no |
+| Terminale | app | launcher | sistema (uid 0, provvisorio: l'unica app) | sì |
 | Doom | app | launcher | persona (uid 1000) | no |
 | network.conf, firewall.conf | configurazione | letti dal servizio network | non applicabile | non applicabile |
 | corekit | libreria | collegata dentro ogni programma | quello del programma | non applicabile |
@@ -76,12 +76,12 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Poteri**: super sì. Controlli: i ruoli speciali (sfondo, pannello) solo a chi ha uid 0 (controllo vero, via kernel). Il tema lo prende da catalog e ne osserva gli avvisi (per le ombre); non fa più da tramite per il cambio di tema.
 
 ### launcher (`utente/programmi/launcher.c`)
-- **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
+- **Cosa fa**: fa partire le applicazioni (come persona; il Terminale come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con la porta "launcher" già aperta, e il canale del custode al descrittore 1: ogni porta che tiene gli manda una copia, e al riavvio init gliele riconsegna).
-- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`, al 7 quella verso picker (a tutte) e all'8 quella verso tasks, solo se il manifesto ha `processes.view` o `processes.stop`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
+- **Lancia**: le app (uid 1000, tranne il Terminale che parte come sistema, uid 0: unico caso, provvisorio, decisione della persona del 17/11/2026, `uid_dell_app`; `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`, al 7 quella verso picker (a tutte) e all'8 quella verso tasks, solo se il manifesto ha `processes.view` o `processes.stop`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000).
 - **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
-- **Poteri**: super sì. Decide i permessi concessi a ogni app quando la fa partire (`permessi_concessi`: dichiarati nel manifesto, quelli di sistema solo alle app del sistema, sconosciuti tolti) e li passa ai servizi con le porte. Controlla con `ha_permesso`: "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati).
+- **Poteri**: super sì. Decide i permessi concessi a ogni app quando la fa partire (`permessi_concessi`: dichiarati nel manifesto, quelli di sistema solo alle app del sistema, sconosciuti tolti) e li passa ai servizi con le porte. Controlla con `ha_permesso`: "apps.open" (programmi), "apps.manage" (installare, aggiornare, togliere, svuotare dati).
 
 ### scrivania (`utente/programmi/scrivania.c`)
 - **Cosa fa**: la "faccia" del sistema: sfondo, userbar (pulsante App e app di sistema, con segno per quelle aperte; in fondo foto profilo segnaposto e ora, aggiornata a ogni minuto con il timeout del poll) e vassoio delle app installate. Un clic su un'icona chiede al launcher di aprire l'app.
@@ -127,10 +127,10 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ### shell (`utente/programmi/shell.c`)
 - **Cosa fa**: shell semplice per le prove. Comandi interni (pwd, cd, ls, help, exit); ogni altra parola è un programma, cercato prima in `/system/bin` poi in `/data/users/<uid>/bin`. Niente variabili, tubi o redirezioni.
 - **Tipo**: comando di prova (provvisorio); usata come programma del sistema.
-- **Lanciato da**: init (sulla seriale) oppure il launcher (richiesta APRI_SHELL, dentro il Terminale).
-- **Lancia**: i comandi digitati (con `fexecve`), quindi per esempio network, curl e vim. Ai comandi dà un ambiente minimo: `PWD`, `HOME=/home` e `TERM=xterm-256color` (decisione della persona, 17/11/2026: il Terminale e la seriale di QEMU capiscono xterm).
-- **Gira come**: sistema (uid 0), in entrambi i casi. Non cambia uid ai comandi che lancia.
-- **Poteri**: super sì (uid 0). Nessun controllo di permessi; il permesso "system.shell" è controllato dal launcher (il sistema e il Terminale).
+- **Lanciato da**: init (sulla seriale) oppure il Terminale (sul suo terminale finto, `avvia_con_variabile`). Tutti e due le danno `TERM=xterm-256color` (decisione della persona, 17/11/2026: il Terminale e la seriale di QEMU capiscono xterm).
+- **Lancia**: i comandi digitati (con `fexecve`), quindi per esempio network, curl e vim. Ai comandi dà un ambiente minimo: `PWD`, `HOME=/home` e il `TERM` che ha ricevuto (se l'ha ricevuto).
+- **Gira come**: sistema (uid 0), in entrambi i casi: sulla seriale perché init è sistema, nel Terminale perché ne eredita i poteri (il Terminale oggi è sistema). Non cambia uid ai comandi che lancia.
+- **Poteri**: super sì (uid 0). Nessun controllo di permessi.
 
 ---
 
@@ -155,7 +155,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ### vim (`strumenti/compilazione/vim.sh`)
 - **Cosa fa**: l'editor vim nella versione più piccola ("tiny": niente sintassi colorata, niente linguaggio di vim, niente aiuto). Non è nostro: sorgenti ufficiali, la stessa versione del pacchetto di Alpine 3.24, compilato statico con ncurses di Alpine legata dentro. Legge le descrizioni dei terminali da `/etc/terminfo` (xterm-256color, xterm, vt100, linux) e le sue impostazioni di fabbrica da `/system/share/vim/vim92/defaults.vim`; nessun vimrc di sistema.
 - **Tipo**: comando.
-- **Lanciato da**: la shell (che gli passa `TERM=xterm-256color`).
+- **Lanciato da**: la shell (che gli passa il `TERM` ricevuto dal Terminale o da init: `xterm-256color`).
 - **Lancia**: nessuno (`:!` lancerebbe una shell `sh`, che nel sistema non c'è).
 - **Gira come**: chi lo lancia; oggi, dalla shell, uid 0. Non imposta uid.
 - **Poteri**: no. Scrive i file con i permessi di chi lo lancia; il file di scambio (`.swp`) accanto al file, oppure in `/tmp`.
@@ -202,9 +202,9 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Cosa fa**: finestra con dentro la shell di prova, su un terminale finto (pty). Il lavoro del terminale (griglia, colori, cursore, schermo alternativo, tasti) lo fa libvterm (sorgenti ufficiali 0.3.3, scaricati e compilati da `strumenti/compilazione/libvterm.sh`, legata solo qui); il Terminale la disegna con il suo stile. Provvisorio.
 - **Tipo**: app.
 - **Lanciato da**: launcher (solo dal vassoio: `nella_barra = false`).
-- **Lancia**: la shell, tramite il launcher (richiesta APRI_SHELL), che la fa partire come sistema (uid 0) sul terminale finto del Terminale.
-- **Gira come**: persona (uid 1000); la shell dentro gira come sistema (uid 0).
-- **Poteri**: l'app non è super, ma di fatto dà una shell uid 0 a chi la usa. Manifesto: "system.shell" (dal 16 novembre 2026, quando il controllo è diventato vero). Il launcher lo controlla con `ha_permesso`.
+- **Lancia**: la shell, da sé (`avvia_con_variabile`, fork ed exec): lo schiavo del terminale finto come 0, 1 e 2 e `TERM=xterm-256color` nell'ambiente; la sessione e il terminale di controllo li prende la shell (setsid, TIOCSCTTY). Chiudendo la finestra la shell riceve SIGHUP.
+- **Gira come**: sistema (uid 0): provvisorio, decisione della persona del 17/11/2026; è l'unica app a cui il launcher lo fa (`uid_dell_app`), e per farla girare come la persona basta togliere quel caso. La shell dentro ne eredita i poteri. Le sue porte verso i servizi restano quelle di un'app (i permessi del manifesto: nessuno). Conseguenza: Attività non può terminarla (tasks ferma solo i processi della persona).
+- **Poteri**: super sì (uid 0), e dà una shell uid 0 a chi la usa. Manifesto: nessun permesso. Senza recinto, come le altre app oggi.
 
 ### Doom (`applicazioni/Doom/`, adattamento `doomgeneric_mshell.c`)
 - **Cosa fa**: il gioco Doom (shareware, doomgeneric), disegnato con solo GKit.

@@ -28,7 +28,7 @@ int chi_chiede(int d, struct chi_chiede *c);
 
 /* I PERMESSI (APPLICAZIONI.md, sezione 9). 1 se 'nome' e' un permesso di sistema (poteri sul
  * sistema intero: processes.*, network.settings, network.firewall, settings.system,
- * system.power, apps.manage, apps.open, system.shell), 0 se no. */
+ * system.power, apps.manage, apps.open), 0 se no. */
 int permesso_di_sistema(const char *nome);
 
 /* 1 se 'nome' e' un permesso che il sistema conosce (normale o di sistema), 0 se no. */
