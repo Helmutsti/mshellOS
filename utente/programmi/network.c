@@ -1170,7 +1170,7 @@ static void stato(struct messaggio *r, const struct messaggio *q) {
         messaggio_aggiungi(r, RETE_CHIAVE_F_USCITA, allow_block(fw.uscita));
         messaggio_aggiungi(r, RETE_CHIAVE_F_PING, allow_block(fw.ping || fw.ingresso));
     }
-    if (fase == RETE_STATO_GUASTA) messaggio_aggiungi(r, RETE_CHIAVE_FRASE, frase_guasto);
+    if (!strcmp(fase, RETE_STATO_GUASTA)) messaggio_aggiungi(r, RETE_CHIAVE_FRASE, frase_guasto);
 }
 
 /* Cosa fare DOPO aver risposto (la risposta deve partire prima: restart si rilancia, e
@@ -1276,7 +1276,7 @@ static void riprendi(const struct chi_chiede *app, int capo, void *dato) {
 /* stop: indirizzo e DNS via, scheda giu'; il firewall resta (vedi network.h). Il servizio
  * poi serve solo la porta: non torna al lavoro di prima. */
 static void __attribute__((noreturn)) ferma(void) {
-    if (fase == RETE_STATO_FERMA) resta_fermo();
+    if (!strcmp(fase, RETE_STATO_FERMA)) resta_fermo();
     if (ha_indirizzo) togli_indirizzo(&attuale);
     if (presa_dhcp >= 0) { close(presa_dhcp); presa_dhcp = -1; }
     if (scheda) imposta_su(nome_scheda, 0);
