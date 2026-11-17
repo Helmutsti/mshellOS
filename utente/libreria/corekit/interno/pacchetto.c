@@ -562,6 +562,15 @@ static void cartella_dati_persona(const char *id) {
     if (mkdir(percorso, 0700) == 0 && chown(percorso, UID_PERSONA, UID_PERSONA) < 0) rmdir(percorso);
 }
 
+int pacchetto_cartella_dati(const char *id, char *percorso, int massimo) {
+    if (!id_valido(id) || snprintf(percorso, (size_t)massimo, "%s/%d/appsdata/%s", cartella_persone, UID_PERSONA, id) >= massimo)
+        return -1;
+    cartella_dati_persona(id);
+    /* lstat, non stat: un collegamento simbolico non vale (il launcher aggancerebbe dove punta) */
+    struct stat s;
+    return lstat(percorso, &s) == 0 && S_ISDIR(s.st_mode) && s.st_uid == UID_PERSONA ? 0 : -1;
+}
+
 /* Scambia due cartelle in un colpo solo (renameat2 con RENAME_EXCHANGE). Dove il file
  * system non lo sa fare, in due passi (con un attimo in cui l'app non c'e'). */
 #ifndef RENAME_EXCHANGE

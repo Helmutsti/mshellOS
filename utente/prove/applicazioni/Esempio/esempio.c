@@ -129,11 +129,15 @@ int main(void) {
     scrivi_riga("esempio", "riavviare la rete: ", rete_riavvia() == RETE_NON_PERMESSO ? "negato" : "NON negato");
 
     /* Anche l'elenco dei processi chiede un permesso (processes.view), che Esempio non ha: il launcher
-     * non le da' la porta verso tasks, quindi collega_servizio si collega per NOME. Allora tasks
-     * non vede un'app: il kernel gli dice che e' un programma della persona (uid 1000), e a
-     * quello vanno solo i permessi normali, nessuno di sistema (ha_permesso, servizi.h): denied. */
+     * non le da' la porta verso tasks, quindi collega_servizio prova a collegarsi per NOME. Ma
+     * Esempio e' nel suo recinto, dove gli indirizzi dei servizi (/run/mshell) non ci sono: tasks
+     * non si raggiunge proprio ("irraggiungibile"). Senza recinto tasks avrebbe risposto
+     * "negato" (un programma della persona non ha permessi di sistema): quello si scrive a parte,
+     * e un elenco ricevuto sarebbe un errore ("NON negato"). */
     static struct info_processo processi[8];
-    scrivi_riga("esempio", "elenco dei processi: ", elenco_processi(processi, 8) == TASKS_NEGATO ? "negato" : "NON negato");
+    int elenco = elenco_processi(processi, 8);
+    scrivi_riga("esempio", "elenco dei processi: ",
+                elenco == TASKS_NEGATO ? "negato" : elenco < 0 ? "irraggiungibile" : "NON negato");
 
     unsigned int pulsanti_prima = 0;
     struct notizia n;

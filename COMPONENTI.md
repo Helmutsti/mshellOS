@@ -78,9 +78,9 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con la porta "launcher" già aperta, e il canale del custode al descrittore 1: ogni porta che tiene gli manda una copia, e al riavvio init gliele riconsegna).
-- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`, al 7 quella verso picker (a tutte) e all'8 quella verso tasks, solo se il manifesto ha `processes.view` o `processes.stop`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
-- **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
-- **Poteri**: super sì. Decide i permessi concessi a ogni app quando la fa partire (`permessi_concessi`: dichiarati nel manifesto, quelli di sistema solo alle app del sistema, sconosciuti tolti) e li passa ai servizi con le porte. Controlla con `ha_permesso`: "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati).
+- **Lancia**: le app (uid 1000, chiuse nel loro recinto con `avvia_app_nel_recinto`, tranne il Terminale che parte con `avvia_app`; il recinto è descritto sotto "App"; 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`, al 7 quella verso picker (a tutte) e all'8 quella verso tasks, solo se il manifesto ha `processes.view` o `processes.stop`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
+- **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid, per costruire i recinti (montare, mondi nuovi del kernel) e per scrivere in `/data/apps`.
+- **Poteri**: super sì. Decide i permessi concessi a ogni app quando la fa partire (`permessi_concessi`: dichiarati nel manifesto, quelli di sistema solo alle app del sistema, sconosciuti tolti), li passa ai servizi con le porte e ne fa il recinto (`prepara_recinto`: Home secondo `files.*`, sfondi con `settings.system`, rete con `network.use`); per ogni app scrive nel registro cosa ha nel recinto. Controlla con `ha_permesso`: "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati).
 
 ### scrivania (`utente/programmi/scrivania.c`)
 - **Cosa fa**: la "faccia" del sistema: sfondo, userbar (pulsante App e app di sistema, con segno per quelle aperte; in fondo foto profilo segnaposto e ora, aggiornata a ogni minuto con il timeout del poll) e vassoio delle app installate. Un clic su un'icona chiede al launcher di aprire l'app.
@@ -157,13 +157,15 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 
 Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè senza poteri di sistema. Il manifesto è in `manifest.toml` (campo `permessi`). Chi dichiara un permesso lo dichiara solo nel manifesto: nel codice dell'app non c'è un controllo; i controlli stanno nei servizi, che per ora rispondono sempre sì (salvo i controlli veri indicati).
 
+**Il recinto** (dal 17 novembre 2026; `corekit/sistema/recinto.h`, `corekit/interno/recinto.c`): ogni app tranne il Terminale parte nei suoi mondi del kernel (file montati, numeri dei programmi: è il numero 1 del suo mondo, IPC, nome della macchina e, senza `network.use`, una rete vuota), su una radice vuota in sola lettura dove ci sono, allo stesso percorso di fuori: il suo pacchetto intero in sola lettura (l'unico posto da cui può eseguire programmi), `/system/resources` in sola lettura, la sua cartella dei dati `/data/users/<uid>/appsdata/<id>` in lettura e scrittura (creata se manca), la Home in sola lettura con `files.read` o in lettura e scrittura con `files.write`, `/data/users/<uid>/wallpapers` in sola lettura con `settings.system`. Niente `/proc`, `/dev`, `/run`, nient'altro di `/data`. Poi NO_NEW_PRIVS e il filtro seccomp (lo stesso della prova `recinto`). Le porte (3-8) e `MSHELL_PORTE` restano come prima. Il Terminale resta senza recinto (decisione della persona).
+
 ### Files (`applicazioni/Files/files.c`)
 - **Cosa fa**: gestore dei file (come il Finder): sfoglia cartelle, griglia o tabella, filtri, rinomina e organizza.
 - **Tipo**: app.
 - **Lanciato da**: launcher (su richiesta della scrivania o di altre app).
 - **Lancia**: nessun programma direttamente; per aprire un file chiede al launcher (`apri_file`).
-- **Gira come**: persona (uid 1000).
-- **Poteri**: super no. Manifesto: "files.write"; funzioni "file.apri_cartella", "file.mostra". Nel codice non c'è un controllo di "files.write": i file sono protetti dai permessi Unix.
+- **Gira come**: persona (uid 1000), nel recinto con la Home in lettura e scrittura.
+- **Poteri**: super no. Manifesto: "files.write"; funzioni "file.apri_cartella", "file.mostra". Nel codice non c'è un controllo di "files.write": fuori dalla Home (agganciata dal launcher) non vede niente, e dentro valgono anche i permessi Unix.
 
 ### Attività (`applicazioni/Attivita/attivita.c`)
 - **Cosa fa**: task manager: processi (ad albero), memoria, disco. Può terminare e riavviare processi. Non legge niente da sola: chiede tutto a tasks con le funzioni di CoreKit (`elenco_processi`, `stato_memoria`, `stato_disco`, `dimensione_cartella`, `termina_processo`).
@@ -194,7 +196,7 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Tipo**: app.
 - **Lanciato da**: launcher (solo dal vassoio: `nella_barra = false`).
 - **Lancia**: la shell, tramite il launcher (richiesta APRI_SHELL), che la fa partire come sistema (uid 0) sul terminale finto del Terminale.
-- **Gira come**: persona (uid 1000); la shell dentro gira come sistema (uid 0).
+- **Gira come**: persona (uid 1000), SENZA recinto (decisione della persona); la shell dentro gira come sistema (uid 0).
 - **Poteri**: l'app non è super, ma di fatto dà una shell uid 0 a chi la usa. Manifesto: "system.shell" (dal 16 novembre 2026, quando il controllo è diventato vero). Il launcher lo controlla con `ha_permesso`.
 
 ### Doom (`applicazioni/Doom/`, adattamento `doomgeneric_mshell.c`)
@@ -225,7 +227,7 @@ Collegate dentro ogni programma (statico): non girano da sole e non hanno uid. O
 ### corekit (`libreria/corekit/`)
 - **Cosa fa**: base comune: file, processi, porte e messaggi, memoria condivisa, tempo, pacchetti (.app, manifesti), cliente del launcher, del servizio di rete e di tasks (processi, memoria, disco). Il lato servizio (`chi_chiede`, `ha_permesso`) e i privilegi (`avvia_come`, `cambia_proprietario`) stanno nella parte `sistema/`.
 - **Tipo**: libreria. **Lanciato da / Lancia**: non applicabile / nessuno. **Gira come**: quello del programma.
-- **Poteri**: `ha_permesso` è vera (regola in `sistema/servizi.h`); `pacchetto_ha_permesso` e `pacchetto_puo_gestire` sono vere (leggono il manifesto di un'app in `/system/apps`). Le funzioni di `privilegi.h` riescono solo con uid 0 (controllo del kernel).
+- **Poteri**: il recinto delle app (`sistema/recinto.h`, `avvia_app_nel_recinto` in `privilegi.h`) lo costruisce CoreKit per il launcher; `ha_permesso` è vera (regola in `sistema/servizi.h`); `pacchetto_ha_permesso` e `pacchetto_puo_gestire` sono vere (leggono il manifesto di un'app in `/system/apps`). Le funzioni di `privilegi.h` riescono solo con uid 0 (controllo del kernel).
 
 ### gkit (`libreria/gkit/`)
 - **Cosa fa**: base della grafica: apre la finestra, dà la tela, parla con il compositore, eventi di mouse e tastiera, strumenti di disegno. Il protocollo delle finestre sta in `sistema/protocollo.h`.

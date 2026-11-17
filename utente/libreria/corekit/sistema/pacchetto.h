@@ -154,6 +154,12 @@ int pacchetto_svuota_dati(const char *id, char *messaggio, int massimo);
 /* 1 se un programma in esecuzione e' il file 'programma' (il percorso completo). */
 int pacchetto_in_uso(const char *programma);
 
+/* La cartella dei dati della persona per l'app 'id' (/data/users/<uid>/appsdata/<id>), in
+ * 'percorso' (al massimo 'massimo' byte): se non c'e' la crea, vuota e della persona (come
+ * l'installazione). 0 se e' una cartella vera della persona (non un collegamento simbolico); -1
+ * se no. La usa il launcher per agganciarla nel recinto dell'app. */
+int pacchetto_cartella_dati(const char *id, char *percorso, int massimo);
+
 /* Dove stanno le cartelle dei dati delle persone (/data/users): una variabile solo per le
  * prove sul computer che compila (test/pacchetti/). */
 extern const char *cartella_persone;

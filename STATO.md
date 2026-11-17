@@ -15,8 +15,7 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
 `immagini`, che hanno le foto di riferimento vecchie; su x86_64 passano tutte):
 1. **Prova del recinto** (`utente/prove/recinto.c`, prova `recinto`, solo QEMU): namespaces,
    radice nuova, uid 1000, NO_NEW_PRIVS, seccomp (elenco di chiamate vietate), la Home agganciata
-   in sola lettura con una sottocartella in scrittura, un secondo recinto "con la rete". Il
-   launcher NON usa ancora il recinto: le app girano come prima.
+   in sola lettura con una sottocartella in scrittura, un secondo recinto "con la rete".
 2. **Permessi sulle cartelle**: per ora solo la Home, `files.read` (lettura) e `files.write`
    (lettura e scrittura); gli sfondi solo a chi ha `settings.system` (Impostazioni).
 3. **catalog**: il servizio delle impostazioni della persona (tema, sfondo), gira come la
@@ -46,11 +45,25 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
    (decisione della persona, sezione 7). Dettagli in `disegni/ApriSalva/PICKER_DA_FINIRE.md`.
 12. **x86_64**: build completa e prove passate sul PC Windows (17/11/2026).
 
+**Nel ramo del recinto, da guardare (17/11/2026; non ancora in `main`):**
+13. **Il recinto vero nel launcher** (`corekit/sistema/recinto.h`, `corekit/interno/recinto.c`,
+   `prepara_recinto` in `launcher.c`): ogni app tranne il Terminale parte nei suoi mondi del
+   kernel, con dentro, allo stesso percorso di fuori (decisione della persona): il suo pacchetto
+   intero in sola lettura, `/system/resources`, la sua cartella dei dati
+   `/data/users/<uid>/appsdata/<id>` in lettura e scrittura (creata se manca), la Home secondo
+   `files.*`, gli sfondi con `settings.system`; rete del computer solo con `network.use`;
+   NO_NEW_PRIVS e lo stesso filtro seccomp della prova (ora in CoreKit). Il launcher scrive nel
+   registro, per ogni app, cosa ha nel recinto. L'app nasce direttamente nei mondi nuovi (clone),
+   cosi' il launcher ha il suo numero vero; `chi()` guarda solo l'uid (nel recinto il kernel dice
+   "processo 0" per il launcher, che sta fuori). Prove QEMU x86_64: passano tutte tranne `files`
+   e `store`, che installano Contatore da file: lo Store nel recinto non vede la Home e non legge
+   il pacchetto (per ora lo Store si ignora, decisione della persona). La sandbox Docker non
+   riesce a costruire i recinti (Docker toglie i poteri per montare): le app non partono.
+
 **Cosa resta, nell'ordine:**
-1. il **recinto vero nel launcher**: unire quello che la prova `recinto` dimostra (Home secondo
-   `files.*`, sfondi per `settings.system`, rete secondo `network.use`, seccomp, porte e
-   `MSHELL_PORTE`). Il Terminale resta senza recinto (decisione della persona). Prima di
-   accenderlo, controllare che le app non leggano più niente fuori dalle loro cartelle;
+1. il **recinto**: decidere come lo Store riceve il pacchetto da installare (oggi lo apre da sé,
+   e nel recinto non vede la Home) e come la sandbox Docker fa partire le app (i recinti chiedono
+   al container poteri che Docker toglie); poi unire in `main`;
 2. la **finestra del primo avvio** per i permessi (da disegnare in Figma), con il posto dove il
    sistema ricorda cosa ha concesso la persona (database del sistema, APPLICAZIONI.md sezione 8),
    e la pagina dei permessi in Impostazioni; poi via la regola "dichiarati = concessi";

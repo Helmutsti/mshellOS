@@ -10,9 +10,11 @@ posto sta ancora tutta nello schermo). Per ognuna:
 Alla fine il pulsante App (la griglia in cima alla userbar) apre il vassoio delle app; un
 clic su Esempio nel vassoio lo chiude e riporta davanti Esempio (gia' aperta). Poi il
 vassoio si riapre e un clic sullo sfondo lo chiude.
-Il launcher, per ogni app aperta, scrive nel registro cosa il recinto le agganciera'
-(APPLICAZIONI.md, "I permessi sulle cartelle"): Files (files.write) la Home in lettura e
-scrittura, Attivita' ed Esempio niente Home. E a ogni app consegna la sua porta verso il
+Il launcher, per ogni app aperta, scrive nel registro cosa ha nel suo recinto
+(APPLICAZIONI.md, "I permessi sulle cartelle"): il pacchetto e i dati sempre; Files
+(files.write) la Home in lettura e scrittura, Attivita', Esempio e Impostazioni niente Home;
+gli sfondi solo Impostazioni (settings.system); la rete del computer solo Esempio
+(network.use). E a ogni app consegna la sua porta verso il
 compositore (gkit/sistema/protocollo.h, LA PORTA DELL'APP): il compositore lo scrive nel registro.
 """
 
@@ -70,12 +72,21 @@ def esegui(p):
     m.muovi(*PUNTO_VUOTO)
     s.aspetta_zona(m, chiuso, VASSOIO_SINISTRA, uguale=True, cosa="il vassoio chiuso dallo sfondo")
 
-    # la Home che il recinto agganciera' a ogni app (per ora solo scritta nel registro)
+    # il recinto di ogni app, come lo scrive il launcher: il pacchetto, i dati, la Home secondo
+    # files.*, gli sfondi solo con settings.system, la rete solo con network.use
     seriale = m.testo_seriale()
-    for app, modo in [("files", "Home in lettura e scrittura (files.write)"),
-                      ("attivita", "niente Home"), ("esempio", "niente Home")]:
-        p.controlla(f"launcher: {app}: nel recinto {modo}" in seriale,
-                    f"manca nel registro la Home di {app}: '{modo}'")
+    righe = {r.split(": nel recinto ", 1)[0][len("launcher: "):]: r for r in seriale.splitlines()
+             if r.startswith("launcher: ") and ": nel recinto " in r}
+    for app, cose in [("files", ["Home in lettura e scrittura (files.write)", "una rete vuota"]),
+                      ("attivita", ["niente Home", "una rete vuota"]),
+                      ("esempio", ["niente Home", "la rete del computer (network.use)"]),
+                      ("impostazioni", ["niente Home", "gli sfondi (settings.system)", "una rete vuota"])]:
+        riga = righe.get(app, "")
+        p.controlla(f"il pacchetto /system/apps/{app}, i dati /data/users/1000/appsdata/{app}," in riga,
+                    f"manca nel registro il recinto di {app} (pacchetto e dati)")
+        for cosa in cose:
+            p.controlla(cosa in riga, f"nel recinto di {app} manca '{cosa}'")
+    p.controlla("sfondi" not in righe.get("files", "x sfondi"), "Files ha avuto gli sfondi")
     # la porta verso il compositore, data dal launcher a ogni app
     for app in ["attivita", "esempio", "impostazioni", "files"]:
         p.controlla(f"compositore: porta dell'app /system/apps/{app}/code" in seriale,
@@ -105,10 +116,10 @@ def esegui(p):
     p.controlla("launcher: esempio: porte" in seriale and " tasks" not in
                 seriale.split("launcher: esempio: porte", 1)[1].split("\n", 1)[0],
                 "Esempio ha avuto la porta verso tasks")
-    # Esempio chiede l'elenco dei processi senza porta (per nome): tasks lo vede come un programma
-    # della persona, senza permessi di sistema
-    p.controlla("esempio: elenco dei processi: negato\n" in seriale,
-                "a Esempio non e' stato negato l'elenco dei processi")
+    # Esempio chiede l'elenco dei processi senza porta (per nome): nel recinto gli indirizzi dei
+    # servizi non ci sono, quindi tasks non si raggiunge
+    p.controlla("esempio: elenco dei processi: irraggiungibile\n" in seriale,
+                "Esempio, nel recinto, ha raggiunto tasks per nome")
     for permesso, servizio in [("settings.system", "catalog"), ("network.settings", "network")]:
         p.controlla(f"permesso {permesso} a /system/apps/esempio/code (uid 1000): negato" in seriale,
                     f"{servizio}: manca nel registro il rifiuto di {permesso} a Esempio")

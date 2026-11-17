@@ -8,9 +8,10 @@
  *   - open_app: controlla che sia un'applicazione installata (una cartella con il suo
  *     manifest.toml in /system/apps o, se li' non c'e', in /data/apps: descrizione.h),
  *     prende dal manifesto quale programma far partire e lo fa partire come APPLICAZIONE
- *     (uid 1000), con l'argomento della richiesta se c'e', e con la sua porta verso il
- *     compositore (fai_partire_app). E' per questo che il launcher e'
- *     del sistema (uid 0): solo il sistema puo' far partire un programma con un altro uid;
+ *     (uid 1000), con l'argomento della richiesta se c'e', con le sue porte verso i servizi
+ *     e chiusa nel suo RECINTO (prepara_recinto; il Terminale no). E' per questo che il
+ *     launcher e' del sistema (uid 0): solo il sistema puo' far partire un programma con un
+ *     altro uid e costruirgli il recinto;
  *   - open_program: un programma normale di /system/bin (non un'app; per ora nessuno lo
  *     usa), come la persona (uid 1000);
  *   - open_shell: la shell di prova come SISTEMA (uid 0), sul terminale finto che chi chiede
@@ -87,13 +88,6 @@ static const char *dato(const struct messaggio *q, const char *chiave, int massi
     return v && lunghezza(v) < massimo ? v : 0;
 }
 
-/* LA HOME NEL RECINTO (APPLICAZIONI.md, sezione 5, "I permessi sulle cartelle"). Fuori dalle
- * sue cartelle, un'app puo' avere solo la Home della persona in uso, intera: in sola lettura
- * con "files.read", in lettura e scrittura con "files.write" (che comprende la lettura). */
-#define HOME_NIENTE    0
-#define HOME_LETTURA   1
-#define HOME_SCRITTURA 2
-
 /* I PERMESSI CONCESSI all'app 'd', in *app (che diventa il chi_chiede dei suoi collegamenti dalle
  * porte: servizi.h). La regola (decisa con la persona il 16 novembre 2026; APPLICAZIONI.md,
  * sezione 9): finche' non c'e' la domanda del primo avvio, i permessi DICHIARATI nel manifesto
@@ -129,34 +123,92 @@ static int ha_concesso(const struct chi_chiede *app, const char *nome) {
     return 0;
 }
 
-/* Cosa dice il manifesto dell'app sulla Home. Il permesso dichiarato vale come concesso finche'
- * non c'e' la domanda del primo avvio (permessi_concessi). */
-static int home_dell_app(const struct descrizione *d) {
-    static struct manifesto m;    /* grande: non sulla pila (le richieste sono una alla volta) */
-    char cartella[MAX_PERCORSO];
-    descrizione_copia(cartella, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
-                      sizeof cartella);
-    descrizione_aggiungi(cartella, "/", sizeof cartella);
-    descrizione_aggiungi(cartella, d->id, sizeof cartella);
-    if (manifesto_dell_app(cartella, &m) < 0) return HOME_NIENTE;
-    int home = HOME_NIENTE;
-    for (int i = 0; i < m.quanti_permessi; i++) {
-        if (descrizione_uguali(m.permessi[i], "files.write")) home = HOME_SCRITTURA;
-        else if (descrizione_uguali(m.permessi[i], "files.read") && home == HOME_NIENTE) home = HOME_LETTURA;
-    }
-    return home;
+/* IL RECINTO DELL'APP (APPLICAZIONI.md, sezione 5, "L'app non vede niente" e "I permessi sulle
+ * cartelle"; il lavoro lo fa CoreKit: sistema/recinto.h). Dentro, ogni cartella sta allo stesso
+ * percorso di fuori (decisione della persona, 17 novembre 2026: cosi' le app non cambiano):
+ *   - il suo pacchetto, intero, in sola lettura: l'unico posto da cui puo' eseguire programmi
+ *     (/system/apps/<id> o /data/apps/<id>);
+ *   - le risorse del sistema, in sola lettura: font, icone, sfondi predefiniti
+ *     (/system/resources, RISORSE_CARTELLA di gkit_disegno.h);
+ *   - la sua cartella dei dati, in lettura e scrittura (/data/users/<uid>/appsdata/<id>; se non
+ *     c'e' la si crea, della persona). Nient'altro di /data;
+ *   - la Home della persona: in sola lettura con "files.read", in lettura e scrittura con
+ *     "files.write" (che comprende la lettura); senza, niente Home;
+ *   - la cartella degli sfondi della persona, in sola lettura, solo con "settings.system"
+ *     (/data/users/<uid>/wallpapers, fuori dalla Home: la usa Impostazioni);
+ *   - la rete del computer solo con "network.use"; senza, una rete vuota. Nessuna regola del
+ *     firewall per app (decisione della persona).
+ * I permessi sono quelli concessi (permessi_concessi). Il Terminale resta SENZA recinto
+ * (decisione della persona): apre la shell come sistema, che col recinto non avrebbe senso
+ * (STATO.md, sezione 0).
+ * I percorsi stanno qui, perche' struct recinto ne tiene solo l'indirizzo fino all'avvio. */
+#define RISORSE_DEL_SISTEMA "/system/resources"
+#define ID_TERMINALE        "terminale"
+
+static struct {
+    char pacchetto[MAX_PERCORSO];
+    char dati[MAX_PERCORSO];
+    char home[MAX_PERCORSO];
+    char sfondi[MAX_PERCORSO];
+} cartelle;
+
+/* Una cartella della persona, '<cartella_persone>/<uid>/<dove>', in 'p'. 0, o -1 se non ci sta. */
+static int cartella_della_persona(char *p, const char *dove) {
+    char numero[12];
+    int k = 0;
+    unsigned int n = UID_APPLICAZIONI;
+    do { numero[k++] = (char)('0' + n % 10); n /= 10; } while (n);
+    descrizione_copia(p, cartella_persone, MAX_PERCORSO);
+    descrizione_aggiungi(p, "/", MAX_PERCORSO);
+    char cifra[2] = {0, 0};
+    while (k) { cifra[0] = numero[--k]; descrizione_aggiungi(p, cifra, MAX_PERCORSO); }
+    descrizione_aggiungi(p, "/", MAX_PERCORSO);
+    descrizione_aggiungi(p, dove, MAX_PERCORSO);
+    return lunghezza(p) < MAX_PERCORSO - 1 ? 0 : -1;
 }
 
-/* Scrive nel registro cosa il recinto agganciera' all'app. Per ora solo questo: il recinto
- * nel launcher non c'e' ancora (STATO.md). */
-static void registra_home(const struct descrizione *d) {
-    static const char *modi[] = {"niente Home", "Home in sola lettura (files.read)",
-                                 "Home in lettura e scrittura (files.write)"};
-    char riga[MAX_ID + 160];
+/* Prepara in *r il recinto dell'app 'd' con i permessi concessi 'app', e scrive nel registro
+ * cosa ha dentro. 0, o -1 se non si puo' (l'app allora non parte). */
+static int prepara_recinto(const struct descrizione *d, const struct chi_chiede *app, struct recinto *r) {
+    *r = (struct recinto){ .quanti = 0 };
+    descrizione_copia(cartelle.pacchetto, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
+                      sizeof cartelle.pacchetto);
+    descrizione_aggiungi(cartelle.pacchetto, "/", sizeof cartelle.pacchetto);
+    descrizione_aggiungi(cartelle.pacchetto, d->id, sizeof cartelle.pacchetto);
+    /* la cartella dei dati: se non c'e' si crea; deve essere una cartella vera della persona,
+     * non un collegamento (il launcher aggancia quello che trova, e un collegamento messo li'
+     * porterebbe l'app altrove) */
+    if (pacchetto_cartella_dati(d->id, cartelle.dati, sizeof cartelle.dati) < 0) {
+        registro("la cartella dei dati non e' una cartella della persona: ", cartelle.dati);
+        return -1;
+    }
+    r->agganci[r->quanti++] = (struct aggancio){ cartelle.pacchetto, AGGANCIO_PROGRAMMA };
+    r->agganci[r->quanti++] = (struct aggancio){ RISORSE_DEL_SISTEMA, AGGANCIO_LETTURA };
+    r->agganci[r->quanti++] = (struct aggancio){ cartelle.dati, AGGANCIO_SCRITTURA };
+    const char *home = "niente Home";
+    if (ha_concesso(app, "files.write") || ha_concesso(app, "files.read")) {
+        int scrive = ha_concesso(app, "files.write");
+        if (cartella_della_persona(cartelle.home, "home") < 0) return -1;
+        r->agganci[r->quanti++] = (struct aggancio){ cartelle.home, scrive ? AGGANCIO_SCRITTURA : AGGANCIO_LETTURA };
+        home = scrive ? "Home in lettura e scrittura (files.write)" : "Home in sola lettura (files.read)";
+    }
+    int sfondi = ha_concesso(app, "settings.system");
+    if (sfondi) {
+        if (cartella_della_persona(cartelle.sfondi, "wallpapers") < 0) return -1;
+        r->agganci[r->quanti++] = (struct aggancio){ cartelle.sfondi, AGGANCIO_LETTURA };
+    }
+    r->rete = ha_concesso(app, "network.use");
+    char riga[MAX_ID + 2 * MAX_PERCORSO + 200];
     descrizione_copia(riga, d->id, sizeof riga);
-    descrizione_aggiungi(riga, ": nel recinto ", sizeof riga);
-    descrizione_aggiungi(riga, modi[home_dell_app(d)], sizeof riga);
-    registro(riga, " (da agganciare: il recinto non c'e' ancora)");
+    descrizione_aggiungi(riga, ": nel recinto il pacchetto ", sizeof riga);
+    descrizione_aggiungi(riga, cartelle.pacchetto, sizeof riga);
+    descrizione_aggiungi(riga, ", i dati ", sizeof riga);
+    descrizione_aggiungi(riga, cartelle.dati, sizeof riga);
+    descrizione_aggiungi(riga, ", le risorse, ", sizeof riga);
+    descrizione_aggiungi(riga, home, sizeof riga);
+    if (sfondi) descrizione_aggiungi(riga, ", gli sfondi (settings.system)", sizeof riga);
+    registro(riga, r->rete ? ", la rete del computer (network.use)" : ", una rete vuota");
+    return 0;
 }
 
 /* LE PORTE VERSO IL LAUNCHER STESSO. Una porta per app: il launcher tiene lui il capo del
@@ -239,6 +291,17 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     }
     static struct chi_chiede app;
     permessi_concessi(d, &app);
+    /* il recinto prima delle porte: se non si puo' fare, l'app non parte e non resta niente
+     * di aperto a suo nome */
+    static struct recinto recinto;
+    int con_recinto = !descrizione_uguali(d->id, ID_TERMINALE);
+    if (!con_recinto) {
+        registro(d->id, ": senza recinto (il Terminale, decisione della persona)");
+    } else if (prepara_recinto(d, &app, &recinto) < 0) {
+        registro("niente recinto, l'app non parte: ", programma);
+        chiudi(nulla);
+        return -1;
+    }
     int compositore = porta_compositore(programma);
     int catalog = porta_servizio(NOME_CATALOG, &app);
     int launcher = porta_launcher(&app);
@@ -279,8 +342,11 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (picker >= 0) descrizione_aggiungi(riga, " picker", sizeof riga);
     if (tasks >= 0) descrizione_aggiungi(riga, " tasks", sizeof riga);
     registro(riga, "");
-    int numero = avvia_app(programma, UID_APPLICAZIONI, argomento, passati, (int)(sizeof passati / sizeof passati[0]),
-                           elenco);
+    int quanti = (int)(sizeof passati / sizeof passati[0]);
+    int numero = con_recinto
+                     ? avvia_app_nel_recinto(programma, UID_APPLICAZIONI, argomento, passati, quanti, elenco, &recinto)
+                     : avvia_app(programma, UID_APPLICAZIONI, argomento, passati, quanti, elenco);
+    if (numero < 0) registro("l'app non e' partita: ", programma);
     chiudi(nulla);
     if (compositore >= 0) chiudi(compositore);
     if (catalog >= 0) chiudi(catalog);
@@ -303,7 +369,6 @@ static void apri_app(const struct messaggio *q, struct messaggio *r) {
         risposta(r, q, ESITO_ERRORE, MOTIVO_NON_INSTALLATA, "Quest'app non \xc3\xa8 installata.");
         return;
     }
-    registra_home(&desc);
     partito(r, q, fai_partire_app(&desc, argomento ? argomento : ""));
 }
 
