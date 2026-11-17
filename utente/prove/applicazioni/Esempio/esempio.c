@@ -6,7 +6,7 @@
  * sola: anche accorgersi che si e' premuto sulla barra e chiedere al compositore di
  * trascinarla.
  * Un clic nel contenuto mette un quadretto dove si e' cliccato; un tasto cambia il
- * colore di sfondo.
+ * colore di sfondo (e i tasti o, s, m chiedono anche al picker un file: tasto_picker).
  *
  * OGNI VOLTA SI RIDISEGNA TUTTO. Le tele sono due e si alternano: quella che si riceve
  * contiene il disegno di DUE volte fa, non dell'ultima. Per questo l'applicazione tiene
@@ -19,6 +19,8 @@
 #include "corekit/catalog.h"
 #include "corekit/sistema/network.h"   /* rete_stato: la porta verso la rete (D_PORTA_NETWORK) */
 #include "corekit/tasks.h"             /* TASKS_NEGATO: elenco_processi senza il permesso */
+#include "corekit/picker.h"            /* picker_apri, picker_salva: la finestra Apri/Salva */
+#include <stdio.h>
 
 #define LARGHEZZA 320
 #define ALTEZZA   220
@@ -54,6 +56,41 @@ static void disegna(unsigned int *pixel) {
     pennello_ritaglia(&p, 0, BARRA, LARGHEZZA, ALTEZZA - BARRA);
     pennello_colore(&p, OPACO(0x803030));
     for (int q = 0; q < quadretti; q++) riempi_tondo(&p, qx[q], qy[q], LATO, LATO, 3);
+}
+
+/* I TASTI DEL PICKER (la prova picker, test/prove/picker.py): Esempio non ha nessun permesso sui
+ * file, e chiede al servizio picker (dalla sua porta, D_PORTA_PICKER) di far scegliere un file
+ * alla persona. Ogni esito lo scrive nel registro:
+ *   o  Apri: legge tutto il file ricevuto e scrive "aperto <nome>, <byte> byte"
+ *   s  Salva, proponendo "prova.txt": scrive "ciao" nel file ricevuto, "salvato <nome>"
+ *   m  Salva proponendo "../fuori.txt": il picker deve rifiutarlo (PICKER_NON_VALIDO), senza
+ *      mostrare niente e senza creare niente
+ * Finche' la persona sceglie, Esempio e' fermo dentro la funzione (come un'app vera che aspetta). */
+static void tasto_picker(unsigned int tasto) {
+    char nome[256], riga[320];
+    if (tasto == 'o') {
+        int d = picker_apri(nome, sizeof nome);
+        if (d == PICKER_ANNULLATO) { scrivi_riga("esempio", "apertura annullata", 0); return; }
+        if (d < 0) { scrivi_riga("esempio", "apertura non riuscita", 0); return; }
+        long byte = 0;
+        char pezzo[512];
+        int n;
+        while ((n = leggi(d, pezzo, sizeof pezzo)) > 0) byte += n;
+        chiudi(d);
+        snprintf(riga, sizeof riga, "%s, %ld byte", nome, byte);
+        scrivi_riga("esempio", "aperto ", riga);
+    } else if (tasto == 's') {
+        int d = picker_salva("prova.txt", nome, sizeof nome);
+        if (d == PICKER_ANNULLATO) { scrivi_riga("esempio", "salvataggio annullato", 0); return; }
+        if (d < 0) { scrivi_riga("esempio", "salvataggio non riuscito", 0); return; }
+        int scritti = scrivi_in(d, "ciao", 4);
+        chiudi(d);
+        scrivi_riga("esempio", scritti == 4 ? "salvato " : "scrittura non riuscita in ", nome);
+    } else if (tasto == 'm') {
+        int d = picker_salva("../fuori.txt", nome, sizeof nome);
+        if (d >= 0) chiudi(d);
+        scrivi_riga("esempio", "salva ../fuori.txt: ", d == PICKER_NON_VALIDO ? "non valido" : "NON rifiutato");
+    }
 }
 
 static int ridisegna(struct finestra *f) {
@@ -118,6 +155,7 @@ int main(void) {
         } else if (n.tipo == TASTO) {
             sfondo = (sfondo + 1) % (int)(sizeof sfondi / sizeof sfondi[0]);
             cambiato = 1;
+            tasto_picker(n.tasto);
         } else if (n.tipo == FUOCO) {
             fuoco = n.fuoco;
             cambiato = 1;

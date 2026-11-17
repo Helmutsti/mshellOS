@@ -67,7 +67,7 @@
 #       disco_custode.img   per la prova delle porte delle app custodite da init (programma custode)
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #       disco_recinto.img     per la prova del recinto delle app (programma recinto)
-#       disco_scelta.img      per la prova della finestra di scelta (cartella /data/tests/scelta)
+#       disco_picker.img      per la prova del servizio picker (il picker con la finestra finta)
 #   build/scarico/     i pacchetti di Alpine e i sorgenti di curl scaricati, tenuti per la
 #                      prossima volta
 #
@@ -764,24 +764,34 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_recinto.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_recinto.img pronto: con il programma recinto in /data/tests"
 
-# IL DISCO DELLA PROVA DELLA FINESTRA DI SCELTA: come disco_app.img, con in piu' la cartella
-# /data/tests/scelta (init la salta: non e' un programma). La cerca il picker provvisorio
-# (utente/programmi/picker.c): se c'e', apre ogni tanto una finestra di scelta sopra Esempio;
-# senza, non fa niente. Lo usa test/prove/scelta.py.
-cp "$B/disco_app.img" "$B/disco_scelta.img"
+# IL DISCO DELLA PROVA DEL PICKER: come disco_app.img, ma il picker del sistema e' quello con la
+# finestra finta, senza grafica (bin/prove/picker_finto: utente/prove/picker_finestra_finta.c),
+# che "sceglie" leggendo /data/tests/window/choice (una cartella: init la salta). In
+# /data/tests c'e' anche l'osservatore (utente/prove/picker.c), che controlla che fuori dalla
+# Home non compaia niente. Lo usa test/prove/picker.py. La partizione system si rifa' con il
+# firewall.conf del sistema (disco_firewall_aperto.img l'aveva cambiato) e il picker finto; poi
+# nell'albero torna il picker vero.
+cp "$B/disco_app.img" "$B/disco_picker.img"
 rm -f "$(vero /data/tests)"/recinto
-metti_cartella /data/tests/scelta 0 755 >/dev/null
+metti_file "$P/bin/prove/picker" "/data/tests/picker" 755 >/dev/null
+metti_cartella /data/tests/window 0 755 >/dev/null
+printf '# la scelta della finestra finta del picker (utente/prove/picker_finestra_finta.c)\nfolder=Documenti\nopen=prova.txt\n' \
+    > "$(vero /data/tests/window/choice)"
+chmod 644 "$(vero /data/tests/window/choice)"
+metti_file utente/config/network/firewall.conf /system/config/network/firewall.conf 644 >/dev/null
+metti_file "$P/bin/prove/picker_finto" /system/services/picker/picker 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$ALBERO_SISTEMA" "$B/disco_picker.img" $((MISURA_SISTEMA * MB / 4096))
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
-    "$B/disco_scelta.img" $((MISURA_DATI * MB / 4096))
-echo "$B/disco_scelta.img pronto: con la cartella scelta in /data/tests"
+    "$B/disco_picker.img" $((MISURA_DATI * MB / 4096))
+metti_file "$P/bin/picker" /system/services/picker/picker 755 >/dev/null
+echo "$B/disco_picker.img pronto: con il picker finto e l'osservatore picker in /data/tests"
 
 # IL DISCO DELLA PROVA DELLA SHELL: come disco_app.img, con in piu' il programma argomenti
 # (utente/prove/argomenti.c) tra i comandi del sistema, in /data/users/0/bin (dove la shell
 # cerca i comandi di uid 0, dopo /system/bin). Non in /data/tests: non deve partire da solo.
 # La prova si fa a mano sulla seriale, in QEMU, come spiegato in argomenti.c.
 cp "$B/disco_app.img" "$B/disco_shell.img"
-rmdir "$(vero /data/tests)"/scelta
-rmdir "$(vero /data/tests)"
+rm -rf "$(vero /data/tests)"
 metti_cartella /data/users/0 0 700 >/dev/null
 metti_file "$P/bin/prove/argomenti" "/data/users/0/bin/argomenti" 755 >/dev/null
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
