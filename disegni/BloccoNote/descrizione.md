@@ -18,7 +18,7 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt). Pagina "App – 
 ## Finestra Blocco note (760 x 588)
 - Titolo finestra (libreria): Stato=Attiva (Inattiva sotto l'Apri), Comandi=No, Dimensione=Normale. Nessuna linea sotto il titolo.
 - Corpo "Contenuto": padding spazio/8, gap spazio/8, verticale. Nessuna barra laterale.
-  1. Barra degli strumenti (orizzontale, padding 0, gap spazio/8, altezza 32): tre Pulsante icona Tipo=Secondario, Dimensione=S, Stato=Normale: Nuovo (Simbolo/plus), Apri (Simbolo/cartella), Salva (Simbolo/save). Nient'altro.
+  1. Barra degli strumenti (orizzontale, padding 0, gap spazio/8, altezza 32): quattro Pulsante icona Tipo=Secondario, Dimensione=S, Stato=Normale: Nuovo (Simbolo/plus), Apri (Simbolo/cartella), Salva (Simbolo/save), Salva con nome (Simbolo/file-pen, 332:3899). Nient'altro. Il suggerimento (tooltip) di Salva con nome e "Salva con nome" (si vede solo nel codice, come per gli altri pulsanti).
   2. Area di testo (istanza, riempie la larghezza e l'altezza: 744 x 492).
 - Tema: cornici con Semantici su Chiaro o Scuro in modo esplicito (come il Terminale). Cornice 824 x 652 (padding 32 attorno alla finestra).
 
@@ -27,14 +27,17 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt). Pagina "App – 
 |---|---|---|---|---|
 | a. Documento nuovo vuoto | 314:2270 (finestra 314:2271) | 314:3804 (314:3805) | Senza titolo – Blocco note | Vuota, Fuoco Sì |
 | b. Testo, cursore e selezione | 314:2305 (314:2306) | 314:3813 (314:3814) | lista-spesa.txt – Blocco note | Selezione, Fuoco Sì |
-| c. Modifiche non salvate | 314:2340 (314:2341) | 314:3822 (314:3823) | • lista-spesa.txt – Blocco note | Testo, Fuoco Sì |
+| c. Modifiche non salvate | 314:2340 (314:2341) | 314:3822 (314:3823) | lista-spesa.txt* – Blocco note | Testo, Fuoco Sì |
 | d. Apri sopra il documento | 314:3711 | 314:3831 | lista-spesa.txt (finestra dietro Inattiva) | Selezione, Fuoco No |
 
-- c: le modifiche non salvate si vedono con un punto "•" davanti al nome nel titolo. Nessun'altra app ha un modo gia deciso: PROPOSTA, da confermare.
+- c: le modifiche non salvate si vedono con un asterisco "*" subito dopo il nome nel titolo (decisione della persona). Il titolo e la proprieta Titolo dell'istanza Titolo finestra.
+- e. Salvare le modifiche? (premendo Nuovo o Apri con modifiche non salvate): cornice Chiaro 332:3971, Scuro 332:4014 (x 3600, y 0 / 800). Copia della schermata c con, in ordine: Velo della finestra (istanza 138:455, assoluto, 760 x 588 a 32,32) sopra la finestra Blocco note (Attiva) e Avviso (istanza del set Avviso 185:3085, Scelte=Tre, 480 x 160, assoluto, centrato nella finestra a x 172 y 246). Testi: titolo "Salvare le modifiche?", messaggio "Le modifiche a lista-spesa.txt andranno perse se non le salvi." (proposta, da confermare). Pulsanti da sinistra, Pulsante M: Non salvare (Secondario), Annulla (Secondario), Salva (Primario). Nelle istanze i nodi si chiamano ancora Annulla / Alternativa / Conferma (non si possono riordinare dentro un'istanza): contano le etichette.
+- Tutte le schermate (a-e) hanno il quarto pulsante nella barra degli strumenti, anche la finestra dietro in d.
 - d: copia della schermata Apri 293:2361 (pagina 289:674) con la finestra Blocco note al posto di Files; Velo della finestra 760 x 588 a x 32 y 32; finestra Apri 480 x 421 centrata (x 172, y 115,5). Per il resto invariata.
 
 ## Foto (`figma/`)
 - a, b, c: `nuovo`, `testo-selezione`, `non-salvato`, ognuna `-chiaro.png` / `-scuro.png`, ritagliate sulla finestra (con il margine d'ombra).
+- e: `salvare-modifiche-chiaro.png` / `salvare-modifiche-scuro.png`: cornice intera.
 - d: `apri-sopra-chiaro.png` / `apri-sopra-scuro.png`: cornice intera.
 - Componente: `area-di-testo-chiaro.png`, `area-di-testo-scuro.png`.
 
@@ -45,7 +48,7 @@ Fonte: Figma "mshell – interfaccia" (X9g7EOJgKBlE4QjmjrTLFt). Pagina "App – 
 - Nessuna linea e nessun bordo tra le aree.
 
 ## Componenti usati
-Titolo finestra, Pulsante icona 92:1170, Barra di scorrimento 113:3035, Velo della finestra 138:455, finestra Apri (copia di 293:2410). Variabili: Semantici (superficie/elevata, superficie/scena, testo/primario, testo/secondario, informazione/testo-tenue, testo/cursore, testo/selezione, testo/selezione-inattiva), Misure (spazio/0, spazio/8, spazio/16, raggio/pannello).
+Titolo finestra, Pulsante icona 92:1170, Avviso 185:3085 (Scelte=Tre), Simbolo/file-pen 332:3899 (nuovo, pagina Componenti base, sezione Icone – Simbolo, dopo Simbolo/pacchetto; Lucide "file-pen", tre tratti come gli altri simboli, solo nel set Chiaro), Barra di scorrimento 113:3035, Velo della finestra 138:455, finestra Apri (copia di 293:2410). Variabili: Semantici (superficie/elevata, superficie/scena, testo/primario, testo/secondario, informazione/testo-tenue, testo/cursore, testo/selezione, testo/selezione-inattiva), Misure (spazio/0, spazio/8, spazio/16, raggio/pannello).
 
 ## Icona dell'app
 Il Blocco note non ha ancora una pagina di disegno: l'icona sta in "Icone delle app senza pagina" (sezione 166:799, pagina Scrivania), accanto a Doom, Contatore ed Esempio. Cornice "Blocco note" **317:8097** (stessa struttura di Contatore: titolo, riquadro Tema Chiaro, riquadro Tema Scuro).
