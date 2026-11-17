@@ -50,6 +50,9 @@
 #include <linux/audit.h>
 #include <linux/filter.h>
 #include <linux/seccomp.h>
+#ifdef __x86_64__
+#include <asm/unistd.h>   /* __X32_SYSCALL_BIT: sta solo nelle intestazioni del kernel */
+#endif
 #include <fcntl.h>
 #include <grp.h>
 #include <poll.h>
