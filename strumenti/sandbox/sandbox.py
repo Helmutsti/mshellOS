@@ -99,6 +99,14 @@ TASTI = {"esc": 1, "minus": 12, "equal": 13, "backspace": 14, "tab": 15,
          "caps_lock": 58, "less": 86, "ctrl_r": 97, "alt_r": 100, "home": 102, "up": 103,
          "pgup": 104, "left": 105, "right": 106, "end": 107, "down": 108, "pgdn": 109,
          "insert": 110, "delete": 111, "meta_l": 125, "meta_r": 126, "f11": 87, "f12": 88}
+# il tastierino numerico (i nomi di QEMU: kp_0... kp_9, kp_decimal...), Bloc Num, e i tasti
+# multimediali (volume, brano, riproduzione: anche questi con i nomi di QEMU)
+TASTI.update({"num_lock": 69, "kp_decimal": 83, "kp_add": 78, "kp_subtract": 74,
+              "kp_divide": 98, "kp_enter": 96,
+              "audiomute": 113, "volumedown": 114, "volumeup": 115, "audionext": 163,
+              "audioplay": 164, "audioprev": 165, "audiostop": 166})
+for _c, _n in zip("1234567890", (79, 80, 81, 75, 76, 77, 71, 72, 73, 82)):
+    TASTI[f"kp_{_c}"] = _n
 for _i, _c in enumerate("1234567890"):
     TASTI[_c] = 2 + _i
 for _riga, _inizio in (("qwertyuiop", 16), ("asdfghjkl", 30), ("zxcvbnm", 44)):

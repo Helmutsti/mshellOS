@@ -447,6 +447,8 @@ una barra (trascinamento e X). Si apre dalla scrivania (icona rossa con il trian
 - Non c'è l'audio né il mouse. Se parte male l'errore è silenzioso (`I_Error` scrive su uno
   stdout che in mshell non va da nessuna parte).
 
+**Tastierino e tasti multimediali**: `eventi` tiene Bloc Num (acceso all'avvio, spia LED_NUML): acceso il tastierino dà cifre e virgola, spento fa i tasti di movimento (con ripetizione). I tasti multimediali (volume, muto, riproduci/pausa, brano, stop) sono del sistema: il compositore li ferma (nessuna app li riceve) e scrive `compositore: tasto di sistema: volume su` ecc.; un servizio del suono non c'è ancora.
+
 **Tasti fisici** (premuto/rilasciato): `eventi` manda `EVENTO_TASTO_FISICO` (codice Linux
 KEY_*, premuto/lasciato/ripetuto) al compositore, che lo recapita solo alla finestra
 attiva che l'ha chiesto con `finestra_tasti_fisici()` (messaggio `VOGLIO_TASTI_FISICI`,

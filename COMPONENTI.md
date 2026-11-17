@@ -59,7 +59,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Poteri**: super sì. Non controlla permessi.
 
 ### eventi (`utente/programmi/eventi.c`)
-- **Cosa fa**: legge tastiera e mouse da `/dev/input` (li prende per sé con EVIOCGRAB), li traduce (tastiera italiana: i caratteri sono numeri Unicode, anche le lettere accentate e l'euro con AltGr+E; puntatore) e manda un messaggio per evento nel tubo verso il compositore. La ripetizione dei tasti (dopo circa 500 ms, circa 30 al secondo) la fa il kernel (EVIOCSREP); eventi la passa uguale per tutti i tasti, fisici e caratteri, tranne i modificatori.
+- **Cosa fa**: legge tastiera e mouse da `/dev/input` (li prende per sé con EVIOCGRAB), li traduce (tastiera italiana: i caratteri sono numeri Unicode, anche le lettere accentate e l'euro con AltGr+E; puntatore) e manda un messaggio per evento nel tubo verso il compositore. La ripetizione dei tasti (dopo circa 500 ms, circa 30 al secondo) la fa il kernel (EVIOCSREP); eventi la passa uguale per tutti i tasti, fisici e caratteri, tranne i modificatori. Il tastierino numerico segue Bloc Num (stato tenuto da eventi, acceso all'avvio, con la spia LED_NUML scritta nelle tastiere): acceso dà cifre e virgola, spento fa i tasti di movimento (frecce, Home, Fine, PagSu, PagGiù, Ins, Canc; il 5 niente) con la stessa ripetizione; + - / * e Invio del tastierino danno sempre il loro carattere. I tasti multimediali passano come tasti fisici: a fermarli è il compositore.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con il tubo al descrittore 0).
 - **Lancia**: nessuno.

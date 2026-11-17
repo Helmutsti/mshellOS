@@ -1636,7 +1636,31 @@ static void alla_rotella(const struct evento *e) {
                                 .scatti_x = e->dx, .scatti_y = e->dy });
 }
 
+/* I TASTI MULTIMEDIALI sono del SISTEMA, non dell'app in primo piano: valgono in ogni app,
+ * e nessuna app li riceve (ne' premuti, ne' ripetuti, ne' lasciati). Sono i codici di Linux
+ * (linux/input-event-codes.h). Un servizio del suono oggi non c'e': il compositore li
+ * riconosce, li ferma e scrive una riga nel registro, una per pressione. Quando ci sara' il
+ * servizio, e' qui che gli si girera' il comando. */
+static const char *tasto_di_sistema(unsigned int codice) {
+    switch (codice) {
+    case 115: return "volume su";           /* KEY_VOLUMEUP */
+    case 114: return "volume giu'";         /* KEY_VOLUMEDOWN */
+    case 113: return "muto";                /* KEY_MUTE */
+    case 164: return "riproduci/pausa";     /* KEY_PLAYPAUSE */
+    case 163: return "brano successivo";    /* KEY_NEXTSONG */
+    case 165: return "brano precedente";    /* KEY_PREVIOUSSONG */
+    case 166: return "stop";                /* KEY_STOPCD */
+    default:  return 0;
+    }
+}
+
 static void al_tasto_fisico(const struct evento *e) {
+    const char *di_sistema = tasto_di_sistema(e->tasto);
+    if (di_sistema) {
+        /* una riga solo alla pressione: la ripetizione (2) e il rilascio (0) si fermano qui senza rumore */
+        if (e->pulsanti == 1) scrivi_riga("compositore", "tasto di sistema: ", di_sistema);
+        return;
+    }
     if (fuoco >= 0 && finestre[fuoco].tasti_fisici)
         avvisa(fuoco, (struct notizia){ .tipo = TASTO_FISICO, .tasto = e->tasto, .premuto = e->pulsanti });
 }
