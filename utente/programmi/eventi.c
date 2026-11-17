@@ -17,7 +17,16 @@
  *      descrittore 0. All'altro capo legge il compositore.
  *
  * LA RIPETIZIONE: un tasto tenuto giu' lo ripete Linux (value 2), dopo mezzo secondo e
- * poi ogni 30 ms: glielo si chiede con EVIOCSREP. */
+ * poi ogni 30 ms: glielo si chiede con EVIOCSREP.
+ *
+ * IL TASTIERINO NUMERICO e il suo Bloc Num (qui sotto): con Bloc Num acceso i tasti del
+ * tastierino sono cifre e virgola; spento fanno i tasti di movimento (frecce, Home, Fine...).
+ * Lo stato lo tiene questo servizio (Linux non lo fa per noi: la tastiera e' presa con
+ * EVIOCGRAB, quindi la gestione dei tasti del kernel non la vede) e accende o spegne la
+ * spia della tastiera (EV_LED, LED_NUML) a ogni cambio.
+ *
+ * I TASTI MULTIMEDIALI (volume, riproduzione...) passano come tutti gli altri tasti fisici:
+ * a decidere che sono "del sistema" e non dell'app in primo piano e' il compositore. */
 #define _GNU_SOURCE
 #include <dirent.h>
 #include <errno.h>
@@ -75,6 +84,56 @@ static const unsigned short maiuscolo[0x59] = {
 };
 
 static int shift, altgr, caps;
+static int numlock = 1;   /* Bloc Num parte acceso, come su Windows e Mac */
+
+/* --- il tastierino numerico ---
+ *
+ * I codici di Linux: 71-73 = 7 8 9, 75-77 = 4 5 6, 79-81 = 1 2 3, 82 = 0, 83 = punto (KPDOT);
+ * 74 e 78 = meno e piu', 55 = per, 98 = diviso, 96 = Invio del tastierino. Gli operatori e
+ * l'Invio danno sempre il loro carattere, con Bloc Num acceso o spento (come su Windows);
+ * le cifre e il punto dipendono da Bloc Num. */
+static int e_tasto_di_numeri(unsigned int codice) {
+    return codice >= KEY_KP7 && codice <= KEY_KPDOT && codice != KEY_KPMINUS && codice != KEY_KPPLUS;
+}
+
+/* Cosa fa il tasto del tastierino con Bloc Num SPENTO: lo stesso del tasto di movimento. */
+static unsigned int movimento_del_tastierino(unsigned int codice) {
+    switch (codice) {
+    case KEY_KP7:   return KEY_HOME;
+    case KEY_KP8:   return KEY_UP;
+    case KEY_KP9:   return KEY_PAGEUP;
+    case KEY_KP4:   return KEY_LEFT;
+    case KEY_KP6:   return KEY_RIGHT;
+    case KEY_KP1:   return KEY_END;
+    case KEY_KP2:   return KEY_DOWN;
+    case KEY_KP3:   return KEY_PAGEDOWN;
+    case KEY_KP0:   return KEY_INSERT;
+    case KEY_KPDOT: return KEY_DELETE;
+    default:        return 0;   /* il 5: non fa niente */
+    }
+}
+
+/* Il carattere dei tasti del tastierino che lo danno (0 per gli altri). Tastiera italiana:
+ * il tasto del punto da' la virgola, come su Windows con quel layout. */
+static unsigned int carattere_del_tastierino(unsigned int codice) {
+    switch (codice) {
+    case KEY_KP0: return '0';  case KEY_KP1: return '1';  case KEY_KP2: return '2';
+    case KEY_KP3: return '3';  case KEY_KP4: return '4';  case KEY_KP5: return '5';
+    case KEY_KP6: return '6';  case KEY_KP7: return '7';  case KEY_KP8: return '8';
+    case KEY_KP9: return '9';  case KEY_KPDOT: return ',';
+    case KEY_KPMINUS: return '-';  case KEY_KPPLUS: return '+';
+    case KEY_KPSLASH: return '/';  case KEY_KPENTER: return '\n';
+    default: return 0;   /* il per (55) lo da' gia' la tabella dei caratteri */
+    }
+}
+
+/* Cosa si e' mandato quando un tasto di numeri e' stato premuto: il tasto stesso (Bloc Num
+ * acceso), il tasto di movimento (spento) o 0 (il 5 spento). Si ricorda perche' la ripetizione
+ * e il rilascio devono fare come la pressione, anche se nel frattempo Bloc Num e' cambiato: se
+ * no resterebbe una freccia "premuta" per sempre. */
+static unsigned short mandato_dal_tastierino[KEY_KPDOT + 1];
+
+static void luce_bloc_num(void);
 
 static void manda_evento(const struct evento *e) {
     if (manda(D_TUBO, e, sizeof *e) < 0) esci();   /* il tubo non c'e' piu': init ci rifara' */
@@ -106,6 +165,16 @@ static int e_modificatore(unsigned int codice) {
  * caratteri, tranne i modificatori. */
 static void tasto(unsigned int codice, int valore) {
     if (valore == 2 && e_modificatore(codice)) return;
+    if (codice == KEY_NUMLOCK && valore == 1) { numlock = !numlock; luce_bloc_num(); }
+    int cifra = 0;   /* il tasto del tastierino che qui e' una cifra (o la virgola) */
+    if (e_tasto_di_numeri(codice)) {
+        if (valore == 1)
+            mandato_dal_tastierino[codice] = (unsigned short)(numlock ? codice : movimento_del_tastierino(codice));
+        unsigned int mandato = mandato_dal_tastierino[codice];
+        if (!mandato) return;                       /* il 5 con Bloc Num spento */
+        cifra = mandato == codice;
+        codice = mandato;                           /* da qui e' il tasto di movimento, o se stesso */
+    }
     /* il tasto "fisico" (frecce, Canc, F1-F12, tastierino, Esc...): 'pulsanti' e' 1 premuto,
      * 2 ripetuto, 0 lasciato. Chi non vuole le ripetizioni (i giochi) scarta il 2. */
     manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_FISICO, .tasto = codice,
@@ -115,10 +184,16 @@ static void tasto(unsigned int codice, int valore) {
     if (codice == KEY_RIGHTALT)                              { altgr = valore != 0; return; }
     if (valore == 0) return;                             /* gli altri rilasci non ci interessano */
     if (codice == KEY_CAPSLOCK) { if (valore == 1) caps = !caps; return; }
-    if (codice >= sizeof normale) return;                /* frecce e simili: per ora no */
-
     unsigned int c;
-    if (altgr) {
+    if (cifra || codice == KEY_KPMINUS || codice == KEY_KPPLUS || codice == KEY_KPSLASH ||
+        codice == KEY_KPENTER) {
+        c = carattere_del_tastierino(codice);
+    } else if (codice >= sizeof normale / sizeof normale[0]) {
+        /* frecce, tasti multimediali e simili: niente carattere. (Si contano gli ELEMENTI della
+         * tabella, non i byte: con i byte i codici fino a 177 leggevano oltre la tabella e
+         * qualche tasto multimediale scriveva un carattere a caso.) */
+        return;
+    } else if (altgr) {
         c = con_altgr(codice);
     } else {
         c = shift ? maiuscolo[codice] : normale[codice];
@@ -134,6 +209,7 @@ static void tasto(unsigned int codice, int valore) {
 struct dispositivo {
     int d;                       /* -1: posto libero */
     dev_t numero;                /* il dispositivo (per non aprirlo due volte) */
+    int tastiera;                /* e' una tastiera: ha la spia di Bloc Num da accendere */
     int assoluto, relativo;      /* tavoletta (posizione) e/o mouse (spostamenti) */
     int minimo[2], massimo[2];   /* la scala degli assi X e Y della tavoletta */
     int x, y;                    /* la posizione, gia' sulla scala 0..PUNTATORE_MAX */
@@ -163,6 +239,21 @@ static void scrivi_dispositivo(const char *cosa, const char *nome, const char *f
     scrivi(riga, n);
 }
 
+/* La spia di Bloc Num di una tastiera: si scrive nel suo file un evento EV_LED. Se la
+ * tastiera non ha la spia (o non si puo' scrivere) non succede niente: lo stato resta qui. */
+static void luce_alla_tastiera(const struct dispositivo *p) {
+    struct input_event e[2] = {
+        { .type = EV_LED, .code = LED_NUML, .value = numlock },
+        { .type = EV_SYN, .code = SYN_REPORT, .value = 0 },
+    };
+    if (write(p->d, e, sizeof e) < 0) return;
+}
+
+static void luce_bloc_num(void) {
+    for (int i = 0; i < MAX_DISPOSITIVI; i++)
+        if (dispositivi[i].d >= 0 && dispositivi[i].tastiera) luce_alla_tastiera(&dispositivi[i]);
+}
+
 /* Prova ad aprire /dev/input/<nome>: si tiene solo se e' una tastiera o un puntatore. */
 static void prova(const char *nome) {
     if (strncmp(nome, "event", 5)) return;
@@ -176,7 +267,8 @@ static void prova(const char *nome) {
     while (i < MAX_DISPOSITIVI && dispositivi[i].d >= 0) i++;
     if (i == MAX_DISPOSITIVI) return;
 
-    int d = open(file, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+    /* in lettura e scrittura: la scrittura serve solo per le spie (EV_LED) della tastiera */
+    int d = open(file, O_RDWR | O_NONBLOCK | O_CLOEXEC);
     if (d < 0) return;
     unsigned char tipi[EV_MAX / 8 + 1] = { 0 }, tasti[KEY_MAX / 8 + 1] = { 0 };
     unsigned char assi[ABS_MAX / 8 + 1] = { 0 }, relativi[REL_MAX / 8 + 1] = { 0 };
@@ -193,7 +285,7 @@ static void prova(const char *nome) {
         return;
     }
     struct dispositivo *p = &dispositivi[i];
-    *p = (struct dispositivo){ .d = d, .numero = s.st_rdev, .assoluto = assoluto,
+    *p = (struct dispositivo){ .d = d, .numero = s.st_rdev, .tastiera = tastiera, .assoluto = assoluto,
                                .relativo = relativo || rotella };
     if (assoluto)
         for (int asse = 0; asse < 2; asse++) {
@@ -207,6 +299,7 @@ static void prova(const char *nome) {
     if (tastiera) {
         unsigned int ripeti[2] = { RIPETI_DOPO, RIPETI_OGNI };
         ioctl(d, EVIOCSREP, ripeti);
+        luce_alla_tastiera(p);   /* una tastiera collegata dopo prende lo stato di adesso */
     }
     char nome_dispositivo[96] = "?";
     ioctl(d, EVIOCGNAME(sizeof nome_dispositivo - 1), nome_dispositivo);

@@ -16,7 +16,7 @@ Vim nel Terminale resta l'editor a riga di comando: le due cose convivono.
   (ricevuti dal sistema, valgono in ogni app).
 
 ## I pezzi, in ordine (1, 2 e 3 sono indipendenti)
-1. **Tastiera**: il servizio eventi ripete tutti i tasti, compresi quelli fisici (oggi frecce,
+1. **Tastiera** (FATTO il 17/11/2026: ripetizione, tastierino con Bloc Num e spia, tasti multimediali fermati dal compositore e scritti nel registro; l'idea di partenza era): il servizio eventi ripete tutti i tasti, compresi quelli fisici (oggi frecce,
    Home, F1–F12... non si ripetono); tastierino numerico; tasti multimediali al sistema (un
    servizio del suono oggi non c'è). Serve anche al Terminale (vim).
 2. **Lettere (UTF-8)**: oggi i font del sistema hanno i 256 caratteri cp437. Un editor legge e
