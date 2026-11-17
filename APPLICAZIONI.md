@@ -448,6 +448,7 @@ Altri ruoli che devono lavorare per tutto il computer passano dai moduli aggiunt
 | Impostazioni | `settings.system` (di sistema) | — | — |
 | Store | `apps.manage` (di sistema) | — | — |
 | Doom | — | — | — (i salvataggi stanno nella sua cartella dei dati) |
+| Blocco note | — (i file gli arriveranno dal picker, la finestra Apri/Salva: l'app riceve solo il file scelto) | — | — |
 | Contatore, Esempio (solo per le prove: `utente/prove/applicazioni/`) | — | — | — |
 
 ## 10. Moduli aggiuntivi (integrazione speciale con il sistema)

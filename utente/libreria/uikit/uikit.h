@@ -200,6 +200,13 @@ struct widget {
      * come per i pulsanti, le voci degli elenchi e tutto il resto. Disabilitato: sempre la
      * freccia (come nel disegno). Lo mette chi prepara il widget. */
     unsigned int forma_puntatore;
+    /* un TASTO FISICO (tasti.h: i codici, i modificatori) premuto o ripetuto mentre il widget ha il
+     * fuoco: frecce, Home, Fine, PagSu, PagGiu, Canc, Ctrl+A... Quello che non e' un carattere, e
+     * che quindi a 'tasto' non arriva. Dice 1 se l'ha usato (nessun altro lo sente), 0 se no
+     * (allora lo sentono gli ascoltatori della finestra, finestra_tk_ascolta_tasti: le
+     * scorciatoie dell'app). Lo mette chi prepara il widget; 0: non gli interessa. Lo usa l'area
+     * di testo (area_testo.h). */
+    int (*tasto_fisico)(struct widget *w, unsigned int codice, unsigned int modificatori);
 };
 
 /* IL SUGGERIMENTO (tooltip, Figma "Suggerimento"): una etichetta di 24 pixel che compare a 4
@@ -908,6 +915,11 @@ struct barra_scorrimento {
  * contenuto ci sta tutto e non c'e' niente da scorrere. */
 int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti);
 
+/* Il contenuto e' stato scorso da chi lo disegna, non dalla rotella ne' dalla barra (il cursore di
+ * un'area di testo che esce dalla vista, muovendosi da tastiera): la barra si mostra come con la
+ * rotella e resta un secondo. Chi chiama ha gia' messo la nuova posizione in b->scorrimento. */
+void barra_scorrimento_mostra(struct barra_scorrimento *b);
+
 /* Prepara una barra di scorrimento: ferma e nascosta, finche' non si scorre. */
 void barra_scorrimento_prepara(struct barra_scorrimento *b);
 
@@ -1029,6 +1041,7 @@ int uikit_esegui_scelta(struct finestra_tk *f, const char *sopra);
 #include "tabella.h"          /* la tabella: intestazioni di colonna con l'ordine, righe */
 #include "griglia.h"          /* la griglia di icone: i tile */
 #include "pannello.h"         /* il pannello chiaro incassato del contenuto (Files) */
+#include "area_testo.h"      /* l'area di testo: scrivere, selezionare, andare a capo (Blocco note) */
 #include "informazioni.h"     /* il pannello delle informazioni, in una mini finestra */
 /* i componenti di Attivita' e dello Store */
 #include "paragrafo.h"

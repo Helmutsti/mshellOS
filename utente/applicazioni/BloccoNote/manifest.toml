@@ -1,0 +1,30 @@
+# Il manifesto del Blocco note (la guida voce per voce: manifest-guida.toml; le regole: APPLICAZIONI.md).
+# Lo leggono il launcher, la scrivania e, dentro il pacchetto, chi lo installa.
+
+id = "blocconote"
+nome = "Blocco note"
+versione = "1.0.0"
+autore = "mshell"
+descrizione = "Un editor di testo semplice: scrivi, seleziona, vai a capo."
+
+# "@PROCESSORE@" lo sostituisce build.sh con il processore per cui compila (x86_64 o arm64):
+# lo stesso sorgente diventa un pacchetto per ogni processore.
+processore = "@PROCESSORE@"
+sistema_minimo = 1
+
+programma = "code"
+
+# Nessun permesso: i file gli arriveranno dal picker (la finestra Apri/Salva), che da' all'app solo quello scelto.
+permessi = []
+deviazioni = []
+funzioni = []
+
+# L'icona dal disegno Figma: il simbolo "file-text" di Lucide sull'arancio di sistema (piu' chiaro nel tema scuro), con la luce dall'alto.
+# Le PNG a 32 e 18 sono quelle di Figma (la 18 senza luce); la 48 e' la 96 rimpicciolita.
+[icone.chiaro]
+svg = "resources/icona-chiara.svg"
+png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png", 48 = "resources/icona-chiara-48.png" }
+
+[icone.scuro]
+svg = "resources/icona-scura.svg"
+png = { 18 = "resources/icona-scura-18.png", 32 = "resources/icona-scura-32.png", 48 = "resources/icona-scura-48.png" }

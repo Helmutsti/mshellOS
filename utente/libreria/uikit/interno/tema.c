@@ -44,6 +44,9 @@ const struct tema tema_chiaro = {
     .testo_secondario               = OPACO(0x77777B),
     .testo_disabilitato             = OPACO(0xB8B8BB),
     .testo_inverso                  = OPACO(0xFAFAFA),
+    .testo_cursore                  = OPACO(0x414146),   /* = testo_primario */
+    .testo_selezione                = OPACO(0xDBEAFE),   /* = informazione_tenue */
+    .testo_selezione_inattiva       = OPACO(0xD8D8DA),   /* = controllo_sfondo_premuto */
     .bordo_controllo                = OPACO(0xC4C4C7),
     .bordo_separatore               = OPACO(0xEBEBEC),
     .bordo_focus                    = OPACO(0x4C4C52),
@@ -117,6 +120,9 @@ const struct tema tema_scuro = {
     .testo_secondario               = OPACO(0xB8B8BB),   /* 6:1 sul vetro */
     .testo_disabilitato             = OPACO(0x89898D),   /* 3,4:1 sul vetro */
     .testo_inverso                  = OPACO(0x242427),
+    .testo_cursore                  = OPACO(0xEBEBEC),   /* = testo_primario */
+    .testo_selezione                = OPACO(0x172554),   /* = informazione_tenue */
+    .testo_selezione_inattiva       = OPACO(0x2F2F33),   /* = controllo_sfondo_premuto */
     .bordo_controllo                = OPACO(0x4C4C52),
     .bordo_separatore               = OPACO(0x55555B),
     .bordo_focus                    = OPACO(0xE3E3E5),

@@ -164,6 +164,8 @@ static void barra_scorrimento_usata(struct barra_scorrimento *b, int spostato) {
     barra_scorrimento_sveglia(b);
 }
 
+void barra_scorrimento_mostra(struct barra_scorrimento *b) { barra_scorrimento_usata(b, 1); }
+
 int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti) {
     struct scorrimento *s = &b->scorrimento;
     if (!scorrimento_massimo(s)) return 0;

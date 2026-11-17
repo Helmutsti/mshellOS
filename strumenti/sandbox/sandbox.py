@@ -121,7 +121,7 @@ PULSANTI = {"left": 0x110, "right": 0x111, "middle": 0x112}
 TASTIERA, TAVOLETTA = 0, 1
 
 # le applicazioni della userbar: id (come nei manifesti) -> nome in test/scrivania.py
-APP = {"attivita": "Attivita", "doom": "Doom", "esempio": "Esempio", "files": "Files",
+APP = {"attivita": "Attivita", "blocconote": "BloccoNote", "doom": "Doom", "esempio": "Esempio", "files": "Files",
        "impostazioni": "Impostazioni", "store": "Store"}
 
 

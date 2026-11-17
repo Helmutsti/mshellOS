@@ -27,6 +27,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | Impostazioni | app | launcher | persona (uid 1000) | no (ha "settings.system") |
 | Store | app | launcher | persona (uid 1000) | no (ha "apps.manage") |
 | Terminale | app | launcher | sistema (uid 0, provvisorio: l'unica app) | sì |
+| Blocco note | app | launcher | persona (uid 1000) | no |
 | Doom | app | launcher | persona (uid 1000) | no |
 | network.conf, firewall.conf | configurazione | letti dal servizio network | non applicabile | non applicabile |
 | corekit | libreria | collegata dentro ogni programma | quello del programma | non applicabile |
@@ -206,6 +207,14 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Gira come**: sistema (uid 0): provvisorio, decisione della persona del 17/11/2026; è l'unica app a cui il launcher lo fa (`uid_dell_app`), e per farla girare come la persona basta togliere quel caso. La shell dentro ne eredita i poteri. Le sue porte verso i servizi restano quelle di un'app (i permessi del manifesto: nessuno). Conseguenza: Attività non può terminarla (tasks ferma solo i processi della persona).
 - **Poteri**: super sì (uid 0), e dà una shell uid 0 a chi la usa. Manifesto: nessun permesso. Senza recinto, come le altre app oggi.
 
+### Blocco note (`applicazioni/BloccoNote/blocconote.c`)
+- **Cosa fa**: l'editor di testo grafico. Per ora (primo passo, `PIANO_EDITOR.md`) è una finestra con l'area di testo di UIKit (`uikit/area_testo.h`) e un documento nuovo, vuoto; la barra degli strumenti ha Nuovo, Apri e Salva come nel disegno, ma per ora non fanno niente (niente file, annulla, copia e incolla).
+- **Tipo**: app.
+- **Lanciato da**: launcher (userbar e vassoio).
+- **Lancia**: nessuno.
+- **Gira come**: persona (uid 1000).
+- **Poteri**: no. Manifesto: nessun permesso (`[]`): i file gli arriveranno dal picker.
+
 ### Doom (`applicazioni/Doom/`, adattamento `doomgeneric_mshell.c`)
 - **Cosa fa**: il gioco Doom (shareware, doomgeneric), disegnato con solo GKit.
 - **Tipo**: app.
@@ -241,7 +250,7 @@ Collegate dentro ogni programma (statico): non girano da sole e non hanno uid. O
 - **Tipo**: libreria. **Lanciato da / Lancia**: non applicabile / nessuno. **Gira come**: quello del programma. **Poteri**: no.
 
 ### uikit (`libreria/uikit/`)
-- **Cosa fa**: interfaccia: stile e temi (dal Figma), widget (pulsanti, tabelle, schede, barra laterale, pannello, avvisi...), finestra a aree e ciclo degli eventi. Include userbar e vassoio (usati dalla scrivania).
+- **Cosa fa**: interfaccia: stile e temi (dal Figma), widget (pulsanti, tabelle, schede, barra laterale, pannello, area di testo, avvisi...), finestra a aree e ciclo degli eventi. L'area di testo (`area_testo.h`, `interno/area_testo.c`) è il componente per scrivere un testo lungo: buffer con il buco, UTF-8, a larghezza fissa a griglia come il Terminale, a capo automatico, Tab, cursore e selezione da tastiera e mouse, scorrimento. Include userbar e vassoio (usati dalla scrivania).
 - **Tipo**: libreria. **Lanciato da / Lancia**: non applicabile / nessuno. **Gira come**: quello del programma. **Poteri**: no.
 
 ### esterni (`libreria/esterni/`)

@@ -68,6 +68,9 @@ struct tema {
     unsigned int testo_secondario;
     unsigned int testo_disabilitato;
     unsigned int testo_inverso;
+    unsigned int testo_cursore;               /* il cursore di scrittura (area di testo): come testo_primario */
+    unsigned int testo_selezione;             /* lo sfondo del testo selezionato, con il fuoco: come informazione_tenue */
+    unsigned int testo_selezione_inattiva;    /* lo sfondo del testo selezionato, senza fuoco: come controllo_sfondo_premuto */
     unsigned int bordo_controllo;
     unsigned int bordo_separatore;
     unsigned int bordo_focus;
