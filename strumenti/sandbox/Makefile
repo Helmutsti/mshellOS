@@ -20,8 +20,10 @@ $(O)/strumenti/sandbox/%.o: strumenti/sandbox/%.c $(O)/.firma
 	@mkdir -p $(@D)
 	$(CC) $(UTENTE) -Istrumenti/sandbox $(DIP) -c $< -o $@
 
+# il picker con i suoi pezzi, come in programmi.mk (PICKER_PEZZI)
+$(O)/sandbox/picker: $(PICKER_PEZZI)
 $(addprefix $(O)/sandbox/,$(SB_PROGRAMMI)): $(O)/sandbox/%: $(O)/utente/programmi/%.o $(SCHERMO_SANDBOX) $(LIBRERIE)
-	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(LIBRERIE))
+	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(filter-out $< $(SCHERMO_SANDBOX),$(filter %.o,$^)) $(LIBRERIE))
 $(O)/sandbox/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(SCHERMO_SANDBOX) $(LIBRERIE)
 	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(LIBRERIE))
 $(O)/sandbox/avvio: $(O)/strumenti/sandbox/avvio_sandbox.o

@@ -113,21 +113,43 @@ $(UIKIT): $(UIKIT_OGGETTI)
 	ar rcs $@ $^
 
 # --- i programmi ---
-PROGRAMMI := $(basename $(notdir $(wildcard utente/programmi/*.c)))
+# Un programma del sistema e' di solito un file solo (utente/programmi/<nome>.c). Il picker e'
+# fatto di tre pezzi (il commento in cima a utente/programmi/picker.c):
+#   picker.c            il servizio (main)
+#   picker_nome.c       la regola del nome valido
+#   picker_finestra.c   la finestra Apri/Salva (UIKit)
+# I pezzi non sono programmi: si tolgono dall'elenco e si legano dentro il picker. La prova del
+# servizio (test/prove/picker.py) lega lo stesso servizio con una finestra finta, senza grafica
+# (utente/prove/picker_finestra_finta.c): e' bin/prove/picker_finto, che build.sh mette solo nel
+# disco di quella prova. Senza picker_finestra.c il picker del sistema non si puo' legare: make
+# si ferma e lo dice.
+PEZZI_PICKER := picker_nome picker_finestra
+PICKER_PEZZI := $(O)/utente/programmi/picker_nome.o $(O)/utente/programmi/picker_finestra.o
+PICKER_FINTO_PEZZI := $(O)/utente/programmi/picker.o $(O)/utente/programmi/picker_nome.o \
+                      $(O)/utente/prove/picker_finestra_finta.o
+PROGRAMMI := $(filter-out $(PEZZI_PICKER),$(basename $(notdir $(wildcard utente/programmi/*.c))))
 COMANDI   := $(basename $(notdir $(wildcard utente/comandi/*.c)))
-PROVE     := $(basename $(notdir $(wildcard utente/prove/*.c)))
+PROVE     := $(filter-out picker_finestra_finta,$(basename $(notdir $(wildcard utente/prove/*.c)))) picker_finto
 
-# i programmi del sistema (init, i servizi, la shell di prova)
+utente/programmi/picker_finestra.c:
+	$(error manca utente/programmi/picker_finestra.c, la finestra Apri/Salva del picker)
+
+# i programmi del sistema (init, i servizi, la shell di prova). Il picker ha in piu' i suoi
+# pezzi, legati dopo il servizio ($< e' sempre il primo)
+$(O)/bin/picker: $(PICKER_PEZZI)
 $(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIBRERIE)
-	$(call lega,$@,$< $(LIBRERIE))
+	$(call lega,$@,$< $(filter-out $<,$(filter %.o,$^)) $(LIBRERIE))
 # i comandi: programmi senza grafica, solo CoreKit (SISTEMA.md)
 # Un comando che usa una libreria di Alpine la dice in LIBRERIE_<nome> (legata dentro il
 # programma, dopo CoreKit). Oggi nessuno.
 $(addprefix $(O)/bin/comandi/,$(COMANDI)): $(O)/bin/comandi/%: $(O)/utente/comandi/%.o $(COREKIT)
 	$(call lega,$@,$< $(COREKIT) -L$(LIBC) $(LIBRERIE_$*))
 # i programmi delle prove (utente/prove): solo nei dischi delle prove
-$(addprefix $(O)/bin/prove/,$(PROVE)): $(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIE)
+$(addprefix $(O)/bin/prove/,$(filter-out picker_finto,$(PROVE))): $(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIE)
 	$(call lega,$@,$< $(LIBRERIE))
+# il picker con la finestra finta, per la sua prova (vedi PEZZI_PICKER, sopra)
+$(O)/bin/prove/picker_finto: $(PICKER_FINTO_PEZZI) $(LIBRERIE)
+	$(call lega,$@,$(PICKER_FINTO_PEZZI) $(LIBRERIE))
 # avvio, il programma dell'archivio di avvio: niente librerie nostre
 $(O)/bin/avvio: $(O)/utente/avvio/avvio.o
 	$(call lega,$@,$<)
