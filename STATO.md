@@ -74,6 +74,16 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
   `TERM=xterm-256color`; la richiesta `open_shell` e il permesso `system.shell` non ci sono più.
   Resta il miglioramento futuro: il Terminale (e quindi la shell) come la persona, togliendo quel
   caso, e un comando come `sudo` per le azioni da sistema.
+- **Il recinto nel launcher** è pronto ma NON unito: ramo `worktree-agent-a6fd0d6238144e1f4`
+  (commit cadc7fb, da riallineare a main). In QEMU 17 prove su 19 (falliscono files e store:
+  l'installazione da file dello Store, punto rimandato dalla persona). La sandbox Docker non può
+  costruire recinti: la persona vuole ragionare su un collaudo delle app con Docker (più
+  contenitori, docker compose, il recinto come impostazione di Docker). Da decidere.
+- **L'editor di testo** è messo da parte: il piano è in `PIANO_EDITOR.md`.
+- Fatti il 17/11/2026 e in main: Terminale su libvterm, vim (tiny, /system/bin/vim), UTF-8 in
+  tutto il sistema, ripetizione di tutti i tasti, puntatore a 24, disco finito come uscita
+  (`crea_disco_*`), copia installata in `Desktop\mshellOS-prod` (aggiornata solo quando lo
+  dice la persona: oggi ha il puntatore a 24 ma non vim e UTF-8).
 
 **Come si lavora sul Mac** (manca `uv`): un python con Pillow, per esempio
 `python3 -m venv /tmp/venv && /tmp/venv/bin/pip install pillow`, poi
