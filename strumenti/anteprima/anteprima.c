@@ -38,11 +38,17 @@ int chiudi(int d) { (void)d; return 0; }
 int data_ora(struct data_ora *d) { (void)d; return -1; }
 int manda(int d, const void *x, unsigned int n) { (void)d; (void)x; (void)n; return -1; }
 int finestra_forma_puntatore(struct finestra *f, unsigned int forma) { (void)f; (void)forma; return -1; }
+/* catalog (tema e sfondo) e le immagini PNG non ci sono: tema e sfondo restano quelli di default. */
+int catalog_leggi(struct catalog_valori *v) { (void)v; return -1; }
+int catalog_cambia(const char *t, const char *s) { (void)t; (void)s; return -1; }
+int immagine_carica(const char *p, struct immagine *im) { (void)p; (void)im; return -1; }
+void immagine_libera(struct immagine *im) { (void)im; }
 
 /* --- il ciclo degli eventi dell'anteprima: si tiene la finestra e torna (il disegno lo fa
  * main, dopo). E' la uikit_esegui di uikit.h: quella vera, in ciclo.c, qui non si compila. --- */
 static struct finestra_tk *catturata;
 int uikit_esegui(struct finestra_tk *f) { catturata = f; return 0; }
+int uikit_esegui_scelta(struct finestra_tk *f, const char *sopra) { (void)sopra; return uikit_esegui(f); }
 
 #define main scena_main
 #include SCENA
