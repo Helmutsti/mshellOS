@@ -37,10 +37,14 @@
 #define TASTO_F2          60
 #define TASTO_CTRL_DX     97
 #define TASTO_ALTGR      100
+#define TASTO_HOME       102
 #define TASTO_SU         103
+#define TASTO_SU_PAGINA  104
 #define TASTO_SINISTRA   105
 #define TASTO_DESTRA     106
+#define TASTO_FINE       107
 #define TASTO_GIU        108
+#define TASTO_GIU_PAGINA 109
 #define TASTO_CANC       111
 #define TASTO_A           30
 #define TASTO_C           46

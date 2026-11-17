@@ -115,7 +115,10 @@ static void tasto(unsigned int codice, int valore) {
     if (codice == KEY_RIGHTALT)                              { altgr = valore != 0; return; }
     if (valore == 0) return;                             /* gli altri rilasci non ci interessano */
     if (codice == KEY_CAPSLOCK) { if (valore == 1) caps = !caps; return; }
-    if (codice >= sizeof normale) return;                /* frecce e simili: per ora no */
+    /* i tasti dopo la tabella (frecce, Home, Canc...) non hanno un carattere. Si conta in elementi, non
+     * in byte: la tabella e' di 'unsigned short', e sizeof dava il doppio, quindi ogni freccia leggeva
+     * oltre la tabella e scriveva una lettera a caso (la freccia su faceva Backspace). */
+    if (codice >= sizeof normale / sizeof normale[0]) return;
 
     unsigned int c;
     if (altgr) {

@@ -96,7 +96,9 @@ static void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pu
             return;
         }
         f->catturato = uikit_widget_sotto(f, x, y);
-        uikit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
+        /* un clic sulla barra di scorrimento non toglie il fuoco al contenuto che scorre (come su ogni sistema) */
+        if (!f->catturato || f->catturato->tipo != &tipo_barra_scorrimento)
+            uikit_fuoco(f, f->catturato && f->catturato->tipo->tasto ? f->catturato : 0);
     }
     if (f->chiudi_premuto) {
         if (!sinistro) {
@@ -148,6 +150,9 @@ static void uikit_tasto_fisico(struct finestra_tk *f, unsigned int codice, int p
     struct avviso *v = codice == TASTO_ESC && !f->modificatori ? uikit_avviso_tastiera(f) : 0;
     if (v) { avviso_rispondi(v, AVVISO_ANNULLA); return; }
     if (finestra_tk_bloccata(f)) return;
+    /* prima il widget che ha il fuoco (un'area di testo: le frecce, Home, Canc), poi le scorciatoie dell'app */
+    struct widget *fuoco = f->con_fuoco;
+    if (fuoco && fuoco->tasto_fisico && fuoco->tasto_fisico(fuoco, codice, f->modificatori)) return;
     for (int i = MAX_ASCOLTATORI - 1; i >= 0; i--) {
         struct ascoltatore_tk a = f->ascoltatori[i];
         if (a.funzione && a.funzione(f, codice, f->modificatori, a.dati)) return;

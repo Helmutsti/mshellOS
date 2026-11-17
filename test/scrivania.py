@@ -4,22 +4,23 @@ Sono numeri presi dallo schermo vero (1280x800). Se la scrivania o il compositor
 cambiano disegno (la userbar, il vassoio, dove si aprono le finestre), si cambiano QUI e
 basta.
 
-    LA USERBAR, sul bordo sinistro (x 8..48), centrata in altezza (y 214..586, alta 372: in fondo la foto profilo e l'ora): in colonna
+    LA USERBAR, sul bordo sinistro (x 8..48), centrata in altezza (y 198..602, alta 404: in fondo la foto profilo e l'ora): in colonna
     il pulsante App e le app del sistema, tondi di 32 pixel a 40 l'uno dall'altro, con il
     centro in x = 28:
         App             y = 234
-        Attivita        y = 274
-        Doom            y = 314
-        Esempio         y = 354
-        Files           y = 394
-        Impostazioni    y = 434
-        Store           y = 474
+        Attivita        y = 258
+        BloccoNote      y = 298
+        Doom            y = 338
+        Esempio         y = 378
+        Files           y = 418
+        Impostazioni    y = 458
+        Store           y = 498
     A sinistra di un'app aperta, nel margine della barra (x 9..11), c'e' un segno scuro
     (nel tema chiaro): un puntino alto 4, una lineetta alta 14 per quella in primo piano.
 
     IL VASSOIO DELLE APP si apre con il pulsante App, a destra della barra (x = 52), centrato
     sul pulsante App: tutte le app installate, 3 per riga, voci di 80 x 68 a 88 l'una
-    dall'altra. Con le 7 app del sistema (il Terminale sta solo qui, non nella userbar):
+    dall'altra. Con le 8 app del sistema (il Terminale sta solo qui, non nella userbar):
     3 righe, 288 x 252, angolo in (52, 108); il centro del tondo della prima voce in (108, 148).
 
     LE FINESTRE si aprono "a scala": la prima con l'angolo in (140, 130), ognuna delle
@@ -30,24 +31,24 @@ import time
 
 from qemu import pixel_diversi
 
-FISSATE = ["Attivita", "Doom", "Esempio", "Files", "Impostazioni", "Store"]
+FISSATE = ["Attivita", "BloccoNote", "Doom", "Esempio", "Files", "Impostazioni", "Store"]
 BARRA_X = 8                       # la userbar: bordo sinistro, larga 40
-BARRA_Y = (800 - (4 + 7 * 32 + 6 * 8 + 16 + 72 + 8)) // 2   # 214: centrata, con App, 6 app, foto e ora
+BARRA_Y = (800 - (4 + 8 * 32 + 7 * 8 + 16 + 72 + 8)) // 2   # 198: centrata, con App, 7 app, foto e ora
 VOCE_X = BARRA_X + 4 + 16         # il centro dei tondi
-APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 234)
+APP_PULSANTE = (VOCE_X, BARRA_Y + 4 + 16)     # il pulsante App: (28, 218)
 # Contatore non e' nella userbar: non e' un'app del sistema, il suo pacchetto sta sulla
 # Desktop della persona (build.sh). Le misure della sua finestra restano in MISURE, per
 # la prova pacchetti, che la installa e la apre.
 APP = {nome: (VOCE_X, APP_PULSANTE[1] + 40 * (i + 1)) for i, nome in enumerate(FISSATE)}
 SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine a sinistra
 # L'ora in fondo alla userbar, sotto la foto profilo (alta 32): il rettangolo (x1, y1, x2, y2)
-# fino al fondo della barra, (8, 538, 48, 586). Nelle foto di riferimento a schermo intero
+# fino al fondo della barra, (8, 554, 48, 602). Nelle foto di riferimento a schermo intero
 # resta coperta (collaudo.py, Prova.riferimento): in QEMU l'orologio parte sempre dalle
 # 10:00 ma puo' passare alle 10:01 durante una prova lenta, e nella sandbox e' l'ora vera.
-ORA = (BARRA_X, BARRA_Y + 4 + 7 * 32 + 6 * 8 + 16 + 32, BARRA_X + 40,
-       BARRA_Y + 4 + 7 * 32 + 6 * 8 + 16 + 72 + 8)
+ORA = (BARRA_X, BARRA_Y + 4 + 8 * 32 + 7 * 8 + 16 + 32, BARRA_X + 40,
+       BARRA_Y + 4 + 8 * 32 + 7 * 8 + 16 + 72 + 8)
 
-# Il vassoio con le 7 app del sistema: quelle della userbar e il Terminale, in ordine
+# Il vassoio con le 8 app del sistema: quelle della userbar e il Terminale, in ordine
 # alfabetico (con Contatore installata le righe restano 3: VASSOIO vale per le 7 e le 8).
 NEL_VASSOIO = FISSATE + ["Terminale"]
 VASSOIO_ANGOLO = (52, 108)
