@@ -14,7 +14,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | compositore | servizio | init | sistema (uid 0) | sì |
 | launcher | servizio | init | sistema (uid 0) | sì |
 | scrivania | servizio | init | sistema (uid 0) | sì |
-| picker (provvisorio) | servizio | init | persona (uid 1000) | no |
+| picker | servizio | init | persona (uid 1000) | no |
 | network (servizio) | servizio | init | sistema (uid 0) | sì |
 | catalog | servizio | init | persona (uid 1000) | no |
 | tasks | servizio | init | sistema (uid 0) | sì |
@@ -50,7 +50,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 ## Servizi
 
 ### init (`utente/programmi/init.c`)
-- **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher", "catalog", "tasks"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Custodisce le porte delle app di catalog, launcher, network e tasks (canale per servizio, `keep` e `restore`, senza mai leggere dalle porte: le butta quando l'app le chiude) e le riconsegna a ogni partenza del servizio (riga `init: riconsegnate <n> porte a <percorso>`). Avvia anche i programmi di prova in `/data/tests` se esiste.
+- **Cosa fa**: PID 1. Apre schermo e porte ("compositore", "launcher", "catalog", "tasks", "picker"), prepara il tubo degli eventi, avvia i servizi passandogli le risorse già aperte, li sorveglia e li fa ripartire se cadono. Custodisce le porte delle app di catalog, launcher, network, tasks e picker (canale per servizio, `keep` e `restore`, senza mai leggere dalle porte: le butta quando l'app le chiude) e le riconsegna a ogni partenza del servizio (riga `init: riconsegnate <n> porte a <percorso>`). Avvia anche i programmi di prova in `/data/tests` se esiste.
 - **Tipo**: servizio.
 - **Lanciato da**: avvio.
 - **Lancia**: catalog e picker (come la persona, uid 1000), tasks (come sistema), eventi, compositore, launcher, scrivania, network, shell (sulla seriale, solo se `/dev/ttyS0` si apre), programmi di `/data/tests`.
@@ -78,7 +78,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Cosa fa**: fa partire le applicazioni (come persona), la shell (come sistema) e i programmi; apre i file `.app` con lo Store; installa, aggiorna, toglie le app e svuota i loro dati; elenca le app.
 - **Tipo**: servizio.
 - **Lanciato da**: init (con la porta "launcher" già aperta, e il canale del custode al descrittore 1: ogni porta che tiene gli manda una copia, e al riavvio init gliele riconsegna).
-- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`, al 7 `/dev/null` (sarà il picker) e all'8 quella verso tasks, solo se il manifesto ha `processes.view` o `processes.stop`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
+- **Lancia**: le app (uid 1000, `avvia_app`: 0, 1 e 2 su /dev/null, al 3 la porta verso il compositore, al 4 quella verso catalog, al 5 quella verso il launcher stesso (il capo del servizio lo tiene lui) e al 6 quella verso network, solo se il manifesto ha `network.use` o `network.settings`, al 7 quella verso picker (a tutte) e all'8 quella verso tasks, solo se il manifesto ha `processes.view` o `processes.stop`; gli altri capi li manda ai servizi con il programma dell'app, e scrive nel registro una riga per app con le porte date: `SISTEMA.md`, "Le porte delle app"), lo Store per i file `.app` (allo stesso modo), i programmi di /system/bin (uid 1000), la shell (uid 0, `avvia_come_con_descrittori`).
 - **Gira come**: sistema (uid 0): serve per far partire programmi con un altro uid e per scrivere in `/data/apps`.
 - **Poteri**: super sì. Decide i permessi concessi a ogni app quando la fa partire (`permessi_concessi`: dichiarati nel manifesto, quelli di sistema solo alle app del sistema, sconosciuti tolti) e li passa ai servizi con le porte. Controlla con `ha_permesso`: "apps.open" (programmi), "system.shell" (shell), "apps.manage" (installare, aggiornare, togliere, svuotare dati).
 
@@ -90,13 +90,13 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Gira come**: sistema (uid 0): serve per ottenere i ruoli sfondo e pannello dal compositore.
 - **Poteri**: super sì. Non controlla permessi; legge i manifest delle app per le icone.
 
-### picker (`utente/programmi/picker.c`) — PROVVISORIO
-- **Cosa fa**: oggi solo per provare il compositore: se esiste la cartella `/data/tests/scelta` (solo nel disco della prova `scelta`) apre ciclicamente una finestra di scelta vuota (480 x 421) sopra Files, 15 secondi aperta e 10 chiusa; senza la cartella dorme. Sarà sostituito dal vero picker (la finestra "Apri/Salva" in UIKit, `disegni/ApriSalva/`).
+### picker (`utente/programmi/picker.c`, `picker_nome.c`, `picker_finestra.c`)
+- **Cosa fa**: fa scegliere alla persona un file da aprire (`open`) o dove salvare (`save`) e lo consegna già aperto all'app che l'ha chiesto, allegato alla risposta. Mostra la finestra "Apri/Salva" (`picker_finestra.c`, UIKit, `disegni/ApriSalva/`) sopra l'app; una richiesta alla volta. Il servizio apre la Home e, dentro, cartelle e file con `openat2` (`RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS`, `RESOLVE_NO_MAGICLINKS`); alla finestra dà solo l'elenco (file e cartelle, niente collegamenti) e "esiste già?". Contratto in `corekit/picker.h`; prova `picker` (con la finestra finta `utente/prove/picker_finestra_finta.c`, solo nel disco `disco_picker.img`).
 - **Tipo**: servizio.
-- **Lanciato da**: init.
+- **Lanciato da**: init (con la porta "picker" già aperta, e il canale del custode al descrittore 1).
 - **Lancia**: nessuno.
-- **Gira come**: persona (uid 1000). Si collega al compositore per nome, come un programma che non è di sistema: il compositore gli concede `RUOLO_SCELTA` perché il suo programma è `/system/services/picker/picker`.
-- **Poteri**: nessuno speciale.
+- **Gira come**: persona (uid 1000): apre solo i file di lei, e quelli che crea (0644) sono suoi. Si collega al compositore per nome, come un programma che non è di sistema: il compositore gli concede `RUOLO_SCELTA` perché il suo programma è `/system/services/picker/picker`.
+- **Poteri**: nessuno speciale. Nessun permesso da controllare (è di base per ogni app). Rifiuta (`invalid`) un nome proposto con "/", "." o "..", e non consegna mai niente fuori dalla Home né che non sia un file normale. Riceve dal launcher la porta di ogni app (`attach`, solo da uid 0): la finestra va sopra l'app della porta.
 
 ### catalog (`utente/programmi/catalog.c`)
 - **Cosa fa**: possiede le impostazioni della persona (oggi tema e sfondo, in `/data/users/1000/preferences`): le dà a chi le chiede (`get`), avvisa chi lo chiede quando cambiano (`watch`, collegamento che resta aperto) e le cambia (`set`). Contratto in `corekit/catalog.h`, funzioni per chi chiede in `corekit/interno/catalog.c`.

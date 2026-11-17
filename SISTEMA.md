@@ -8,8 +8,8 @@ servizio, un comando o un'app. Le regole delle app (pacchetti, permessi, isolame
 
 | Ruolo | Cosa fa | Chi è oggi |
 |---|---|---|
-| **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono, e custodisce le porte delle app di catalog, launcher, network e tasks (le riconsegna quando ripartono). Nient'altro. | `/system/init` |
-| **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), catalog (impostazioni della persona), tasks (processi, memoria e disco), scrivania |
+| **init** | Il processo 1. Fa partire i servizi, presta loro le risorse (schermo, nomi), li sorveglia e li rifà partire se cadono, e custodisce le porte delle app di catalog, launcher, network, tasks e picker (le riconsegna quando ripartono). Nient'altro. | `/system/init` |
+| **servizi** | Ognuno **possiede** una cosa del computer ed è l'**unico** a toccarla. La offre agli altri da una **porta** e controlla i permessi di chi chiede. Possiede anche la sua configurazione. | eventi (tastiera e mouse), compositore (schermo e finestre), launcher (avvio e installazione delle app), network (rete e firewall), catalog (impostazioni della persona), tasks (processi, memoria e disco), picker (la finestra Apri/Salva), scrivania |
 | **app** | Programmi grafici in un pacchetto `.app`, isolati, con i permessi del manifesto. Disegnano la loro interfaccia e la danno al compositore. Per tutto il resto chiedono ai servizi dalle porte. | Files, Attività, Impostazioni, Store, Terminale... |
 | **comandi** | Programmi senza grafica, per la riga di comando. Parlano con le **stesse porte** delle app, con i permessi della persona che li lancia. Non sono app (`APPLICAZIONI.md`, sezione 2). | i nostri in `/system/bin` (sorgenti in `utente/comandi/`, uno per file: oggi `network`), `/system/bin/curl` (scarica dal web, HTTP e HTTPS; non è nostro: compilato dai sorgenti ufficiali) e la shell |
 | **shell** | Un comando come gli altri: legge righe e fa partire comandi. Non ha nessun ruolo speciale e nessuno passa da lei per parlare con il sistema. Il Terminale è solo l'app che la ospita. | `/system/bin/shell` (di prova) |
@@ -27,6 +27,17 @@ Dettagli sui servizi di oggi:
   2026 nessun altro programma tocca quei file: le app (UIKit), la scrivania e il compositore
   chiedono tema e sfondo a catalog e osservano i suoi avvisi; Impostazioni li cambia con catalog.
   Il compositore non fa più da tramite per il tema (prova `tema`).
+- **picker** fa scegliere alla persona un file da aprire o dove salvarlo, e lo consegna **già
+  aperto** all'app che l'ha chiesto (`open`, `save`): l'app riceve solo quel file, senza nessun
+  permesso sui file. Mostra la finestra "Apri/Salva" (`disegni/ApriSalva/`) sopra l'app, con il
+  velo sulle sue finestre; una richiesta alla volta. Gira come la persona (uid 1000) e non esce
+  mai dalla Home (`/data/users/<uid>/home`): ogni cartella e ogni file li apre con `openat2` dalla
+  Home, con `RESOLVE_BENEATH`, `RESOLVE_NO_SYMLINKS` e `RESOLVE_NO_MAGICLINKS` (il kernel rifiuta
+  ogni percorso che esce), consegna solo file normali e nell'elenco mostra solo file e cartelle,
+  niente collegamenti. Un nome proposto con "/", "." o ".." è rifiutato (`invalid`). Il nome
+  glielo presta init. Contratto in `corekit/picker.h`; il servizio in `utente/programmi/picker.c`,
+  la finestra in `picker_finestra.c`; prova `test/prove/picker.py` (con una finestra finta, senza
+  grafica).
 
 ## 2. Un servizio, tanti clienti
 
@@ -151,7 +162,7 @@ recinto il percorso del programma sarebbe un altro) e non da quello che l'app di
 | 4 | catalog | lo standard: `attach` dal launcher, `connect` dall'app (`corekit/messaggi.h` e `sistema/servizi.h`) |
 | 5 | launcher | lo standard, ma senza `attach`: il launcher crea la coppia e tiene lui il capo del servizio, con il programma dell'app. A tutte le app |
 | 6 | network | lo standard (`attach` dal launcher, `connect` dall'app). Solo alle app con `network.use` o `network.settings` nel manifesto; alle altre `/dev/null` |
-| 7 | (libero) | sarà la porta del servizio per scegliere i file (picker); per ora `/dev/null` |
+| 7 | picker | lo standard (`attach` dal launcher, `connect` dall'app). A tutte le app: scegliere un file non chiede permessi |
 | 8 | tasks | lo standard. Solo alle app con `processes.view` o `processes.stop` nel manifesto; alle altre `/dev/null` |
 
 I descrittori passati a un programma vanno da 0 a 15 (`MAX_PASSATI`); il **registro** (la console, su
@@ -169,21 +180,21 @@ Per i servizi dello standard:
 
 **Quali sono le porte lo dice il launcher**, non si indovina: nella variabile d'ambiente
 `MSHELL_PORTE` dell'app scrive l'elenco delle porte date davvero, servizio e descrittore (es.
-`compositore=3 catalog=4 launcher=5 network=6 tasks=8`), come fa systemd con `LISTEN_FDS`. La libreria
+`compositore=3 catalog=4 launcher=5 network=6 picker=7 tasks=8`), come fa systemd con `LISTEN_FDS`. La libreria
 (`porta_di`, `corekit/messaggi.h`) controlla prima il tipo (il servizio è nell'elenco?) e poi chi
 è (all'altro capo c'è davvero il sistema?). Corretto il 16 novembre 2026: prima si guardava solo il
 secondo punto, e in un programma del sistema un suo collegamento qualsiasi a quel numero veniva
 scambiato per una porta (la scrivania si chiudeva quando catalog ripartiva).
 
 I programmi del sistema e i comandi, che non partono dal launcher, non hanno la variabile: si
-collegano per nome, e il servizio chiede al kernel chi sono. Oggi le porte sono cinque (compositore, catalog, launcher,
-network e tasks): i servizi che chiedono un permesso (network, tasks) danno la porta solo alle app che lo hanno
+collegano per nome, e il servizio chiede al kernel chi sono. Oggi le porte sono sei (compositore, catalog, launcher,
+network, picker e tasks): i servizi che chiedono un permesso (network, tasks) danno la porta solo alle app che lo hanno
 nel manifesto. Per ogni app che fa partire, il launcher scrive nel registro una riga con le porte
-date (`launcher: esempio: porte compositore catalog launcher network`).
+date (`launcher: esempio: porte compositore catalog launcher network picker`).
 
 **Init custodisce le porte** (deciso con la persona, come il "file descriptor store" di systemd).
 Il capo "servizio" di una porta sta nel servizio, e se il servizio cade si chiude. Allora catalog,
-launcher, network e tasks hanno con init un canale (una coppia di socket: init tiene un capo, presta
+launcher, network, tasks e picker hanno con init un canale (una coppia di socket: init tiene un capo, presta
 l'altro al servizio) e a ogni porta nuova gli mandano una copia del capo (`request=keep`, con
 `program` e `permission`). Init le tiene senza mai leggerle (le butta quando l'app le chiude) e,
 a ogni partenza del servizio, prima di farlo partire gli riconsegna le porte (`request=restore`

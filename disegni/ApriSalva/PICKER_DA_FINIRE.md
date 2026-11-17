@@ -1,5 +1,13 @@
 # Picker: lavoro a meta' (da finire)
 
+**Aggiornamento del 17/11/2026:** fatti e provati (build x86_64 e collaudo QEMU) i punti 2 (il
+servizio, senza l'interfaccia: `utente/programmi/picker.c` con elenca/esiste/openat2), 4
+(launcher), 5 (init), 6 (prova `picker`, con la finestra finta `utente/prove/picker_finestra_finta.c`
+nel disco `disco_picker.img`; tolti il picker provvisorio, la prova `scelta` e il suo disco) e 7
+(documenti). Resta il punto 3: `utente/programmi/picker_finestra.c` (l'interfaccia comune e' in
+`picker_finestra.h`). Senza quel file make si ferma ("manca utente/programmi/picker_finestra.c").
+Il resto di questo file e' com'era, per la storia.
+
 Ramo di partenza: origin/compositore-scelta. Ramo di lavoro: servizio-picker (pubblicato come servizio-picker-wip).
 Niente e' stato compilato ne' provato.
 

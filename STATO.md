@@ -23,7 +23,7 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
    persona; le app, la scrivania e il compositore le chiedono a lui e ne ricevono gli avvisi.
 4. **Le porte delle app**: il launcher dà a ogni app un canale già aperto per servizio
    (3 compositore, 4 catalog, 5 launcher, 6 network solo con il permesso della rete, 7 picker
-   (non ancora), 8 tasks solo con processes.*) e scrive l'elenco nella variabile d'ambiente
+   a tutte, 8 tasks solo con processes.*) e scrive l'elenco nella variabile d'ambiente
    `MSHELL_PORTE`; il servizio sa chi è l'app dal launcher. I programmi del sistema chiamano
    per nome.
 5. **Il controllo vero dei permessi** (`ha_permesso`): sistema = tutto; app = dichiarati nel
@@ -37,18 +37,18 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
    con `processes.view`/`processes.stop`; ferma solo i processi della persona.
 9. **Il compositore sa mostrare una finestra di scelta** (`RUOLO_SCELTA`) sopra l'app che chiede,
    con il velo e i clic bloccati; la accetta solo dal programma `/system/services/picker/picker`
-   (prova `scelta`). Il registro dei programmi è passato dal descrittore 8 al 16.
+   (la provava la prova `scelta`, tolta con il picker provvisorio). Il registro dei programmi è
+   passato dal descrittore 8 al 16.
 10. **Il disegno della finestra "Apri/Salva"** approvato (`disegni/ApriSalva/`, Figma 289:674).
 
-**A metà:** il **servizio picker vero** (mostra la finestra "Apri/Salva" e consegna all'app solo
-il file scelto). In `main` c'è solo un picker provvisorio minimo (`utente/programmi/picker.c`,
-fa qualcosa solo se esiste `/data/tests/scelta`, per la prova `scelta`). Il lavoro a metà è sul
-ramo `servizio-picker-wip` (pubblicato, partito da `compositore-scelta`; non compilato né
-provato), con il file `disegni/ApriSalva/PICKER_DA_FINIRE.md` che dice cosa è fatto (il contratto
-`corekit/picker.h` e le funzioni per le app; un campo `secondaria` nell'etichetta di UIKit) e cosa
-manca (il servizio vero, l'interfaccia, la porta 7 nel launcher, init, la prova, i documenti).
-**Domanda aperta per la persona:** in "Salva", se il file esiste già, si sovrascrive senza
-chiedere? (E una differenza da controllare: la barra del titolo mini è 28 nel codice, 29 in Figma.) Il compito completo: contratto `corekit/picker.h`
+**A metà:** il **picker** (mostra la finestra "Apri/Salva" e consegna all'app solo il file
+scelto). Fatti (ramo `servizio-picker`): il contratto `corekit/picker.h` con le funzioni per le
+app, il servizio (`utente/programmi/picker.c`), la porta 7 nel launcher, init, la prova `picker`
+con una finestra finta, i documenti. Manca la finestra vera (`utente/programmi/picker_finestra.c`,
+l'interfaccia `picker_finestra.h`): senza, il picker del sistema non si lega e build.sh si ferma.
+`disegni/ApriSalva/PICKER_DA_FINIRE.md` dice i dettagli. In "Salva", se il file esiste già, lo
+chiede la finestra ("Sostituire il file?"). (Una differenza da controllare: la barra del titolo
+mini è 28 nel codice, 29 in Figma.) Il compito completo: contratto `corekit/picker.h`
 (`open`, `save`, file consegnato già aperto, "cancelled" per Annulla), servizio che gira come la
 persona e apre solo dentro la Home (openat2 + RESOLVE_BENEATH), l'interfaccia come il disegno
 (finestra minima, padding e gap 16), porta 7 a tutte le app, nome prestato da init, prova con
@@ -574,7 +574,12 @@ sistema, fuori dall'app, che consegna solo il file scelto. Disegno fatto e appro
 minima in sovraimpressione sopra l'app (`disegni/ApriSalva/`, pagina Figma 289:674). Fatto
 (17/11/2026): il compositore sa mostrare la finestra di scelta (`RUOLO_SCELTA`, solo dal programma
 picker) sopra l'app, con il velo sulle sue finestre e l'input bloccato; `finestra_apri_scelta` in GKit,
-`uikit_esegui_scelta` in UIKit; picker provvisorio, prova `scelta`. Prossimo: il vero picker.
+`uikit_esegui_scelta` in UIKit. Fatto (17/11/2026): il servizio picker vero
+(`utente/programmi/picker.c`: richieste `open` e `save`, file consegnato già aperto, solo sotto la
+Home con `openat2`), la porta 7 a tutte le app nel launcher, il nome prestato da init con le porte
+custodite, la prova `picker` (Esempio, tasti o, s, m, con una finestra finta senza grafica, nel
+disco `disco_picker.img`). Il picker provvisorio e la prova `scelta` non ci sono più. La finestra
+vera è `picker_finestra.c` (a parte).
 
 **Decisioni per il recinto** (della persona, 16/11/2026):
 - **Attività nel recinto**: vede e ferma i programmi tramite un servizio dei processi, solo con

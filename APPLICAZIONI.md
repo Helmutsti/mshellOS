@@ -227,7 +227,9 @@ porte invece ci sono, dal 16 novembre 2026). Passare al recinto tocca quasi ogni
    fuori dall'app (come il portale di Flatpak e la finestra "Apri" del Mac), che consegna all'app
    solo il file scelto; prima si disegna in Figma (`disegni/ApriSalva/`), partendo da Files. Il
    servizio si chiama **picker** (deciso dalla persona lo stesso giorno). Il disegno è approvato:
-   finestra minima in sovraimpressione sopra l'app che chiede.
+   finestra minima in sovraimpressione sopra l'app che chiede. Il 17 novembre 2026 il servizio c'è
+   (`utente/programmi/picker.c`, porta 7 a tutte le app, prova `picker`); la finestra vera è
+   `picker_finestra.c`.
 3. **La finestra di domanda del sistema non esiste** (serve anche al firewall e al primo avvio
    per i permessi).
 4. **Come si trovano i servizi.** Oggi ogni programma si collega da sé agli indirizzi in
@@ -337,7 +339,7 @@ quello che tocca le cose della persona o il sistema intero.
 | La propria cartella dei dati e il proprio database | (disco) | una per persona, nel suo mondo isolato |
 | Leggere tema (chiaro/scuro), sfondo, lingua, ora | catalog (impostazioni), ora | solo lettura |
 | Usare font e icone del sistema | (disco) | `/system/resources`, sola lettura |
-| Aprire **un file scelto dalla persona** | selettore dei file | il sistema mostra la finestra "Apri"/"Salva"; l'app riceve solo quel file. Così la maggior parte delle app non ha bisogno del permesso sui file (come macOS e iPhone) |
+| Aprire **un file scelto dalla persona** | picker | il sistema mostra la finestra "Apri"/"Salva"; l'app riceve solo quel file, già aperto (in lettura o in scrittura). Così la maggior parte delle app non ha bisogno del permesso sui file (come macOS e iPhone). Porta 7, a tutte le app; `picker_apri` e `picker_salva` di CoreKit (`corekit/picker.h`). La finestra parte dalla Home e non ne esce (`SISTEMA.md`, sezione 1) |
 | Chiedere al sistema di condividere o di passare una richiesta a un ruolo | sistema | è la persona a scegliere a chi va |
 
 ### Permessi normali: li concede la persona al primo avvio
