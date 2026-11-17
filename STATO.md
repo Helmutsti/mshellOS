@@ -89,6 +89,14 @@ Con più agenti in parallelo: ogni agente usa un volume suo per la sandbox
 Serve Docker (la compilazione avviene dentro un container Alpine 3.24) e QEMU.
 Il risultato va in `build/<cpu>/` e si può cancellare: viene rifatto.
 
+**L'uscita del repository è il disco finito per QEMU** (decisione della persona, 17/11/2026):
+`crea_disco_x86_64.ps1` (PC) e `crea_disco_arm64.sh` (Mac) fanno solo `build/<cpu>/disco.img`
+(con `SOLO_DISCO=1`, senza i dischi delle prove); non va su GitHub. La versione stabile della
+persona sta FUORI dal repository, in `Desktop\mshellOS-prod` (PC): `avvia.ps1` la lancia,
+`aggiorna.ps1` la installa o la aggiorna dal disco finito sostituendo solo le partizioni avvio
+e system (i dati restano; se le partizioni cambiano posto si ferma). Si aggiorna solo quando lo
+dice la persona.
+
 **Windows, PC** (QEMU in `C:\Program Files\qemu\`):
 
 ```powershell

@@ -628,6 +628,9 @@ mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$ALBERO
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
     "$B/disco.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco.img pronto: GPT con avvio ($MISURA_AVVIO MB, FAT32), system ($MISURA_SISTEMA MB, ext4) e data ($MISURA_DATI MB, ext4)"
+# SOLO_DISCO=1 (crea_disco_x86_64.ps1, crea_disco_arm64.sh): il disco finito e basta, senza i
+# dischi delle prove qui sotto
+[ -n "$SOLO_DISCO" ] && exit 0
 
 # IL DISCO DELLE PROVE: una copia di disco_app.img in cui la partizione data ha in piu' la
 # cartella /data/tests, con i programmi delle prove (init fa partire tutto quello che c'e'
