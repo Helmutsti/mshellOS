@@ -10,7 +10,7 @@ Si apre il Blocco note dalla userbar (e' la seconda app) e si prova, guardando l
   5. scrivere con una selezione la sostituisce; Backspace la cancella;
   6. Tab inserisce un carattere di tabulazione (largo fino alla colonna multipla di 4); con piu'
      righe selezionate (Ctrl+A) Tab le rientra tutte e Maiusc+Tab toglie il rientro;
-  7. una riga lunga va a capo alla larghezza dell'area (a parola);
+  7. una riga lunga va a capo a carattere; in mezzo a una parola l'ultima casella mostra "_";
   8. un testo piu' lungo dell'area scorre: il cursore resta in vista, Ctrl+Home torna in cima, la
      rotella scorre;
   9. il mouse: un clic mette il cursore, trascinare seleziona, il doppio clic seleziona la parola;
@@ -198,9 +198,10 @@ def esegui(p):
     p.controlla(pixel_diversi(senza.crop(PANNELLO), meno_rientro.crop(PANNELLO), None, 40) > 20,
                 "Maiusc+Tab non ha tolto il rientro della riga del cursore")
 
-    # 7. una riga lunga va a capo (a parola): 91 caselle per riga
+    # 7. una riga lunga va a capo (a carattere, con il segno "_" in mezzo alle parole): 91 caselle per riga
     con(m, "ctrl", "end")
     scrivi(m, "\n" + "parola " * 20 + "e poi ancora un pezzo di frase che continua oltre la fine della riga dell'area")
+    scrivi(m, "\n" + "abcdefghij" * 11 + " fine")      # una parola lunga: l'a capo cade in mezzo e c'e' il segno "_"
     capo = scatta("a_capo")
     p.controlla(pixel_diversi(capo.crop(PANNELLO), senza.crop(PANNELLO), None, 40) > 500, "la riga lunga non e' stata scritta")
 

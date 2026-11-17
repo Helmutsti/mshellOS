@@ -15,10 +15,12 @@
  * scritto, non tutto il testo. Il blocco cresce da solo. Il testo non ha un limite, e non ha mai uno 0
  * dentro (i controlli, tranne a capo e tabulazione, non entrano).
  *
- * A CAPO AUTOMATICO alla larghezza dell'area: una riga che non ci sta continua sotto. Si va a capo A
- * PAROLA: dopo l'ultimo spazio (o tabulazione) che ci sta; una parola piu' lunga di una riga intera si
- * spezza a carattere. Gli spazi non fanno mai andare a capo (restano in fondo alla riga, anche oltre il
- * bordo, invisibili). L'a capo vero (Invio) e' il carattere '\n'. Le righe cosi' ottenute sono "righe
+ * A CAPO AUTOMATICO alla larghezza dell'area, A CARATTERE: la riga si riempie fino all'ultima colonna.
+ * Se l'a capo cade in mezzo a una parola (il carattere prima e quello dopo non sono spazio ne'
+ * tabulazione) l'ultima casella della riga mostra "_" in TESTO_SECONDARIO, e la riga ha una lettera in
+ * meno; se cade su uno spazio, nessun segno. Il segno e' SOLO disegnato: non e' nel testo, non si
+ * seleziona, il cursore non ci si ferma. Gli spazi non fanno mai andare a capo (restano in fondo alla
+ * riga, invisibili). L'a capo vero (Invio) e' il carattere '\n'. Le righe cosi' ottenute sono "righe
  * visive"; "riga" qui sotto e' una riga visiva, tranne dove si dice "riga del testo" (quella tra due
  * '\n').
  *
@@ -40,7 +42,7 @@
  *
  * IL MOUSE. Un clic mette il cursore, trascinare seleziona (la vista segue il cursore), un doppio
  * clic seleziona la parola. La rotella scorre; la barra di scorrimento e' quella della libreria, a filo
- * del bordo destro del pannello, e compare con la rotella o con il puntatore sopra.
+ * del bordo destro del pannello, e compare con la rotella, con il puntatore sopra e quando la vista scorre perche' il cursore si muove da tastiera (barra_scorrimento_mostra).
  *
  * IL FUOCO. Con il fuoco: il cursore (una barra di 2 x 16, TESTO_CURSORE) e il testo selezionato con
  * lo sfondo TESTO_SELEZIONE e il colore INFORMAZIONE_TESTO_TENUE. Senza: niente cursore, la selezione
@@ -71,6 +73,7 @@
 
 struct riga_area_testo {
     int ini, fine;                     /* i byte del testo: da 'ini' a 'fine' (esclusa; senza il '\n') */
+    int segno;                         /* 1: la riga finisce in mezzo a una parola, e l'ultima casella mostra "_" */
 };
 
 struct area_testo {

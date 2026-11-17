@@ -915,6 +915,11 @@ struct barra_scorrimento {
  * contenuto ci sta tutto e non c'e' niente da scorrere. */
 int barra_scorrimento_rotella(struct barra_scorrimento *b, int scatti);
 
+/* Il contenuto e' stato scorso da chi lo disegna, non dalla rotella ne' dalla barra (il cursore di
+ * un'area di testo che esce dalla vista, muovendosi da tastiera): la barra si mostra come con la
+ * rotella e resta un secondo. Chi chiama ha gia' messo la nuova posizione in b->scorrimento. */
+void barra_scorrimento_mostra(struct barra_scorrimento *b);
+
 /* Prepara una barra di scorrimento: ferma e nascosta, finche' non si scorre. */
 void barra_scorrimento_prepara(struct barra_scorrimento *b);
 

@@ -108,7 +108,7 @@ static int colonne_in(int larghezza) {
     return k < 1 ? 1 : k;
 }
 
-static int aggiungi_riga(struct area_testo *a, int ini, int fine) {
+static int aggiungi_riga(struct area_testo *a, int ini, int fine, int segno) {
     if (a->n_righe == a->cap_righe) {
         int nuove = a->cap_righe ? 2 * a->cap_righe : 64;
         struct riga_area_testo *r = realloc(a->righe, (size_t)nuove * sizeof *r);
@@ -116,7 +116,7 @@ static int aggiungi_riga(struct area_testo *a, int ini, int fine) {
         a->righe = r;
         a->cap_righe = nuove;
     }
-    a->righe[a->n_righe++] = (struct riga_area_testo){ ini, fine };
+    a->righe[a->n_righe++] = (struct riga_area_testo){ ini, fine, segno };
     return 1;
 }
 
@@ -126,15 +126,18 @@ static void aggiorna_scorrimento(struct area_testo *a) {
 }
 
 /* Rifa' l'elenco delle righe. Dentro ogni riga del testo (tra due '\n') si conta la colonna, e quando
- * un carattere che non e' uno spazio non ci sta piu' si va a capo: dopo l'ultimo spazio visto in questa
- * riga, se c'e'; se no, subito prima del carattere (una parola piu' lunga della riga si spezza). Gli
- * spazi non vanno mai a capo: restano in fondo alla riga. Ci sono sempre almeno una riga. */
+ * un carattere che non e' uno spazio non ci sta piu' si va a capo A CARATTERE: la riga si riempie fino
+ * all'ultima colonna. Se l'a capo cade in mezzo a una parola (il carattere prima e quello dopo non sono
+ * spazio ne' tabulazione) l'ultima casella della riga e' il segno "_": la riga ha una lettera in meno
+ * (quella che non ci stava col segno passa alla riga dopo) e 'segno' e' 1. Il segno si disegna
+ * soltanto: non e' nel testo. Gli spazi non vanno mai a capo: restano in fondo alla riga.
+ * Ci sono sempre almeno una riga. */
 static void rifai_righe(struct area_testo *a) {
     int n = lung(a), cols = a->colonne < 1 ? 1 : a->colonne;
     a->n_righe = 0;
     int ini = 0;
     for (;;) {
-        int i = ini, col = 0, rottura = -1;
+        int i = ini, col = 0, prima = -1;          /* 'prima': dove comincia il carattere prima di i */
         while (i < n) {
             unsigned int cp;
             int len = carattere_in(a, i, &cp);
@@ -142,18 +145,21 @@ static void rifai_righe(struct area_testo *a) {
             int spazio = cp == ' ' || cp == '\t';
             int w = larghezza_di(cp, col);
             if (!spazio && col > 0 && col + w > cols) {
-                int fine = rottura > ini ? rottura : i;
-                if (!aggiungi_riga(a, ini, fine)) return;
+                unsigned int cq = 0;
+                if (prima >= 0) carattere_in(a, prima, &cq);
+                int segno = prima > ini && cq != ' ' && cq != '\t';
+                int fine = segno ? prima : i;
+                if (!aggiungi_riga(a, ini, fine, segno)) return;
                 ini = i = fine;
                 col = 0;
-                rottura = -1;
+                prima = -1;
                 continue;
             }
             col += w;
+            prima = i;
             i += len;
-            if (spazio) rottura = i;
         }
-        if (!aggiungi_riga(a, ini, i)) return;
+        if (!aggiungi_riga(a, ini, i, 0)) return;
         if (i >= n) break;
         ini = i + 1;                       /* salta il '\n' */
     }
@@ -198,7 +204,8 @@ static int offset_a_colonna(const struct area_testo *a, int li, int col) {
         c += w;
         i += len;
     }
-    return a->righe[li].fine;
+    /* in fondo a una riga con il segno il cursore non va oltre l'ultima lettera (oltre sarebbe la riga dopo) */
+    return a->righe[li].segno && a->righe[li].fine > a->righe[li].ini ? prima_di(a, a->righe[li].fine) : a->righe[li].fine;
 }
 
 /* --- il cursore e la selezione --- */
@@ -211,10 +218,11 @@ static void assicura_visibile(struct area_testo *a) {
     if (a->base.a <= 0) return;
     int li = riga_del_cursore(a);
     int sopra = li * RIGA, sotto = DENTRO + (li + 1) * RIGA + DENTRO - a->base.a;
-    int *pos = &a->barra.scorrimento.posizione;
+    int *pos = &a->barra.scorrimento.posizione, prima = *pos;
     if (*pos > sopra) *pos = sopra;
     if (*pos < sotto) *pos = sotto;
     scorrimento_misure(&a->barra.scorrimento, a->n_righe * RIGA + 2 * DENTRO, a->base.a);   /* tiene la posizione nei limiti */
+    if (*pos != prima) barra_scorrimento_mostra(&a->barra);   /* scorre da solo: la barra si fa vedere */
 }
 
 /* Il testo, il cursore o la selezione sono cambiati: righe, vista e ridisegno. */
@@ -235,7 +243,8 @@ static void testo_cambiato(struct area_testo *a) {
 static void metti_cursore(struct area_testo *a, int off, int estendi, int riga) {
     a->cursore = off;
     if (!estendi) a->ancora = off;
-    a->a_fine_riga = riga >= 0 && riga + 1 < a->n_righe && a->righe[riga].fine == off && a->righe[riga + 1].ini == off;
+    a->a_fine_riga = riga >= 0 && riga + 1 < a->n_righe && !a->righe[riga].segno &&
+                     a->righe[riga].fine == off && a->righe[riga + 1].ini == off;   /* sul segno "_" il cursore non si ferma */
 }
 
 /* Su o giu' di 'quante' righe, alla colonna voluta. Oltre la prima riga si va all'inizio del testo,
@@ -459,6 +468,10 @@ static void area_disegna(struct widget *w, struct pennello *p) {
             int c1 = minimo(colonna_in(a, li, da), a->colonne), c2 = minimo(colonna_in(a, li, fino), a->colonne);
             pennello_colore(p, w->fuoco ? TESTO_SELEZIONE : TESTO_SELEZIONE_INATTIVA);
             riempi_rettangolo(p, x0 + CASELLA_X(c1), ry, CASELLA_X(c2) - CASELLA_X(c1), RIGA);
+        }
+        if (r->segno) {                                   /* il segno dell'a capo in mezzo a una parola: solo disegnato */
+            pennello_colore(p, TESTO_SECONDARIO);
+            disegna_lettera(p, '_', x0 + CASELLA_X(a->colonne - 1), ry);
         }
         int col = 0, selezionato = 0;
         pennello_colore(p, TESTO_PRIMARIO);

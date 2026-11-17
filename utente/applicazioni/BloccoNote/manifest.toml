@@ -19,8 +19,8 @@ permessi = []
 deviazioni = []
 funzioni = []
 
-# L'icona: il simbolo "file-text" di Lucide sull'arancio di sistema (piu' chiaro nel tema scuro), con la luce dall'alto.
-# Le PNG sono le versioni a 48, 32 e 18.
+# L'icona dal disegno Figma: il simbolo "file-text" di Lucide sull'arancio di sistema (piu' chiaro nel tema scuro), con la luce dall'alto.
+# Le PNG a 32 e 18 sono quelle di Figma (la 18 senza luce); la 48 e' la 96 rimpicciolita.
 [icone.chiaro]
 svg = "resources/icona-chiara.svg"
 png = { 18 = "resources/icona-chiara-18.png", 32 = "resources/icona-chiara-32.png", 48 = "resources/icona-chiara-48.png" }

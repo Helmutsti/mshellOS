@@ -26,7 +26,13 @@ sandbox in `disegni/BloccoNote/codice/`; la prova è `test/prove/bloccotesto.py`
 - testo a **larghezza fissa disegnato a griglia come il Terminale** (una lettera, una casella; il testo
   è UTF-8: una lettera è un carattere Unicode, non un byte);
 - il testo lo tiene il componente in un **buffer con il buco** (gap buffer);
-- **a capo automatico** alla larghezza dell'area;
+- **a capo automatico a carattere** (deciso dopo il primo giro): la riga si riempie fino all'ultima
+  colonna; se l'a capo cade in mezzo a una parola l'ultima casella mostra il segno `_` (colore
+  `testo/secondario`), solo disegnato, che non sta nel testo e non si seleziona; se cade su uno spazio
+  nessun segno;
+- su/giù sui bordi come VS Code (sulla prima riga su va all'inizio, sull'ultima giù alla fine);
+- la barra di scorrimento compare anche quando il testo scorre perché il cursore si muove da tastiera;
+- l'icona dell'app è quella del disegno Figma (cornice "Blocco note" della pagina Scrivania);
 - **Tab = un carattere `'\t'`, mostrato largo fino alla colonna multipla di 4**; con più righe
   selezionate Tab aggiunge un `'\t'` a ognuna; **Maiusc+Tab toglie il rientro** di ogni riga selezionata
   (o della riga del cursore): un `'\t'`, o fino a 4 spazi. Come Visual Studio Code;
