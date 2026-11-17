@@ -9,6 +9,8 @@
  *                              da Linux all'avvio
  *   avvia, avvia_come,         fork, poi nel figlio dup2 (i descrittori prestati),
  *   avvia_con                  setuid/setgid (l'uid nuovo) ed execve
+ *   avvia_app_nel_recinto      clone nei mondi nuovi, poi il recinto (recinto.c), l'uid,
+ *                              NO_NEW_PRIVS, seccomp ed execve
  *   processo                   pidfd_open: un descrittore che diventa pronto quando il
  *                              processo finisce
  *   elenco_processi,           una richiesta al servizio tasks (tasks.c, qui accanto): lui
@@ -33,6 +35,7 @@
 
 #include "../corekit.h"
 #include "../sistema/privilegi.h"
+#include "../sistema/recinto.h"
 #include "interno.h"
 
 /* --- il registro --- */
@@ -126,13 +129,21 @@ static void solo_quelli_passati(int quanti) {
  * il launcher ci scrive l'elenco delle porte dell'app (messaggi.h, VARIABILE_PORTE); il
  * Terminale e init, per la shell, il tipo di terminale (TERM). */
 static int lancia(const char *percorso, const int *passati, int quanti, int uid,
-                  const char *argomento, const char *variabile) {
+                  const char *argomento, const char *variabile, const struct recinto *recinto) {
     char vero[MAX_VERO];
     if (percorso_vero(percorso, vero) < 0 || quanti < 0 || quanti > MAX_PASSATI) return -1;
     figli_spariscono();
     int tubo[2];
     if (pipe2(tubo, O_CLOEXEC) < 0) return -1;
-    pid_t figlio = fork();
+    /* Con il recinto il figlio nasce gia' nei mondi nuovi (clone con i flag di recinto_mondi):
+     * cosi' e' lui l'app, il numero 1 del suo mondo, e qui si riceve il suo numero vero, quello
+     * che vedono il compositore, tasks e gli altri. Una copia in mezzo (unshare, poi fork)
+     * darebbe al launcher il numero della copia, non dell'app. clone con la pila 0 e' come
+     * fork: il figlio continua sulla sua copia della pila. A differenza di fork, la libreria C
+     * non sa del figlio (il numero del thread che ricorda e' quello del padre): per questo il
+     * figlio fa solo chiamate semplici al kernel fino a execve, come gia' faceva. */
+    pid_t figlio = recinto ? (pid_t)syscall(SYS_clone, (unsigned long)recinto_mondi(recinto) | SIGCHLD, 0, 0, 0, 0)
+                           : fork();
     if (figlio == 0) {
         /* --- il figlio --- */
         int errore = 0;
@@ -146,8 +157,12 @@ static int lancia(const char *percorso, const int *passati, int quanti, int uid,
         for (int i = 0; i < quanti && !errore; i++)
             if (dup2(alti[i], i) < 0) errore = errno;   /* dup2 toglie O_CLOEXEC */
         solo_quelli_passati(quanti);
+        /* il recinto si costruisce ancora come sistema (montare chiede i poteri); poi l'uid
+         * della persona; poi si chiude, e non si torna piu' indietro (recinto.c) */
+        if (!errore && recinto) errore = recinto_costruisci(recinto);
         if (!errore && uid >= 0 && (setgroups(0, 0) < 0 || setgid((gid_t)uid) < 0 || setuid((uid_t)uid) < 0))
             errore = errno;
+        if (!errore && recinto) errore = recinto_chiudi();
         if (!errore) {
             /* il primo argomento e' sempre il programma; poi, se c'e', quello per lui */
             char *argomenti[] = { vero, (char *)argomento, 0 };
@@ -169,24 +184,24 @@ static int lancia(const char *percorso, const int *passati, int quanti, int uid,
     return figlio > 0 && letti == 0 ? (int)figlio : -1;
 }
 
-int avvia(const char *percorso) { return lancia(percorso, 0, 0, -1, 0, 0); }
+int avvia(const char *percorso) { return lancia(percorso, 0, 0, -1, 0, 0, 0); }
 
-int avvia_come(const char *percorso, unsigned int uid) { return lancia(percorso, 0, 0, (int)uid, 0, 0); }
+int avvia_come(const char *percorso, unsigned int uid) { return lancia(percorso, 0, 0, (int)uid, 0, 0, 0); }
 
 int avvia_come_con(const char *percorso, unsigned int uid, const char *argomento) {
-    return lancia(percorso, 0, 0, (int)uid, argomento && argomento[0] ? argomento : 0, 0);
+    return lancia(percorso, 0, 0, (int)uid, argomento && argomento[0] ? argomento : 0, 0, 0);
 }
 
 int avvia_con(const char *percorso, const int *descrittori, int quanti) {
-    return lancia(percorso, descrittori, quanti, -1, 0, 0);
+    return lancia(percorso, descrittori, quanti, -1, 0, 0, 0);
 }
 
 int avvia_con_variabile(const char *percorso, const int *descrittori, int quanti, const char *variabile) {
-    return lancia(percorso, descrittori, quanti, -1, 0, variabile);
+    return lancia(percorso, descrittori, quanti, -1, 0, variabile, 0);
 }
 
 int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti) {
-    return lancia(percorso, descrittori, quanti, (int)uid, 0, 0);
+    return lancia(percorso, descrittori, quanti, (int)uid, 0, 0, 0);
 }
 
 unsigned int uid_mio(void) { return (unsigned int)getuid(); }
@@ -195,7 +210,14 @@ int apri_nulla(void) { return open("/dev/null", O_RDWR | O_CLOEXEC); }
 
 int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti,
               const char *variabile) {
-    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, variabile);
+    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, variabile, 0);
+}
+
+int avvia_app_nel_recinto(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori,
+                          int quanti, const char *variabile, const struct recinto *recinto) {
+    if (!recinto) return -1;           /* un recinto si chiede sempre: senza, c'e' avvia_app */
+    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, variabile,
+                  recinto);
 }
 
 #ifndef SYS_pidfd_open

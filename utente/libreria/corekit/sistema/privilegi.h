@@ -10,6 +10,7 @@
 #define PRIVILEGI_H
 
 #include "../corekit.h"
+#include "recinto.h"
 
 /* --- far partire un programma con un altro uid --- */
 
@@ -33,6 +34,14 @@ int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int
  * VARIABILE_PORTE), cosi' l'app sa quali canali sono porte senza doverlo indovinare. */
 int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti,
               const char *variabile);
+
+/* Come avvia_app, ma l'app parte nel suo RECINTO (recinto.h): mondi nuovi del kernel, una radice
+ * con dentro solo le cartelle dell'elenco, poi l'uid, NO_NEW_PRIVS e il filtro delle chiamate.
+ * Il programma 'percorso' deve stare dentro una cartella dell'elenco con il modo
+ * AGGANCIO_PROGRAMMA (il pacchetto dell'app). Il numero dell'app (quello vero, visto da fuori),
+ * o -1 se non e' partita. Lo usa il launcher per tutte le app tranne il Terminale. */
+int avvia_app_nel_recinto(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori,
+                          int quanti, const char *variabile, const struct recinto *recinto);
 
 /* /dev/null, aperto in lettura e scrittura: da prestare come ingresso, uscita ed errori a un
  * programma che non ne ha (apri, in corekit.h, i dispositivi non li apre). Il descrittore, o -1. */

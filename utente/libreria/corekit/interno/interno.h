@@ -38,4 +38,15 @@ int launcher_chiedi(struct messaggio *richiesta, struct messaggio *risposta, int
  * byte, compreso lo 0; "" se non c'e'). Con 'perche' 0 o 'byte' 0 non fa niente. */
 void launcher_frase(const struct messaggio *risposta, char *perche, unsigned int byte);
 
+/* IL RECINTO (sistema/recinto.h; il lavoro in recinto.c), per lancia in corekit.c.
+ * recinto_mondi: i flag CLONE_NEW... dei mondi nuovi di quel recinto (con il permesso della
+ * rete, senza CLONE_NEWNET). recinto_costruisci: nel figlio nato gia' nei mondi nuovi, ancora
+ * con i poteri del sistema, costruisce la radice nuova e ci entra (pivot_root). 0, o il
+ * numero dell'errore di Linux (errno). Dopo, chi chiama cambia uid e chiama recinto_chiudi:
+ * NO_NEW_PRIVS e il filtro delle chiamate. 0, o errno. */
+struct recinto;
+int recinto_mondi(const struct recinto *r);
+int recinto_costruisci(const struct recinto *r);
+int recinto_chiudi(void);
+
 #endif

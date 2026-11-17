@@ -50,8 +50,7 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
 `immagini`, che hanno le foto di riferimento vecchie; su x86_64 passano tutte):
 1. **Prova del recinto** (`utente/prove/recinto.c`, prova `recinto`, solo QEMU): namespaces,
    radice nuova, uid 1000, NO_NEW_PRIVS, seccomp (elenco di chiamate vietate), la Home agganciata
-   in sola lettura con una sottocartella in scrittura, un secondo recinto "con la rete". Il
-   launcher NON usa ancora il recinto: le app girano come prima.
+   in sola lettura con una sottocartella in scrittura, un secondo recinto "con la rete".
 2. **Permessi sulle cartelle**: per ora solo la Home, `files.read` (lettura) e `files.write`
    (lettura e scrittura); gli sfondi solo a chi ha `settings.system` (Impostazioni).
 3. **catalog**: il servizio delle impostazioni della persona (tema, sfondo), gira come la
@@ -80,6 +79,23 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
    (Annulla / Sostituisci). Un'app con sopra la finestra non viene giudicata "non risponde"
    (decisione della persona, sezione 7). Dettagli in `disegni/ApriSalva/PICKER_DA_FINIRE.md`.
 12. **x86_64**: build completa e prove passate sul PC Windows (17/11/2026).
+
+13. **Il recinto vero nel launcher** (`corekit/sistema/recinto.h`, `corekit/interno/recinto.c`,
+   `prepara_recinto` in `launcher.c`): ogni app tranne il Terminale parte nei suoi mondi del
+   kernel, con dentro, allo stesso percorso di fuori (decisione della persona): il suo pacchetto
+   intero in sola lettura, `/system/resources`, la sua cartella dei dati
+   `/data/users/<uid>/appsdata/<id>` in lettura e scrittura (creata se manca), la Home secondo
+   `files.*`, gli sfondi con `settings.system`; rete del computer solo con `network.use`;
+   NO_NEW_PRIVS e lo stesso filtro seccomp della prova (ora in CoreKit). Il launcher scrive nel
+   registro, per ogni app, cosa ha nel recinto. L'app nasce direttamente nei mondi nuovi (clone),
+   cosi' il launcher ha il suo numero vero; `chi()` guarda solo l'uid (nel recinto il kernel dice
+   "processo 0" per il launcher, che sta fuori). Prove QEMU x86_64: passano tutte tranne `files`
+   e `store`, che installano Contatore da file: lo Store nel recinto non vede la Home e non legge
+   il pacchetto (per ora lo Store si ignora, decisione della persona). La sandbox Docker non
+   riesce a costruire i recinti (Docker toglie i poteri per montare): nella sandbox le app partono
+   SENZA recinto (decisione della persona del 18/11/2026; `strumenti/sandbox/recinto_sandbox.c`),
+   il recinto si prova in QEMU. Unito in `main` il 18/11/2026, con il Terminale come deciso il
+   17/11 (sistema, senza recinto, `uid_dell_app`).
 
 **Wayland (decisione della persona, 18/11/2026): il compositore passa a Wayland, a passi, senza
 rompere niente** (`SISTEMA.md`, "Wayland"). **Passo 1 fatto** (ramo di lavoro, non ancora in `main`):
@@ -113,10 +129,8 @@ oggi lo schermo è un solo buffer con DIRTYFB): cambierà solo da dove arriva il
 protocollo, resta Wayland con le nostre estensioni (finestra di scelta del picker, identità, pannelli).
 
 **Cosa resta, nell'ordine:**
-1. il **recinto vero nel launcher**: unire quello che la prova `recinto` dimostra (Home secondo
-   `files.*`, sfondi per `settings.system`, rete secondo `network.use`, seccomp, porte e
-   `MSHELL_PORTE`). Il Terminale resta senza recinto (decisione della persona). Prima di
-   accenderlo, controllare che le app non leggano più niente fuori dalle loro cartelle;
+1. il **recinto**: decidere come lo Store riceve il pacchetto da installare (oggi lo apre da sé,
+   e nel recinto non vede la Home: falliscono le prove `files` e `store`);
 2. la **finestra del primo avvio** per i permessi (da disegnare in Figma), con il posto dove il
    sistema ricorda cosa ha concesso la persona (database del sistema, APPLICAZIONI.md sezione 8),
    e la pagina dei permessi in Impostazioni; poi via la regola "dichiarati = concessi";
@@ -140,11 +154,6 @@ protocollo, resta Wayland con le nostre estensioni (finestra di scelta del picke
   `TERM=xterm-256color`; la richiesta `open_shell` e il permesso `system.shell` non ci sono più.
   Resta il miglioramento futuro: il Terminale (e quindi la shell) come la persona, togliendo quel
   caso, e un comando come `sudo` per le azioni da sistema.
-- **Il recinto nel launcher** è pronto ma NON unito: ramo `worktree-agent-a6fd0d6238144e1f4`
-  (commit cadc7fb, da riallineare a main). In QEMU 17 prove su 19 (falliscono files e store:
-  l'installazione da file dello Store, punto rimandato dalla persona). La sandbox Docker non può
-  costruire recinti: la persona vuole ragionare su un collaudo delle app con Docker (più
-  contenitori, docker compose, il recinto come impostazione di Docker). Da decidere.
 - **L'editor di testo**: fatti il primo passo (l'area di testo di UIKit e l'app Blocco note) e il terzo (Nuovo, Apri, Salva con nome, asterisco e "Salvare le modifiche?"; Salva su un file aperto aspetta una decisione: il picker dà Apri in sola lettura); mancano annulla e appunti; il resto è in `PIANO_EDITOR.md`.
 - Fatti il 17/11/2026 e in main: Terminale su libvterm, vim (tiny, /system/bin/vim), UTF-8 in
   tutto il sistema, ripetizione di tutti i tasti, puntatore a 24, disco finito come uscita

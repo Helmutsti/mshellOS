@@ -11,6 +11,8 @@ include strumenti/compilazione/programmi.mk
 #     oggetto sciolto che definisce le tre funzioni dello schermo (gkit/sistema/schermo.h):
 #     chi lega le trova gia' li', e dall'archivio non prende schermo.o (si prende un oggetto
 #     da un archivio solo per una funzione che manca ancora);
+#   - il launcher con il recinto della sandbox (recinto_sandbox.c): le app partono senza
+#     recinto, perche' Docker toglie i poteri per costruirlo (decisione della persona);
 #   - eventi: mouse e tastiera da una presa TCP (eventi_sandbox.c) al posto di evdev;
 #   - avvio: il primo programma del container (avvio_sandbox.c).
 SCHERMO_SANDBOX := $(O)/strumenti/sandbox/schermo_sandbox.o
@@ -24,6 +26,8 @@ $(O)/strumenti/sandbox/%.o: strumenti/sandbox/%.c $(O)/.firma
 $(O)/sandbox/picker: $(PICKER_PEZZI)
 # il compositore con il server Wayland e le sue librerie, come in programmi.mk
 $(O)/sandbox/compositore: $(O)/utente/programmi/compositore_wayland.o
+# il launcher con il recinto della sandbox: le app partono senza recinto (recinto_sandbox.c)
+$(O)/sandbox/launcher: $(O)/strumenti/sandbox/recinto_sandbox.o
 $(addprefix $(O)/sandbox/,$(SB_PROGRAMMI)): $(O)/sandbox/%: $(O)/utente/programmi/%.o $(SCHERMO_SANDBOX) $(LIBRERIE)
 	$(call lega,$@,$(SCHERMO_SANDBOX) $< $(filter-out $< $(SCHERMO_SANDBOX),$(filter %.o,$^)) $($*_ESTERNE) $(LIBRERIE))
 $(O)/sandbox/eventi: $(O)/strumenti/sandbox/eventi_sandbox.o $(SCHERMO_SANDBOX) $(LIBRERIE)

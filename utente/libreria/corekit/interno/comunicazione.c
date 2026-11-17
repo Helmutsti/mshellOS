@@ -187,9 +187,15 @@ static int credenziali(int d, struct ucred *c) {
     return getsockopt(d, SOL_SOCKET, SO_PEERCRED, c, &l) < 0 || c->pid <= 0 ? -1 : 0;
 }
 
+/* Per chi() basta l'uid, e il numero del processo non si guarda: un'app nel recinto ha un suo
+ * mondo dei numeri (recinto.c), e per lei il launcher, che ha creato i suoi canali, sta fuori;
+ * il kernel allora le dice "processo 0" (non lo vede), ma l'uid e' quello vero (i mondi degli
+ * utenti non si cambiano). Un socket non collegato ha uid 65534 ("nessuno"): non e' mai il
+ * sistema ne' la persona. programma_di e termina invece il processo lo vogliono vedere. */
 int chi(int d) {
     struct ucred c;
-    return credenziali(d, &c) < 0 ? -1 : (int)c.uid;
+    socklen_t l = sizeof c;
+    return getsockopt(d, SOL_SOCKET, SO_PEERCRED, &c, &l) < 0 ? -1 : (int)c.uid;
 }
 
 int programma_di(int d, char *dove) {
