@@ -44,16 +44,17 @@
 #                      prepara strumenti/grafica/genera.py): vanno in /system/resources
 #   strumenti/         programmi che girano qui, sul computer che compila (la grafica)
 #   build/<cpu>/       il compilato (si puo' cancellare, viene rifatto):
-#       linux          il kernel (per il PC: bzImage; per ARM: Image)
+#       linux          il kernel, com'e' nel pacchetto di Alpine (vmlinuz: per il PC un
+#                      bzImage, per ARM uno "zboot"), da mettere nella UKI
 #       libcorekit.a   CoreKit compilata (una libreria statica), legata in ogni programma
 #       libgkit.a      GKit compilata (la grafica), come libcorekit.a
 #       libuikit.a     UIKit compilata (l'interfaccia), come libcorekit.a
 #       curl           il comando curl, compilato dai sorgenti ufficiali (strumenti/
 #                      compilazione/curl.sh): si rifa' solo se cambia la versione o la radice
 #       avvio.img      l'archivio di avvio (initramfs: cpio compresso con gzip)
-#       BOOTX64.EFI    (solo PC) kernel + archivio + riga di comando in un solo programma
+#       BOOTX64.EFI    (PC) kernel + archivio + riga di comando in un solo programma
 #                      UEFI (una "UKI", Unified Kernel Image)
-#       riga_kernel.txt (solo ARM) la riga di comando del kernel, per QEMU -append
+#       BOOTAA64.EFI   (ARM) lo stesso, per ARM64
 #       pacchetti/<id>.app  il pacchetto di ogni applicazione (uno ZIP), per questo processore
 #       disco.img      IL DISCO, uno solo, con una tabella delle partizioni GPT e tre
 #                      partizioni (vedi IL DISCO qui sotto)
@@ -73,9 +74,9 @@
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
 # nome nella tabella (il "PARTLABEL", che avvio usa per trovarle):
-#   1. avvio   64 MB  la partizione EFI (FAT32): sul PC dentro \EFI\BOOT\BOOTX64.EFI, la
-#                     UKI; su ARM e' vuota (QEMU carica kernel e archivio con -kernel e
-#                     -initrd), ma c'e', perche' il disco sia fatto allo stesso modo
+#   1. avvio   64 MB  la partizione EFI (FAT32): dentro \EFI\BOOT\BOOTX64.EFI sul PC,
+#                     \EFI\BOOT\BOOTAA64.EFI su ARM, la UKI (il nome e' quello che il
+#                     firmware UEFI cerca da solo su quel processore)
 #   2. system  64 MB  ext4, montata da avvio in SOLA LETTURA come "/": il sistema
 #   3. data    64 MB  ext4, montata da avvio in lettura e scrittura in /data: i dati
 # Com'e' fatto il sistema che ne viene fuori:
@@ -149,14 +150,17 @@ x86_64)
     ARCH=x86_64
     B=${USCITA:-build/x86_64}
     CONSOLE="console=ttyS0,115200"
-    # efi-mkuki e systemd-efistub: la UKI
-    ATTREZZI_CPU="efi-mkuki systemd-efistub"
+    # la UKI: il nome che il firmware UEFI cerca, e il programmino di systemd che fa
+    # partire Linux (systemd-stub), per questo processore (vedi il passo 5)
+    UKI=BOOTX64.EFI
+    STUB=linuxx64.efi.stub
     ;;
 arm64)
     ARCH=aarch64
     B=${USCITA:-build/arm64}
     CONSOLE="console=ttyAMA0"
-    ATTREZZI_CPU=""
+    UKI=BOOTAA64.EFI
+    STUB=linuxaa64.efi.stub
     ;;
 *)
     echo "build.sh: CPU sconosciuta '$CPU' (x86_64 o arm64)"
@@ -200,7 +204,8 @@ mkdir -p "$SCARICO/$ARCH"
 # binutils: ar, che mette insieme libcorekit.a (passo 2); e2fsprogs: gli ext4 (mkfs.ext4); sfdisk: la tabella delle partizioni (GPT); mtools: la
 # FAT della partizione di avvio, scritta senza montarla
 # make: la compilazione (programmi.mk); zip: i pacchetti delle app
-ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip $ATTREZZI_CPU"
+# efi-mkuki e systemd-efistub: la UKI (passo 5)
+ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub"
 apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = "$(echo $ATTREZZI | wc -w)" ] ||
     apk add --cache-dir "$SCARICO/$ARCH" $ATTREZZI >/dev/null
 
@@ -560,40 +565,39 @@ echo "$CHIAVE_AVVIO" > "$B/avvio.img.chiave"
 fi
 
 # --- 4. il kernel ---
-# Sul PC vmlinuz e' un "bzImage", che sa anche partire da UEFI da solo (l'"EFI stub").
-# Su ARM64 Alpine lo da' compresso dentro un piccolo programma UEFI ("zboot": "MZ", poi
-# "zimg", da dove a dove sta il kernel compresso, e "gzip"): per partire senza UEFI
-# (QEMU -kernel, UTM) serve l'"Image" che c'e' dentro, quindi lo si tira fuori.
+# Il vmlinuz del pacchetto, cosi' com'e', su tutti e due i processori: e' gia' un programma
+# UEFI che sa far partire Linux (l'"EFI stub"), ed e' quello che systemd-stub lancia dalla
+# UKI (passo 5). Sul PC e' un "bzImage"; su ARM64 Alpine lo da' compresso dentro un piccolo
+# programma UEFI ("zboot") che lo scompatta in memoria e poi lo avvia: nella UKI va bene
+# cosi' (e occupa un terzo dell'"Image" scompattato, che servirebbe solo per far partire
+# il kernel senza firmware, con QEMU -kernel, cosa che non si fa piu').
 VMLINUZ="$RADICE/boot/vmlinuz-$NUCLEO"
 CHIAVE_LINUX="$NUCLEO $VERSIONE_K $FIRMA_BUILD"
 if pronto "$B/linux" "$CHIAVE_LINUX"; then
     echo "$B/linux gia' pronto: Linux $VERSIONE_K"
-elif [ "$CPU" = arm64 ] && [ "$(dd if="$VMLINUZ" bs=1 skip=4 count=4 2>/dev/null)" = zimg ]; then
-    numero_a() { od -An -tu4 -j "$1" -N4 "$VMLINUZ" | tr -d ' '; }
-    tail -c +"$(($(numero_a 8) + 1))" "$VMLINUZ" | head -c "$(numero_a 12)" | gzip -dc > "$B/linux"
 else
     cp "$VMLINUZ" "$B/linux"
+    echo "$CHIAVE_LINUX" > "$B/linux.chiave"
+    echo "$B/linux pronto: Linux $VERSIONE_K"
 fi
-pronto "$B/linux" "$CHIAVE_LINUX" || { echo "$CHIAVE_LINUX" > "$B/linux.chiave"; echo "$B/linux pronto: Linux $VERSIONE_K"; }
 
-# --- 5. (solo PC) il programma UEFI che avvia tutto ---
+# --- 5. il programma UEFI che avvia tutto ---
 # All'accensione il firmware UEFI cerca un disco con una partizione EFI (FAT) e dentro il
-# file \EFI\BOOT\BOOTX64.EFI. Ci mettiamo una UKI: un solo programma UEFI con dentro il
-# kernel, l'archivio di avvio e la riga di comando. La fa efi-mkuki, che li attacca
-# come "sezioni" al programmino UEFI di systemd che sa far partire Linux (systemd-stub).
-# Su ARM QEMU carica il kernel e l'archivio da se' (-kernel, -initrd): la riga di comando
-# gliela passa run.sh (-append), da riga_kernel.txt.
+# file \EFI\BOOT\BOOTX64.EFI sul PC, \EFI\BOOT\BOOTAA64.EFI su ARM ($UKI). Ci mettiamo
+# una UKI: un solo programma UEFI con dentro il kernel, l'archivio di avvio e la riga di
+# comando. La fa efi-mkuki, che li attacca come "sezioni" al programmino UEFI di systemd
+# che sa far partire Linux (systemd-stub, il file $STUB del pacchetto systemd-efistub,
+# uno per processore). -k: la versione del kernel, che sul PC efi-mkuki saprebbe leggere
+# dal bzImage da se', su ARM no: la si da' sempre.
 CHIAVE_UKI="$CHIAVE_AVVIO / $CHIAVE_LINUX / $RIGA_KERNEL"
-if [ "$CPU" = x86_64 ] && pronto "$B/BOOTX64.EFI" "$CHIAVE_UKI"; then
-    echo "$B/BOOTX64.EFI gia' pronto"
-elif [ "$CPU" = x86_64 ]; then
+if pronto "$B/$UKI" "$CHIAVE_UKI"; then
+    echo "$B/$UKI gia' pronto"
+else
     printf 'NAME="mshell"\nID=mshell\nPRETTY_NAME="mshell (Linux %s)"\n' "$VERSIONE_K" > /tmp/os-release
     efi-mkuki -c "$RIGA_KERNEL" -k "$VERSIONE_K" -r /tmp/os-release \
-        -S /usr/lib/systemd/boot/efi/linuxx64.efi.stub -o "$B/BOOTX64.EFI" "$B/linux" "$B/avvio.img"
-    echo "$CHIAVE_UKI" > "$B/BOOTX64.EFI.chiave"
-    echo "$B/BOOTX64.EFI pronto"
-else
-    echo "$RIGA_KERNEL" > "$B/riga_kernel.txt"
+        -S "/usr/lib/systemd/boot/efi/$STUB" -o "$B/$UKI" "$B/linux" "$B/avvio.img"
+    echo "$CHIAVE_UKI" > "$B/$UKI.chiave"
+    echo "$B/$UKI pronto"
 fi
 
 # --- 6. il disco: GPT con tre partizioni ---
@@ -631,7 +635,7 @@ FINE
 AVVIO="$B/disco.img@@$((INIZIO_AVVIO * MB))"
 mformat -i "$AVVIO" -F -T $((MISURA_AVVIO * SETTORI_MB)) -v AVVIO ::
 mmd -i "$AVVIO" ::/EFI ::/EFI/BOOT
-[ "$CPU" = x86_64 ] && mcopy -i "$AVVIO" "$B/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+mcopy -i "$AVVIO" "$B/$UKI" "::/EFI/BOOT/$UKI"
 
 # 2. system e 3. data: ext4. mkfs.ext4 (di e2fsprogs, gli attrezzi di Linux per ext2/3/4)
 #    scrive un ext4 vuoto e, con -d, ci copia dentro l'albero, con proprietari, permessi e

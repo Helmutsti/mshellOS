@@ -55,7 +55,8 @@ riferimento) non cambiano.
 ## Come si lancia
 
 Serve [uv](https://docs.astral.sh/uv/) (installa da solo Python e Pillow) e QEMU, con il
-firmware UEFI per il PC (`edk2-x86_64-code.fd`, che viene con QEMU). Il firmware si cerca
+firmware UEFI (`edk2-x86_64-code.fd` sul PC, `edk2-aarch64-code.fd` sul Mac ARM, che
+vengono con QEMU). Il firmware si cerca
 vicino a QEMU (`C:\Program Files\qemu\share\` su Windows, `<prefisso>/share/qemu/` con
 Homebrew e su Linux), poi in `$(brew --prefix qemu)/share/qemu/` e `/usr/share/qemu/`, come
 `run.sh`; se sta altrove, si dice con la variabile `OVMF` (il percorso del file).

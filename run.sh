@@ -6,14 +6,10 @@
 # Il disco e' uno solo, build/<cpu>/disco.img, con una tabella delle partizioni GPT e tre
 # partizioni (vedi build.sh): avvio (la partizione EFI, FAT32), system (ext4: "/", in sola
 # lettura) e data (ext4: /data, i file della persona e lo stato dei servizi).
-# x86_64:
-#   il firmware UEFI trova nel disco la partizione avvio e lancia \EFI\BOOT\BOOTX64.EFI:
-#   il kernel Linux con l'archivio di avvio e la riga di comando (una UKI)
-# arm64:
-#   build/arm64/linux      : il kernel Linux in formato "Image", che QEMU carica in RAM e
-#                            avvia direttamente, passandogli il device tree
-#   build/arm64/avvio.img  : l'archivio di avvio (initramfs), che QEMU mette in RAM accanto
-#   build/arm64/disco.img  : il disco (la partizione avvio c'e', ma qui non si usa)
+# Si parte come su un computer vero, su tutti e due i processori: prima il firmware UEFI,
+# che trova nel disco la partizione avvio e lancia \EFI\BOOT\BOOTX64.EFI (x86_64) o
+# \EFI\BOOT\BOOTAA64.EFI (arm64): il kernel Linux con l'archivio di avvio e la riga di
+# comando (una UKI, la fa build.sh).
 #
 # I dispositivi sono quelli "virtio" (fatti apposta per le macchine virtuali, con i loro
 # driver in Linux) e l'USB, come su un computer vero:
@@ -46,8 +42,13 @@ docker run --rm -v "$qui:/w" "$attrezzi" sh /w/build.sh "$cpu"
 
 if [ "$cpu" = arm64 ]; then
     # -M virt     : la macchina ARM "virtuale" di QEMU
-    # -kernel, -initrd, -append : niente firmware: QEMU mette in RAM il kernel e
-    #               l'archivio di avvio e salta al kernel, con la sua riga di comando
+    # -drive if=pflash ... edk2-aarch64-code.fd : il firmware UEFI per ARM (del progetto
+    #               EDK2), che viene con QEMU, come sul PC. Parte, trova nel disco la
+    #               partizione EFI (avvio) e lancia \EFI\BOOT\BOOTAA64.EFI, cioe' Linux.
+    #               Il file e' gia' grande quanto la memoria flash della macchina (64 MB).
+    #               Non c'e' una seconda flash per le variabili UEFI: il firmware le tiene
+    #               in memoria (si perdono a ogni accensione), e trova il disco da solo
+    # bootindex=1 : il disco e' il primo (l'unico) da cui il firmware prova a partire
     # -serial stdio : la seriale e' questo terminale
     # Si usa la virtualizzazione del computer: il kernel gira sulla CPU vera, senza essere
     # emulato. Sul Mac con chip Apple e' hvf (Hypervisor.framework), su Linux ARM e' kvm.
@@ -63,12 +64,13 @@ if [ "$cpu" = arm64 ]; then
         fi
         cpu_qemu="-accel kvm -cpu host"
     fi
+    firmware="$(brew --prefix qemu 2>/dev/null)/share/qemu/edk2-aarch64-code.fd"
+    [ -f "$firmware" ] || firmware=/usr/share/qemu/edk2-aarch64-code.fd   # Linux
     exec qemu-system-aarch64 -M virt $cpu_qemu -m 512 -smp 4 -rtc base=localtime \
-        -kernel "$qui/build/arm64/linux" -initrd "$qui/build/arm64/avvio.img" \
-        -append "$(cat "$qui/build/arm64/riga_kernel.txt")" -serial stdio \
+        -drive if=pflash,format=raw,readonly=on,file="$firmware" -serial stdio \
         -device virtio-gpu-pci,xres=1280,yres=800 -display cocoa,zoom-to-fit=on \
         -drive if=none,id=disco,file="$qui/build/arm64/disco.img",format=raw \
-        -device virtio-blk-pci,drive=disco \
+        -device virtio-blk-pci,drive=disco,bootindex=1 \
         -device qemu-xhci -device usb-kbd -device usb-tablet -nic user,model=virtio-net-pci
 fi
 

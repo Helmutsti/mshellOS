@@ -8,10 +8,9 @@ E' il pezzo su cui stanno tutte le prove. Fa tre cose:
      Il disco (uno solo: la tabella GPT con le partizioni avvio, system e data) si COPIA
      prima in una cartella di lavoro: il sistema ci scrive (in data), e le prove non
      devono cambiare build/ (ne' litigare con un QEMU aperto che lo tiene).
-     Sul PC (x86_64) parte prima il firmware UEFI (OVMF, il file edk2-x86_64-code.fd che
-     viene con QEMU), che lancia la UKI (kernel Linux + archivio di avvio) dalla
-     partizione avvio del disco. Su ARM64 QEMU carica da solo il kernel e l'archivio di
-     avvio (-kernel, -initrd).
+     Parte prima il firmware UEFI (del progetto EDK2, che viene con QEMU: il file
+     edk2-x86_64-code.fd sul PC, edk2-aarch64-code.fd su ARM64), che lancia la UKI
+     (kernel Linux + archivio di avvio + riga di comando) dalla partizione avvio del disco.
 
   2. PARLA CON QEMU attraverso QMP, il "monitor per i programmi" di QEMU: una presa TCP
      dove si mandano comandi in JSON, una riga per comando, e QEMU risponde con una riga.
@@ -75,13 +74,13 @@ def trova_qemu(nome):
     raise ErroreProva(f"non trovo {nome}: installa QEMU o imposta QEMU_DIR")
 
 
-def trova_firmware(qemu):
-    """Il firmware UEFI del PC (OVMF): edk2-x86_64-code.fd, che viene con QEMU.
+def trova_firmware(qemu, nome):
+    """Il firmware UEFI (del progetto EDK2), che viene con QEMU: nome e' il file,
+    edk2-x86_64-code.fd per il PC (OVMF), edk2-aarch64-code.fd per ARM64.
     La variabile OVMF (il percorso del file), se c'e', vince su tutto. Poi, vicino al
     programma di QEMU: Windows lo mette in <qemu>/share/, Homebrew e Linux in
     <prefisso>/share/qemu/ (con qemu in <prefisso>/bin/). Poi `brew --prefix qemu`
     e /usr/share/qemu/, come run.sh."""
-    nome = "edk2-x86_64-code.fd"
     if os.environ.get("OVMF"):
         f = Path(os.environ["OVMF"])
         if f.exists():
@@ -264,20 +263,19 @@ class Macchina:
             # arrivare qui solo la CPU del computer.
             acceleratore = "hvf" if platform.system() == "Darwin" else "kvm"
             cpu_qemu = ["-accel", acceleratore, "-cpu", "host"]
-            riga = (self.build / "riga_kernel.txt").read_text().strip()
-            argomenti = [trova_qemu("qemu-system-aarch64"), "-M", "virt", *cpu_qemu,
+            programma = trova_qemu("qemu-system-aarch64")
+            firmware = trova_firmware(programma, "edk2-aarch64-code.fd")
+            argomenti = [programma, "-M", "virt", *cpu_qemu,
                          "-m", str(self.ram), "-smp", "4",
-                         "-kernel", str(self.build / "linux"),
-                         "-initrd", str(self.build / "avvio.img"),
-                         "-append", riga,
+                         "-drive", f"if=pflash,format=raw,readonly=on,file={firmware}",
                          "-device", "virtio-gpu-pci,xres=1280,yres=800"]
         else:
             programma = trova_qemu("qemu-system-x86_64")
-            firmware = trova_firmware(programma)
+            firmware = trova_firmware(programma, "edk2-x86_64-code.fd")
             argomenti = [programma, "-machine", "pc", "-m", str(self.ram), "-smp", "4",
                          "-drive", f"if=pflash,format=raw,readonly=on,file={firmware}",
                          "-vga", "none", "-device", "virtio-vga,xres=1280,yres=800"]
-        # bootindex=1: il firmware UEFI del PC parte da questo disco (su ARM non conta)
+        # bootindex=1: il firmware UEFI parte da questo disco
         argomenti += ["-drive", f"if=none,id=disco,file={disco},format=raw",
                       "-device", "virtio-blk-pci,drive=disco,bootindex=1"]
         # Un'ora fissa (clock=vm: corre solo quando corre la macchina): le date dei file
@@ -300,10 +298,8 @@ class Macchina:
     def accendi(self):
         self.lavoro.mkdir(parents=True, exist_ok=True)
         origine = self.build / self.disco
-        avvio = ["linux", "avvio.img", "riga_kernel.txt"] if self.cpu == "arm64" else []
-        for f in [origine] + [self.build / n for n in avvio]:
-            if not f.exists():
-                raise ErroreProva(f"manca {f}: compila prima (--compila)")
+        if not origine.exists():
+            raise ErroreProva(f"manca {origine}: compila prima (--compila)")
         porte = [self.porta_qmp, self.porta_hmp] + ([self.porta_internet] if self.internet else [])
         for p in porte:
             if not porta_libera(p):

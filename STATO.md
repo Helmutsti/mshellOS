@@ -219,10 +219,10 @@ né seriale: per una shell si entra nel container con `docker exec -it <nome> sh
 
 **L'accensione, passo per passo**
 
-1. PC: il firmware UEFI trova sul disco la partizione di avvio e lancia un unico file,
-   `\EFI\BOOT\BOOTX64.EFI`. Dentro ci sono il kernel, il piccolo archivio di avvio e la
-   riga di comando del kernel (questo formato si chiama UKI).
-   ARM: QEMU carica direttamente in memoria il kernel e l'archivio (`-kernel`, `-initrd`).
+1. Il firmware UEFI trova sul disco la partizione di avvio e lancia un unico file,
+   `\EFI\BOOT\BOOTX64.EFI` sul PC, `\EFI\BOOT\BOOTAA64.EFI` su ARM. Dentro ci sono il
+   kernel, il piccolo archivio di avvio e la riga di comando del kernel (questo formato si
+   chiama UKI).
 2. Parte Linux, che esegue il nostro programma `avvio` (in `utente/avvio/`): carica i
    moduli del kernel, trova le partizioni per nome, monta `system` in sola lettura come
    `/` e `data` su `/data`, poi passa la mano a `/system/init`.

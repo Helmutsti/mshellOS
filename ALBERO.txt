@@ -11,8 +11,8 @@ Regola: chi cambia l'albero in build.sh aggiorna questo file.
 ====================================================================================================
 LE TRE PARTIZIONI (tabella GPT, MB = 1048576 byte)
 ====================================================================================================
-  1. avvio    64 MB   FAT32   dal 1 MB al 64 MB. Sul PC: \EFI\BOOT\BOOTX64.EFI (la UKI).
-                              Su ARM e' vuota (QEMU usa -kernel e -initrd).
+  1. avvio    64 MB   FAT32   dal 1 MB al 64 MB. La UKI: \EFI\BOOT\BOOTX64.EFI sul PC,
+                              \EFI\BOOT\BOOTAA64.EFI su ARM.
   2. system   64 MB   ext4    dal 65 MB al 128 MB. Montata da avvio in SOLA LETTURA come /.
   3. data     64 MB   ext4    dal 129 MB al 192 MB. Montata da avvio in LETTURA E
                               SCRITTURA come /data.

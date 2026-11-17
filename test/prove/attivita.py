@@ -7,7 +7,7 @@ Si apre prima Esempio (primo posto) e poi Attivita (secondo posto, angolo in 180
 LA MEMORIA. Nella scheda "Memoria" la prima riga dice "In uso 109,1 MB su 1,9 GB". Il
 totale e' quello che Linux dice in /proc/meminfo (MemTotal: la RAM meno quello che il
 kernel tiene per se' fin dall'avvio): circa 1972 MB sul PC con 2 GB, 7946 con --ram 8192,
-464 su ARM64 con 512 MB (TOTALE_MB, sotto). Attivita lo scrive con testo_byte di UIKit:
+460 su ARM64 con 512 MB (TOTALE_MB, sotto). Attivita lo scrive con testo_byte di UIKit:
 un decimale TRONCATO (non arrotondato, e senza ",0"), in MB fino a 1024 MB e in GB oltre.
 Quindi "1,9 GB" vuol dire 1,9 GB <= totale < 2,0 GB, cioe' 1945,6 MB <= totale < 2048 MB.
 Il testo si legge senza un vero lettore di testo (OCR), con le lettere del font stesso:
@@ -55,7 +55,7 @@ DESCRIZIONE = "Attivita: il totale della memoria (1972 MB a 2 GB); l'albero; ter
 # Il MemTotal di Linux, in MB interi, per la RAM data a QEMU (--ram): lo stesso kernel e la
 # stessa macchina danno sempre lo stesso numero. Se cambia (kernel nuovo), la prova lo dice
 # e il numero si aggiorna qui, dopo averlo guardato nella foto 'memoria'.
-TOTALE_MB = {2048: 1972, 8192: 7946, 512: 464}
+TOTALE_MB = {2048: 1972, 8192: 7946, 512: 460}
 # il font della riga "In uso ... su ...": FONT_SEZIONE_NUOVO di UIKit (stile.h), Plex semigrassetto 15
 FONT_RIGA = Path(__file__).resolve().parents[2] / "risorse" / "fonts" / "ibm-plex-sans-semibold-15.font"
 
