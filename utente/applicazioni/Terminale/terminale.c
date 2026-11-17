@@ -12,19 +12,22 @@
  * coppia di capi, il "padrone" (master) che teniamo noi e lo "schiavo" (/dev/pts/N) che diamo
  * alla shell come 0, 1 e 2. In mezzo c'e' il kernel, che fa per la shell quello che farebbe
  * con un terminale vero: l'eco di quello che si scrive, il tasto di cancellazione, la riga
- * intera consegnata con Invio, Ctrl-C (SIGINT) e Ctrl-D (fine). Noi:
- *   - scriviamo nel padrone i tasti premuti: le lettere come sono, Invio come "\r",
- *     cancella come DEL (0x7F, il tasto di cancellazione dei terminali Linux), Ctrl-C e
- *     Ctrl-D come i caratteri 3 e 4 (arrivano come tasti fisici: tasti.h);
- *   - leggiamo dal padrone quello che la shell scrive e lo mettiamo nella GRIGLIA, COLONNE x
- *     RIGHE caselle, con IBM Plex Mono 13 (larghezza fissa: ogni lettera una casella, righe
- *     da 20). Si capiscono le lettere, "\n" (riga dopo), "\r" (inizio riga), "\b" (indietro
- *     di una casella) e i colori e il grassetto (ESC [ ... m, le sequenze SGR dei terminali:
- *     0 ripristina, 1 grassetto, 22 niente grassetto, 30-36 i colori, 39 il colore del testo,
- *     90 grigio, 91 arancio); quando la griglia e' piena tutto sale di una riga (le righe che
- *     escono si perdono: niente storia). Le altre sequenze di escape (ESC ...) si saltano.
- *     I colori veri li sceglie il terminale secondo il tema (come nel disegno): la shell dice
- *     solo "rosso", "verde"...
+ * intera consegnata con Invio, Ctrl-C (SIGINT) e Ctrl-D (fine).
+ *
+ * IL LAVORO DEL TERMINALE LO FA libvterm (la libreria di Neovim e Vim: strumenti/compilazione/
+ * libvterm.sh dice da dove viene). Noi:
+ *   - quello che la shell (o un programma) scrive nel padrone lo passiamo a libvterm senza
+ *     guardarlo (vterm_input_write): lei legge le lettere e le sequenze di escape (cursore,
+ *     pulizia dello schermo, colori, schermo alternativo...) e tiene la GRIGLIA, COLONNE x
+ *     RIGHE caselle: lettera, colore e attributi di ogni casella, il cursore. Ci avvisa delle
+ *     righe cambiate (damage) e noi ridisegniamo solo quelle;
+ *   - ridisegniamo con il nostro disegno: IBM Plex Mono 13 (larghezza fissa: ogni lettera
+ *     una casella, righe da 20) e i colori del tema. I 16 colori ANSI (SGR 30-37, 90-97 e gli
+ *     sfondi) sono i colori del tema (mappa_ansi); i colori a 256 e RGB sono quelli che da'
+ *     libvterm. Le righe che escono dall'alto si perdono: niente storia;
+ *   - i tasti li diamo a libvterm (vterm_keyboard_key e vterm_keyboard_unichar) e quello che
+ *     produce (le lettere, le frecce come sequenze, Ctrl+lettera) va nel padrone; vanno nel
+ *     padrone anche le risposte di libvterm alle domande dei programmi.
  * Quando la shell finisce (exit, Ctrl-D) il padrone da' "fine" e la finestra si chiude;
  * chiudendo la finestra, la shell riceve SIGHUP e finisce. */
 #define _GNU_SOURCE
@@ -34,6 +37,8 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+#include <vterm.h>
 
 #include "corekit/sistema/launcher.h"
 #include "uikit/uikit.h"
@@ -55,85 +60,66 @@
 #define CURSORE_ALTO 16                  /* il cursore a blocco: largo una casella, alto 16, al centro della riga */
 #define TERMINALE_DENTRO SPAZIO_16       /* il padding del pannello: tra il suo bordo e il testo */
 
-/* Il colore di una casella (i 4 bit bassi: 1-6 sono i numeri SGR 31-36) e il grassetto (il bit alto). */
-enum { COL_TESTO, COL_ROSSO, COL_VERDE, COL_GIALLO, COL_BLU, COL_VIOLA, COL_MENTA, COL_GRIGIO, COL_ARANCIO };
-#define GRASSETTO 0x80
-
 static int padrone = -1;                 /* il capo del pty che teniamo noi */
-static unsigned char griglia[RIGHE][COLONNE];         /* 0: casella vuota */
-static unsigned char stile_casella[RIGHE][COLONNE];   /* colore e grassetto di ogni casella */
-static unsigned char stile_ora;          /* quello con cui si scrive adesso */
-static int riga, colonna;                /* il cursore (colonna == COLONNE: a fine riga) */
-static enum { NORMALE, ESCAPE, CSI, OSC } stato;   /* dentro una sequenza di escape? */
-static int parametri[8], quanti_parametri;         /* i numeri della sequenza CSI in corso */
+static VTerm *vt;                        /* il terminale di libvterm */
+static VTermScreen *vschermo;            /* la sua griglia */
+static int riga, colonna;                /* il cursore (da movecursor) */
+static int cursore_visibile = 1;         /* da settermprop */
 static int cambiata_da = RIGHE, cambiata_a = -1;   /* le righe da ridisegnare */
 
 static struct finestra_tk finestra;
 static struct pannello_tk pannello;
 
-/* --- la griglia --- */
-
-static void segna(int r) {
-    if (r < cambiata_da) cambiata_da = r;
-    if (r > cambiata_a) cambiata_a = r;
+static void scrivi_alla_shell(const void *b, size_t n) {
+    if (padrone >= 0 && write(padrone, b, n) < 0) { /* pieno: il tasto si perde */ }
 }
 
-static void a_capo(void) {
-    if (riga < RIGHE - 1) { riga++; return; }
-    memmove(griglia[0], griglia[1], (RIGHE - 1) * COLONNE);   /* tutto sale di una riga */
-    memmove(stile_casella[0], stile_casella[1], (RIGHE - 1) * COLONNE);
-    memset(griglia[RIGHE - 1], 0, COLONNE);
-    memset(stile_casella[RIGHE - 1], 0, COLONNE);
-    segna(0);
-    segna(RIGHE - 1);
+/* --- gli avvisi di libvterm --- */
+
+static void segna(int da, int a) {
+    if (da < 0) da = 0;
+    if (a > RIGHE - 1) a = RIGHE - 1;
+    if (da < cambiata_da) cambiata_da = da;
+    if (a > cambiata_a) cambiata_a = a;
 }
 
-/* Una sequenza ESC [ ... m: i colori e il grassetto. */
-static void colora(void) {
-    for (int i = 0; i < quanti_parametri; i++) {
-        int n = parametri[i];
-        unsigned char peso = stile_ora & GRASSETTO;
-        if (n == 0) stile_ora = 0;
-        else if (n == 1) stile_ora |= GRASSETTO;
-        else if (n == 22) stile_ora &= (unsigned char)~GRASSETTO;
-        else if (n >= 30 && n <= 36) stile_ora = (unsigned char)(peso | (n - 30));   /* 30: nero = il testo */
-        else if (n == 37 || n == 39) stile_ora = peso;                                 /* il colore del testo */
-        else if (n == 90) stile_ora = (unsigned char)(peso | COL_GRIGIO);
-        else if (n == 91) stile_ora = (unsigned char)(peso | COL_ARANCIO);
+/* Una zona della griglia e' cambiata: si ridisegnano le sue righe. */
+static int al_cambio(VTermRect r, void *dati) {
+    (void)dati;
+    segna(r.start_row, r.end_row - 1);
+    return 1;
+}
+
+static int al_cursore(VTermPos nuova, VTermPos vecchia, int visibile, void *dati) {
+    (void)dati;
+    segna(vecchia.row, vecchia.row);
+    segna(nuova.row, nuova.row);
+    riga = nuova.row;
+    colonna = nuova.col;
+    cursore_visibile = visibile;
+    return 1;
+}
+
+static int alla_proprieta(VTermProp proprieta, VTermValue *valore, void *dati) {
+    (void)dati;
+    if (proprieta == VTERM_PROP_CURSORVISIBLE) {
+        cursore_visibile = valore->boolean;
+        segna(riga, riga);
+    } else if (proprieta == VTERM_PROP_ALTSCREEN) {
+        segna(0, RIGHE - 1);                 /* lo schermo e' un altro: tutto da rifare */
     }
+    return 1;
 }
 
-/* Un byte scritto dalla shell. */
-static void metti(unsigned char c) {
-    switch (stato) {
-    case ESCAPE:
-        stato = c == '[' ? CSI : c == ']' ? OSC : NORMALE;
-        if (stato == CSI) { quanti_parametri = 1; parametri[0] = 0; }
-        return;
-    case CSI:
-        if (c >= '0' && c <= '9') { parametri[quanti_parametri - 1] = parametri[quanti_parametri - 1] * 10 + (c - '0'); return; }
-        if (c == ';') { if (quanti_parametri < 8) parametri[quanti_parametri++] = 0; return; }
-        if (c >= 0x40 && c <= 0x7E) { if (c == 'm') colora(); stato = NORMALE; }     /* la lettera finale */
-        return;
-    case OSC:    if (c == 7) stato = NORMALE; else if (c == 0x1B) stato = ESCAPE; return;
-    case NORMALE: break;
-    }
-    segna(riga);
-    if (c == 0x1B) {
-        stato = ESCAPE;
-    } else if (c == '\n') {
-        a_capo();
-    } else if (c == '\r') {
-        colonna = 0;
-    } else if (c == '\b') {
-        if (colonna > 0) colonna--;
-    } else if (c >= ' ' && c != 0x7F) {
-        if (colonna >= COLONNE) { colonna = 0; a_capo(); }     /* la riga e' piena: si va a capo */
-        griglia[riga][colonna] = c;
-        stile_casella[riga][colonna++] = stile_ora;
-    }
-    segna(riga);
+/* Quello che libvterm produce (i tasti, le risposte ai programmi) va alla shell. */
+static void dal_terminale(const char *b, size_t n, void *dati) {
+    (void)dati;
+    scrivi_alla_shell(b, n);
 }
+
+static const VTermScreenCallbacks callback_schermo = {
+    .damage = al_cambio, .movecursor = al_cursore, .settermprop = alla_proprieta,
+};
 
 /* --- il widget della griglia --- */
 
@@ -158,50 +144,80 @@ static void schermo_disponi(struct widget *w) {
     scorrimento_misure(&s->barra.scorrimento, w->a, w->a);
 }
 
-/* Il colore di una casella, dal tema in uso: i colori "testo pastello" dei colori di sistema. */
-static unsigned int colore_di(unsigned char s) {
-    switch (s & 0x0F) {
-    case COL_ROSSO:   return tema_corrente->sistema[COLORE_ROSSO].testo_pastello;
-    case COL_VERDE:   return tema_corrente->sistema[COLORE_VERDE].testo_pastello;
-    case COL_GIALLO:  return tema_corrente->sistema[COLORE_GIALLO].testo_pastello;
-    case COL_BLU:     return tema_corrente->sistema[COLORE_BLU].testo_pastello;
-    case COL_VIOLA:   return tema_corrente->sistema[COLORE_VIOLA].testo_pastello;
-    case COL_MENTA:   return tema_corrente->sistema[COLORE_MENTA].testo_pastello;
-    case COL_ARANCIO: return tema_corrente->sistema[COLORE_ARANCIO].testo_pastello;
-    case COL_GRIGIO:  return TESTO_SECONDARIO;
-    default:          return TESTO_PRIMARIO;
+/* I 16 colori ANSI (i numeri SGR 30-37 e 90-97, e gli sfondi 40-47 e 100-107) sono i colori
+ * del tema, dal tema in uso: i colori "testo pastello" dei colori di sistema. Il nero (0) e il
+ * bianco (7 e 15) sono il colore del testo; 8 (nero acceso, 90) e' il grigio e 9 (rosso acceso,
+ * 91) l'arancio, come la shell li chiede; gli altri accesi (10-14) come i loro normali. */
+static unsigned int mappa_ansi(int indice) {
+    switch (indice) {
+    case 1:           return tema_corrente->sistema[COLORE_ROSSO].testo_pastello;
+    case 2: case 10:  return tema_corrente->sistema[COLORE_VERDE].testo_pastello;
+    case 3: case 11:  return tema_corrente->sistema[COLORE_GIALLO].testo_pastello;
+    case 4: case 12:  return tema_corrente->sistema[COLORE_BLU].testo_pastello;
+    case 5: case 13:  return tema_corrente->sistema[COLORE_VIOLA].testo_pastello;
+    case 6: case 14:  return tema_corrente->sistema[COLORE_MENTA].testo_pastello;
+    case 9:           return tema_corrente->sistema[COLORE_ARANCIO].testo_pastello;
+    case 8:           return TESTO_SECONDARIO;
+    default:          return TESTO_PRIMARIO;     /* 0, 7, 15 */
     }
+}
+
+/* Il colore di un colore di libvterm: quello predefinito e' del tema (il testo; per lo sfondo
+ * 0, "non si disegna": c'e' il pannello); i primi 16 sono i colori ANSI del tema; gli altri
+ * (256 colori e RGB) li da' libvterm. */
+static unsigned int colore_di(VTermColor c, int e_sfondo) {
+    if (VTERM_COLOR_IS_DEFAULT_FG(&c) || VTERM_COLOR_IS_DEFAULT_BG(&c))
+        return e_sfondo ? 0 : TESTO_PRIMARIO;
+    if (VTERM_COLOR_IS_INDEXED(&c) && c.indexed.idx < 16) return mappa_ansi(c.indexed.idx);
+    vterm_screen_convert_color_to_rgb(vschermo, &c);
+    return OPACO(((unsigned int)c.rgb.red << 16) | ((unsigned int)c.rgb.green << 8) | c.rgb.blue);
+}
+
+/* La lettera di una casella, per il font (code page 437): le ASCII; il resto non c'e' nel
+ * font e si disegna come '?'. 0: casella vuota. */
+static char lettera_di(const VTermScreenCell *cella) {
+    uint32_t c = cella->chars[0];
+    if (c == 0 || c == (uint32_t)-1 || c == ' ') return 0;       /* -1: la seconda meta' di una lettera larga */
+    return c > ' ' && c < 0x7F ? (char)c : '?';
 }
 
 static void schermo_disegna(struct widget *w, struct pennello *p) {
     int x0 = w->x, y0 = w->y;
     int giu = (RIGA_ALTA - FONT_TERMINALE->altezza) / 2;      /* il testo al centro della riga */
     for (int r = 0; r < RIGHE; r++) {
-        int k = 0;
-        while (k < COLONNE) {                  /* un pezzo alla volta: stesso colore e peso */
-            if (!griglia[r][k]) { k++; continue; }
-            unsigned char s = stile_casella[r][k];
-            int fine = k;
-            pennello_colore(p, colore_di(s));
-            while (fine < COLONNE && griglia[r][fine] && stile_casella[r][fine] == s) {
-                char lettera[2] = { (char)griglia[r][fine], 0 };
-                testo(p, s & GRASSETTO ? FONT_GRASSETTO : FONT_TERMINALE, x0 + CASELLA_X(fine),
-                      y0 + r * RIGA_ALTA + giu, lettera);
-                fine++;
-            }
-            k = fine;
+        /* prima gli sfondi (colori diversi da quello del pannello), poi le lettere */
+        for (int k = 0; k < COLONNE; k++) {
+            VTermScreenCell cella;
+            vterm_screen_get_cell(vschermo, (VTermPos){ r, k }, &cella);
+            unsigned int sfondo = cella.attrs.reverse ? colore_di(cella.fg, 0) : colore_di(cella.bg, 1);
+            if (!sfondo) continue;
+            pennello_colore(p, sfondo);
+            riempi_rettangolo(p, x0 + CASELLA_X(k), y0 + r * RIGA_ALTA, CASELLA_X(k + 1) - CASELLA_X(k), RIGA_ALTA);
+        }
+        for (int k = 0; k < COLONNE; k++) {
+            VTermScreenCell cella;
+            vterm_screen_get_cell(vschermo, (VTermPos){ r, k }, &cella);
+            char lettera[2] = { lettera_di(&cella), 0 };
+            if (!lettera[0] || cella.attrs.conceal) continue;
+            unsigned int colore = colore_di(cella.fg, 0);
+            if (cella.attrs.reverse) colore = colore_di(cella.bg, 1) ? colore_di(cella.bg, 1) : SUPERFICIE_ELEVATA;
+            pennello_colore(p, colore);
+            testo(p, cella.attrs.bold ? FONT_GRASSETTO : FONT_TERMINALE, x0 + CASELLA_X(k),
+                  y0 + r * RIGA_ALTA + giu, lettera);
         }
     }
+    if (!cursore_visibile) return;
     /* il cursore: un blocco nel colore del testo, con la lettera sotto nel colore del pannello */
     int k = colonna < COLONNE ? colonna : COLONNE - 1;
     int cx = x0 + CASELLA_X(k), cy = y0 + riga * RIGA_ALTA + (RIGA_ALTA - CURSORE_ALTO) / 2;
     pennello_colore(p, TESTO_PRIMARIO);
     riempi_rettangolo(p, cx, cy, CURSORE_LARGO, CURSORE_ALTO);
-    if (griglia[riga][k]) {
-        char sotto[2] = { (char)griglia[riga][k], 0 };
+    VTermScreenCell sotto;
+    vterm_screen_get_cell(vschermo, (VTermPos){ riga, k }, &sotto);
+    char lettera[2] = { lettera_di(&sotto), 0 };
+    if (lettera[0]) {
         pennello_colore(p, SUPERFICIE_ELEVATA);
-        testo(p, stile_casella[riga][k] & GRASSETTO ? FONT_GRASSETTO : FONT_TERMINALE, cx,
-              y0 + riga * RIGA_ALTA + giu, sotto);
+        testo(p, sotto.attrs.bold ? FONT_GRASSETTO : FONT_TERMINALE, cx, y0 + riga * RIGA_ALTA + giu, lettera);
     }
 }
 
@@ -209,39 +225,88 @@ static void schermo_puntatore(struct widget *w, int x, int y, unsigned int pulsa
     (void)w; (void)x; (void)y; (void)pulsanti;   /* un clic gli da' solo il fuoco */
 }
 
-static void scrivi_alla_shell(const void *b, int n) {
-    if (padrone >= 0 && write(padrone, b, (size_t)n) < 0) { /* pieno: il tasto si perde */ }
-}
-
-/* Un carattere (code page 437, come i font) dalla tastiera. */
+/* Un carattere (code page 437) dalla tastiera: Invio, cancella e Tab sono tasti per libvterm,
+ * le lettere di stampa (ASCII) sono caratteri. Le lettere oltre l'ASCII (accenti) vanno alla
+ * shell come sono, un byte (la shell e il font parlano la code page 437). */
 static void schermo_tasto(struct widget *w, unsigned int tasto) {
     (void)w;
-    unsigned char c;
-    if (tasto == '\n') c = '\r';              /* Invio: il kernel lo fa diventare "\n" */
-    else if (tasto == '\b') c = 0x7F;         /* cancella */
-    else if (tasto >= ' ' && tasto < 256 && tasto != 0x7F) c = (unsigned char)tasto;
-    else return;
-    scrivi_alla_shell(&c, 1);
+    if (tasto == '\n') vterm_keyboard_key(vt, VTERM_KEY_ENTER, VTERM_MOD_NONE);
+    else if (tasto == '\b') vterm_keyboard_key(vt, VTERM_KEY_BACKSPACE, VTERM_MOD_NONE);
+    else if (tasto == '\t') vterm_keyboard_key(vt, VTERM_KEY_TAB, VTERM_MOD_NONE);
+    else if (tasto >= ' ' && tasto < 0x7F) vterm_keyboard_unichar(vt, tasto, VTERM_MOD_NONE);
+    else if (tasto >= 0x80 && tasto < 256) { unsigned char c = (unsigned char)tasto; scrivi_alla_shell(&c, 1); }
 }
 
 static const struct tipo_widget tipo_schermo = {
     schermo_misura, schermo_disponi, schermo_disegna, schermo_puntatore, schermo_tasto, 0, 0, 0, 0
 };
 
-/* Ctrl-C e Ctrl-D: con Ctrl giu' i caratteri non arrivano (uikit.h), arrivano i tasti fisici. */
+/* I TASTI FISICI (codici Linux, tasti.h): Esc, frecce, Home/End, PagSu/PagGiu, Ins, Canc, i tasti
+ * funzione, e Ctrl+lettera (con Ctrl giu' i caratteri non arrivano: uikit.h). Gli altri (le
+ * lettere, Invio, Tab, cancella) arrivano come caratteri. */
+#define TASTO_HOME 102
+#define TASTO_SU_PAGINA 104
+#define TASTO_FINE 107
+#define TASTO_GIU_PAGINA 109
+#define TASTO_INS 110
+#define TASTO_F3 61
+#define TASTO_F10 68
+#define TASTO_F11 87
+#define TASTO_F12 88
+
+/* La lettera di un tasto fisico (la tastiera QWERTY: la posizione), o 0. */
+static char lettera_del_tasto(unsigned int codice) {
+    static const char fila1[] = "qwertyuiop", fila2[] = "asdfghjkl", fila3[] = "zxcvbnm";
+    if (codice >= 16 && codice < 16 + 10) return fila1[codice - 16];
+    if (codice >= 30 && codice < 30 + 9) return fila2[codice - 30];
+    if (codice >= 44 && codice < 44 + 7) return fila3[codice - 44];
+    return 0;
+}
+
+static VTermKey tasto_di_vterm(unsigned int codice) {
+    switch (codice) {
+    case TASTO_ESC:          return VTERM_KEY_ESCAPE;
+    case TASTO_SU:           return VTERM_KEY_UP;
+    case TASTO_GIU:          return VTERM_KEY_DOWN;
+    case TASTO_SINISTRA:     return VTERM_KEY_LEFT;
+    case TASTO_DESTRA:       return VTERM_KEY_RIGHT;
+    case TASTO_HOME:         return VTERM_KEY_HOME;
+    case TASTO_FINE:         return VTERM_KEY_END;
+    case TASTO_SU_PAGINA:    return VTERM_KEY_PAGEUP;
+    case TASTO_GIU_PAGINA:   return VTERM_KEY_PAGEDOWN;
+    case TASTO_INS:          return VTERM_KEY_INS;
+    case TASTO_CANC:         return VTERM_KEY_DEL;
+    case TASTO_F11:          return VTERM_KEY_FUNCTION(11);
+    case TASTO_F12:          return VTERM_KEY_FUNCTION(12);
+    default:
+        if (codice >= TASTO_F1 && codice <= TASTO_F2) return VTERM_KEY_FUNCTION(codice - TASTO_F1 + 1);
+        if (codice >= TASTO_F3 && codice <= TASTO_F10) return VTERM_KEY_FUNCTION(codice - TASTO_F3 + 3);
+        return VTERM_KEY_NONE;
+    }
+}
+
 static int scorciatoie(struct finestra_tk *f, unsigned int codice, unsigned int modificatori, void *dati) {
     (void)f; (void)dati;
-    if (modificatori != MOD_CTRL) return 0;
-    unsigned char c = codice == TASTO_C ? 3 : codice == TASTO_D ? 4 : 0;
-    if (!c) return 0;
-    scrivi_alla_shell(&c, 1);
-    return 1;
+    VTermModifier mod = (modificatori & MOD_CTRL ? VTERM_MOD_CTRL : 0) |
+                        (modificatori & MOD_MAIUSC ? VTERM_MOD_SHIFT : 0) |
+                        (modificatori & MOD_ALT ? VTERM_MOD_ALT : 0);
+    VTermKey tasto = tasto_di_vterm(codice);
+    if (tasto != VTERM_KEY_NONE) {
+        vterm_keyboard_key(vt, tasto, mod);
+        return 1;
+    }
+    char lettera = lettera_del_tasto(codice);
+    if (lettera && (modificatori & MOD_CTRL)) {
+        vterm_keyboard_unichar(vt, (uint32_t)lettera, mod);
+        return 1;
+    }
+    return 0;
 }
 
 /* Il padrone e' pronto: quello che la shell ha scritto, o la fine (la shell e' finita). */
 static void dalla_shell(struct finestra_tk *f, void *dati) {
     (void)dati;
-    unsigned char b[4096];
+    char b[4096];
     ssize_t n = read(padrone, b, sizeof b);
     if (n < 0 && (errno == EAGAIN || errno == EINTR)) return;
     if (n <= 0) {                             /* EIO: nessuno tiene piu' lo schiavo */
@@ -249,7 +314,8 @@ static void dalla_shell(struct finestra_tk *f, void *dati) {
         finestra_tk_chiudi(f);
         return;
     }
-    for (ssize_t i = 0; i < n; i++) metti(b[i]);
+    vterm_input_write(vt, b, (size_t)n);      /* libvterm legge, aggiorna la griglia e ci avvisa */
+    vterm_screen_flush_damage(vschermo);
     if (cambiata_a < 0) return;
     widget_cambiato_zona(&schermo.base, schermo.base.x, schermo.base.y + cambiata_da * RIGA_ALTA,
                          schermo.base.l, (cambiata_a - cambiata_da + 1) * RIGA_ALTA);
@@ -259,7 +325,21 @@ static void dalla_shell(struct finestra_tk *f, void *dati) {
 
 /* Scrive un messaggio nella griglia (quando la shell non parte). */
 static void dici(const char *s) {
-    while (*s) metti((unsigned char)*s++);
+    vterm_input_write(vt, s, strlen(s));
+    vterm_screen_flush_damage(vschermo);
+}
+
+/* --- libvterm --- */
+
+static void prepara_vterm(void) {
+    vt = vterm_new(RIGHE, COLONNE);
+    vterm_set_utf8(vt, 1);
+    vterm_output_set_callback(vt, dal_terminale, 0);
+    vschermo = vterm_obtain_screen(vt);
+    vterm_screen_enable_altscreen(vschermo, 1);
+    vterm_screen_set_callbacks(vschermo, &callback_schermo, 0);
+    vterm_screen_set_damage_merge(vschermo, VTERM_DAMAGE_ROW);
+    vterm_screen_reset(vschermo, 1);
 }
 
 /* --- la shell nel pty --- */
@@ -280,6 +360,7 @@ static int avvia_shell(void) {
 }
 
 int main(void) {
+    prepara_vterm();
     schermo = (struct schermo_tk){ .base = { .tipo = &tipo_schermo, .elastico = 1, .largo = 1 } };
     barra_scorrimento_prepara(&schermo.barra);
     widget_aggiungi(&schermo.base, &schermo.barra.base);

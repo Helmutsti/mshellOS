@@ -190,7 +190,7 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Poteri**: super no, ma ha un permesso di sistema: manifesto "apps.manage", concesso perché è un'app del sistema; il launcher lo controlla con `ha_permesso` sulla porta dello Store.
 
 ### Terminale (`applicazioni/Terminale/terminale.c`)
-- **Cosa fa**: finestra con dentro la shell di prova, su un terminale finto (pty) con griglia di caratteri, colori e scorrimento. Provvisorio.
+- **Cosa fa**: finestra con dentro la shell di prova, su un terminale finto (pty). Il lavoro del terminale (griglia, colori, cursore, schermo alternativo, tasti) lo fa libvterm (sorgenti ufficiali 0.3.3, scaricati e compilati da `strumenti/compilazione/libvterm.sh`, legata solo qui); il Terminale la disegna con il suo stile. Provvisorio.
 - **Tipo**: app.
 - **Lanciato da**: launcher (solo dal vassoio: `nella_barra = false`).
 - **Lancia**: la shell, tramite il launcher (richiesta APRI_SHELL), che la fa partire come sistema (uid 0) sul terminale finto del Terminale.

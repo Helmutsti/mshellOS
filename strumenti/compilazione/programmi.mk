@@ -13,6 +13,7 @@
 #
 # Cosa esce, in O:
 #   lib{corekit,gkit,uikit}.a      le tre librerie (LIBRERIE.md)
+#   libvterm/                      libvterm.a e le sue intestazioni (solo per il Terminale)
 #   bin/<nome>                     i programmi del sistema (utente/programmi/<nome>.c)
 #   bin/comandi/<nome>             i comandi (utente/comandi/<nome>.c), solo CoreKit
 #   bin/prove/<nome>               i programmi delle prove (utente/prove/<nome>.c)
@@ -75,7 +76,7 @@ $(O)/%.o: %.c $(O)/.firma
 # le applicazioni vedono anche la loro cartella (-I)
 $(O)/utente/applicazioni/%.o: utente/applicazioni/%.c $(O)/.firma
 	@mkdir -p $(@D)
-	$(CC) $(UTENTE) -I$(dir $<) $(DIP) -c $< -o $@
+	$(CC) $(UTENTE) -I$(dir $<) -I$(O)/libvterm/include $(DIP) -c $< -o $@
 $(O)/utente/prove/applicazioni/%.o: utente/prove/applicazioni/%.c $(O)/.firma
 	@mkdir -p $(@D)
 	$(CC) $(UTENTE) -I$(dir $<) $(DIP) -c $< -o $@
@@ -111,6 +112,16 @@ $(GKIT): $(GKIT_OGGETTI)
 $(UIKIT): $(UIKIT_OGGETTI)
 	@rm -f $@
 	ar rcs $@ $^
+
+# libvterm (la libreria di Neovim e Vim che fa il lavoro di un terminale), dai sorgenti
+# ufficiali: la scarica e la compila libvterm.sh, che dice come. Si lega solo nel Terminale.
+# SCARICO e' dove restano gli archivi scaricati (build.sh e la sandbox: build/scarico).
+SCARICO ?= build/scarico
+VTERM := $(O)/libvterm/libvterm.a
+$(VTERM): strumenti/compilazione/libvterm.sh $(O)/.firma
+	@sh strumenti/compilazione/libvterm.sh $(ARCH) $(RADICE) $(SCARICO) $(O)/libvterm "$(CC)"
+$(O)/utente/applicazioni/Terminale/terminale.o: $(VTERM)
+terminale_ESTERNE := $(VTERM)
 
 # --- i programmi ---
 # Un programma del sistema e' di solito un file solo (utente/programmi/<nome>.c). Il picker e'
@@ -164,8 +175,8 @@ APP_ID :=
 define APP
 $(2)_OGGETTI := $$(patsubst %.c,$(O)/%.o,$$(sort $$(wildcard $(1)*.c)))
 $(2)_FILE := $$(filter-out %.c %.h,$$(shell find $(1) -type f))
-$(O)/app/$(2)/code: $$($(2)_OGGETTI) $$(LIBRERIE)
-	$$(call lega,$$@,$$($(2)_OGGETTI) $$(LIBRERIE))
+$(O)/app/$(2)/code: $$($(2)_OGGETTI) $$($(2)_ESTERNE) $$(LIBRERIE)
+	$$(call lega,$$@,$$($(2)_OGGETTI) $$($(2)_ESTERNE) $$(LIBRERIE))
 $(O)/pacchetti/$(2).app: $(O)/app/$(2)/code $$($(2)_FILE) strumenti/compilazione/impacchetta.sh
 	sh strumenti/compilazione/impacchetta.sh $(1) $(2) $(CPU) $(O)/app/$(2)/code $(O)/pacchetti
 APP_ID += $(2)

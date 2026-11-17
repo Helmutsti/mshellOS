@@ -68,7 +68,7 @@
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #       disco_recinto.img     per la prova del recinto delle app (programma recinto)
 #       disco_picker.img      per la prova del servizio picker (il picker con la finestra finta)
-#   build/scarico/     i pacchetti di Alpine e i sorgenti di curl scaricati, tenuti per la
+#   build/scarico/     i pacchetti di Alpine e i sorgenti di curl e libvterm scaricati, tenuti per la
 #                      prossima volta
 #
 # IL DISCO. Una tabella GPT (Linux la legge da solo) con tre partizioni, ognuna con il suo
