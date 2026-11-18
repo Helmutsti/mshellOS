@@ -74,8 +74,6 @@ struct tema {
     unsigned int bordo_controllo;
     unsigned int bordo_separatore;
     unsigned int bordo_focus;
-    unsigned int cursore_riempimento;
-    unsigned int cursore_contorno;
     unsigned int oggetto_riempimento;
     unsigned int oggetto_riempimento_forte;
     unsigned int oggetto_tratto;

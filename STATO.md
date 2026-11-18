@@ -684,6 +684,7 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
    Il set "Caricamento – fotogrammi" non l'ho aperto (12 fotogrammi, un giro al secondo);
    (d) le foto di riferimento delle prove (`test/riferimenti/*`) hanno il puntatore parcheggiato
    nell'angolo: con la freccia nuova (contorno più largo) vanno rifatte, dopo averle guardate.
+   **18/11/2026: il puntatore è fatto con le immagini di Figma** (`risorse/puntatore/`, PNG con alfa vero esportate dal disegno, usate così come sono; `strumenti/grafica/puntatore.py` le converte in `puntatori.h`, premoltiplicate). Niente più tracciati rifatti a mano, né colori `cursore_*` nel tema. Anello dell'attesa: 12 fotogrammi di Figma (gira solo l'arco). Confronti in `disegni/Puntatore/confronto-*.png`. Le foto di riferimento ARM64 NON sono state rifatte: oggi differiscono anche per la userbar (c'è il Terminale) e per Files, non solo per il puntatore.
    Il gruppo di azioni e l'interruttore c'erano gia' (la pillola della barra degli strumenti).
 7. **Togliere la vecchia grafica** (vetro scuro, Inter) da codice e Figma.
 8. **Controllo sulla lunghezza** del percorso del programma di un'app (`MAX_PERCORSO_PROGRAMMA`

@@ -94,10 +94,4 @@ const struct strato_ombra *ombra_pannello(int sopra, int *quanti) {
 
 int sfocatura_finestra(void) { return OMBRA_FINESTRA_SFOCATURA_SFONDO; }
 
-int colori_puntatore(unsigned int *contorno, unsigned int *riempimento) {
-    *contorno = CURSORE_CONTORNO;
-    *riempimento = CURSORE_RIEMPIMENTO;
-    return 0;   /* il puntatore e' uguale nei due temi, ombra compresa: quella del chiaro */
-}
-
 void compositore_scegli_tema(const struct catalog_valori *v) { tema_da_catalog(v); }

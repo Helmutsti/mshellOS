@@ -1185,10 +1185,10 @@ static void da_applicazione(int i) {
 
 /* LE FORME DEL PUNTATORE (disegno: "Componenti base", Puntatore): la freccia, la mano, la barra a
  * I, la freccia col divieto e l'anello dell'attesa, ognuna con il suo contorno, la sua ombra e
- * il suo punto caldo. Sono immagini piccole, gia' pronte, in puntatori.h (scritto da
- * strumenti/grafica/puntatore.py, che spiega com'e' fatto ogni pixel: quanto copre il
- * contorno, quanto la forma, quanto e' scura l'ombra nel chiaro e nello scuro). Qui si
- * mescolano coi colori del tema e con la scena, e basta.
+ * il suo punto caldo. Sono le immagini del disegno, esportate da Figma e usate cosi' come sono
+ * (risorse/puntatore/, convertite in puntatori.h da strumenti/grafica/puntatore.py): ogni pixel
+ * e' gia' colore e ombra insieme, premoltiplicato, uguale nel chiaro e nello scuro. Qui si
+ * mescolano con la scena, e basta.
  *
  * IL PUNTO CALDO, (px, py), e' dove sta il puntatore: nell'immagine e' il pixel (immagine.px,
  * immagine.py), quindi si disegna a partire da (px - immagine.px, py - immagine.py). Nell'immagine c'e'
@@ -1242,28 +1242,12 @@ static void copia(int x0, int y0, int x1, int y1) {
     }
 }
 
-/* Un pixel del puntatore (0xCCFFLLDD, vedi puntatori.h) messo sul pixel 'sotto' della scena:
- * prima l'ombra (nera), poi il contorno, poi la forma, ognuno con la sua copertura. I colori
- * sono quelli del tema, premoltiplicati per la copertura; il risultato e' per lo schermo. */
-static unsigned int pixel_puntatore(unsigned int v, unsigned int contorno, unsigned int riempimento,
-                                    int scuro, unsigned int sotto) {
-    unsigned int c = v >> 24, f = (v >> 16) & 0xFF, o = scuro ? v & 0xFF : (v >> 8) & 0xFF;
-    unsigned int p = o << 24;   /* l'ombra: nera, gia' premoltiplicata */
-    if (c) p = sopra_a(c << 24 | diviso_255(((contorno >> 16) & 0xFF) * c) << 16 |
-                       diviso_255(((contorno >> 8) & 0xFF) * c) << 8 | diviso_255((contorno & 0xFF) * c), p);
-    if (f) p = sopra_a(f << 24 | diviso_255(((riempimento >> 16) & 0xFF) * f) << 16 |
-                       diviso_255(((riempimento >> 8) & 0xFF) * f) << 8 | diviso_255((riempimento & 0xFF) * f), p);
-    return per_lo_schermo(sopra_a(p, sotto));
-}
-
 /* Il puntatore, direttamente sullo schermo (non nella scena). I suoi pixel sono in parte
  * trasparenti (gli orli, l'ombra): ognuno si mescola con il pixel della SCENA che sta
  * sotto (da 'disegno', non dallo schermo, dove potrebbe esserci ancora il puntatore di
  * prima), e il risultato va sullo schermo. Solo il rettangolo dell'immagine, tagliato
  * dentro lo schermo. */
 static void disegna_puntatore(const struct forma_ora *im) {
-    unsigned int contorno, riempimento;
-    int scuro = colori_puntatore(&contorno, &riempimento);
     int x0 = px - im->px, y0 = py - im->py;
     int r0 = y0 < 0 ? -y0 : 0, r1 = altezza - y0 < im->a ? altezza - y0 : im->a;
     int k0 = x0 < 0 ? -x0 : 0, k1 = larghezza - x0 < im->l ? larghezza - x0 : im->l;
@@ -1271,7 +1255,7 @@ static void disegna_puntatore(const struct forma_ora *im) {
         const unsigned int *sotto = &disegno[(y0 + r) * larghezza];
         unsigned int *riga = (unsigned int *)(memoria + (y0 + r) * schermo.passo);
         for (int k = k0; k < k1; k++)
-            riga[x0 + k] = pixel_puntatore(im->pixel[r * im->l + k], contorno, riempimento, scuro, sotto[x0 + k]);
+            riga[x0 + k] = per_lo_schermo(sopra_a(im->pixel[r * im->l + k], sotto[x0 + k]));
     }
 }
 
