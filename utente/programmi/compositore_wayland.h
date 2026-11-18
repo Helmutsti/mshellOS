@@ -39,9 +39,15 @@ void wayland_notizia(int i, const struct notizia *n);
 /* La X della cornice: il programma riceve "chiuditi" (xdg_toplevel.close) e decide lui. */
 void wayland_chiedi_chiusura(int i);
 
-/* Dopo ogni composizione: i programmi che aspettavano "il prossimo fotogramma" (frame callback)
- * ricevono "fatto", e si spedisce quello che e' in coda. */
-void wayland_fotogramma(void);
+/* IL RITMO DEI FOTOGRAMMI. Un programma che anima chiede "dimmi quando disegnare il prossimo"
+ * (frame callback) e disegna quando riceve "fatto". Il compositore da' il "fatto" a un tic alla
+ * volta (il ciclo di compositore.c): 'ms' e' il tempo del tic.
+ * wayland_vuole_fotogramma: c'e' almeno un programma che aspetta, con la finestra visibile (solo
+ * allora il ciclo accende l'orologio: se nessuno aspetta, nessun tic).
+ * wayland_fotogramma: il "fatto" a quei programmi (le finestre ridotte aspettano) e si
+ * spedisce quello che e' in coda. */
+int wayland_vuole_fotogramma(void);
+void wayland_fotogramma(unsigned int ms);
 
 /* ---- quello che il compositore offre a Wayland (il ponte, in compositore.c) ---- */
 

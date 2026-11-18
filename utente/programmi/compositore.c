@@ -60,6 +60,7 @@
  * poche cose del design che deve disegnare lui (la barra di emergenza, uguale a quella delle
  * applicazioni, e l'ombra e il vetro delle finestre) gliele da' UIKit, con le sole funzioni
  * di uikit/sistema/uikit_compositore.h. */
+#include <stdint.h>
 #include "corekit/corekit.h"
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
@@ -1750,6 +1751,7 @@ static void al_tasto(const struct evento *e) {
 /* Il descrittore del server Wayland (wayland_inizia), che il ciclo guarda insieme agli altri;
  * -1 se non si e' acceso (il compositore funziona uguale, solo senza Wayland). */
 static int descrittore_wayland = -1;
+#define FOTOGRAMMI_WAYLAND 60   /* tic al secondo dei frame callback (vedi il ciclo, in fondo) */
 
 /* Un giro di attesa: aspetta al massimo 'ms' millisecondi (0: guarda e basta) che
  * succeda qualcosa, e serve quello che e' pronto: un evento, i messaggi delle
@@ -1831,9 +1833,22 @@ int main(void) {
      * disegnare posizioni gia' vecchie e restare sempre indietro. Le posizioni di mezzo
      * non le vedrebbe nessuno: conta solo l'ultima. (Come Wayland, macOS e Windows: un
      * fotogramma con tutto quello che e' successo dall'ultimo.) */
+    /* IL TIC DEI FOTOGRAMMI DI WAYLAND: 60 al secondo sul tempo monotonico, allineati a multipli
+     * di 1000/60 ms (il tic numero n cade a n*1000/60 ms: niente deriva). L'orologio e' acceso
+     * solo se qualche programma aspetta il suo fotogramma: il timeout dell'attesa diventa il
+     * minimo tra quello di sempre e il tempo che manca al tic; se nessuno aspetta, il ciclo
+     * dorme come prima. OGGI il tic viene da questo orologio; DOMANI verra' dal flip dello
+     * schermo (page flip DRM): allora cambia solo da dove arriva il numero del tic. */
+    uint64_t ultimo_tic = (uint64_t)tempo() * FOTOGRAMMI_WAYLAND / 1000;
     for (;;) {
         /* al massimo mezzo secondo: i "ci sei?"; con l'attesa sullo schermo, un fotogramma dell'anello */
-        if (servi(forma_voluta() == FORMA_ATTESA ? 1000 / FOTOGRAMMI_ATTESA : 500) < 0) return 0;
+        int attesa = forma_voluta() == FORMA_ATTESA ? 1000 / FOTOGRAMMI_ATTESA : 500;
+        if (descrittore_wayland >= 0 && wayland_vuole_fotogramma()) {
+            int manca = (int)(((ultimo_tic + 1) * 1000 + FOTOGRAMMI_WAYLAND - 1) / FOTOGRAMMI_WAYLAND) - (int)tempo();
+            if (manca < 0) manca = 0;
+            if (manca < attesa) attesa = manca;
+        }
+        if (servi(attesa) < 0) return 0;
         /* il resto della coda, senza dormire; con un limite, per ridisegnare comunque
          * ogni tanto anche se gli eventi non smettono mai di arrivare */
         for (int giri = 0; giri < 64; giri++) {
@@ -1843,6 +1858,13 @@ int main(void) {
         }
         controlla_risposte();
         componi();
-        if (descrittore_wayland >= 0) wayland_fotogramma();   /* "fatto": il programma disegna il prossimo */
+        if (descrittore_wayland >= 0) {
+            uint64_t tic_ora = (uint64_t)tempo() * FOTOGRAMMI_WAYLAND / 1000;   /* il tic in corso */
+            if (tic_ora != ultimo_tic) {                  /* un tic nuovo: al massimo un "fatto" per tic */
+                ultimo_tic = tic_ora;
+                if (wayland_vuole_fotogramma())           /* "fatto": il programma disegna il prossimo */
+                    wayland_fotogramma((unsigned int)(tic_ora * 1000 / FOTOGRAMMI_WAYLAND));
+            }
+        }
     }
 }

@@ -801,6 +801,16 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_wayland.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_wayland.img pronto: con il programma wayland in /data/tests"
 
+# IL DISCO DELLA PROVA DEL RITMO DEI FOTOGRAMMI: come disco_wayland.img, ma il client si chiama
+# wayland_anima (lo stesso programma: il nome lo fa animare, ridisegnando ad ogni "fatto" del
+# frame callback). Lo usa test/prove/wayland_ritmo.py.
+cp "$B/disco_app.img" "$B/disco_wayland_ritmo.img"
+rm -f "$(vero /data/tests)"/wayland
+metti_file "$P/bin/prove/wayland" "/data/tests/wayland_anima" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_wayland_ritmo.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_wayland_ritmo.img pronto: con il programma wayland_anima in /data/tests"
+
 # IL DISCO DELLA PROVA DEL PICKER: come disco_app.img, ma il picker del sistema e' quello con la
 # finestra finta, senza grafica (bin/prove/picker_finto: utente/prove/picker_finestra_finta.c),
 # che "sceglie" leggendo /data/tests/window/choice (una cartella: init la salta). In
@@ -809,7 +819,7 @@ echo "$B/disco_wayland.img pronto: con il programma wayland in /data/tests"
 # firewall.conf del sistema (disco_firewall_aperto.img l'aveva cambiato) e il picker finto; poi
 # nell'albero torna il picker vero.
 cp "$B/disco_app.img" "$B/disco_picker.img"
-rm -f "$(vero /data/tests)"/wayland
+rm -f "$(vero /data/tests)"/wayland_anima
 metti_file "$P/bin/prove/picker" "/data/tests/picker" 755 >/dev/null
 metti_cartella /data/tests/window 0 755 >/dev/null
 printf '# la scelta della finestra finta del picker (utente/prove/picker_finestra_finta.c)\nfolder=Documenti\nopen=prova.txt\n' \

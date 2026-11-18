@@ -527,15 +527,27 @@ void wayland_chiedi_chiusura(int i) {
     wl_display_flush_clients(display);
 }
 
-void wayland_fotogramma(void) {
+/* Una superficie aspetta il prossimo fotogramma e si vede (la finestra ridotta non conta:
+ * non si disegna cio' che nessuno guarda). */
+static int aspetta_visibile(const struct superficie *s) {
+    if (wl_list_empty(&s->da_servire)) return 0;
+    if (s->finestra && s->finestra->slot >= 0 && !ponte_visibile(s->finestra->slot)) return 0;
+    return 1;
+}
+
+int wayland_vuole_fotogramma(void) {
+    if (!display) return 0;
+    struct superficie *s;
+    wl_list_for_each(s, &superfici, link)
+        if (aspetta_visibile(s)) return 1;
+    return 0;
+}
+
+void wayland_fotogramma(unsigned int ms) {
     if (!display) return;
-    struct timespec t;
-    clock_gettime(CLOCK_MONOTONIC, &t);
-    uint32_t ms = (uint32_t)(t.tv_sec * 1000 + t.tv_nsec / 1000000);
     struct superficie *s;
     wl_list_for_each(s, &superfici, link) {
-        if (wl_list_empty(&s->da_servire)) continue;
-        if (s->finestra && s->finestra->slot >= 0 && !ponte_visibile(s->finestra->slot)) continue;   /* ridotta: aspetta */
+        if (!aspetta_visibile(s)) continue;   /* ridotta: aspetta, riparte al tic dopo il ritorno */
         for (struct wl_list *p = s->da_servire.next, *n; p != &s->da_servire; p = n) {
             n = p->next;
             struct wl_resource *cb = wl_resource_from_link(p);

@@ -403,7 +403,7 @@ class Macchina:
                 raise ErroreProva(f"dopo {attesa:.0f} s non si vede {cosa}")
             time.sleep(pausa)
 
-    def aspetta_scrivania(self, attesa=120.0):
+    def aspetta_scrivania(self, attesa=120.0, ferma=True):
         """Aspetta il desktop: le partizioni montate e la tavoletta USB presa dal servizio
         eventi (le righe nella seriale), poi la userbar disegnata a sinistra e lo schermo fermo.
         Il puntatore va in un angolo, dove non copre niente. Sul PC l'attesa comprende il
@@ -415,8 +415,8 @@ class Macchina:
         self.aspetta_seriale('eventi: tavoletta', attesa)
         self.muovi(*PUNTO_VUOTO)
         from scrivania import userbar_visibile
-        self.aspetta_che(userbar_visibile, attesa, 0.5, "la userbar della scrivania")
-        return self.aspetta_schermo_fermo()
+        f = self.aspetta_che(userbar_visibile, attesa, 0.5, "la userbar della scrivania")
+        return self.aspetta_schermo_fermo() if ferma else f   # ferma=False: c'e' un programma che anima
 
     # -- il mouse (la tavoletta USB: posizioni assolute) --
 

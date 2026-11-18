@@ -14,7 +14,8 @@
  *            /data/tests), "pacchetti" (disco_pacchetti.img: il programma pacchetti),
  *            "messaggi" (disco_messaggi.img: il programma messaggi) o "catalog"
  *            (disco_catalog.img: il programma catalog, la prova del servizio delle impostazioni)
- *            o "wayland" (il client Wayland di prova, utente/prove/wayland.c)
+ *            o "wayland" (il client Wayland di prova, utente/prove/wayland.c) o
+ *            "wayland_anima" (lo stesso client con il nome wayland_anima: anima, per il ritmo)
  *
  * LE DATE DELLA CASA. In QEMU l'orologio e' fermo al 1/1/2026 e i file della casa sono del
  * 31/12/2025 alle 18:02: Files scrive "ieri, 18:02". Il container ha l'orologio vero (non
@@ -90,11 +91,13 @@ int main(int quanti, char **argomenti) {
     }
 
     if (!strcmp(prove, "riempitivi") || !strcmp(prove, "pacchetti") || !strcmp(prove, "messaggi") ||
-        !strcmp(prove, "catalog") || !strcmp(prove, "wayland")) {
+        !strcmp(prove, "catalog") || !strcmp(prove, "wayland") || !strcmp(prove, "wayland_anima")) {
         mkdir("/data/tests", 0755);
         chmod("/data/tests", 0755);
         if (!strcmp(prove, "riempitivi"))
             for (char nome[] = "riempitivo-1"; nome[11] <= '6'; nome[11]++) metti_prova("riempitivo", nome);
+        else if (!strcmp(prove, "wayland_anima"))
+            metti_prova("wayland", "wayland_anima");   /* lo stesso client: il nome lo fa animare */
         else
             metti_prova(prove, prove);      /* un programma solo, con lo stesso nome */
     }

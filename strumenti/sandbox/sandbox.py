@@ -88,7 +88,8 @@ PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
 # i dischi delle prove di build.sh, e cosa vuol dire per la sandbox (avvio_sandbox.c)
 DISCHI = {"disco.img": "nessuna", "disco_app.img": "nessuna", "disco_prove.img": "riempitivi", "disco_pacchetti.img": "pacchetti",
-          "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog", "disco_wayland.img": "wayland"}
+          "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog", "disco_wayland.img": "wayland",
+          "disco_wayland_ritmo.img": "wayland_anima"}
 
 # I codici dei tasti di Linux (KEY_*, linux/input-event-codes.h) per i nomi dei tasti di
 # QEMU (i "qcode" che usano le prove: "a", "ret", "shift"...).
@@ -360,12 +361,12 @@ class Sandbox:
                 raise ErroreProva(f"dopo {attesa:.0f} s non si vede {cosa}")
             time.sleep(pausa)
 
-    def aspetta_scrivania(self, attesa=20.0):
+    def aspetta_scrivania(self, attesa=20.0, ferma=True):
         self.aspetta_seriale("eventi: tavoletta", attesa)
         self.muovi(*PUNTO_VUOTO)
         from scrivania import userbar_visibile
-        self.aspetta_che(userbar_visibile, attesa, 0.1, "la userbar della scrivania")
-        return self.aspetta_schermo_fermo()
+        f = self.aspetta_che(userbar_visibile, attesa, 0.1, "la userbar della scrivania")
+        return self.aspetta_schermo_fermo() if ferma else f   # ferma=False: c'e' un programma che anima
 
     def apri(self, app, attesa=15.0):
         """Apre un'applicazione dalla userbar (per id: "files", "attivita"...) e aspetta che
@@ -508,7 +509,7 @@ def comando_prova(args):
         esito = "OK"
         try:
             sb.accendi()
-            p.scrivania = sb.aspetta_scrivania()
+            p.scrivania = sb.aspetta_scrivania(ferma=not getattr(modulo, "SCHERMO_ANIMATO", False))
             modulo.esegui(p)
             for v in collaudo.VIETATE:
                 if v in getattr(modulo, "PREVISTE", []): continue   # la prova la aspetta

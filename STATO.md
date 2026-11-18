@@ -56,7 +56,12 @@ QEMU) apre una finestra con la cornice nostra sulla scrivania, si sposta, si chi
 Socket di prova `/run/mshell/wayland-prova`; le app normali NON hanno Wayland. **Passo 2 (da
 fare)**: GKit client Wayland, un'app alla volta (serve wl_seat per tastiera e mouse, wl_output,
 il socket dato dal launcher come le altre porte con `WAYLAND_SOCKET`, l'identità dell'app per i
-permessi, il ritmo dei fotogrammi, il ridimensionamento). **Passo 3 (da fare)**: via il vecchio
+permessi, il ridimensionamento). **Ritmo dei fotogrammi: fatto (limite chiuso)**: il "fatto" dei
+frame callback non parte più a ogni giro del ciclo ma a 60 tic al secondo (orologio monotonico,
+allineato a multipli di 1000/60 ms), acceso solo se una finestra visibile aspetta; le finestre
+ridotte non ricevono niente. Prova `wayland_ritmo` (client `wayland_anima`, disco
+`disco_wayland_ritmo.img`). **Da fare dopo**: il tic dal ritmo vero dello schermo (page flip DRM,
+oggi lo schermo è un solo buffer con DIRTYFB): cambierà solo da dove arriva il tic. **Passo 3 (da fare)**: via il vecchio
 protocollo, resta Wayland con le nostre estensioni (finestra di scelta del picker, identità, pannelli).
 
 **Cosa resta, nell'ordine:**

@@ -187,7 +187,7 @@ def esegui_una(modulo, cpu, args):
     riuscita, messaggio = True, ""
     try:
         m.accendi()
-        p.scrivania = m.aspetta_scrivania()
+        p.scrivania = m.aspetta_scrivania(ferma=not getattr(modulo, "SCHERMO_ANIMATO", False))
         modulo.esegui(p)
         seriale = m.testo_seriale()
         for v in VIETATE:
