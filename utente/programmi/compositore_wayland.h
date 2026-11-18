@@ -18,9 +18,8 @@
 
 #include "gkit/gkit.h"   /* struct notizia */
 
-/* I posti delle finestre: gli stessi di 'finestre' in compositore.c (il numero del posto e'
- * anche l'indice qui). */
-#define WAYLAND_MAX_POSTI 8
+/* (I posti delle finestre sono quelli di 'finestre' in compositore.c, senza un massimo: il
+ * numero del posto e' anche l'indice nella tabella di qui, che cresce.) */
 
 /* ---- quello che Wayland offre al compositore (compositore_wayland.c) ---- */
 
@@ -52,12 +51,14 @@ void wayland_fotogramma(unsigned int ms);
 /* ---- quello che il compositore offre a Wayland (il ponte, in compositore.c) ---- */
 
 /* Un posto per la finestra di un programma Wayland; 'cliente' e' il socket di quel programma
- * (si sa di chi e'). Il posto, o -1 se sono tutti presi. */
+ * (si sa di chi e'). Il posto, o -1 se la memoria e' finita. */
 int ponte_apri(int cliente);
 
 /* L'immagine della finestra del posto 'i' e' pronta o e' cambiata: l x a pixel premoltiplicati
- * (0xAARRGGBB), cornice compresa. La prima volta la finestra compare. */
-void ponte_mostra(int i, unsigned int *pixel, int l, int a, const char *titolo);
+ * (0xAARRGGBB), cornice compresa. La prima volta la finestra compare. 0, o -1 se la memoria e'
+ * finita: il compositore ha tolto la finestra (il posto non e' piu' di Wayland: va chiesta la
+ * chiusura al programma). */
+int ponte_mostra(int i, unsigned int *pixel, int l, int a, const char *titolo);
 
 /* Wayland non ha piu' la finestra del posto 'i': sparisce. */
 void ponte_togli(int i);

@@ -1,57 +1,65 @@
-"""finestre_molte: con tante app aperte il compositore resta in piedi.
+"""finestre_molte: con tante finestre aperte il compositore resta in piedi: non c'e' un tetto.
 
-Prima il compositore guardava i suoi descrittori con un elenco di al massimo 16 posti; ne
-servivano fino a 4 + 8 finestre + 8 porte, e con molte app l'attesa falliva (-1) e il
-compositore usciva: init lo faceva ripartire e tutte le finestre si perdevano. Ora l'elenco
-non ha un massimo suo: lo dimensiona il compositore sul suo massimo vero.
-  1. Si aprono dalla userbar tutte le app tranne Doom: 6 app, cioe' 6 finestre piu' le 2 della
-     scrivania (lo sfondo e la barra) = 8 finestre, il massimo, e 6 porte. Fanno 18 descrittori
-     da guardare: col vecchio limite (16) il compositore sarebbe caduto. Ogni app e' segnata
-     "aperta" nella userbar e la sua barra del titolo si vede dove la mette il compositore.
-  2. Si apre anche Doom: e' la nona finestra, oltre il massimo. Il compositore la rifiuta e lo
-     scrive nel registro ("troppe finestre: collegamento rifiutato"), ma non esce: la userbar
-     c'e' ancora e il registro non dice che init l'abbia fatto ripartire.
+Il compositore non ha piu' un numero massimo di finestre: i posti stanno in tabelle che crescono
+e la memoria di ogni finestra (ombra, buchi, vetro) si prende della sua misura quando si apre e
+si restituisce quando si chiude. Il limite e' la memoria: se finisce, il collegamento nuovo si
+rifiuta con una riga nel registro e il compositore resta (prima il tetto era 8).
+  1. Il disco ha otto client Wayland di prova (wayland_1 ... wayland_8, "Prova Wayland"): init li
+     fa partire, e ognuno apre la sua finestra. Con la scrivania (lo sfondo e la barra) sono 10
+     finestre, gia' oltre il vecchio tetto.
+  2. Si aprono dalla userbar tutte le 7 app, Doom compreso: 17 finestre in tutto, e 7 porte.
+     Ogni app e' segnata "aperta" nella userbar, e la userbar si vede ancora.
+  3. Nel registro non c'e' "troppe finestre" ne' "memoria finita", nessun client Wayland ha
+     perso la finestra ("wayland: chiusa") e init non ha fatto ripartire nessun servizio.
 """
 
 import time
 
 import scrivania as s
+from qemu import PUNTO_VUOTO
 
 NOME = "finestre_molte"
 ORDINE = 21
-DISCO = "disco_app.img"   # in QEMU: la userbar con Esempio, come la conoscono le prove (scrivania.py)
-DESCRIZIONE = "6 app + scrivania = 8 finestre e 6 porte (18 descrittori): il compositore resta; la nona finestra e' rifiutata"
+DISCO = "disco_finestre_molte.img"   # otto client Wayland di prova + la userbar con Esempio (scrivania.py)
+DESCRIZIONE = "8 client Wayland + 7 app + scrivania = 17 finestre: il compositore resta, nessun tetto"
 
-# Doom, rifiutato dal compositore, scrive "non riesco ad aprire la finestra": e' quello che si vuole
-PREVISTE = ["non riesco"]
+APPS = ["Attivita", "BloccoNote", "Esempio", "Files", "Impostazioni", "Store"]   # e Doom, per ultimo
+CLIENT_WAYLAND = 8
 
-APPS = ["Attivita", "BloccoNote", "Esempio", "Files", "Impostazioni", "Store"]
+
+def _mostrate(m):
+    return m.testo_seriale().count("wayland: finestra mostrata")
 
 
 def esegui(p):
     m = p.m
-    for app in APPS:
-        s.apri(m, app, attesa=30.0)
-    f = m.aspetta_schermo_fermo()
-    m.foto("sei_app")
-    for app in APPS:
-        p.controlla(s.segno_sotto(f, app) > 0, f"{app} non risulta aperta nella userbar")
-    p.controlla(s.userbar_visibile(f), "con sei app aperte la userbar non si vede piu'")
-    seriale = m.testo_seriale()
-    p.controlla("troppe finestre" not in seriale, "il compositore ha rifiutato una finestra prima del massimo")
-
-    # la nona finestra: rifiutata, e il compositore resta
-    s.clic_app(m, "Doom")
-    deadline = time.time() + 30.0
-    while "troppe finestre: collegamento rifiutato" not in m.testo_seriale() and time.time() < deadline:
+    # 1. le finestre Wayland, tutte
+    fine = time.time() + 60.0
+    while _mostrate(m) < CLIENT_WAYLAND and time.time() < fine:
         time.sleep(0.5)
-    seriale = m.testo_seriale()
-    p.controlla("compositore: troppe finestre: collegamento rifiutato" in seriale,
-                "oltre il massimo il compositore non ha scritto il rifiuto nel registro")
-    time.sleep(2.0)
+    p.controlla(_mostrate(m) == CLIENT_WAYLAND,
+                f"i client Wayland con la finestra sono {_mostrate(m)}, dovevano essere {CLIENT_WAYLAND}")
     f = m.aspetta_schermo_fermo()
-    m.foto("oltre_il_massimo")
-    p.controlla(s.userbar_visibile(f), "oltre il massimo la userbar non c'e' piu' (il compositore e' caduto?)")
+    m.foto("wayland")
+    p.controlla(s.userbar_visibile(f), "con otto finestre Wayland la userbar non si vede piu'")
+
+    # 2. le app della userbar
     for app in APPS:
-        p.controlla(s.segno_sotto(f, app) > 0, f"{app} non e' piu' aperta dopo il rifiuto della nona finestra")
+        s.apri(m, app, attesa=60.0)
+    # Doom per ultimo e senza aspettare lo schermo fermo: in QEMU anima il suo schermo senza smettere
+    s.clic_app(m, "Doom")
+    m.muovi(*PUNTO_VUOTO)
+    f = m.aspetta_che(lambda f: s.segno_sotto(f, "Doom") > 0, 60.0, cosa="Doom aperta nella userbar")
+    time.sleep(1.0)
+    m.foto("diciassette")
+    for app in APPS + ["Doom"]:
+        p.controlla(s.segno_sotto(f, app) > 0, f"{app} non risulta aperta nella userbar")
+    p.controlla(s.userbar_visibile(f), "con 17 finestre la userbar non si vede piu'")
+
+    # 3. il registro
+    seriale = m.testo_seriale()
+    p.controlla("troppe finestre" not in seriale, "il compositore ha rifiutato una finestra")
+    p.controlla("memoria finita" not in seriale, "il compositore dice di avere finito la memoria")
+    p.controlla("wayland: chiusa" not in seriale, "un client Wayland ha perso la sua finestra")
     p.controlla("lo faccio ripartire" not in seriale, "init ha fatto ripartire un servizio")
+    p.controlla(_mostrate(m) == CLIENT_WAYLAND, "le finestre Wayland sono state rifatte (il compositore e' ripartito?)")

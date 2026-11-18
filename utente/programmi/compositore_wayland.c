@@ -79,7 +79,29 @@ struct finestra_wl {
     unsigned int *immagine;              /* cornice + contenuto: l x a */
     int l, a;
 };
-static struct finestra_wl *per_posto[WAYLAND_MAX_POSTI];
+/* chi e' di Wayland in ogni posto del compositore: cresce con i posti (a raddoppio, a zero) */
+static struct finestra_wl **per_posto;
+static int posti_wl;
+
+static struct finestra_wl *al_posto(int posto) {
+    return posto >= 0 && posto < posti_wl ? per_posto[posto] : 0;
+}
+
+/* Segna chi e' al posto; 0 se la tabella non cresce (memoria finita). Togliere (w = 0) non cresce mai. */
+static int segna_posto(int posto, struct finestra_wl *w) {
+    if (posto >= posti_wl) {
+        if (!w) return 1;
+        int nuovi = posti_wl ? posti_wl : 8;
+        while (nuovi <= posto) nuovi *= 2;
+        struct finestra_wl **t = realloc(per_posto, (size_t)nuovi * sizeof *t);
+        if (!t) return 0;
+        memset(&t[posti_wl], 0, (size_t)(nuovi - posti_wl) * sizeof *t);
+        per_posto = t;
+        posti_wl = nuovi;
+    }
+    per_posto[posto] = w;
+    return 1;
+}
 
 /* --- l'immagine della finestra --- */
 
@@ -124,7 +146,14 @@ static void ridisegna(struct finestra_wl *w) {
         for (int x = l - raggio > raggio ? l - raggio : raggio; x < l; x++)
             w->immagine[y * l + x] = coperto_di(w->immagine[y * l + x], coperto(distanza(&forma, x, y)));
     }
-    ponte_mostra(w->slot, w->immagine, l, a, w->titolo);
+    if (ponte_mostra(w->slot, w->immagine, l, a, w->titolo) < 0) {
+        /* memoria finita: il compositore ha tolto la finestra. Il posto non e' piu' nostro (se
+         * no un'altra finestra lo riuserebbe e ponte_togli toglierebbe lei); si chiede al
+         * programma di chiudersi. */
+        segna_posto(w->slot, 0);
+        w->slot = -1;
+        if (w->toplevel) xdg_toplevel_send_close(w->toplevel);
+    }
 }
 
 /* Il contenuto di un buffer shm in 'contenuto' (rifatto se la misura e' cambiata). 1 se fatto.
@@ -200,7 +229,7 @@ static void toplevel_distrutto(struct wl_resource *r) {
     if (w->slot >= 0) {
         int posto = w->slot;
         w->slot = -1;
-        per_posto[posto] = 0;
+        segna_posto(posto, 0);
         ponte_togli(posto);
     }
     w->configurata = 0;
@@ -240,7 +269,7 @@ static void xdg_surface_toplevel(struct wl_client *client, struct wl_resource *r
     }
     int posto = ponte_apri(wl_client_get_fd(client));
     struct wl_resource *t = wl_resource_create(client, &xdg_toplevel_interface, wl_resource_get_version(r), id);
-    if (posto < 0 || !t || posto >= WAYLAND_MAX_POSTI) {
+    if (posto < 0 || !t || !segna_posto(posto, w)) {
         if (posto >= 0) ponte_togli(posto);
         wl_resource_post_no_memory(r);
         return;
@@ -248,7 +277,6 @@ static void xdg_surface_toplevel(struct wl_client *client, struct wl_resource *r
     wl_resource_set_implementation(t, &toplevel_interfaccia, w, toplevel_distrutto);
     w->toplevel = t;
     w->slot = posto;
-    per_posto[posto] = w;
 }
 
 static void xdg_surface_popup(struct wl_client *c, struct wl_resource *r, uint32_t id, struct wl_resource *genitore,
@@ -278,7 +306,7 @@ static void xdg_surface_distrutta(struct wl_resource *r) {
     if (w->toplevel) {                    /* il toplevel non e' ancora distrutto: si stacca */
         wl_resource_set_user_data(w->toplevel, 0);
         if (w->slot >= 0) {
-            per_posto[w->slot] = 0;
+            segna_posto(w->slot, 0);
             ponte_togli(w->slot);
         }
     }
@@ -513,8 +541,8 @@ void wayland_servi(void) {
 }
 
 void wayland_notizia(int i, const struct notizia *n) {
-    if (i < 0 || i >= WAYLAND_MAX_POSTI || !per_posto[i] || n->tipo != FUOCO) return;
-    struct finestra_wl *w = per_posto[i];
+    struct finestra_wl *w = al_posto(i);
+    if (!w || n->tipo != FUOCO) return;
     if (w->attiva == (int)(n->fuoco != 0)) return;
     w->attiva = n->fuoco != 0;
     ridisegna(w);                         /* il titolo e i comandi cambiano */
@@ -522,8 +550,9 @@ void wayland_notizia(int i, const struct notizia *n) {
 }
 
 void wayland_chiedi_chiusura(int i) {
-    if (i < 0 || i >= WAYLAND_MAX_POSTI || !per_posto[i] || !per_posto[i]->toplevel) return;
-    xdg_toplevel_send_close(per_posto[i]->toplevel);
+    struct finestra_wl *w = al_posto(i);
+    if (!w || !w->toplevel) return;
+    xdg_toplevel_send_close(w->toplevel);
     wl_display_flush_clients(display);
 }
 

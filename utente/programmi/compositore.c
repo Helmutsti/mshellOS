@@ -61,6 +61,8 @@
  * applicazioni, e l'ombra e il vetro delle finestre) gliele da' UIKit, con le sole funzioni
  * di uikit/sistema/uikit_compositore.h. */
 #include <stdint.h>
+#include <stdlib.h>   /* malloc, calloc, realloc, free: le memorie delle finestre */
+#include <string.h>   /* memset, memcpy */
 #include "corekit/corekit.h"
 #include "gkit/gkit.h"
 #include "gkit/gkit_disegno.h"
@@ -118,7 +120,9 @@ static void immagine(int x, int y, int l, int a, const unsigned int *pixel, int 
  * (struct finestra_compositore: 'struct finestra' e' la finestra vista dall'applicazione,
  * in gkit.h) */
 
-#define MAX_FINESTRE 8
+/* Niente tetto al numero di finestre: i posti stanno in tabelle che crescono (riserva_posti)
+ * e la memoria "a misura di schermo" di ogni finestra (ombra, buchi, vetro) si prende quando
+ * la finestra si apre, della sua misura vera (memoria_finestra). Il limite e' la memoria. */
 
 struct finestra_compositore {
     int usata;
@@ -157,25 +161,40 @@ struct finestra_compositore {
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
     unsigned int forma;         /* la forma del puntatore quando e' sulla finestra (MOSTRA_PUNTATORE) */
+
+    /* LE MEMORIE DI QUESTA FINESTRA, della sua misura (memoria_finestra): ombra, buchi e vetro
+     * (vedi sotto), per chi non e' lo sfondo. 'mem_l' x 'mem_a' e' la misura per cui sono state
+     * prese: se la finestra cambia misura si rifanno. */
+    unsigned char *ombra;
+    unsigned short (*buchi)[2];
+    unsigned int *vetro;
+    int rientro;
+    int mem_l, mem_a;
 };
 
 /* Il solo programma che puo' aprire una finestra di scelta (RUOLO_SCELTA). */
 #define PROGRAMMA_PICKER "/system/services/picker/picker"
 
-static struct finestra_compositore finestre[MAX_FINESTRE];
+/* I posti: 'finestre' e le altre tabelle "per posto" (ordine, lista, piani, impronte...) hanno
+ * 'posti' elementi e crescono insieme, a raddoppio (riserva_posti). Un posto non cambia mai
+ * numero (il numero e' anche l'indice nel ponte di Wayland), ma l'indirizzo dell'array si': non
+ * si tiene un puntatore a un posto attraverso nuova_finestra. */
+static struct finestra_compositore *finestre;
+static int posti;
 
 /* LE PORTE DELLE APP (protocollo.h, LA PORTA DELL'APP): il capo del compositore, e il programma
  * dell'app che il launcher ha detto. Una porta si chiude quando l'app la chiude (o finisce). */
-#define MAX_PORTE MAX_FINESTRE
-static struct {
+struct porta {
     int usata;
     int d;
     char programma[MAX_PERCORSO_PROGRAMMA];
-} porte[MAX_PORTE];
+};
+static struct porta *porte;      /* cresce a raddoppio (porta_app) */
+static int quante_porte;
 
 /* L'ordine: ordine[0] e' quella piu' in fondo, ordine[quante-1] quella in primo piano.
  * Si disegnano dal fondo: ognuna copre quelle disegnate prima. */
-static int ordine[MAX_FINESTRE];
+static int *ordine;      /* un elemento per posto */
 static int quante;
 
 static int fuoco = -1;      /* la finestra che riceve i tasti */
@@ -216,8 +235,7 @@ static int tutto_da_rifare = 1;
 #define OMBRA_MARGINE_GIU  96
 #define OMBRA_L(f) ((f)->l + 2 * OMBRA_MARGINE)
 #define OMBRA_A(f) ((f)->a + OMBRA_MARGINE + OMBRA_MARGINE_GIU)
-static unsigned char ombre[MAX_FINESTRE][(MAX_LARGHEZZA + 2 * OMBRA_MARGINE) *
-                                         (MAX_ALTEZZA + OMBRA_MARGINE + OMBRA_MARGINE_GIU)];
+/* (la tabella di ogni finestra e' 'ombra' nella sua struct: OMBRA_L x OMBRA_A byte) */
 
 /* Una finestra che non ha il fuoco ha un'ombra piu' leggera (nel vecchio disegno il 22%
  * contro il 38%, cioe' il 58%). Il Figma ha una sola ombra per la finestra: questo e' un
@@ -236,11 +254,10 @@ static const struct strato_ombra *strati_ombra(const struct finestra_compositore
  * che disegna_ombra salta. E IL RIENTRO: di quanto stare dentro dai bordi della finestra
  * perche' sotto non ci sia piu' ombra in nessun punto (gli angoli arrotondati: fuori dalla
  * curva, ma dentro il rettangolo, l'ombra c'e'). Serve al vetro (vedi pianifica); -1: non c'e'. */
-static unsigned short buchi[MAX_FINESTRE][MAX_ALTEZZA + OMBRA_MARGINE + OMBRA_MARGINE_GIU][2];
-static int rientro[MAX_FINESTRE];
+/* (nella struct di ogni finestra: 'buchi', OMBRA_A coppie, e 'rientro') */
 
 static void prepara_ombra(int i) {
-    const struct finestra_compositore *f = &finestre[i];
+    struct finestra_compositore *f = &finestre[i];
     int n;
     const struct strato_ombra *strati = strati_ombra(f, &n);
     struct tondo forma = tondo(0, 0, f->l, f->a, f->raggio);
@@ -263,30 +280,30 @@ static void prepara_ombra(int i) {
                     passa = passa * (255 - alfa) / 255;
                 }
             int v = (255 - passa) * fuori >> 8;
-            ombre[i][y * OMBRA_L(f) + x] = (unsigned char)v;
+            f->ombra[y * OMBRA_L(f) + x] = (unsigned char)v;
         }
     /* i buchi: dalla colonna di mezzo, finche' la tabella vale 0 */
     int lt = OMBRA_L(f);
     for (int y = 0; y < OMBRA_A(f); y++) {
-        const unsigned char *riga = &ombre[i][y * lt];
+        const unsigned char *riga = &f->ombra[y * lt];
         int b0 = lt / 2, b1 = lt / 2;
         if (!riga[b0]) {
             while (b0 > 0 && !riga[b0 - 1]) b0--;
             while (b1 < lt && !riga[b1]) b1++;
         }
-        buchi[i][y][0] = (unsigned short)b0;
-        buchi[i][y][1] = (unsigned short)b1;
+        f->buchi[y][0] = (unsigned short)b0;
+        f->buchi[y][1] = (unsigned short)b1;
     }
     /* il rientro: il primo d per cui il rettangolo della finestra stretto di d per parte sta
      * tutto nei buchi */
-    rientro[i] = -1;
-    for (int d = 0; 2 * d < f->l && 2 * d < f->a && rientro[i] < 0; d++) {
+    f->rientro = -1;
+    for (int d = 0; 2 * d < f->l && 2 * d < f->a && f->rientro < 0; d++) {
         int dentro_buco = 1;
         for (int y = d; y < f->a - d && dentro_buco; y++) {
-            const unsigned short *b = buchi[i][y + OMBRA_MARGINE];
+            const unsigned short *b = f->buchi[y + OMBRA_MARGINE];
             dentro_buco = b[0] <= OMBRA_MARGINE + d && b[1] >= OMBRA_MARGINE + f->l - d;
         }
-        if (dentro_buco) rientro[i] = d;
+        if (dentro_buco) f->rientro = d;
     }
 }
 
@@ -314,9 +331,9 @@ static void disegna_ombra(int i) {
     int y0 = zy0 - oy > 0 ? zy0 - oy : 0, y1 = zy1 - oy < OMBRA_A(f) ? zy1 - oy : OMBRA_A(f);
     int x0 = zx0 - ox > 0 ? zx0 - ox : 0, x1 = zx1 - ox < OMBRA_L(f) ? zx1 - ox : OMBRA_L(f);
     for (int y = y0; y < y1; y++) {
-        const unsigned char *riga = &ombre[i][y * OMBRA_L(f)];
+        const unsigned char *riga = &f->ombra[y * OMBRA_L(f)];
         unsigned int *d = &disegno[(oy + y) * larghezza + ox];
-        int b0 = buchi[i][y][0], b1 = buchi[i][y][1];
+        int b0 = f->buchi[y][0], b1 = f->buchi[y][1];
         int fine = x1 < b0 ? x1 : b0;
         for (int x = x0; x < fine; x++)
             if (riga[x]) d[x] = sopra_a_vero(colori[riga[x]], d[x]);
@@ -371,7 +388,7 @@ struct sfocata {
 static struct sfocata piccola;   /* la copia piccola su cui si lavora (una alla volta) */
 /* il vetro di ogni finestra: la sfocatura gia' ingrandita, l x a pixel (0x00RRGGBB); valgono
  * solo i pixel che stanno sullo schermo */
-static unsigned int vetri[MAX_FINESTRE][MAX_LARGHEZZA * MAX_ALTEZZA];
+/* (ogni finestra ha il suo: 'vetro' nella sua struct) */
 
 /* LE MEDIE. raggio_media non va oltre MAX_RAGGIO_MEDIA (main): medie piu' larghe di 33 pixel
  * piccoli (132 veri) non servono a nessun vetro. La divisione della media e' gia' fatta per
@@ -548,7 +565,7 @@ static unsigned int fondo[MAX_LARGHEZZA * MAX_ALTEZZA];
 static unsigned int vetro_fondo[MAX_LARGHEZZA * MAX_ALTEZZA];
 static int fondo_pronto, vetro_fondo_pronto;
 
-static int lista[MAX_FINESTRE], in_lista;   /* quelle da disegnare, in ordine (fai_lista) */
+static int *lista, in_lista;   /* quelle da disegnare, in ordine (fai_lista) */
 
 /* La copia piccola che serve per rifare il vetro nel rettangolo g (dentro lo schermo): le
  * colonne e le righe piccole che legge l'ingrandimento, piu' 3 medie e 2 per parte (cosi' le
@@ -595,7 +612,7 @@ struct piano {
     int tutto, quanti;
     struct zona pezzi[MAX_PEZZI];   /* in pixel dello schermo, dentro lo schermo */
 };
-static struct piano piani[MAX_FINESTRE];
+static struct piano *piani;     /* un elemento per posto */
 
 static int vuota(struct zona z) { return z.x0 >= z.x1 || z.y0 >= z.y1; }
 
@@ -629,7 +646,7 @@ static void pianifica(int i, int posto) {
     p->tutto = p->quanti = 0;
     struct zona w = sullo_schermo(f);
     if (vuota(w)) return;                       /* niente sullo schermo: niente da rifare */
-    int m = dipendenza, d = rientro[i];
+    int m = dipendenza, d = f->rientro;
     struct zona pulita = { f->x + d + m, f->y + d + m, f->x + f->l - d - m, f->y + f->a - d - m };
     if (!a_pezzi || d < 0 || vuota(pulita)) { p->tutto = 1; return; }
     int ya = pulita.y0 > w.y0 ? pulita.y0 : w.y0, yb = pulita.y1 < w.y1 ? pulita.y1 : w.y1;
@@ -664,26 +681,26 @@ static void rifai_vetro(int i) {
     if (p->tutto) {
         posto_sfocata(f, &piccola.x, &piccola.y, &piccola.l, &piccola.a);
         sfoca(disegno, &piccola);
-        ingrandisci(&piccola, w, vetri[i], f->x, f->y, f->l);
+        ingrandisci(&piccola, w, f->vetro, f->x, f->y, f->l);
         return;
     }
     if (!vetro_fondo_pronto) prepara_vetro_fondo();
     for (int y = w.y0; y < w.y1; y++) {
         const unsigned int *da = &vetro_fondo[y * larghezza + w.x0];
-        unsigned int *a = &vetri[i][(y - f->y) * f->l + w.x0 - f->x];
+        unsigned int *a = &f->vetro[(y - f->y) * f->l + w.x0 - f->x];
         for (int k = 0; k < w.x1 - w.x0; k++) a[k] = da[k];
     }
     for (int k = 0; k < p->quanti; k++) {
         copia_per(p->pezzi[k], &piccola);
         sfoca(disegno, &piccola);
-        ingrandisci(&piccola, p->pezzi[k], vetri[i], f->x, f->y, f->l);
+        ingrandisci(&piccola, p->pezzi[k], f->vetro, f->x, f->y, f->l);
     }
 }
 
 /* Mette il vetro della finestra (la sfocatura ingrandita) dentro la sua forma, nella zona. */
 static void metti_sfocatura(int i) {
     const struct finestra_compositore *f = &finestre[i];
-    const unsigned int *vetro = vetri[i];
+    const unsigned int *vetro = f->vetro;
     struct tondo forma = tondo(f->x, f->y, f->l, f->a, f->raggio);
     int y0 = f->y > zy0 ? f->y : zy0, y1 = f->y + f->a < zy1 ? f->y + f->a : zy1;
     int x0 = f->x > zx0 ? f->x : zx0, x1 = f->x + f->l < zx1 ? f->x + f->l : zx1;
@@ -854,7 +871,7 @@ static void racconta_a(int pannello, int i, unsigned int tipo) {
 }
 
 static void racconta(int i, unsigned int tipo) {
-    for (int k = 0; k < MAX_FINESTRE; k++)
+    for (int k = 0; k < posti; k++)
         if (finestre[k].usata && finestre[k].ruolo == RUOLO_PANNELLO && finestre[k].immagini[0])
             racconta_a(k, i, tipo);
 }
@@ -866,7 +883,7 @@ static void racconta_attiva_a(int pannello) {
 }
 
 static void racconta_attiva(void) {
-    for (int k = 0; k < MAX_FINESTRE; k++)
+    for (int k = 0; k < posti; k++)
         if (finestre[k].usata && finestre[k].ruolo == RUOLO_PANNELLO && finestre[k].mostrata >= 0)
             racconta_attiva_a(k);
 }
@@ -878,6 +895,13 @@ static void scollega(int i) {
     if (f->immagini[0] && !f->wayland) togli(f->immagini[0]);   /* quella di Wayland non e' un foglio */
     if (f->foglio >= 0) chiudi(f->foglio);
     if (f->collegamento >= 0) chiudi(f->collegamento);
+    free(f->ombra);                    /* le memorie della finestra tornano al sistema */
+    free(f->buchi);
+    free(f->vetro);
+    f->ombra = 0;
+    f->buchi = 0;
+    f->vetro = 0;
+    f->mem_l = f->mem_a = 0;
     f->usata = 0;
     int k = 0;
     while (k < quante && ordine[k] != i) k++;
@@ -900,13 +924,46 @@ static void scollega(int i) {
     }
 }
 
+static int riserva_posti(int n);
+
+/* La memoria "a misura di schermo" della finestra i, della sua misura vera (f->l x f->a): la
+ * tabella dell'ombra (con il margine), i buchi e il vetro. Si prende quando la finestra si
+ * apre e si rifa' se cambia misura; l'unica a non averla e' lo sfondo (non ha ombra ne'
+ * vetro). malloc di musl: i blocchi grandi sono mmap, e free li restituisce al sistema
+ * subito (con un'unica mmap per tipo non ci sarebbe niente da guadagnare). 0 se c'e' (o se
+ * non serve), -1 se la memoria e' finita: chi chiama toglie la finestra. */
+static int memoria_finestra(int i) {
+    struct finestra_compositore *f = &finestre[i];
+    if (f->ruolo == RUOLO_SFONDO) return 0;
+    if (f->ombra && f->mem_l == f->l && f->mem_a == f->a) return 0;
+    unsigned char *ombra = malloc((size_t)OMBRA_L(f) * (size_t)OMBRA_A(f));
+    unsigned short (*buchi)[2] = malloc((size_t)OMBRA_A(f) * sizeof *buchi);
+    unsigned int *vetro = calloc((size_t)f->l * (size_t)f->a, sizeof *vetro);
+    if (!ombra || !buchi || !vetro) {
+        free(ombra);
+        free(buchi);
+        free(vetro);
+        scrivi_riga("compositore", "memoria finita: finestra rifiutata", "");
+        return -1;
+    }
+    free(f->ombra);
+    free(f->buchi);
+    free(f->vetro);
+    f->ombra = ombra;
+    f->buchi = buchi;
+    f->vetro = vetro;
+    f->mem_l = f->l;
+    f->mem_a = f->a;
+    return 0;
+}
+
 /* Un collegamento nuovo 'd' (accettato, o arrivato da una porta): si aspetta il suo
- * VOGLIO_FINESTRA. Il suo posto, o -1 (troppe finestre: 'd' si chiude). */
+ * VOGLIO_FINESTRA. Il suo posto, o -1 (memoria finita: 'd' si chiude). */
 static int nuova_finestra(int d) {
     int i = 0;
-    while (i < MAX_FINESTRE && finestre[i].usata) i++;
-    if (i == MAX_FINESTRE) {   /* troppe finestre: il collegamento nuovo si rifiuta, il compositore resta */
-        scrivi_riga("compositore", "troppe finestre: collegamento rifiutato", "");
+    while (i < posti && finestre[i].usata) i++;
+    if (i == posti && riserva_posti(posti + 1) < 0) {   /* memoria finita: il collegamento nuovo si rifiuta, il compositore resta */
+        scrivi_riga("compositore", "memoria finita: collegamento rifiutato", "");
         if (d >= 0) chiudi(d);
         return -1;
     }
@@ -926,8 +983,17 @@ static void nuovo_collegamento(int ascolto) {
  * ogni finestra, con il capo allegato. Si tiene la porta; il collegamento 'i' si chiude. */
 static void porta_app(int i, const struct porta_app *m, int capo) {
     int k = 0;
-    while (k < MAX_PORTE && porte[k].usata) k++;
-    if (capo < 0 || finestre[i].immagini[0] || chi(finestre[i].collegamento) != UID_SISTEMA || k == MAX_PORTE) {
+    while (k < quante_porte && porte[k].usata) k++;
+    if (k == quante_porte) {            /* tutte prese: la tabella cresce (a raddoppio) */
+        int nuove = quante_porte ? 2 * quante_porte : 8;
+        struct porta *t = realloc(porte, (size_t)nuove * sizeof *t);
+        if (t) {
+            memset(&t[quante_porte], 0, (size_t)(nuove - quante_porte) * sizeof *t);
+            porte = t;
+            quante_porte = nuove;
+        }
+    }
+    if (capo < 0 || finestre[i].immagini[0] || chi(finestre[i].collegamento) != UID_SISTEMA || k == quante_porte) {
         if (capo >= 0) chiudi(capo);
         scollega(i);
         return;
@@ -1025,6 +1091,10 @@ static void voglio_finestra(int i, const struct voglio_finestra *m, int foglio) 
         f->x = m->x;          /* le superfici speciali stanno dove dicono loro */
         f->y = m->y;
     }
+    if (memoria_finestra(i) < 0) {      /* memoria finita: la finestra non si apre */
+        scollega(i);
+        return;
+    }
     if (f->ruolo != RUOLO_SFONDO) prepara_ombra(i);
 }
 
@@ -1050,7 +1120,7 @@ static void mostra(int i, const struct mostra *m) {
         f->annunciata = 1;
         racconta(i, FINESTRA_APERTA);
     } else if (prima < 0 && f->ruolo == RUOLO_PANNELLO) {   /* un pannello nuovo: le finestre che ci sono */
-        for (int k = 0; k < MAX_FINESTRE; k++)
+        for (int k = 0; k < posti; k++)
             if (finestre[k].usata && finestre[k].annunciata) racconta_a(i, k, FINESTRA_APERTA);
         racconta_attiva_a(i);
     } else if (prima != f->mostrata) {
@@ -1087,9 +1157,9 @@ int ponte_apri(int cliente) {
 /* L'immagine del posto 'i' e' pronta (o e' cambiata): 'pixel' sono l x a pixel premoltiplicati,
  * titolo compreso. La prima volta la finestra compare (a cascata, davanti, con il fuoco);
  * se cambia la misura si rifa' l'ombra. */
-void ponte_mostra(int i, unsigned int *pixel, int l, int a, const char *titolo) {
+int ponte_mostra(int i, unsigned int *pixel, int l, int a, const char *titolo) {
     struct finestra_compositore *f = &finestre[i];
-    if (!f->usata || !f->wayland || l < 1 || a < 1 || l > larghezza || a > altezza) return;
+    if (!f->usata || !f->wayland || l < 1 || a < 1 || l > larghezza || a > altezza) return 0;
     int nuova = !f->immagini[0];
     int misura = f->l != l || f->a != a;
     f->immagini[0] = f->immagini[1] = pixel;
@@ -1105,8 +1175,15 @@ void ponte_mostra(int i, unsigned int *pixel, int l, int a, const char *titolo) 
         if (f->x + l > larghezza) f->x = larghezza - l;
         if (f->y + a > altezza) f->y = altezza - a;
     }
-    if (nuova || misura) prepara_ombra(i);
+    if (nuova || misura) {
+        if (memoria_finestra(i) < 0) {  /* memoria finita: la finestra sparisce, Wayland lo sa dal -1 */
+            scollega(i);
+            return -1;
+        }
+        prepara_ombra(i);
+    }
     mostra(i, &(struct mostra){ .tipo = MOSTRA, .immagine = 0, .quante = 0 });   /* tutta cambiata */
+    return 0;
 }
 
 /* Wayland non ha piu' la finestra del posto 'i' (il programma l'ha chiusa o e' finito). */
@@ -1143,7 +1220,7 @@ static void pong(int i, const struct pong *m) {
  * bloccata. */
 static void controlla_risposte(void) {
     unsigned int adesso = tempo();
-    for (int i = 0; i < MAX_FINESTRE; i++) {
+    for (int i = 0; i < posti; i++) {
         struct finestra_compositore *f = &finestre[i];
         if (!f->usata || !f->immagini[0] || f->wayland) continue;   /* Wayland ha i suoi ping */
         /* Con sopra una finestra di scelta (Apri/Salva) l'app aspetta la risposta e non legge: non si giudica,
@@ -1191,7 +1268,7 @@ static void riducimi(int i) {
  * tutte, con il fuoco. */
 static void porta_davanti(int pannello, unsigned int numero) {
     if (finestre[pannello].ruolo != RUOLO_PANNELLO) return;
-    for (int i = 0; i < MAX_FINESTRE; i++) {
+    for (int i = 0; i < posti; i++) {
         struct finestra_compositore *f = &finestre[i];
         if (!f->usata || f->ruolo != RUOLO_FINESTRA || f->id != numero || f->mostrata < 0) continue;
         f->ridotta = 0;
@@ -1210,7 +1287,7 @@ static int avvisi_catalog = -1;
 /* Il tema nuovo: si sceglie, si rifanno le ombre di tutte le finestre e tutto il fotogramma. */
 static void tema_nuovo(const struct catalog_valori *v) {
     compositore_scegli_tema(v);
-    for (int k = 0; k < MAX_FINESTRE; k++)
+    for (int k = 0; k < posti; k++)
         if (finestre[k].usata && finestre[k].immagini[0] && finestre[k].ruolo != RUOLO_SFONDO) prepara_ombra(k);
     tutto_da_rifare = 1;
 }
@@ -1373,7 +1450,7 @@ struct impronta {
     int vista, x, y, l, a, posto, col_fuoco, non_risponde, velata;
     unsigned int ruolo, generazione, id;
 };
-static struct impronta impronte_prima[MAX_FINESTRE];
+static struct impronta *impronte_prima;   /* un elemento per posto */
 static int px_prima, py_prima;
 static struct forma_ora immagine_prima;   /* l'immagine del puntatore di prima: da cancellare */
 static unsigned int forma_prima = FORMA_NORMALE;
@@ -1418,9 +1495,46 @@ static void zona_aggiungi(struct zona z) {
 /* COSA E' CAMBIATO dall'ultimo fotogramma, finestra per finestra: i rettangoli dove i
  * suoi pixel non sono piu' quelli di prima ('danni'). */
 #define MAX_DANNI (MAX_ZONE_MOSTRA + 2)
-static struct zona danni[MAX_FINESTRE][MAX_DANNI];
-static int quanti_danni[MAX_FINESTRE];
-static int da_sfocare[MAX_FINESTRE];   /* il suo smerigliato va rifatto */
+static struct zona (*danni)[MAX_DANNI];   /* un elemento per posto */
+static int *quanti_danni;
+static int *da_sfocare;   /* il suo smerigliato va rifatto */
+static struct impronta *adesso;   /* le impronte di questo fotogramma (cosa_rifare) */
+static int *stessa;               /* c'era e c'e', la stessa finestra, nello stesso posto */
+
+/* LE TABELLE PER POSTO crescono insieme: si prende il doppio di posti (o 8 la prima volta), si
+ * copia quello che c'e' e si toglie il vecchio. Prima si prendono TUTTE le nuove: se una
+ * manca, non cambia niente (e il posto nuovo si rifiuta). Array che cresce e non lista:
+ * il numero del posto e' un indice (il ponte di Wayland, ordine, lista, impronte), e le
+ * tabelle sono piccole (qualche centinaio di byte per posto: le memorie grandi sono per
+ * finestra, in memoria_finestra). I posti nuovi sono a zero, come erano quelli statici. */
+static int riserva_posti(int n) {
+    if (n <= posti) return 0;
+    int nuovi = posti ? posti : 8;
+    while (nuovi < n) nuovi *= 2;
+    struct { void **tabella; size_t elemento; } t[] = {
+        { (void **)&finestre, sizeof *finestre },           { (void **)&ordine, sizeof *ordine },
+        { (void **)&lista, sizeof *lista },                 { (void **)&piani, sizeof *piani },
+        { (void **)&impronte_prima, sizeof *impronte_prima }, { (void **)&danni, sizeof *danni },
+        { (void **)&quanti_danni, sizeof *quanti_danni },   { (void **)&da_sfocare, sizeof *da_sfocare },
+        { (void **)&adesso, sizeof *adesso },               { (void **)&stessa, sizeof *stessa },
+    };
+    enum { QUANTE = sizeof t / sizeof t[0] };
+    void *nuova[QUANTE];
+    for (int k = 0; k < QUANTE; k++) {
+        nuova[k] = calloc((size_t)nuovi, t[k].elemento);
+        if (!nuova[k]) {
+            while (k-- > 0) free(nuova[k]);
+            return -1;
+        }
+    }
+    for (int k = 0; k < QUANTE; k++) {
+        if (posti) memcpy(nuova[k], *t[k].tabella, (size_t)posti * t[k].elemento);
+        free(*t[k].tabella);
+        *t[k].tabella = nuova[k];
+    }
+    posti = nuovi;
+    return 0;
+}
 
 static void danno(int i, struct zona z) {
     if (quanti_danni[i] < MAX_DANNI) danni[i][quanti_danni[i]++] = z;
@@ -1461,7 +1575,7 @@ static struct zona impronta_dentro(const struct impronta *p) {
  *    li' la scena, dal fondo fino a lei.
  * Il risultato e' lo stesso, pixel per pixel, che si avrebbe ricomponendo tutto. */
 static void cosa_rifare(void) {
-    struct impronta adesso[MAX_FINESTRE] = { 0 };
+    memset(adesso, 0, (size_t)posti * sizeof *adesso);
     for (int k = 0; k < in_lista; k++) {
         int i = lista[k];
         const struct finestra_compositore *f = &finestre[i];
@@ -1469,22 +1583,21 @@ static void cosa_rifare(void) {
                                        scelta_sopra(i) >= 0, f->ruolo, f->generazione, f->id };
     }
     quante_zone = 0;
-    for (int i = 0; i < MAX_FINESTRE; i++) quanti_danni[i] = da_sfocare[i] = 0;
+    for (int i = 0; i < posti; i++) quanti_danni[i] = da_sfocare[i] = 0;
 
     if (tutto_da_rifare) {              /* tutto, sfocature comprese */
         tutto_da_rifare = 0;
         zona_aggiungi((struct zona){ 0, 0, larghezza, altezza });
-        for (int i = 0; i < MAX_FINESTRE; i++) da_sfocare[i] = adesso[i].vista;
-        for (int i = 0; i < MAX_FINESTRE; i++) piani[i] = (struct piano){ .tutto = 1 };
+        for (int i = 0; i < posti; i++) da_sfocare[i] = adesso[i].vista;
+        for (int i = 0; i < posti; i++) piani[i] = (struct piano){ .tutto = 1 };
         fondo_pronto = 0;
-        for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
-        for (int i = 0; i < MAX_FINESTRE; i++) finestre[i].quante_cambiate = 0;
+        for (int i = 0; i < posti; i++) impronte_prima[i] = adesso[i];
+        for (int i = 0; i < posti; i++) finestre[i].quante_cambiate = 0;
         return;
     }
 
     /* 1. ognuna da sola */
-    int stessa[MAX_FINESTRE];   /* c'era e c'e', la stessa finestra, nello stesso posto */
-    for (int i = 0; i < MAX_FINESTRE; i++) {
+    for (int i = 0; i < posti; i++) {
         const struct impronta *p = &impronte_prima[i], *q = &adesso[i];
         stessa[i] = p->vista && q->vista && p->id == q->id && p->x == q->x && p->y == q->y &&
                     p->l == q->l && p->a == q->a && p->ruolo == q->ruolo;
@@ -1516,7 +1629,7 @@ static void cosa_rifare(void) {
         const struct impronta *q = &adesso[i];
         if (q->ruolo == RUOLO_SFONDO || da_sfocare[i]) continue;
         struct zona vista = guardata(&finestre[i]);
-        for (int j = 0; j < MAX_FINESTRE && !da_sfocare[i]; j++) {
+        for (int j = 0; j < posti && !da_sfocare[i]; j++) {
             if (j == i) continue;
             const struct impronta *pj = &impronte_prima[j], *qj = &adesso[j];
             int sotto_prima = pj->vista && pj->posto < impronte_prima[i].posto;
@@ -1532,7 +1645,7 @@ static void cosa_rifare(void) {
         if (da_sfocare[lista[k]] && adesso[lista[k]].ruolo != RUOLO_SFONDO) pianifica(lista[k], k);
 
     /* 3. le zone */
-    for (int i = 0; i < MAX_FINESTRE; i++) {
+    for (int i = 0; i < posti; i++) {
         for (int d = 0; d < quanti_danni[i]; d++) zona_aggiungi(danni[i][d]);
         if (da_sfocare[i] && adesso[i].ruolo != RUOLO_SFONDO) {
             if (piani[i].tutto) zona_aggiungi(guardata(&finestre[i]));
@@ -1542,7 +1655,7 @@ static void cosa_rifare(void) {
                 zona_aggiungi(letta(s->x, s->y, s->l, s->a));
             }
         }
-        for (int j = i + 1; j < MAX_FINESTRE; j++) {
+        for (int j = i + 1; j < posti; j++) {
             if (!stessa[i] || !stessa[j]) continue;
             int prima = impronte_prima[i].posto < impronte_prima[j].posto;
             int ora = adesso[i].posto < adesso[j].posto;
@@ -1552,8 +1665,8 @@ static void cosa_rifare(void) {
                                              a.x1 < b.x1 ? a.x1 : b.x1, a.y1 < b.y1 ? a.y1 : b.y1 });
         }
     }
-    for (int i = 0; i < MAX_FINESTRE; i++) impronte_prima[i] = adesso[i];
-    for (int i = 0; i < MAX_FINESTRE; i++) finestre[i].quante_cambiate = 0;   /* usate */
+    for (int i = 0; i < posti; i++) impronte_prima[i] = adesso[i];
+    for (int i = 0; i < posti; i++) finestre[i].quante_cambiate = 0;   /* usate */
 }
 
 /* La composizione delle zone: si comincia dallo sfondo da solo (il colore di quando non c'e'
@@ -1759,14 +1872,25 @@ static int descrittore_wayland = -1;
  * risorse di init non ci sono piu'. */
 static int servi(int ms) {
     const int eventi = D_EVENTI, ascolto = D_ASCOLTO;   /* prestati da init */
-    struct da_guardare g[4 + MAX_FINESTRE + MAX_PORTE];
-    int chi[4 + MAX_FINESTRE + MAX_PORTE];   /* una finestra (>= 0), una porta (-2 - k), o -1 */
+    /* l'elenco da guardare cresce con le finestre e le porte (aspetta non ha un limite suo) */
+    static struct da_guardare *g;
+    static int *chi;   /* una finestra (>= 0), una porta (-2 - k), o -1 */
+    static int posti_g;
+    if (posti_g < 4 + posti + quante_porte) {
+        int nuovi = 4 + posti + quante_porte;
+        struct da_guardare *g2 = realloc(g, (size_t)nuovi * sizeof *g2);
+        if (g2) g = g2;
+        int *c2 = realloc(chi, (size_t)nuovi * sizeof *c2);
+        if (c2) chi = c2;
+        if (g2 && c2) posti_g = nuovi;   /* se non c'e' memoria si guarda quello che ci sta */
+    }
+    if (posti_g < 4) return -1;         /* nemmeno l'elenco minimo: come senza risorse */
     int n = 0;
     g[n].descrittore = eventi;  chi[n++] = -1;
     g[n].descrittore = ascolto; chi[n++] = -1;
-    for (int i = 0; i < MAX_FINESTRE; i++)   /* quelle di Wayland non hanno un collegamento */
+    for (int i = 0; i < posti && n < posti_g - 2; i++)   /* quelle di Wayland non hanno un collegamento */
         if (finestre[i].usata && finestre[i].collegamento >= 0) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
-    for (int k = 0; k < MAX_PORTE; k++)
+    for (int k = 0; k < quante_porte && n < posti_g - 2; k++)
         if (porte[k].usata) { g[n].descrittore = porte[k].d; chi[n++] = -2 - k; }
     int catalog = 0;   /* gli avvisi di catalog, in fondo (se ci sono) */
     if (avvisi_catalog >= 0) { catalog = n; g[n].descrittore = avvisi_catalog; chi[n++] = -1; }
@@ -1811,6 +1935,10 @@ int main(void) {
     }
     if (schermo.larghezza > MAX_LARGHEZZA || schermo.altezza > MAX_ALTEZZA) {
         scrivi_testo("compositore: lo schermo e' piu' grande di quanto so disegnare\n");
+        return 0;
+    }
+    if (riserva_posti(8) < 0) {          /* i primi posti: senza, non c'e' niente da fare */
+        scrivi_testo("compositore: non ho memoria per i posti delle finestre\n");
         return 0;
     }
     larghezza = schermo.larghezza;

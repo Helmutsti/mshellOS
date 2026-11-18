@@ -669,8 +669,14 @@ persona sono nella sezione 8.
 fino a 2 + 8 finestre + 8 porte + catalog + Wayland = 20 (6 app aprivano 18 e il compositore usciva:
 init lo faceva ripartire e le finestre andavano perse); lo stesso valeva per launcher, catalog, picker,
 tasks e network (elenchi fino a 41). Ora `aspetta` non ha un massimo suo (l'elenco lo dà il chiamante,
-dimensionato sul suo massimo vero). Oltre le 8 finestre il compositore rifiuta il collegamento nuovo e
-scrive "troppe finestre: collegamento rifiutato" nel registro, senza uscire. Prova: `finestre_molte`.
+dimensionato sul suo massimo vero). **Memoria delle finestre dinamica** (18/11/2026): niente più tetto di
+8 finestre. I posti (`finestre`, `ordine`, `lista`, `piani`, impronte, danni) stanno in tabelle che crescono
+insieme a raddoppio (`riserva_posti`); ombra, buchi e vetro di ogni finestra (prima 8 x ~6,6 MB statici, sul
+caso peggiore a schermo intero) si prendono con malloc della misura vera quando la finestra si apre o cambia
+misura e si restituiscono alla chiusura (`memoria_finestra`); lo sfondo non ne ha. Le porte e l'elenco di
+`aspetta` crescono con le finestre. Se la memoria finisce il collegamento (o la finestra Wayland) nuovo si
+rifiuta con "memoria finita: ..." nel registro e il compositore resta. Prova `finestre_molte`: 8 client Wayland
+(`disco_finestre_molte.img`) + 7 app + scrivania = 17 finestre.
 
 ~~**I permessi delle porte rispondono sempre sì**~~: fatto il 16/11/2026 (sopra, "Il controllo vero
 dei permessi").
