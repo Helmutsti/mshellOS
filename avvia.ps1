@@ -3,7 +3,7 @@
 #
 # IL COMPOSITORE PARTE DA SOLO: all'accensione greetd (il gestore dell'accesso) apre la sessione
 # di utente1 senza chiedere niente e lancia mshell-compositore (disegno solo con il processore)
-# con il programma di prova: una finestra con quattro quadrati colorati. Sullo schermo, Alt+Esc
+# (per ora senza app: solo lo sfondo e il puntatore). Sullo schermo, Alt+Esc
 # chiude il compositore; allora greetd mostra l'accesso testuale (agreety). La shell
 # dell'amministratore, gia' aperta, sta sulla seriale.
 $ErrorActionPreference = "Stop"

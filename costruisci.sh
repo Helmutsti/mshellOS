@@ -72,7 +72,7 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # LA SCRIVANIA PARTE DA SOLA, COME PERSONA NORMALE (decisione della persona). Il gestore
 # dell'accesso e' greetd (la strada standard, la stessa che usera' la schermata di accesso):
 # all'accensione apre una sessione di utente1 senza chiedere niente (initial_session) e lancia
-# il compositore con il programma di prova. Passa da PAM come login, quindi logind registra la
+# il compositore. Passa da PAM come login, quindi logind registra la
 # sessione su seat0: il compositore (libseat) chiede a logind schermo e tastiera, e utente1 non
 # ha bisogno di gruppi speciali. Quando la sessione finisce, greetd mostra agreety, l'accesso
 # testuale del pacchetto (default_session, con l'utente _greetd creato dal pacchetto).
@@ -94,7 +94,7 @@ command = "/usr/sbin/agreety --cmd /bin/sh"
 user = "_greetd"
 
 [initial_session]
-command = "env WLR_RENDERER=pixman XKB_DEFAULT_LAYOUT=it mshell-compositore -s mshell-prova-wayland"
+command = "env WLR_RENDERER=pixman XKB_DEFAULT_LAYOUT=it mshell-compositore"
 user = "utente1"
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"
@@ -118,20 +118,15 @@ done
 # --- 3b. i programmi di mshell (utente/), compilati qui con le librerie degli attrezzi, che
 # sono le stesse del sistema (Debian 13) ---
 #   mshell-compositore    il compositore Wayland (tinywl di wlroots, utente/compositore/)
-#   mshell-prova-wayland  un client di prova: una finestra con quattro quadrati (utente/prove/)
-echo "3b. compositore e programma di prova"
+echo "3b. compositore"
 C=/tmp/compila
 rm -rf "$C"
 mkdir -p "$C"
 PROTOCOLLI=$(pkg-config --variable=pkgdatadir wayland-protocols)
 wayland-scanner server-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.h"
-wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
-wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
 gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 wayland-server xkbcommon) \
     -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c \
     $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
-gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova-wayland" \
-    utente/prove/wayland.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
 
 # --- 3c. lo sfondo e il puntatore (risorse/), preparati qui con gli attrezzi ---
 # LO SFONDO: la foto di risorse/sfondi/ portata alla misura dello schermo della macchina

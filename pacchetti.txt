@@ -14,5 +14,4 @@ libpam-modules   # PAM: i moduli di base (password, limiti, ambiente)
 libpam-systemd   # PAM: registra ogni sessione presso logind (spegnimento corretto, /run/user, D-Bus della sessione)
 libwlroots-0.18  # wlroots, la libreria su cui e' fatto il compositore Wayland (mshell-compositore): schermo, tastiera, mouse, finestre
 xkb-data         # le descrizioni delle tastiere (disposizioni dei tasti): il compositore le legge per capire i tasti
-libwayland-client0  # la libreria con cui i programmi parlano al compositore Wayland (mshell-prova-wayland)
 greetd           # il gestore dell'accesso (display manager): all'accensione apre da solo la sessione di utente1 e lancia la scrivania; poi sara' la schermata di accesso
