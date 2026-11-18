@@ -89,40 +89,29 @@ for f in "$O"/vim/terminfo/*/*; do
     metti_file "$f" "/etc/terminfo/${f#"$O"/vim/terminfo/}" 644
 done
 
-# le applicazioni, come build.sh: il pacchetto (manifesto, code, resources); quelle di
-# DA_INSTALLARE solo come .app sul Desktop, le altre scompattate in /system/apps.
+# le applicazioni, come build.sh: il pacchetto lo fa programmi.mk (impacchetta.sh, lo stesso
+# del disco), scompattato in $O/pacchetti/<id>/ e chiuso in $O/pacchetti/<id>.app; quelle di
+# DA_INSTALLARE vanno solo come .app sul Desktop, le altre scompattate in /system/apps (gli
+# eseguibili, cioe' code o, nelle app Linux, il caricatore e i programmi di linux/, 755).
 # Ci sono anche Esempio e Contatore (utente/prove/applicazioni): la sandbox e' un ambiente
-# di prova, come disco_prove.img.
+# di prova, come disco_prove.img. E le app Linux (utente/applicazioni_linux), come nel disco.
 DA_INSTALLARE="contatore"
 APPS=""
 SCRIVANIA_PACCHETTI=""
-P=/tmp/pacchetti
-rm -rf "$P"
-for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
+P=$O/pacchetti
+for cartella in utente/applicazioni/*/ utente/applicazioni_linux/*/ utente/prove/applicazioni/*/; do
+    [ -d "$cartella" ] || continue
     nome=$(basename "$cartella" | tr A-Z a-z)
     pacchetto="$P/$nome"
-    mkdir -p "$pacchetto/resources"
-    sed "s/@PROCESSORE@/$CPU/" "${cartella}manifest.toml" > "$pacchetto/manifest.toml"
-    cp "$O/app/$nome/code" "$pacchetto/code"
-    for r in "$cartella"*; do
-        case "$r" in *.c|*.h|*/manifest.toml) continue ;; esac
-        [ -f "$r" ] && cp "$r" "$pacchetto/resources/"
-    done
-    [ -d "${cartella}resources" ] && cp -R "${cartella}resources/." "$pacchetto/resources/"
-    find "$pacchetto" -type d -exec chmod 755 {} +
-    find "$pacchetto" -type f -exec chmod 644 {} +
-    chmod 755 "$pacchetto/code"
-    find "$pacchetto" -exec touch -d "2026-01-01 00:00:00" {} +
     case " $DA_INSTALLARE " in
     *" $nome "*)
-        (cd "$pacchetto" && find manifest.toml code resources | sort | zip -X -q -D "$P/$nome.app" -@)
         SCRIVANIA_PACCHETTI="$SCRIVANIA_PACCHETTI $nome"
         ;;
     *)
         (cd "$pacchetto" && find . -type f | sort) | while read -r f; do
             f=${f#./}
             permessi=644
-            [ "$f" = code ] && permessi=755
+            [ -x "$pacchetto/$f" ] && permessi=755
             metti_file "$pacchetto/$f" "/system/apps/$nome/$f" $permessi
         done
         APPS="$APPS $nome"
@@ -185,5 +174,5 @@ FROM scratch
 ADD radice.tar /
 ENTRYPOINT ["/.sandbox/avvio"]
 FINE
-rm -rf "$A" "$P"
+rm -rf "$A"
 echo "sandbox: radice.tar pronto ($(wc -c < /w/build/sandbox/radice.tar) byte)"

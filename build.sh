@@ -429,6 +429,10 @@ done
 #   - tutti gli .app si copiano in $B/pacchetti/ (per lo Store, le prove, chi li vuole);
 #   - le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
 #     contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
+#     Le app Linux (utente/applicazioni_linux/<Nome>/, oggi Foot) sono app del sistema
+#     come le altre: al posto di code hanno la cartella linux/ (app_linux.sh), in cui sono
+#     755 il caricatore di musl e i programmi. Gli eseguibili si riconoscono dai permessi
+#     che hanno nel pacchetto.
 #     Le app di utente/prove/applicazioni/ (Esempio, Contatore) NON sono del sistema: vanno
 #     solo nei dischi delle prove (passo 6), mai in disco.img. In quei dischi quelle di
 #     DA_INSTALLARE hanno il pacchetto sul Desktop della persona, per provare
@@ -439,7 +443,8 @@ PACCHETTI="$B/pacchetti"
 rm -rf "$PACCHETTI"
 mkdir -p "$PACCHETTI"
 PROVE_APPS=""
-for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
+for cartella in utente/applicazioni/*/ utente/applicazioni_linux/*/ utente/prove/applicazioni/*/; do
+    [ -d "$cartella" ] || continue
     nome=$(basename "$cartella" | tr A-Z a-z)
     cp "$P/pacchetti/$nome.app" "$PACCHETTI/$nome.app"
     case "$cartella" in
@@ -448,7 +453,9 @@ for cartella in utente/applicazioni/*/ utente/prove/applicazioni/*/; do
         ;;
     *)
         metti_albero "$P/pacchetti/$nome" "/system/apps/$nome" 0
-        chmod 755 "$(vero "/system/apps/$nome/code")"
+        (cd "$P/pacchetti/$nome" && find . -type f -perm -u+x) | while read -r f; do
+            chmod 755 "$(vero "/system/apps/$nome/${f#./}")"
+        done
         APPS="$APPS $nome"
         ;;
     esac

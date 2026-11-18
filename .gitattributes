@@ -6,3 +6,6 @@
 file/** -text
 # Le risorse del sistema (font, icone, sfondi) sono file binari: mai toccarne le fini riga
 risorse/** binary
+# I file propri delle app Linux (utente/applicazioni_linux/<Nome>/linux/, es. fonts.conf) vanno
+# nel pacchetto byte per byte: uguali su Windows e su Mac
+utente/applicazioni_linux/*/linux/** -text

@@ -22,6 +22,7 @@
 #   bin/prove/<nome>               i programmi delle prove (utente/prove/<nome>.c)
 #   bin/avvio                      il programma dell'archivio di avvio (utente/avvio/avvio.c)
 #   app/<id>/code                  il programma di ogni applicazione
+#   applinux/<id>/linux/           l'albero di ogni app Linux (app_linux.sh), al posto di code
 #   pacchetti/<id>/                il pacchetto di ogni applicazione, scompattato (va cosi'
 #                                  in /system/apps/<id> per le app del sistema)
 #   pacchetti/<id>.app             lo stesso chiuso in uno ZIP (impacchetta.sh)
@@ -212,6 +213,23 @@ $(O)/pacchetti/$(2).app: $(O)/app/$(2)/code $$($(2)_FILE) strumenti/compilazione
 APP_ID += $(2)
 endef
 $(foreach c,$(APP_CARTELLE),$(eval $(call APP,$(c),$(call minuscolo,$(notdir $(patsubst %/,%,$(c)))))))
+
+# Le APP LINUX (utente/applicazioni_linux/<Nome>/): programmi di altri, presi dai pacchetti di
+# Alpine con le loro librerie (decisione della persona: come sul Mac, ogni app porta le sue).
+# Niente da compilare: app_linux.sh prende i pacchetti scritti in alpine.txt e prepara
+# l'albero applinux/<id>/linux/ (caricatore di musl, librerie, programma, dati; lo script dice
+# come e perche'); impacchetta.sh lo mette nel pacchetto al posto di "code". L'albero si rifa'
+# quando cambiano alpine.txt, i file della cartella linux/ dei sorgenti o lo script.
+APP_LINUX_CARTELLE := $(sort $(wildcard utente/applicazioni_linux/*/))
+define APP_LINUX
+$(2)_FILE := $$(shell find $(1) -type f)
+$(O)/applinux/$(2)/chiave: $$(filter $(1)alpine.txt $(1)linux/%,$$($(2)_FILE)) strumenti/compilazione/app_linux.sh
+	@sh strumenti/compilazione/app_linux.sh $(ARCH) $(1) $(SCARICO) $(O)/applinux/$(2)
+$(O)/pacchetti/$(2).app: $(O)/applinux/$(2)/chiave $$($(2)_FILE) strumenti/compilazione/impacchetta.sh
+	sh strumenti/compilazione/impacchetta.sh $(1) $(2) $(CPU) $(O)/applinux/$(2)/linux $(O)/pacchetti
+APP_ID += $(2)
+endef
+$(foreach c,$(APP_LINUX_CARTELLE),$(eval $(call APP_LINUX,$(c),$(call minuscolo,$(notdir $(patsubst %/,%,$(c)))))))
 
 # --- tutto ---
 PROGRAMMI_PRONTI := $(addprefix $(O)/bin/,$(PROGRAMMI) avvio) \

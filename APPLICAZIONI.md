@@ -34,6 +34,24 @@ e la persona ne viene informata.
 - Il manifesto contiene la **versione minima del sistema** di cui l'app ha bisogno. È il sistema
   a dichiarare quali versioni non supporta più.
 
+### App Linux
+
+- Sono programmi di altri per Linux (la prima: il terminale **Foot**), presi dai pacchetti di
+  Alpine. Come le app del Mac, **portano con sé le loro librerie**, dentro il pacchetto: nel
+  sistema non c'è una cartella di librerie in comune.
+- Il manifesto è come quello delle altre app, con in più `linux = true`; `programma` dice dove
+  sta il programma dentro l'albero, per esempio `programma = "linux/usr/bin/foot"`.
+- Nel pacchetto, al posto di `code`, c'è la cartella **`linux/`**: un piccolo albero come quello
+  di Alpine, con solo quello che serve: il caricatore di musl (`linux/lib/ld-musl-<processore>.so.1`),
+  le librerie, il programma, i suoi dati (`linux/usr/share`) e le sue configurazioni
+  (`linux/etc`). Niente collegamenti simbolici: ogni libreria è un file vero con il nome che il
+  caricatore cerca.
+- Partono **senza recinto**, lanciando il caricatore che sta nel loro pacchetto, che carica il
+  programma con le librerie del pacchetto.
+- I sorgenti stanno in `utente/applicazioni_linux/<Nome>/`: il manifesto, le icone, `alpine.txt`
+  (i pacchetti di Alpine da prendere) e i file propri dell'app in `linux/`. Il pacchetto lo fa
+  la compilazione (`strumenti/compilazione/app_linux.sh`).
+
 ### Identificativo
 
 - Ogni app ha un identificativo fisso, diverso dal nome che si vede (che può cambiare o essere
