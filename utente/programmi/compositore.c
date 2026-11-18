@@ -904,7 +904,11 @@ static void scollega(int i) {
 static int nuova_finestra(int d) {
     int i = 0;
     while (i < MAX_FINESTRE && finestre[i].usata) i++;
-    if (i == MAX_FINESTRE) { if (d >= 0) chiudi(d); return -1; }   /* troppe finestre */
+    if (i == MAX_FINESTRE) {   /* troppe finestre: il collegamento nuovo si rifiuta, il compositore resta */
+        scrivi_riga("compositore", "troppe finestre: collegamento rifiutato", "");
+        if (d >= 0) chiudi(d);
+        return -1;
+    }
     struct finestra_compositore *f = &finestre[i];
     *f = (struct finestra_compositore){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1,
                             .da_rilasciare = -1, .ultimo_ping = tempo() };

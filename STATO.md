@@ -660,6 +660,13 @@ persona sono nella sezione 8.
 (`uid_dell_app` in `utente/programmi/launcher.c`): decisione provvisoria della persona del
 17/11/2026. Il miglioramento futuro è nella sezione 0.
 
+~~**`aspetta` guardava al massimo 16 descrittori**~~: fatto il 18/11/2026. Il compositore ne guarda
+fino a 2 + 8 finestre + 8 porte + catalog + Wayland = 20 (6 app aprivano 18 e il compositore usciva:
+init lo faceva ripartire e le finestre andavano perse); lo stesso valeva per launcher, catalog, picker,
+tasks e network (elenchi fino a 41). Ora `aspetta` non ha un massimo suo (l'elenco lo dà il chiamante,
+dimensionato sul suo massimo vero). Oltre le 8 finestre il compositore rifiuta il collegamento nuovo e
+scrive "troppe finestre: collegamento rifiutato" nel registro, senza uscire. Prova: `finestre_molte`.
+
 ~~**I permessi delle porte rispondono sempre sì**~~: fatto il 16/11/2026 (sopra, "Il controllo vero
 dei permessi").
 

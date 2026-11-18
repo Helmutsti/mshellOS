@@ -33,7 +33,8 @@
  *                      l'altro ha chiuso. Se il messaggio e' piu' lungo, il resto si perde
  *   aspetta(...)       dorme finche' almeno uno dei descrittori dell'elenco ha qualcosa da
  *                      ricevere (un messaggio, un collegamento, l'altro che ha chiuso, un
- *                      processo finito), o finche' non passano ms millisecondi (poll)
+ *                      processo finito), o finche' non passano ms millisecondi (poll). L'elenco non ha un
+ *                      massimo: lo dimensiona il chiamante sul suo massimo vero
  *
  * I FOGLI: memoria condivisa tra programmi (memfd di Linux). Un foglio e' un pezzo di
  * memoria che il kernel tiene per conto di chi l'ha creato. Si tiene in mano con un
@@ -48,7 +49,6 @@
 
 #define MAX_NOME       32  /* lettere di un nome di socket, compreso lo 0 finale */
 #define MAX_MESSAGGIO 5120 /* byte di un messaggio (basta per un percorso lungo MAX_PERCORSO e il resto) */
-#define MAX_GUARDATI   16  /* descrittori in un elenco di aspetta */
 
 struct da_guardare {
     int descrittore;

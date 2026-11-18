@@ -511,6 +511,7 @@ def comando_prova(args):
             p.scrivania = sb.aspetta_scrivania()
             modulo.esegui(p)
             for v in collaudo.VIETATE:
+                if v in getattr(modulo, "PREVISTE", []): continue   # la prova la aspetta
                 if v in sb.testo_seriale():
                     raise ErroreProva(f"nel registro c'e' '{v}'")
         except Exception as e:      # noqa: BLE001 (ogni errore fa fallire la prova)

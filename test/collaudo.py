@@ -191,6 +191,7 @@ def esegui_una(modulo, cpu, args):
         modulo.esegui(p)
         seriale = m.testo_seriale()
         for v in VIETATE:
+            if v in getattr(modulo, "PREVISTE", []): continue   # la prova la aspetta (e la controlla da se)
             if v in seriale:
                 riga = next(r for r in seriale.splitlines() if v in r)
                 raise ErroreProva(f"nella seriale c'e' '{v}': {riga.strip()}")

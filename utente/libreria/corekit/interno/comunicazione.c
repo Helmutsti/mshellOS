@@ -157,8 +157,11 @@ int chiudi(int d) {
 }
 
 int aspetta(struct da_guardare *elenco, int quanti, int ms) {
-    if (quanti < 0 || quanti > MAX_GUARDATI) return -1;
-    struct pollfd p[MAX_GUARDATI];
+    /* Nessun massimo nostro: il limite e' l'elenco del chiamante, che lo dimensiona sul
+     * suo massimo vero (finestre, clienti, porte). L'array di poll si fa grande uguale
+     * (sullo stack: 8 byte a descrittore). Elenco vuoto: si dorme soltanto. */
+    if (quanti < 0) return -1;
+    struct pollfd p[quanti > 0 ? quanti : 1];
     for (int i = 0; i < quanti; i++) {
         p[i] = (struct pollfd){ elenco[i].descrittore, POLLIN, 0 };
         elenco[i].pronto = 0;
