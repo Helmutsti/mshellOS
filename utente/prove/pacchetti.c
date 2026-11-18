@@ -40,7 +40,7 @@ static int ha_contatore(void) {
 int main(void) {
     dormi(1000);    /* che i servizi siano partiti */
     passo("elenco", elenco_app_installate(&e), LAUNCHER_FATTO);
-    passo("app nell'elenco (9 del sistema, con lo Store, il Terminale, il Blocco note e Foot)", e.quante, 9);
+    passo("app nell'elenco (8 del sistema, con lo Store, il Terminale e il Blocco note)", e.quante, 8);
     passo("contatore nell'elenco prima", ha_contatore(), 0);
 
     /* aprire contatore.app farebbe partire lo Store (lo prova test/prove/store.py): qui si

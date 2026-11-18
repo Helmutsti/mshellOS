@@ -36,7 +36,7 @@ e la persona ne viene informata.
 
 ### App Linux
 
-- Sono programmi di altri per Linux (la prima: il terminale **Foot**), presi dai pacchetti di
+- Sono programmi di altri per Linux (il primo provato: il terminale Foot, poi tolto), presi dai pacchetti di
   Alpine. Come le app del Mac, **portano con sé le loro librerie**, dentro il pacchetto: nel
   sistema non c'è una cartella di librerie in comune.
 - Il manifesto è come quello delle altre app, con in più `linux = true`; `programma` dice dove

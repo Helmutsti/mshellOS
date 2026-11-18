@@ -29,7 +29,6 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 | Terminale | app | launcher | sistema (uid 0, provvisorio: l'unica app) | sì |
 | Blocco note | app | launcher | persona (uid 1000) | no |
 | Doom | app | launcher | persona (uid 1000) | no |
-| Foot | app Linux (pacchetti Alpine) | launcher (non ancora) | da decidere | no |
 | network.conf, firewall.conf | configurazione | letti dal servizio network | non applicabile | non applicabile |
 | corekit | libreria | collegata dentro ogni programma | quello del programma | non applicabile |
 | gkit | libreria | idem | quello del programma | non applicabile |
@@ -239,18 +238,6 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 ## App Linux (`utente/applicazioni_linux/`)
 
 Programmi di altri, presi dai pacchetti di Alpine 3.24 con tutte le loro librerie dentro il pacchetto (decisione della persona: come le app del Mac, ognuna porta le sue). Nel pacchetto, al posto di `code`, c'è la cartella `linux/`, un piccolo albero tipo Alpine: le librerie (la chiusura delle dipendenze, ognuna con il nome che il caricatore cerca, senza collegamenti simbolici), il programma e i suoi dati. Il manifesto ha `linux = true` e `programma = "linux/usr/bin/<programma>"`. Partono senza recinto, come un programma Linux qualsiasi: il kernel fa partire il caricatore di musl del sistema (`/lib/ld-musl-<arch>.so.1`, collegamento a `/system/lib`, come dyld sul Mac; decisione della persona del 18/11/2026), che cerca le librerie in `LD_LIBRARY_PATH` (le cartelle `linux/lib` e `linux/usr/lib` del pacchetto, messe dal launcher con le altre variabili). Il pacchetto lo prepara `strumenti/compilazione/app_linux.sh` (dai pacchetti scritti in `alpine.txt`), lo chiude `impacchetta.sh` come le altre app.
-
-### Foot (`applicazioni_linux/Foot/`)
-- **Cosa fa**: il terminale Wayland foot 1.27 (pacchetto Alpine `foot`), con il carattere DejaVu Sans Mono e le descrizioni del terminale foot (terminfo). La configurazione dei caratteri è sua (`linux/etc/fonts/fonts.conf`, cartelle relative al file; la cache in `$XDG_CACHE_HOME/fontconfig`). Icone provvisorie: quelle del Terminale.
-- **Tipo**: app Linux, del sistema (`/system/apps/foot`); `nella_barra = false`.
-- **Lanciato da**: launcher (quando saprà lanciare le app Linux; oggi non ancora).
-- **Lancia**: il programma che gira nel terminale (per foot: quello di `SHELL`, o la shell di `/etc/passwd`); quale, lo deciderà il launcher.
-- **Gira come**: da decidere con il launcher.
-- **Poteri**: no. Manifesto: nessun permesso (`[]`). Senza recinto.
-
----
-
-## Configurazioni (`utente/config/network/`)
 
 ### network.conf e firewall.conf
 - **Cosa fa**: `network.conf` dice la scheda (eth0) e il modo (dhcp o static con address, gateway, dns). `firewall.conf` dice entrata, uscita, inoltro e ping (oggi: entrata blocca, uscita permetti, inoltro blocca, ping permetti).

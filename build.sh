@@ -439,7 +439,7 @@ done
 #   - tutti gli .app si copiano in $B/pacchetti/ (per lo Store, le prove, chi li vuole);
 #   - le app DEL SISTEMA si mettono scompattate in /system/apps/<id>/, con lo stesso
 #     contenuto del pacchetto (code 755, il resto 644, le cartelle 755, tutto del sistema).
-#     Le app Linux (utente/applicazioni_linux/<Nome>/, oggi Foot) sono app del sistema
+#     Le app Linux (utente/applicazioni_linux/<Nome>/, oggi nessuna) sono app del sistema
 #     come le altre: al posto di code hanno la cartella linux/ (app_linux.sh), in cui sono
 #     755 il caricatore di musl e i programmi. Gli eseguibili si riconoscono dai permessi
 #     che hanno nel pacchetto.
