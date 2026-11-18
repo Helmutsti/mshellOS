@@ -131,7 +131,7 @@ gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova-wayland" \
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
 DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"
-PER_INSTALLARE="dpkg init-system-helpers perl-base sysvinit-utils mawk"
+PER_INSTALLARE="dpkg init-system-helpers perl-base sysvinit-utils mawk adduser passwd"
 D="$RADICE/var/lib/dpkg"
 dpkg-query --admindir="$D" -W -f '${Package} ${Installed-Size}\n' | sort > "$B/pacchetti-tutti.txt"
 echo "4. tolgo: $DA_TERMINALE $PER_INSTALLARE"
