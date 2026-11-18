@@ -284,7 +284,7 @@ static void xdg_surface_toplevel(struct wl_client *client, struct wl_resource *r
         wl_resource_post_error(r, XDG_SURFACE_ERROR_ALREADY_CONSTRUCTED, "e' gia' una finestra");
         return;
     }
-    int posto = ponte_apri(wl_client_get_fd(client));
+    int posto = ponte_apri(wl_client_get_fd(client), wl_client_get_user_data(client));
     struct wl_resource *t = wl_resource_create(client, &xdg_toplevel_interface, wl_resource_get_version(r), id);
     if (posto < 0 || !t || !segna_posto(posto, w)) {
         if (posto >= 0) ponte_togli(posto);
@@ -860,6 +860,19 @@ int wayland_inizia(void) {
         return -1;
     }
     return wl_event_loop_get_fd(wl_display_get_event_loop(display));
+}
+
+/* LA CONNESSIONE DI UN'APP, dal launcher (PORTA_WAYLAND): il capo 'd' diventa un client del
+ * server, e il programma dell'app gli resta attaccato (wl_client_set_user_data): e' quello che
+ * dice il launcher, non il kernel, come per la porta del protocollo nostro. */
+int wayland_cliente(int d, const char *programma) {
+    if (!display || d < 0) return -1;
+    char *copia = strdup(programma);
+    if (!copia) return -1;
+    struct wl_client *c = wl_client_create(display, d);   /* da qui il descrittore e' suo */
+    if (!c) { free(copia); return -1; }
+    wl_client_set_user_data(c, copia, free);
+    return 0;
 }
 
 void wayland_servi(void) {

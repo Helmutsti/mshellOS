@@ -1006,6 +1006,21 @@ static void porta_app(int i, const struct porta_app *m, int capo) {
     scollega(i);
 }
 
+/* PORTA_WAYLAND sul collegamento 'i': come PORTA_APP (solo dal sistema, prima di ogni
+ * finestra), ma il capo allegato diventa un client Wayland di quel programma. Il collegamento
+ * 'i' si chiude. */
+static void porta_wayland(int i, const struct porta_app *m, int capo) {
+    char programma[MAX_PERCORSO_PROGRAMMA];
+    for (int c = 0; c < MAX_PERCORSO_PROGRAMMA; c++) programma[c] = m->programma[c];
+    programma[MAX_PERCORSO_PROGRAMMA - 1] = 0;
+    if (capo >= 0 && !finestre[i].immagini[0] && chi(finestre[i].collegamento) == UID_SISTEMA &&
+        wayland_cliente(capo, programma) == 0)
+        scrivi_riga("compositore", "connessione Wayland dell'app ", programma);
+    else if (capo >= 0)
+        chiudi(capo);
+    scollega(i);
+}
+
 /* Un messaggio sulla porta 'k': NUOVO_COLLEGAMENTO con il capo allegato diventa una finestra
  * dell'app della porta. L'app chiusa, o un messaggio sbagliato: la porta si chiude. */
 static void da_porta(int k) {
@@ -1142,15 +1157,21 @@ static void mostra(int i, const struct mostra *m) {
  *     al_mouse, perche' il programma non sa dove sta il puntatore.
  * Il resto (ombra, vetro, primo piano, fuoco, userbar) e' quello di tutte le finestre. */
 
-/* Un posto per la finestra di un programma Wayland, di cui 'cliente' e' il socket (serve a
- * sapere di chi e': programma_di). Il numero del posto, o -1 se sono tutti presi. */
-int ponte_apri(int cliente) {
+/* Un posto per la finestra di un programma Wayland, di cui 'cliente' e' il socket. Di chi e':
+ * 'programma', se la connessione l'ha data il launcher (PORTA_WAYLAND); se no lo dice il kernel
+ * (programma_di). Il numero del posto, o -1 se sono tutti presi. */
+int ponte_apri(int cliente, const char *programma) {
     int i = nuova_finestra(-1);
     if (i < 0) return -1;
     struct finestra_compositore *f = &finestre[i];
     f->wayland = 1;
     f->ruolo = RUOLO_FINESTRA;
-    if (programma_di(cliente, f->programma) < 0) f->programma[0] = 0;
+    if (programma) {
+        for (int c = 0; c < MAX_PERCORSO_PROGRAMMA; c++) f->programma[c] = programma[c];
+        f->programma[MAX_PERCORSO_PROGRAMMA - 1] = 0;
+    } else if (programma_di(cliente, f->programma) < 0) {
+        f->programma[0] = 0;
+    }
     return i;
 }
 
@@ -1324,6 +1345,7 @@ static void da_applicazione(int i) {
     if (n <= 0) { if (foglio >= 0) chiudi(foglio); scollega(i); return; }   /* ha chiuso */
     if (m.tipo == VOGLIO_FINESTRA && n == sizeof m.v) { voglio_finestra(i, &m.v, foglio); return; }
     if (m.tipo == PORTA_APP && n == sizeof m.a) { porta_app(i, &m.a, foglio); return; }
+    if (m.tipo == PORTA_WAYLAND && n == sizeof m.a) { porta_wayland(i, &m.a, foglio); return; }
     if (foglio >= 0) chiudi(foglio);   /* un foglio va solo col primo messaggio */
     if (m.tipo == MOSTRA && n == sizeof m.m) { mostra(i, &m.m); return; }
     if (m.tipo == TRASCINAMI && n == sizeof m.t && finestre[i].immagini[0]) { trascinami(i); return; }

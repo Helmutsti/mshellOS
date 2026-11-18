@@ -123,6 +123,14 @@
 #define NUOVO_COLLEGAMENTO 12 /* (sulla porta di un'app) "ecco il collegamento per una mia
                              * finestra": allegato un capo di una coppia fatta dall'app */
 
+#define PORTA_WAYLAND   13  /* (solo il sistema: il launcher) "ecco la connessione Wayland di
+                             * un'app che sto facendo partire": come PORTA_APP (stessa struct
+                             * porta_app), ma il capo allegato diventa un client del server
+                             * Wayland del compositore (wl_client_create), di quel programma.
+                             * L'app trova l'altro capo a D_PORTA_WAYLAND, con WAYLAND_SOCKET */
+
+#define D_PORTA_WAYLAND 9   /* dove un'app trova la sua connessione Wayland (WAYLAND_SOCKET=9) */
+
 #define D_PORTA_APP     3   /* dove un'app fatta partire dal launcher trova la sua porta: dopo
                              * 0, 1 e 2, che restano l'ingresso, l'uscita e gli errori di ogni
                              * programma (il launcher li collega a /dev/null) */

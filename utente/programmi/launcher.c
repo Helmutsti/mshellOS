@@ -229,6 +229,9 @@ static struct {
  *     6  network (D_PORTA_NETWORK, network.h), solo con network.use o network.settings nel manifesto
  *     7  picker (D_PORTA_PICKER, picker.h): la finestra Apri/Salva, di base a tutte le app
  *     8  tasks (D_PORTA_TASKS, tasks.h), solo con processes.view o processes.stop nel manifesto
+ *     9  la connessione Wayland (D_PORTA_WAYLAND, protocollo.h: PORTA_WAYLAND), a tutte: il
+ *        compositore ne fa un client Wayland di quell'app; l'app la trova con WAYLAND_SOCKET=9,
+ *        la variabile di libwayland-client per una connessione gia' aperta (wl_display_connect)
  * Poi il launcher chiude i suoi capi: app e servizi parlano da soli. Se un servizio non risponde
  * (o il permesso manca), al posto della porta c'e' /dev/null e lo si scrive nel registro. All'app
  * dice quali porte ha con la variabile d'ambiente VARIABILE_PORTE (messaggi.h): l'elenco delle
@@ -237,15 +240,16 @@ static struct {
  * /dev/null: se restassero chiusi, il primo file o collegamento che l'app apre finirebbe li', e
  * quello che l'app stampa (Doom stampa molto) ci andrebbe dentro. */
 _Static_assert(D_PORTA_APP == 3 && D_PORTA_CATALOG == 4 && D_PORTA_LAUNCHER == 5 && D_PORTA_NETWORK == 6 &&
-               D_PORTA_PICKER == 7 && D_PORTA_TASKS == 8,
-               "le porte delle app: 3 compositore, 4 catalog, 5 launcher, 6 network, 7 picker, 8 tasks");
+               D_PORTA_PICKER == 7 && D_PORTA_TASKS == 8 && D_PORTA_WAYLAND == 9,
+               "le porte delle app: 3 compositore, 4 catalog, 5 launcher, 6 network, 7 picker, 8 tasks, 9 Wayland");
 
-/* La porta verso il compositore (il suo formato): il capo dell'app, o -1. */
-static int porta_compositore(const char *programma) {
+/* La porta verso il compositore (il suo formato): 'tipo' PORTA_APP (il protocollo nostro) o
+ * PORTA_WAYLAND (la connessione Wayland). Il capo dell'app, o -1. */
+static int porta_compositore(unsigned int tipo, const char *programma) {
     int porta[2];
     if (coppia(porta) < 0) return -1;
     int c = collega(NOME_COMPOSITORE);
-    struct porta_app m = { .tipo = PORTA_APP };
+    struct porta_app m = { .tipo = tipo };
     descrizione_copia(m.programma, programma, sizeof m.programma);
     int data = c >= 0 && manda_foglio(c, &m, sizeof m, porta[1]) >= 0;
     if (c >= 0) chiudi(c);
@@ -322,7 +326,8 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
         chiudi(nulla);
         return -1;
     }
-    int compositore = porta_compositore(programma);
+    int compositore = porta_compositore(PORTA_APP, programma);
+    int wayland = porta_compositore(PORTA_WAYLAND, programma);
     int catalog = porta_servizio(NOME_CATALOG, &app);
     int launcher = porta_launcher(&app);
     int picker = porta_servizio(NOME_PICKER, &app);   /* di base: scegliere un file non chiede permessi */
@@ -339,9 +344,10 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (catalog < 0) registro("niente porta verso catalog per ", programma);
     if (launcher < 0) registro("niente porta verso il launcher per ", programma);
     if (picker < 0) registro("niente porta verso picker per ", programma);
+    if (wayland < 0) registro("niente connessione Wayland per ", programma);
     int passati[] = { nulla, nulla, nulla, compositore >= 0 ? compositore : nulla, catalog >= 0 ? catalog : nulla,
                       launcher >= 0 ? launcher : nulla, rete >= 0 ? rete : nulla,
-                      picker >= 0 ? picker : nulla, tasks >= 0 ? tasks : nulla };
+                      picker >= 0 ? picker : nulla, tasks >= 0 ? tasks : nulla, wayland >= 0 ? wayland : nulla };
     /* L'ELENCO DELLE PORTE (messaggi.h, VARIABILE_PORTE): solo quelle date davvero, cosi' l'app
      * non deve indovinare quali descrittori sono porte. Es. "MSHELL_PORTE=compositore=3 catalog=4" */
     char elenco[128];
@@ -352,6 +358,8 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (rete >= 0) descrizione_aggiungi(elenco, NOME_NETWORK "=6 ", sizeof elenco);
     if (picker >= 0) descrizione_aggiungi(elenco, NOME_PICKER "=7 ", sizeof elenco);
     if (tasks >= 0) descrizione_aggiungi(elenco, NOME_TASKS "=8 ", sizeof elenco);
+    /* senza connessione, niente WAYLAND_SOCKET: al 9 c'e' /dev/null */
+    const char *ambiente[] = { elenco, wayland >= 0 ? "WAYLAND_SOCKET=9" : 0, 0 };
     char riga[MAX_ID + 96];
     descrizione_copia(riga, d->id, sizeof riga);
     descrizione_aggiungi(riga, ": porte", sizeof riga);
@@ -361,11 +369,12 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (rete >= 0) descrizione_aggiungi(riga, " network", sizeof riga);
     if (picker >= 0) descrizione_aggiungi(riga, " picker", sizeof riga);
     if (tasks >= 0) descrizione_aggiungi(riga, " tasks", sizeof riga);
+    if (wayland >= 0) descrizione_aggiungi(riga, " wayland", sizeof riga);
     registro(riga, "");
     int quanti = (int)(sizeof passati / sizeof passati[0]);
     int numero = con_recinto
-                     ? avvia_app_nel_recinto(programma, uid, argomento, passati, quanti, elenco, &recinto)
-                     : avvia_app(programma, uid, argomento, passati, quanti, elenco);
+                     ? avvia_app_nel_recinto(programma, uid, argomento, passati, quanti, ambiente, &recinto)
+                     : avvia_app(programma, uid, argomento, passati, quanti, ambiente);
     if (numero < 0) registro("l'app non e' partita: ", programma);
     chiudi(nulla);
     if (compositore >= 0) chiudi(compositore);
@@ -374,6 +383,7 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (rete >= 0) chiudi(rete);
     if (picker >= 0) chiudi(picker);
     if (tasks >= 0) chiudi(tasks);
+    if (wayland >= 0) chiudi(wayland);
     return numero;
 }
 

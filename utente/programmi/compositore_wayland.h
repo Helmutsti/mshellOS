@@ -28,6 +28,11 @@
  * per la prova del passo 1, non lo trovano le app dal launcher (SISTEMA.md, "Wayland"). */
 int wayland_inizia(void);
 
+/* La connessione Wayland di un'app, dal launcher (PORTA_WAYLAND, protocollo.h): il capo 'd'
+ * diventa un client del server, di quel 'programma' (/system/apps/<id>/code): le sue finestre
+ * sono di quell'app. 0, o -1 (allora 'd' resta di chi chiama, che lo chiude). */
+int wayland_cliente(int d, const char *programma);
+
 /* Il descrittore e' pronto: legge i messaggi dei programmi e li serve. */
 void wayland_servi(void);
 
@@ -57,9 +62,10 @@ void wayland_fotogramma(unsigned int ms);
 
 /* ---- quello che il compositore offre a Wayland (il ponte, in compositore.c) ---- */
 
-/* Un posto per la finestra di un programma Wayland; 'cliente' e' il socket di quel programma
- * (si sa di chi e'). Il posto, o -1 se la memoria e' finita. */
-int ponte_apri(int cliente);
+/* Un posto per la finestra di un programma Wayland; 'cliente' e' il socket di quel programma.
+ * Di chi e': 'programma' se la connessione l'ha data il launcher (wayland_cliente), se no (0)
+ * lo dice il kernel dal socket. Il posto, o -1 se la memoria e' finita. */
+int ponte_apri(int cliente, const char *programma);
 
 /* L'immagine della finestra del posto 'i' e' pronta o e' cambiata: l x a pixel premoltiplicati
  * (0xAARRGGBB), cornice compresa. La prima volta la finestra compare. 0, o -1 se la memoria e'

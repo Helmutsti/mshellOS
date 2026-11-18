@@ -125,11 +125,11 @@ static void solo_quelli_passati(int quanti) {
  * -1. Se execve riesce, il tubo si chiude da solo (O_CLOEXEC) e il padre legge 0 byte.
  * uid -1: lo stesso di chi lo fa partire. 'argomento' (0: nessuno) arriva al programma
  * nuovo come secondo argomento di main (argv[1]): per esempio la cartella da aprire.
- * 'variabile' (0: nessuna) e' l'unica variabile d'ambiente del programma nuovo, "NOME=valore":
- * il launcher ci scrive l'elenco delle porte dell'app (messaggi.h, VARIABILE_PORTE); il
- * Terminale e init, per la shell, il tipo di terminale (TERM). */
+ * 'ambiente' (0: nessuna) sono le sole variabili d'ambiente del programma nuovo, "NOME=valore",
+ * l'elenco finisce con 0: il launcher ci scrive l'elenco delle porte dell'app (messaggi.h,
+ * VARIABILE_PORTE) e WAYLAND_SOCKET; il Terminale e init, per la shell, il tipo di terminale (TERM). */
 static int lancia(const char *percorso, const int *passati, int quanti, int uid,
-                  const char *argomento, const char *variabile, const struct recinto *recinto) {
+                  const char *argomento, const char *const *ambiente, const struct recinto *recinto) {
     char vero[MAX_VERO];
     if (percorso_vero(percorso, vero) < 0 || quanti < 0 || quanti > MAX_PASSATI) return -1;
     figli_spariscono();
@@ -166,8 +166,8 @@ static int lancia(const char *percorso, const int *passati, int quanti, int uid,
         if (!errore) {
             /* il primo argomento e' sempre il programma; poi, se c'e', quello per lui */
             char *argomenti[] = { vero, (char *)argomento, 0 };
-            char *ambiente[] = { (char *)variabile, 0 };
-            execve(vero, argomenti, ambiente);
+            char *nessuna[] = { 0 };
+            execve(vero, argomenti, ambiente ? (char *const *)ambiente : nessuna);
             errore = errno;
         }
         ssize_t scritti = write(tubo[1], &errore, sizeof errore);
@@ -197,7 +197,8 @@ int avvia_con(const char *percorso, const int *descrittori, int quanti) {
 }
 
 int avvia_con_variabile(const char *percorso, const int *descrittori, int quanti, const char *variabile) {
-    return lancia(percorso, descrittori, quanti, -1, 0, variabile, 0);
+    const char *ambiente[] = { variabile, 0 };
+    return lancia(percorso, descrittori, quanti, -1, 0, variabile ? ambiente : 0, 0);
 }
 
 int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int *descrittori, int quanti) {
@@ -209,14 +210,14 @@ unsigned int uid_mio(void) { return (unsigned int)getuid(); }
 int apri_nulla(void) { return open("/dev/null", O_RDWR | O_CLOEXEC); }
 
 int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti,
-              const char *variabile) {
-    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, variabile, 0);
+              const char *const *ambiente) {
+    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, ambiente, 0);
 }
 
 int avvia_app_nel_recinto(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori,
-                          int quanti, const char *variabile, const struct recinto *recinto) {
+                          int quanti, const char *const *ambiente, const struct recinto *recinto) {
     if (!recinto) return -1;           /* un recinto si chiede sempre: senza, c'e' avvia_app */
-    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, variabile,
+    return lancia(percorso, descrittori, quanti, (int)uid, argomento && argomento[0] ? argomento : 0, ambiente,
                   recinto);
 }
 

@@ -29,11 +29,12 @@ int avvia_come_con_descrittori(const char *percorso, unsigned int uid, const int
 
 /* Tutto insieme: l'uid, l'argomento (come avvia_come_con) e i descrittori da prestare (come
  * avvia_con: il programma nuovo li trova a 0, 1, 2...). Lo usa il launcher per le app, che
- * ricevono cosi' i loro canali gia' aperti (APPLICAZIONI.md, "Come funzionano le chiavi"), e una
- * variabile d'ambiente "NOME=valore" (0: nessuna): l'elenco delle porte (messaggi.h,
- * VARIABILE_PORTE), cosi' l'app sa quali canali sono porte senza doverlo indovinare. */
+ * ricevono cosi' i loro canali gia' aperti (APPLICAZIONI.md, "Come funzionano le chiavi"), e le
+ * variabili d'ambiente 'ambiente' ("NOME=valore", l'elenco finisce con 0; 0: nessuna): l'elenco
+ * delle porte (messaggi.h, VARIABILE_PORTE), cosi' l'app sa quali canali sono porte senza
+ * doverlo indovinare, e WAYLAND_SOCKET, la sua connessione Wayland. */
 int avvia_app(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori, int quanti,
-              const char *variabile);
+              const char *const *ambiente);
 
 /* Come avvia_app, ma l'app parte nel suo RECINTO (recinto.h): mondi nuovi del kernel, una radice
  * con dentro solo le cartelle dell'elenco, poi l'uid, NO_NEW_PRIVS e il filtro delle chiamate.
@@ -41,7 +42,7 @@ int avvia_app(const char *percorso, unsigned int uid, const char *argomento, con
  * AGGANCIO_PROGRAMMA (il pacchetto dell'app). Il numero dell'app (quello vero, visto da fuori),
  * o -1 se non e' partita. Lo usa il launcher per tutte le app tranne il Terminale. */
 int avvia_app_nel_recinto(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori,
-                          int quanti, const char *variabile, const struct recinto *recinto);
+                          int quanti, const char *const *ambiente, const struct recinto *recinto);
 
 /* /dev/null, aperto in lettura e scrittura: da prestare come ingresso, uscita ed errori a un
  * programma che non ne ha (apri, in corekit.h, i dispositivi non li apre). Il descrittore, o -1. */

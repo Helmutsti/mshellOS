@@ -230,6 +230,7 @@ class Macchina:
                  internet=False):
         self.cpu = cpu
         self.ram = self.RAM_ARM64 if cpu == "arm64" else ram     # in MB
+        self.recinto = True                 # le app partono nel loro recinto (nella sandbox no)
         self.build = Path(build) / cpu      # build.sh compila in build/<cpu>/
         self.lavoro = Path(lavoro)          # qui vanno seriale, disco copiato, foto
         # il disco da copiare: disco.img, o disco_prove.img (con i programmi delle prove

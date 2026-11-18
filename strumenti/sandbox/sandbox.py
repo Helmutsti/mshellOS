@@ -212,6 +212,7 @@ class Sandbox:
         self.foto_fatte = 0
         self.ultimo_puntatore = (0, 0)
         self.ram = 0                  # la RAM e' quella del computer: le prove sulla memoria non valgono
+        self.recinto = False          # le app partono senza recinto (recinto_sandbox.c): Docker non lo permette
         self.cpu = CPU
 
     # -- accendere e spegnere --

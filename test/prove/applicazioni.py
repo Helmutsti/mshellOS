@@ -99,10 +99,10 @@ def esegui(p):
     p.controlla("esempio: tema da catalog: light" in seriale, "Esempio non ha avuto il tema da catalog")
     # le porte date a ogni app, una riga per app: network solo a chi ha network.use (Esempio),
     # picker a tutte (e' di base)
-    p.controlla("launcher: attivita: porte compositore catalog launcher picker tasks\n" in seriale,
-                "Attivita non ha avuto le porte compositore, catalog, launcher, picker e tasks (e basta)")
-    p.controlla("launcher: esempio: porte compositore catalog launcher network picker\n" in seriale,
-                "Esempio non ha avuto le porte compositore, catalog, launcher, network e picker")
+    p.controlla("launcher: attivita: porte compositore catalog launcher picker tasks wayland\n" in seriale,
+                "Attivita non ha avuto le porte compositore, catalog, launcher, picker, tasks e Wayland (e basta)")
+    p.controlla("launcher: esempio: porte compositore catalog launcher network picker wayland\n" in seriale,
+                "Esempio non ha avuto le porte compositore, catalog, launcher, network, picker e Wayland")
     # la porta verso network: Esempio chiede lo stato della rete, e network sa che e' Esempio
     p.controlla("network: collegamento dalla porta di /system/apps/esempio/code" in seriale,
                 "network non ha ricevuto il collegamento di Esempio dalla sua porta")
@@ -117,9 +117,16 @@ def esegui(p):
                 seriale.split("launcher: esempio: porte", 1)[1].split("\n", 1)[0],
                 "Esempio ha avuto la porta verso tasks")
     # Esempio chiede l'elenco dei processi senza porta (per nome): nel recinto gli indirizzi dei
-    # servizi non ci sono, quindi tasks non si raggiunge
-    p.controlla("esempio: elenco dei processi: irraggiungibile\n" in seriale,
-                "Esempio, nel recinto, ha raggiunto tasks per nome")
+    # servizi non ci sono, quindi tasks non si raggiunge. Solo dove le app hanno il recinto: nella
+    # sandbox partono senza (decisione della persona, strumenti/sandbox/recinto_sandbox.c)
+    if m.recinto:
+        p.controlla("esempio: elenco dei processi: irraggiungibile\n" in seriale,
+                    "Esempio, nel recinto, ha raggiunto tasks per nome")
+    # la connessione Wayland, data dal launcher a ogni app: il compositore sa di quale app e'
+    for app in ["attivita", "esempio", "impostazioni", "files"]:
+        p.controlla(f"compositore: connessione Wayland dell'app /system/apps/{app}/code" in seriale,
+                    f"il compositore non ha ricevuto la connessione Wayland di {app}")
+    p.controlla("niente connessione Wayland" not in seriale, "un'app e' partita senza connessione Wayland")
     for permesso, servizio in [("settings.system", "catalog"), ("network.settings", "network")]:
         p.controlla(f"permesso {permesso} a /system/apps/esempio/code (uid 1000): negato" in seriale,
                     f"{servizio}: manca nel registro il rifiuto di {permesso} a Esempio")
