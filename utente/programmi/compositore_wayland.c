@@ -839,6 +839,32 @@ static void lega_seat(struct wl_client *client, void *dati, uint32_t versione, u
     if (wl_resource_get_version(r) >= WL_SEAT_NAME_SINCE_VERSION) wl_seat_send_name(r, "seat0");
 }
 
+/* --- wl_output: lo schermo ---
+ * Uno schermo solo, che non cambia: a chi lo chiede si dice subito tutto e poi "done".
+ * geometry: posizione 0,0 e misura fisica sconosciuta (0 x 0 mm, come le macchine virtuali);
+ * mode: la misura in pixel, a 60 Hz (il ritmo dei fotogrammi, wayland_fotogramma);
+ * scale 1 (nessun ingrandimento); name e description (versione 4). */
+static void output_rilascia(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static const struct wl_output_interface output_interfaccia = { .release = output_rilascia };
+
+static void lega_output(struct wl_client *client, void *dati, uint32_t versione, uint32_t id) {
+    (void)dati;
+    struct wl_resource *r = wl_resource_create(client, &wl_output_interface, versione > 4 ? 4 : (int)versione, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &output_interfaccia, 0, 0);
+    int l, a;
+    ponte_schermo(&l, &a);
+    wl_output_send_geometry(r, 0, 0, 0, 0, WL_OUTPUT_SUBPIXEL_UNKNOWN, "mshell", "schermo",
+                            WL_OUTPUT_TRANSFORM_NORMAL);
+    wl_output_send_mode(r, WL_OUTPUT_MODE_CURRENT | WL_OUTPUT_MODE_PREFERRED, l, a, 60000);
+    int v = wl_resource_get_version(r);
+    if (v >= WL_OUTPUT_SCALE_SINCE_VERSION) wl_output_send_scale(r, 1);
+    if (v >= WL_OUTPUT_NAME_SINCE_VERSION) wl_output_send_name(r, "schermo-1");
+    if (v >= WL_OUTPUT_DESCRIPTION_SINCE_VERSION) wl_output_send_description(r, "lo schermo di mshell");
+    if (v >= WL_OUTPUT_DONE_SINCE_VERSION) wl_output_send_done(r);
+}
+
 /* --- quello che vede il compositore --- */
 
 int wayland_inizia(void) {
@@ -854,7 +880,8 @@ int wayland_inizia(void) {
         !wl_global_create(display, &wl_compositor_interface, 4, 0, lega_compositor) ||
         wl_display_init_shm(display) < 0 ||   /* wl_shm, con ARGB8888 e XRGB8888 */
         !wl_global_create(display, &xdg_wm_base_interface, 3, 0, lega_wm) ||
-        !wl_global_create(display, &wl_seat_interface, 7, 0, lega_seat)) {
+        !wl_global_create(display, &wl_seat_interface, 7, 0, lega_seat) ||
+        !wl_global_create(display, &wl_output_interface, 4, 0, lega_output)) {
         wl_display_destroy(display);
         display = 0;
         return -1;

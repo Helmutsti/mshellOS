@@ -51,6 +51,10 @@ def esegui(p):
     seriale = m.testo_seriale()
     p.controlla("wayland: collegata: wl_compositor, wl_shm, xdg_wm_base" in seriale, "il client non dice di essersi collegato")
     p.controlla("wayland: configure attiva" in seriale, "il programma non sa di avere il fuoco (configure attiva)")
+    # lo schermo (wl_output): la misura dello schermo, 60 Hz, scala 1
+    l, a = f.size
+    p.controlla(f"wayland: schermo {l}x{a} a 60 Hz, scala 1" in seriale,
+                f"il programma non ha saputo com'e' lo schermo (wl_output: {l}x{a} a 60 Hz, scala 1)")
 
     # 1. il contenuto: i quattro quadrati e la sfumatura
     giusti = {

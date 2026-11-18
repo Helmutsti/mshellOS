@@ -73,6 +73,8 @@ static struct wl_buffer *buffer_anima;
 static uint32_t *pixel_anima;              /* il buffer, sempre mappato: si ridisegna ad ogni "fatto" */
 static unsigned int fotogrammi;            /* i "fatto" ricevuti (e fotogrammi disegnati) */
 static struct wl_seat *seat;
+static struct wl_output *uscita;           /* lo schermo (wl_output) */
+static int schermo_l, schermo_a, schermo_hz, schermo_scala;
 static struct wl_pointer *puntatore;
 static struct wl_keyboard *tastiera;
 static uint32_t ultimo_serial;             /* i numeri di serie non devono mai tornare indietro */
@@ -90,7 +92,34 @@ static void globale(void *dati, struct wl_registry *registro, uint32_t nome, con
         base = wl_registry_bind(registro, nome, &xdg_wm_base_interface, versione < 3 ? versione : 3);
     else if (!strcmp(interfaccia, wl_seat_interface.name))
         seat = wl_registry_bind(registro, nome, &wl_seat_interface, versione < 7 ? versione : 7);
+    else if (!strcmp(interfaccia, wl_output_interface.name) && !uscita)
+        uscita = wl_registry_bind(registro, nome, &wl_output_interface, versione < 4 ? versione : 4);
 }
+
+/* --- lo schermo (wl_output): la misura, il ritmo e la scala; a "done" si scrive nel registro ---
+ *   wayland: schermo 1280x800 a 60 Hz, scala 1 */
+static void output_geometria(void *d, struct wl_output *o, int32_t x, int32_t y, int32_t mm_l, int32_t mm_a,
+                             int32_t subpixel, const char *marca, const char *modello, int32_t trasformazione) {
+    (void)d; (void)o; (void)x; (void)y; (void)mm_l; (void)mm_a; (void)subpixel; (void)marca; (void)modello;
+    (void)trasformazione;
+}
+static void output_modo(void *d, struct wl_output *o, uint32_t flag, int32_t l, int32_t a, int32_t mhz) {
+    (void)d; (void)o;
+    if (flag & WL_OUTPUT_MODE_CURRENT) { schermo_l = l; schermo_a = a; schermo_hz = mhz / 1000; }
+}
+static void output_fatto(void *d, struct wl_output *o) {
+    (void)d; (void)o;
+    char riga[96];
+    snprintf(riga, sizeof riga, "schermo %dx%d a %d Hz, scala %d", schermo_l, schermo_a, schermo_hz, schermo_scala);
+    scrivi_riga("wayland", riga, "");
+}
+static void output_scala(void *d, struct wl_output *o, int32_t s) { (void)d; (void)o; schermo_scala = s; }
+static void output_nome(void *d, struct wl_output *o, const char *n) { (void)d; (void)o; (void)n; }
+static void output_descrizione(void *d, struct wl_output *o, const char *n) { (void)d; (void)o; (void)n; }
+
+static const struct wl_output_listener output_ascolto = {
+    output_geometria, output_modo, output_fatto, output_scala, output_nome, output_descrizione,
+};
 
 static void globale_tolto(void *dati, struct wl_registry *registro, uint32_t nome) { (void)dati; (void)registro; (void)nome; }
 
@@ -382,7 +411,8 @@ int main(int quanti, char **argomenti) {
     }
     scrivi_riga("wayland", "collegata: wl_compositor, wl_shm, xdg_wm_base", "");
     xdg_wm_base_add_listener(base, &base_ascolto, 0);
-    if (seat) wl_seat_add_listener(seat, &seat_ascolto, 0);   /* le capacita' arrivano al prossimo dispatch */
+    if (seat) wl_seat_add_listener(seat, &seat_ascolto, 0);
+    if (uscita) wl_output_add_listener(uscita, &output_ascolto, 0);   /* arriva al prossimo dispatch */   /* le capacita' arrivano al prossimo dispatch */
 
     struct wl_surface *superficie = wl_compositor_create_surface(compositore);
     struct xdg_surface *xdg = xdg_wm_base_get_xdg_surface(base, superficie);
