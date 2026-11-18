@@ -1742,16 +1742,20 @@ static void componi_zone(void) {
  * Sulla CORNICE nostra di una finestra Wayland (la testata con riduci e chiudi) la forma la
  * decide il compositore, non il programma: il programma la chiede solo per il suo contenuto
  * (cursor-shape), e la sua forma (per esempio il testo di un terminale) sulla testata sarebbe
- * sbagliata. Su tutta la testata, comandi compresi, la freccia: come sui pulsanti delle finestre di
- * UIKit (uikit.h, forma_puntatore: la manina e' solo per i collegamenti). */
+ * sbagliata. Sui comandi (riduci, chiudi) la manina, come su tutto quello che si clicca (regola
+ * della persona, 18/11/2026: vale anche per UIKit); sul resto della testata la freccia. */
 static unsigned int forma_voluta(void) {
     if (trascinata >= 0) return FORMA_NORMALE;
     int i = presa >= 0 ? presa : finestra_sotto(px, py);
     if (i < 0 || scelta_sopra(i) >= 0) return FORMA_NORMALE;
     if (finestre[i].non_risponde) return FORMA_ATTESA;
     if (finestre[i].wayland && !finestre[i].senza_cornice) {
-        if (cornice_comando(finestre[i].l, px - finestre[i].x, py - finestre[i].y) != CORNICE_NIENTE)
-            return FORMA_NORMALE;
+        switch (cornice_comando(finestre[i].l, px - finestre[i].x, py - finestre[i].y)) {
+        case CORNICE_RIDUCI:
+        case CORNICE_CHIUDI:  return FORMA_COLLEGAMENTO;
+        case CORNICE_TESTATA: return FORMA_NORMALE;
+        default: break;
+        }
     }
     return finestre[i].forma;
 }
