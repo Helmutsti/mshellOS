@@ -3,10 +3,9 @@
 #
 # E' un'APP LINUX: un programma di altri, preso dai pacchetti di Alpine 3.24 con le sue
 # librerie (strumenti/compilazione/app_linux.sh, i pacchetti in alpine.txt). Nel pacchetto,
-# invece di "code", c'e' la cartella linux/, un piccolo albero tipo Alpine: il caricatore di
-# musl (linux/lib/ld-musl-<processore>.so.1), le librerie, il programma e i suoi dati.
-# Il launcher non lancia il programma da solo: lancia il caricatore del pacchetto, che carica
-# il programma con le librerie del pacchetto (linux = true).
+# invece di "code", c'e' la cartella linux/, un piccolo albero tipo Alpine: le librerie, il
+# programma e i suoi dati. Parte con il caricatore di musl del sistema (/lib/ld-musl-*), che
+# carica le librerie del pacchetto: il launcher gliele indica (linux = true).
 
 id = "foot"
 nome = "Foot"

@@ -83,6 +83,10 @@ for f in utente/comandi/*.c; do
     metti_file "$O/bin/comandi/$nome" "/system/bin/$nome" 755
 done
 # vim e le descrizioni dei terminali, come build.sh (strumenti/compilazione/vim.sh)
+# il caricatore delle app Linux, come build.sh: il file in /system/lib, il collegamento in /lib
+metti_file "/radice/lib/ld-musl-$ARCH.so.1" "/system/lib/ld-musl-$ARCH.so.1" 755
+cartelle_per /lib/x
+ln -s "/system/lib/ld-musl-$ARCH.so.1" "$(vero /lib/ld-musl-$ARCH.so.1)"
 metti_file "$O/vim/vim" /system/bin/vim 755
 metti_file "$O/vim/defaults.vim" /system/share/vim/vim92/defaults.vim 644
 for f in "$O"/vim/terminfo/*/*; do

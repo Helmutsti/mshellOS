@@ -14,16 +14,13 @@
 # PERCHE'. Le app Linux di altri (decisione della persona) portano con se' le loro librerie,
 # dentro il loro pacchetto, come le app del Mac: nel sistema non c'e' una cartella di
 # librerie condivise, e ogni app ha le sue, nelle versioni con cui e' stata fatta. Partono
-# lanciando il caricatore di musl CHE STA NEL PACCHETTO:
-#     <app>/linux/lib/ld-musl-<arch>.so.1 --library-path <app>/linux/lib:<app>/linux/usr/lib \
-#         <app>/linux/usr/bin/<programma> ...
-# Il caricatore cerca le librerie solo nelle cartelle di --library-path, cioe' nel pacchetto.
-# (Il launcher fa questo; lo script prepara solo l'albero.)
+# come un programma Linux qualsiasi: il kernel fa partire il caricatore di musl del SISTEMA
+# (/lib/ld-musl-<arch>.so.1, un collegamento a /system/lib: come dyld sul Mac), che cerca le
+# librerie nelle cartelle di LD_LIBRARY_PATH, cioe' nel pacchetto
+# (<app>/linux/lib:<app>/linux/usr/lib: lo imposta il launcher; lo script prepara l'albero).
 #
 # COSA C'E' IN USCITA/linux/: un piccolo albero tipo Alpine con SOLO quello che serve.
-#   lib/ld-musl-<arch>.so.1   il caricatore (e' anche la libreria C: musl e' un file solo;
-#                             il nome libc.musl-<arch>.so.1 che i programmi chiedono il
-#                             caricatore lo riconosce come se stesso, quindi non serve)
+#   (niente caricatore: e' del sistema, ed e' anche la libreria C, libc.musl-<arch>.so.1)
 #   lib/, usr/lib/            le librerie: la CHIUSURA delle dipendenze, cioe' quelle che il
 #                             programma chiede (NEEDED, letto con readelf), quelle che chiedono
 #                             loro, e cosi' via, ognuna nella cartella dove Alpine la mette
@@ -128,9 +125,10 @@ echo "$righe" | while read -r pacchetto percorso; do
     done
 done
 
-# --- 3. il caricatore e le librerie: la chiusura delle dipendenze ---
-CARICATORE=lib/ld-musl-$ARCH.so.1
-prendi "$CARICATORE"
+# --- 3. le librerie: la chiusura delle dipendenze ---
+# Il caricatore di musl NON va nel pacchetto: sta nel sistema (/system/lib, con il collegamento
+# /lib/ld-musl-<arch>.so.1 che i programmi hanno scritto dentro; decisione della persona,
+# 18/11/2026, come dyld sul Mac). E' anche la libreria C (libc.musl-<arch>.so.1).
 
 # chiede FILE: le librerie che FILE chiede (le voci NEEDED), una per riga
 chiede() {
@@ -148,7 +146,7 @@ while [ -n "$da_guardare" ]; do
     nuove=""
     for f in $da_guardare; do
         for nome in $(chiede "$f"); do
-            case "$nome" in libc.musl-*) continue ;; esac     # e' il caricatore stesso
+            case "$nome" in libc.musl-*) continue ;; esac     # e' il caricatore del sistema
             if [ -f "$T/lib/$nome" ] || [ -f "$T/usr/lib/$nome" ]; then continue; fi
             if [ -e "$R/lib/$nome" ]; then dove=lib
             elif [ -e "$R/usr/lib/$nome" ]; then dove=usr/lib
@@ -167,10 +165,9 @@ done
 if [ -d "$SOPRA" ]; then cp -R "$SOPRA/." "$T/"; fi
 
 # --- 5. permessi e controlli ---
-# cartelle 755, file 644; eseguibili (755) solo il caricatore e i programmi
+# cartelle 755, file 644; eseguibili (755) solo i programmi
 find "$T" -type d -exec chmod 755 {} +
 find "$T" -type f -exec chmod 644 {} +
-chmod 755 "$T/$CARICATORE"
 for d in bin sbin usr/bin usr/sbin usr/libexec; do
     if [ -d "$T/$d" ]; then find "$T/$d" -type f -exec chmod 755 {} +; fi
 done
