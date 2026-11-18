@@ -42,6 +42,7 @@
 #include <linux/input.h>
 
 #include "corekit/corekit.h"
+#include "corekit/tastiera_it.h"
 
 #define D_TUBO 0            /* prestato da init: qui si scrivono gli eventi */
 #define MAX_DISPOSITIVI 16
@@ -49,90 +50,13 @@
 #define RIPETI_DOPO TASTI_RIPETI_DOPO   /* ms prima di ripetere un tasto tenuto giu' (chiamate.h) */
 #define RIPETI_OGNI TASTI_RIPETI_OGNI   /* poi una volta ogni 30 ms */
 
-/* --- la tastiera italiana: dal TASTO premuto al CARATTERE ---
+/* --- la tastiera italiana ---
  *
- * I codici dei tasti sono quelli di Linux (KEY_...): per i tasti principali (1-88) sono
- * gli stessi degli scancode PS/2 "set 1" (KEY_A = 30 = 0x1E). AltGr e' KEY_RIGHTALT.
- * Si tiene traccia di Shift, AltGr e Caps Lock. Il carattere e' il suo numero Unicode
- * (U+00E0 e' à): per le lettere ASCII e' il codice ASCII di sempre; chi riceve lo scrive in
- * UTF-8 (corekit/utf8.h). */
-#define A_GRAVE 0xE0   /* à */
-#define E_GRAVE 0xE8   /* è */
-#define E_ACUTA 0xE9   /* é */
-#define I_GRAVE 0xEC   /* ì */
-#define O_GRAVE 0xF2   /* ò */
-#define U_GRAVE 0xF9   /* ù */
-#define C_CEDIG 0xE7   /* ç */
-#define STERLINA 0xA3  /* £ */
-#define GRADO   0xB0   /* ° */
-#define PARAGR  0xA7   /* § */
-#define EURO    0x20AC /* € */
-
-static const unsigned short normale[0x59] = {
-    [0x02] = '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\'', I_GRAVE, '\b',
-    [0x0F] = '\t', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', E_GRAVE, '+', '\n',
-    [0x1E] = 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', O_GRAVE, A_GRAVE, '\\',
-    [0x2B] = U_GRAVE, 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '-',
-    [0x37] = '*', [0x39] = ' ', [0x56] = '<',
-};
-
-static const unsigned short maiuscolo[0x59] = {
-    [0x02] = '!', '"', STERLINA, '$', '%', '&', '/', '(', ')', '=', '?', '^', '\b',
-    [0x0F] = '\t', 'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', E_ACUTA, '*', '\n',
-    [0x1E] = 'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', C_CEDIG, GRADO, '|',
-    [0x2B] = PARAGR, 'Z', 'X', 'C', 'V', 'B', 'N', 'M', ';', ':', '_',
-    [0x37] = '*', [0x39] = ' ', [0x56] = '>',
-};
-
-static int shift, altgr, caps;
-static int numlock = 1;   /* Bloc Num parte acceso, come su Windows e Mac */
-
-/* --- il tastierino numerico ---
- *
- * I codici di Linux: 71-73 = 7 8 9, 75-77 = 4 5 6, 79-81 = 1 2 3, 82 = 0, 83 = punto (KPDOT);
- * 74 e 78 = meno e piu', 55 = per, 98 = diviso, 96 = Invio del tastierino. Gli operatori e
- * l'Invio danno sempre il loro carattere, con Bloc Num acceso o spento (come su Windows);
- * le cifre e il punto dipendono da Bloc Num. */
-static int e_tasto_di_numeri(unsigned int codice) {
-    return codice >= KEY_KP7 && codice <= KEY_KPDOT && codice != KEY_KPMINUS && codice != KEY_KPPLUS;
-}
-
-/* Cosa fa il tasto del tastierino con Bloc Num SPENTO: lo stesso del tasto di movimento. */
-static unsigned int movimento_del_tastierino(unsigned int codice) {
-    switch (codice) {
-    case KEY_KP7:   return KEY_HOME;
-    case KEY_KP8:   return KEY_UP;
-    case KEY_KP9:   return KEY_PAGEUP;
-    case KEY_KP4:   return KEY_LEFT;
-    case KEY_KP6:   return KEY_RIGHT;
-    case KEY_KP1:   return KEY_END;
-    case KEY_KP2:   return KEY_DOWN;
-    case KEY_KP3:   return KEY_PAGEDOWN;
-    case KEY_KP0:   return KEY_INSERT;
-    case KEY_KPDOT: return KEY_DELETE;
-    default:        return 0;   /* il 5: non fa niente */
-    }
-}
-
-/* Il carattere dei tasti del tastierino che lo danno (0 per gli altri). Tastiera italiana:
- * il tasto del punto da' la virgola, come su Windows con quel layout. */
-static unsigned int carattere_del_tastierino(unsigned int codice) {
-    switch (codice) {
-    case KEY_KP0: return '0';  case KEY_KP1: return '1';  case KEY_KP2: return '2';
-    case KEY_KP3: return '3';  case KEY_KP4: return '4';  case KEY_KP5: return '5';
-    case KEY_KP6: return '6';  case KEY_KP7: return '7';  case KEY_KP8: return '8';
-    case KEY_KP9: return '9';  case KEY_KPDOT: return ',';
-    case KEY_KPMINUS: return '-';  case KEY_KPPLUS: return '+';
-    case KEY_KPSLASH: return '/';  case KEY_KPENTER: return '\n';
-    default: return 0;   /* il per (55) lo da' gia' la tabella dei caratteri */
-    }
-}
-
-/* Cosa si e' mandato quando un tasto di numeri e' stato premuto: il tasto stesso (Bloc Num
- * acceso), il tasto di movimento (spento) o 0 (il 5 spento). Si ricorda perche' la ripetizione
- * e il rilascio devono fare come la pressione, anche se nel frattempo Bloc Num e' cambiato: se
- * no resterebbe una freccia "premuta" per sempre. */
-static unsigned short mandato_dal_tastierino[KEY_KPDOT + 1];
+ * La traduzione dal tasto al carattere (Maiusc, AltGr, Bloc Maiusc, Bloc Num, tastierino) sta
+ * in CoreKit (corekit/tastiera_it.h): qui se ne tiene lo stato, uno solo. Parte con Bloc Num
+ * acceso (come tastiera_it_inizia): e' scritto qui e non in main() perche' la sandbox include questo
+ * file con un suo main(), e la spia della tastiera si accende gia' all'apertura. */
+static struct tastiera_it tastiera = { .bloc_num = 1 };
 
 static void luce_bloc_num(void);
 
@@ -164,25 +88,13 @@ static int modificatori_adesso(void) {
     if (mod_giu & (1u << M_LALT))                    m |= GREZZO_ALT;
     if (mod_giu & (1u << M_RALT))                    m |= GREZZO_ALTGR;
     if (mod_giu & (1u << M_LMETA | 1u << M_RMETA))   m |= GREZZO_META;
-    if (caps)    m |= GREZZO_BLOC_MAIUSC;
-    if (numlock) m |= GREZZO_BLOC_NUM;
+    if (tastiera.bloc_maiusc) m |= GREZZO_BLOC_MAIUSC;
+    if (tastiera.bloc_num)    m |= GREZZO_BLOC_NUM;
     return m;
 }
 
 static void manda_evento(const struct evento *e) {
     if (manda(D_TUBO, e, sizeof *e) < 0) esci();   /* il tubo non c'e' piu': init ci rifara' */
-}
-
-/* Combinazioni con AltGr sulla tastiera italiana. */
-static unsigned int con_altgr(unsigned int codice) {
-    switch (codice) {
-    case KEY_E:          return EURO;                /* AltGr+E */
-    case KEY_LEFTBRACE:  return shift ? '{' : '[';   /* tasto è */
-    case KEY_RIGHTBRACE: return shift ? '}' : ']';   /* tasto + */
-    case KEY_SEMICOLON:  return '@';                 /* tasto ò */
-    case KEY_APOSTROPHE: return '#';                 /* tasto à */
-    default:             return 0;
-    }
 }
 
 /* I tasti che non si ripetono mai, come su Windows e Mac: i modificatori e i blocchi. */
@@ -199,50 +111,22 @@ static int e_modificatore(unsigned int codice) {
  * caratteri, tranne i modificatori. */
 static void tasto(unsigned int codice, int valore) {
     if (valore == 2 && e_modificatore(codice)) return;
-    if (codice == KEY_NUMLOCK && valore == 1) { numlock = !numlock; luce_bloc_num(); }
-    if (codice == KEY_CAPSLOCK && valore == 1) caps = !caps;
+    int num_prima = tastiera.bloc_num;
+    unsigned int fisico, carattere;
+    tastiera_it_tasto(&tastiera, codice, valore, &fisico, &carattere);
+    if (tastiera.bloc_num != num_prima) luce_bloc_num();
     /* il tasto grezzo (per Wayland), con lo stato dei modificatori DOPO di lui: i blocchi sono
      * gia' cambiati qui sopra, i modificatori si aggiornano adesso */
     int bit = bit_modificatore(codice);
     if (bit >= 0 && valore != 2) mod_giu = valore ? mod_giu | 1u << bit : mod_giu & ~(1u << bit);
     manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_GREZZO, .tasto = codice, .dx = modificatori_adesso(),
                                    .pulsanti = (unsigned int)valore });
-    int cifra = 0;   /* il tasto del tastierino che qui e' una cifra (o la virgola) */
-    if (e_tasto_di_numeri(codice)) {
-        if (valore == 1)
-            mandato_dal_tastierino[codice] = (unsigned short)(numlock ? codice : movimento_del_tastierino(codice));
-        unsigned int mandato = mandato_dal_tastierino[codice];
-        if (!mandato) return;                       /* il 5 con Bloc Num spento */
-        cifra = mandato == codice;
-        codice = mandato;                           /* da qui e' il tasto di movimento, o se stesso */
-    }
     /* il tasto "fisico" (frecce, Canc, F1-F12, tastierino, Esc...): 'pulsanti' e' 1 premuto,
      * 2 ripetuto, 0 lasciato. Chi non vuole le ripetizioni (i giochi) scarta il 2. */
-    manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_FISICO, .tasto = codice,
+    if (!fisico) return;                                /* il 5 con Bloc Num spento */
+    manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_FISICO, .tasto = fisico,
                                    .pulsanti = (unsigned int)valore });
-    /* i tasti che cambiano lo stato, sia quando si premono sia quando si lasciano */
-    if (codice == KEY_LEFTSHIFT || codice == KEY_RIGHTSHIFT) { shift = valore != 0; return; }
-    if (codice == KEY_RIGHTALT)                              { altgr = valore != 0; return; }
-    if (valore == 0) return;                             /* gli altri rilasci non ci interessano */
-    if (codice == KEY_CAPSLOCK) return;   /* (il blocco e' gia' cambiato, in cima) */
-    unsigned int c;
-    if (cifra || codice == KEY_KPMINUS || codice == KEY_KPPLUS || codice == KEY_KPSLASH ||
-        codice == KEY_KPENTER) {
-        c = carattere_del_tastierino(codice);
-    } else if (codice >= sizeof normale / sizeof normale[0]) {
-        /* frecce, tasti multimediali e simili: niente carattere. (Si contano gli ELEMENTI della
-         * tabella, non i byte: con i byte i codici fino a 177 leggevano oltre la tabella e
-         * qualche tasto multimediale scriveva un carattere a caso.) */
-        return;
-    } else if (altgr) {
-        c = con_altgr(codice);
-    } else {
-        c = shift ? maiuscolo[codice] : normale[codice];
-        /* Caps Lock inverte maiuscole e minuscole, ma solo per le lettere */
-        if (caps && c >= 'a' && c <= 'z') c -= 'a' - 'A';
-        else if (caps && c >= 'A' && c <= 'Z') c += 'a' - 'A';
-    }
-    if (c) manda_evento(&(struct evento){ .tipo = EVENTO_TASTO, .tasto = c });
+    if (carattere) manda_evento(&(struct evento){ .tipo = EVENTO_TASTO, .tasto = carattere });
 }
 
 /* --- i dispositivi --- */
@@ -284,7 +168,7 @@ static void scrivi_dispositivo(const char *cosa, const char *nome, const char *f
  * tastiera non ha la spia (o non si puo' scrivere) non succede niente: lo stato resta qui. */
 static void luce_alla_tastiera(const struct dispositivo *p) {
     struct input_event e[2] = {
-        { .type = EV_LED, .code = LED_NUML, .value = numlock },
+        { .type = EV_LED, .code = LED_NUML, .value = tastiera.bloc_num },
         { .type = EV_SYN, .code = SYN_REPORT, .value = 0 },
     };
     if (write(p->d, e, sizeof e) < 0) return;
