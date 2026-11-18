@@ -29,6 +29,20 @@ x86_64 rifatte (userbar con il Blocco note, puntatore nuovo); ramo del recinto n
 vanno nel registro del kernel (`/dev/kmsg`, decisione della persona): il kernel non le spezza piu'
 (prima la prova `avvio` falliva a caso). **Da rifare sul Mac:** collaudo arm64 dopo questo cambio.
 
+**18/11/2026, pomeriggio: COMPATIBILITA' con le app Linux (decisione della persona: le nostre app
+native per ora restano indietro; GKit su Wayland e' nel ramo `gkit-wayland`, da riprendere).**
+Fatto e in `main`: Foot (terminale Wayland di Alpine) si apre dal vassoio e mostra la shell.
+App Linux = pacchetto con le sue librerie (come il Mac: `utente/applicazioni_linux/`,
+`strumenti/compilazione/app_linux.sh`, manifesto `linux = true`); il caricatore di musl e' del
+sistema (`/system/lib`, collegamento in `/lib`); il launcher le fa partire senza recinto con
+`LD_LIBRARY_PATH` e le variabili XDG. Il compositore ha in piu': xdg-decoration, move,
+set_minimized, ping, cursor-shape, wl_output, sottosuperfici, appunti. **Da fare:** prova
+automatica di Foot (scrivere un comando), prove in QEMU con Foot; il RALLENTAMENTO in QEMU
+(`wayland_ritmo` 39-49 fotogrammi/s, compositore all'88%: nato con il commit 3a11cfc, nella
+sandbox non si vede); Files e Store in QEMU falliscono per il recinto (rimandato). Avvisi di Foot:
+mancano selezione primaria, xdg-activation, fractional-scale, xdg-toplevel-icon, text-input,
+tabelle Compose.
+
 **Domande aperte della persona (Blocco note):** Salva su un file aperto con Apri (il picker oggi lo da'
 in sola lettura; consigliata una richiesta del picker in lettura e scrittura); la domanda "Salvare le
 modifiche?" anche alla chiusura della finestra (serve in UIKit un modo di fermare la chiusura).
