@@ -11,7 +11,8 @@
  * protocollo di oggi. Ci sono wl_compositor (superfici, commit, frame), wl_shm (ARGB8888 e
  * XRGB8888) e xdg_wm_base (finestre con titolo, configure, chiusura). PASSO 2: wl_seat, con il
  * puntatore (wl_pointer) e la tastiera (wl_keyboard, con la keymap italiana). Poi xdg-decoration,
- * cursor-shape e wl_subcompositor (le sottosuperfici): per il ponte non cambia niente, l'immagine
+ * cursor-shape, wl_subcompositor (le sottosuperfici) e gli appunti (wl_data_device_manager: la selezione
+ * va al programma con il fuoco della tastiera, il trascinamento non c'e'): per il ponte non cambia niente, l'immagine
  * di ponte_mostra e' la principale con le sottosuperfici gia' composte.
  *
  * Questo file non include header di Wayland: compositore.c resta com'e'. */

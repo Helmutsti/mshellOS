@@ -217,6 +217,11 @@ resta, passo dopo passo, solo per quello che è davvero nostro.
    (mouse e tastiera nelle finestre Wayland, vedi "Mouse e tastiera" sotto). Mancano `wl_output`,
    il socket dato dal launcher come le altre porte, e il modo di dire all'app quale finestra è sua
    (l'identità, per i permessi).
+   **Appunti (fatto):** `wl_data_device_manager` v3, il copia e incolla tra programmi Wayland. La
+   selezione è una sola per il seat; il programma con il fuoco della tastiera la riceve (con i tipi
+   MIME) a ogni cambio e quando prende il fuoco; il contenuto non passa dal compositore (`receive` va
+   alla sorgente con un pipe). Sorgente distrutta: selezione vuota; sorgente sostituita: `cancelled`.
+   Il trascinamento (`start_drag`) non c'è: la sorgente riceve subito `cancelled`. Prova `wayland_appunti`.
 3. **Passo 3 (da fare):** via il vecchio protocollo. Resta Wayland con le nostre estensioni
    private: la finestra di scelta (`RUOLO_SCELTA`, il picker), l'identità dell'app per i
    permessi, i pannelli della scrivania (userbar, vassoio).
