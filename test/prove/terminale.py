@@ -147,9 +147,15 @@ def esegui(p):
     # 7. i tasti multimediali sono del sistema: il compositore li ferma e lo scrive nel registro
     # (qui si vede solo che l'app non scrive niente e che la riga c'e'; che l'app non li riceva
     # e' garantito dal ritorno anticipato del compositore, non da quello che si vede)
-    for tasto, nome in (("volumeup", "volume su"), ("volumedown", "volume giu'"), ("audiomute", "muto"),
-                        ("audioplay", "riproduci/pausa"), ("audionext", "brano successivo"),
-                        ("audioprev", "brano precedente"), ("audiostop", "stop")):
+    # In QEMU la tastiera USB finta (usb-kbd) ha solo la pagina "tastiera" dell'HID: volume e muto
+    # ci sono, riproduci/brano/stop stanno nella pagina "consumer", che usb-kbd non manda. In QEMU
+    # quei quattro non arrivano proprio: si provano solo nella sandbox (che scrive i codici da se').
+    in_qemu = type(m).__name__ == "Macchina"
+    multimediali = [("volumeup", "volume su"), ("volumedown", "volume giu'"), ("audiomute", "muto")]
+    if not in_qemu:
+        multimediali += [("audioplay", "riproduci/pausa"), ("audionext", "brano successivo"),
+                         ("audioprev", "brano precedente"), ("audiostop", "stop")]
+    for tasto, nome in multimediali:
         p.controlla(scrivi(tasto) is None, f"il tasto {tasto} ha scritto qualcosa nel Terminale")
         m.aspetta_seriale(f"compositore: tasto di sistema: {nome}", 5.0)
 

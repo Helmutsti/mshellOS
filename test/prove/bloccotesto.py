@@ -25,6 +25,7 @@ from qemu import pixel_diversi
 
 NOME = "bloccotesto"
 ORDINE = 46
+DISCO = "disco_app.img"   # in QEMU: la userbar con Esempio, come la conoscono le prove (scrivania.py)
 DESCRIZIONE = "il Blocco note: scrivere, accenti, selezione, Tab, a capo, scorrimento, mouse, fuoco"
 
 FINESTRA = (140, 130, 140 + 760, 130 + 588)

@@ -19,6 +19,7 @@ import scrivania as s
 
 NOME = "finestre_molte"
 ORDINE = 21
+DISCO = "disco_app.img"   # in QEMU: la userbar con Esempio, come la conoscono le prove (scrivania.py)
 DESCRIZIONE = "6 app + scrivania = 8 finestre e 6 porte (18 descrittori): il compositore resta; la nona finestra e' rifiutata"
 
 # Doom, rifiutato dal compositore, scrive "non riesco ad aprire la finestra": e' quello che si vuole

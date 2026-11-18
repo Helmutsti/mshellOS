@@ -15,6 +15,7 @@ from qemu import pixel_diversi
 
 NOME = "blocconote_modifiche"
 ORDINE = 47
+DISCO = "disco_app.img"   # in QEMU: la userbar con Esempio, come la conoscono le prove (scrivania.py)
 DESCRIZIONE = "il Blocco note: asterisco nel titolo, avviso Salvare le modifiche? (Esc, Annulla, Non salvare)"
 
 FINESTRA = (140, 130, 140 + 760, 130 + 588)
