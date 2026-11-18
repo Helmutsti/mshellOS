@@ -5,7 +5,7 @@
 #   1. mmdebstrap crea in RADICE un Debian 13 con SOLO i pacchetti obbligatori ("essential") e
 #      quelli di pacchetti.txt (approvati dalla persona), piu' le librerie che servono;
 #   2. l'archivio d'avvio (initramfs) con dracut degli attrezzi, con i moduli del kernel del sistema;
-#   3. le impostazioni: il nome del computer, la shell sulla console senza login;
+#   3. le impostazioni: il nome del computer, l'accesso automatico dell'amministratore;
 #   4. si tolgono i pacchetti "da terminale" e quelli "per installare" (decisione della persona):
 #      si cancellano i loro file, poi il registro dei pacchetti;
 #   5. il kernel tutto-in-uno (UKI): kernel + initramfs + riga di comando in un solo file .EFI;
@@ -52,33 +52,25 @@ dracut --quiet --force --no-hostonly --kver "$KVER" --kmoddir "$RADICE/lib/modul
 echo "3. impostazioni"
 echo mshell > "$RADICE/etc/hostname"
 : > "$RADICE/etc/fstab"
-# LA SHELL SULLA CONSOLE, SENZA LOGIN (decisione della persona): un servizio che apre /bin/sh
-# come amministratore sul terminale dato (%I: tty1 e' lo schermo, ttyS0 la seriale), e lo
-# riapre se si chiude. I getty (che chiederebbero nome e password con login) sono spenti.
+# L'ACCESSO AUTOMATICO (decisione della persona: "accesso automatico classico"). Sul terminale
+# c'e' agetty, il programma che apre la console, con --autologin root: fa partire login, che
+# passa da PAM, e PAM (pam_systemd) registra la SESSIONE presso logind. Cosi' la shell e' una
+# sessione vera, come in un sistema normale: allo spegnimento si chiude bene, ha la sua
+# cartella /run/user/0. tty1 e' lo schermo, ttyS0 la seriale. La shell di root e' /bin/sh
+# (dash): bash non c'e'.
 S="$RADICE/etc/systemd/system"
-cat > "$S/console-shell@.service" <<'FINE'
-[Unit]
-Description=Shell dell'amministratore su %I, senza login
-After=systemd-user-sessions.service
-
+mkdir -p "$S/getty@tty1.service.d" "$S/serial-getty@ttyS0.service.d"
+cat > "$S/getty@tty1.service.d/accesso-automatico.conf" <<'FINE'
 [Service]
-ExecStart=/bin/sh
-StandardInput=tty
-StandardOutput=tty
-TTYPath=/dev/%I
-TTYReset=yes
-TTYVHangup=yes
-Restart=always
-WorkingDirectory=/root
-Environment=HOME=/root TERM=linux
-
-[Install]
-WantedBy=multi-user.target
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
 FINE
-mkdir -p "$S/multi-user.target.wants"
-for t in tty1 ttyS0; do ln -sf ../console-shell@.service "$S/multi-user.target.wants/console-shell@$t.service"; done
-ln -sf /dev/null "$S/getty@.service"
-ln -sf /dev/null "$S/serial-getty@.service"
+cat > "$S/serial-getty@ttyS0.service.d/accesso-automatico.conf" <<'FINE'
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --keep-baud 115200,57600,38400,9600 - $TERM
+FINE
+sed -i 's#^\(root:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\)/bin/bash$#\1/bin/sh#' "$RADICE/etc/passwd"
 ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # I SERVIZI CHE NON SERVONO (decisione della persona): il sistema si ricostruisce da capo a
 # ogni modifica, quindi quello che rifanno dopo un aggiornamento si fa qui, una volta sola
@@ -92,7 +84,7 @@ for u in ldconfig.service systemd-journal-catalog-update.service systemd-update-
 done
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
-DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils login"
+DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"
 PER_INSTALLARE="dpkg init-system-helpers perl-base sysvinit-utils mawk"
 D="$RADICE/var/lib/dpkg"
 dpkg-query --admindir="$D" -W -f '${Package} ${Installed-Size}\n' | sort > "$B/pacchetti-tutti.txt"
