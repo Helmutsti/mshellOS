@@ -4,7 +4,40 @@ Questo documento serve a riprendere il lavoro da un altro computer, anche dopo g
 Dice cos'è mshell oggi, come si compila e si prova, cosa è stato fatto, cosa è deciso,
 cosa aspetta una risposta e cosa resta da fare.
 
-## 0. PER RIPARTIRE (aggiornato il 17/11/2026)
+## 0. PER RIPARTIRE (aggiornato il 18/11/2026)
+
+### Il lavoro del 17-18/11 sul Mac (in `main`, collaudo arm64: 28 prove su 28 in QEMU, sandbox tutta verde)
+**Lo scopo in corso ora: la migrazione COMPLETA del compositore a Wayland, un passo alla volta**
+(decisione della persona; server Wayland DENTRO il compositore, niente ponte esterno). Passi:
+1. ~~il compositore parla Wayland e mostra le finestre (wl_compositor, wl_shm, xdg_shell)~~ fatto;
+2. ~~mouse e tastiera (wl_seat; keymap italiana compilata con xkbcomp in /system/resources/keymaps/it.xkb; tasti grezzi da eventi, EVENTO_TASTO_GREZZO)~~ fatto;
+3. **PROSSIMO:** il launcher da' Wayland alle app vere (WAYLAND_SOCKET, un descrittore gia' aperto come le altre porte, identita' dell'app per i permessi), wl_output;
+4. GKit client Wayland, un'app alla volta; 5. le funzioni nostre (picker/RUOLO_SCELTA, userbar, identita') come estensioni private; 6. via il vecchio protocollo.
+Limiti chiusi lungo la strada: `aspetta` senza tetto di 16 descrittori; frame callback a 60 Hz con un
+orologio acceso solo quando serve (il tic verra' poi dal page flip DRM); memoria delle finestre dinamica
+(niente tetto di 8 finestre). Rimandati: page flip DRM (ritmo vero dello schermo) e puntatore su un
+piano hardware (cursore fluido); popup, resize interattivo, appunti, forma del cursore del client.
+
+Fatto anche: ARM si avvia come il PC (firmware UEFI + BOOTAA64.EFI nel disco); `help` della shell
+elenca i programmi; tastierino numerico, Bloc Num, tasti multimediali al compositore; il Blocco note
+(area di testo UIKit a griglia, a capo con "_", Tab '\t' largo 4, Maiusc+Tab; Nuovo, Apri, Salva con
+nome, "*" dopo il nome, "Salvare le modifiche?"); il puntatore dalle PNG di Figma (risorse/puntatore/).
+
+**Da fare sul PC Windows (x86_64), prima di tutto:** build completa e collaudo x86_64; rifare le foto
+di riferimento x86_64 (cambiano userbar con il Blocco note e il puntatore); caricare online il ramo del
+recinto nel launcher (`worktree-agent-a6fd0d6238144e1f4`, esiste solo sul PC).
+
+**Domande aperte della persona (Blocco note):** Salva su un file aperto con Apri (il picker oggi lo da'
+in sola lettura; consigliata una richiesta del picker in lettura e scrittura); la domanda "Salvare le
+modifiche?" anche alla chiusura della finestra (serve in UIKit un modo di fermare la chiusura).
+Altro sul tavolo: ambiente Alpine in un recinto per i programmi Linux da riga di comando;
+aggiornamento della copia di produzione (sul Mac: ~/Desktop/produzione, disco.img + avvia.sh) senza
+perdere /data; icona "Note" gialla in Figma simile al Blocco note.
+
+**Regola per gli agenti:** niente comandi lasciati in sottofondo ad aspettare altri processi (sono
+rimasti appesi per ore cercando con pgrep un nome che stava nel loro stesso comando).
+
+### Il lavoro prima del 17/11
 
 **Lo scopo del lavoro in corso:** ogni app può fare solo quello che dichiara e che la persona le
 concede, e il kernel lo fa rispettare anche se l'app non usa le nostre librerie (sicurezza,
