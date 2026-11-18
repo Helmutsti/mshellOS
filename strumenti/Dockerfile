@@ -6,8 +6,14 @@
 #                               unico (UKI) che il firmware fa partire
 #   fdisk, mtools, dosfstools, e2fsprogs  il disco: la tabella delle partizioni, la FAT32
 #                               dell'avvio e l'ext4 del sistema
+#   gcc, libc6-dev, pkg-config  il compilatore C, per i programmi di mshell (utente/)
+#   libwlroots-0.18-dev, libwayland-dev, libwayland-bin (wayland-scanner), wayland-protocols,
+#   libxkbcommon-dev, libpixman-1-dev  quello che serve a compilare il compositore (wlroots) e i
+#                               programmi Wayland: le intestazioni e le descrizioni dei protocolli
 FROM debian:trixie
 RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
         mmdebstrap dracut-core systemd systemd-sysv systemd-ukify systemd-boot-efi \
-        fdisk mtools dosfstools e2fsprogs ca-certificates >/dev/null && \
+        fdisk mtools dosfstools e2fsprogs ca-certificates \
+        gcc libc6-dev pkg-config libwlroots-0.18-dev libwayland-dev libwayland-bin wayland-protocols \
+        libxkbcommon-dev libpixman-1-dev >/dev/null && \
     rm -rf /var/lib/apt/lists/*

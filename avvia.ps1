@@ -1,6 +1,11 @@
 # avvia.ps1: costruisce il sistema (costruisci.sh, nel container degli attrezzi) e lo accende
 # in QEMU, sul PC Windows. La finestra di QEMU mostra lo schermo (tty1), con la shell
 # dell'amministratore gia' aperta.
+#
+# IL COMPOSITORE, A MANO: dalla shell (sullo schermo o sulla seriale) si lancia con
+#   LIBSEAT_BACKEND=noop WLR_RENDERER=pixman mshell-compositore -s mshell-prova-wayland &
+# (disegno solo con il processore; -s apre il programma di prova: una finestra con quattro
+# quadrati colorati). Sullo schermo, Alt+Esc chiude il compositore.
 $ErrorActionPreference = "Stop"
 $qui = $PSScriptRoot
 

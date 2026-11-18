@@ -6,6 +6,7 @@
 #      quelli di pacchetti.txt (approvati dalla persona), piu' le librerie che servono;
 #   2. l'archivio d'avvio (initramfs) con dracut degli attrezzi, con i moduli del kernel del sistema;
 #   3. le impostazioni: il nome del computer, l'accesso automatico dell'amministratore;
+#      poi si compilano i programmi di mshell (utente/) e si mettono in /usr/bin;
 #   4. si tolgono i pacchetti "da terminale" e quelli "per installare" (decisione della persona):
 #      si cancellano i loro file, poi il registro dei pacchetti;
 #   5. il kernel tutto-in-uno (UKI): kernel + initramfs + riga di comando in un solo file .EFI;
@@ -82,6 +83,24 @@ for u in ldconfig.service systemd-journal-catalog-update.service systemd-update-
          systemd-creds.socket; do
     ln -sf /dev/null "$S/$u"
 done
+
+# --- 3b. i programmi di mshell (utente/), compilati qui con le librerie degli attrezzi, che
+# sono le stesse del sistema (Debian 13) ---
+#   mshell-compositore    il compositore Wayland (tinywl di wlroots, utente/compositore/)
+#   mshell-prova-wayland  un client di prova: una finestra con quattro quadrati (utente/prove/)
+echo "3b. compositore e programma di prova"
+C=/tmp/compila
+rm -rf "$C"
+mkdir -p "$C"
+PROTOCOLLI=$(pkg-config --variable=pkgdatadir wayland-protocols)
+wayland-scanner server-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.h"
+wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
+wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
+gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 wayland-server xkbcommon) \
+    -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c \
+    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
+gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova-wayland" \
+    utente/prove/wayland.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
 DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"
