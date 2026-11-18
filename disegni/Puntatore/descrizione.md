@@ -26,3 +26,6 @@ Ogni forma ha due parti: "contorno" (sotto) e "forma" (sopra).
 ## Note
 - Le istanze del puntatore seguono le variabili: nessuna modifica a mano sulle istanze.
 - Le variabili `scorrimento/cursore*` sono della barra di scorrimento, non del puntatore.
+
+## Immagini esportate (18/11/2026)
+Il codice usa le PNG esportate da Figma (alfa vero, ricavato esportando su fondo nero e bianco), in `risorse/puntatore/`: normale, collegamento, testo, divieto, attesa-00..11 (32x32, componente 24x24 a x=+2, y=0, pixel 1:1; la tela piu' grande serve all'ombra). Punti caldi nelle immagini a 32: freccia e divieto (6, 3), mano (11, 4), barra a I e attesa (14, 12). Confronti in `confronto-prima-*.png` (script vecchio contro Figma) e `confronto-dopo-*.png` (compositore contro Figma); foto della sandbox in `codice/`.

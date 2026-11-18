@@ -47,8 +47,6 @@ const struct tema tema_chiaro = {
     .bordo_controllo                = OPACO(0xC4C4C7),
     .bordo_separatore               = OPACO(0xEBEBEC),
     .bordo_focus                    = OPACO(0x4C4C52),
-    .cursore_riempimento            = OPACO(0x37373B),
-    .cursore_contorno               = OPACO(0xFFFFFF),
     .oggetto_riempimento            = OPACO(0xF2F2F3),
     .oggetto_riempimento_forte      = OPACO(0xE3E3E5),
     .oggetto_tratto                 = OPACO(0x77777B),
@@ -121,8 +119,6 @@ const struct tema tema_scuro = {
     .bordo_separatore               = OPACO(0x55555B),
     .bordo_focus                    = OPACO(0xE3E3E5),
     /* il puntatore non cambia col tema: freccia scura e contorno bianco anche nello scuro */
-    .cursore_riempimento            = OPACO(0x37373B),
-    .cursore_contorno               = OPACO(0xFFFFFF),
     .oggetto_riempimento            = OPACO(0x2F2F33),
     .oggetto_riempimento_forte      = OPACO(0x414146),
     .oggetto_tratto                 = OPACO(0x9A9A9F),

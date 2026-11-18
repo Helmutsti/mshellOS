@@ -53,8 +53,6 @@
 #define BORDO_CONTROLLO                          (tema_corrente->bordo_controllo)
 #define BORDO_SEPARATORE                         (tema_corrente->bordo_separatore)
 #define BORDO_FOCUS                              (tema_corrente->bordo_focus)
-#define CURSORE_RIEMPIMENTO                      (tema_corrente->cursore_riempimento)
-#define CURSORE_CONTORNO                         (tema_corrente->cursore_contorno)
 #define OGGETTO_RIEMPIMENTO                      (tema_corrente->oggetto_riempimento)
 #define OGGETTO_RIEMPIMENTO_FORTE                (tema_corrente->oggetto_riempimento_forte)
 #define OGGETTO_TRATTO                           (tema_corrente->oggetto_tratto)
