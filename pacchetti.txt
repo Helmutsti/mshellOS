@@ -7,3 +7,4 @@
 systemd          # il primo programma (PID 1), con journald (registro), logind (sessioni), udev (dispositivi)
 systemd-sysv     # fa di systemd il programma /sbin/init che il kernel fa partire
 linux-image-amd64  # il kernel di Debian con i suoi moduli
+dbus             # il "centralino" standard (D-Bus, dbus-daemon): systemctl, logind, rete, Flatpak e app parlano con i servizi
