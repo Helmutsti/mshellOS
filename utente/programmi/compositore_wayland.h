@@ -9,8 +9,8 @@
  *
  * PASSO 1 della decisione "il compositore passa a Wayland" (SISTEMA.md): Wayland accanto al
  * protocollo di oggi. Ci sono wl_compositor (superfici, commit, frame), wl_shm (ARGB8888 e
- * XRGB8888) e xdg_wm_base (finestre con titolo, configure, chiusura). Tastiera e mouse
- * (wl_seat) non ci sono ancora: sono del passo 2, quando GKit diventera' un client Wayland.
+ * XRGB8888) e xdg_wm_base (finestre con titolo, configure, chiusura). PASSO 2: wl_seat, con il
+ * puntatore (wl_pointer) e la tastiera (wl_keyboard, con la keymap italiana).
  *
  * Questo file non include header di Wayland: compositore.c resta com'e'. */
 #ifndef COMPOSITORE_WAYLAND_H
@@ -31,9 +31,16 @@ int wayland_inizia(void);
 /* Il descrittore e' pronto: legge i messaggi dei programmi e li serve. */
 void wayland_servi(void);
 
-/* Una notizia per la finestra del posto 'i' (come quelle del nostro protocollo): oggi conta
- * solo FUOCO (la cornice cambia e il programma sa di essere "attivo"). */
+/* Una notizia per la finestra del posto 'i' (le stesse che avvisa manda alle nostre finestre):
+ * FUOCO (la cornice cambia, il programma e' "attivo" e riceve enter/leave della tastiera),
+ * PUNTATORE (x, y sono della finestra, cornice compresa: il programma le vede sul contenuto),
+ * USCITO e ROTELLA (wl_pointer). TASTO e TASTO_FISICO non servono: ci sono i tasti grezzi. */
 void wayland_notizia(int i, const struct notizia *n);
+
+/* Un tasto grezzo (EVENTO_TASTO_GREZZO, corekit/chiamate.h): 'codice' di Linux, 'valore' 1
+ * premuto, 0 lasciato, 2 ripetuto (si scarta: ripete il programma), 'mod' i GREZZO_... DOPO il tasto.
+ * Va al programma della finestra con il fuoco (wl_keyboard.key e modifiers). */
+void wayland_tasto(unsigned int codice, int valore, unsigned int mod);
 
 /* La X della cornice: il programma riceve "chiuditi" (xdg_toplevel.close) e decide lui. */
 void wayland_chiedi_chiusura(int i);

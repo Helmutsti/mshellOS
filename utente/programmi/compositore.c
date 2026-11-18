@@ -1776,7 +1776,8 @@ static void al_mouse(const struct evento *e) {
         if (i >= 0 && finestre[i].wayland) {
             /* la cornice di una finestra Wayland e' nostra: i suoi comandi e il trascinamento li
              * gestiamo qui (una finestra nostra lo chiede con RIDUCIMI e TRASCINAMI). Sotto la
-             * testata c'e' il programma, ma senza seat non sente il puntatore. */
+             * testata c'e' il programma: il puntatore sul suo contenuto lo sente (wl_pointer),
+             * quello sulla cornice no (se ne occupa compositore_wayland.c). */
             switch (cornice_comando(finestre[i].l, px - finestre[i].x, py - finestre[i].y)) {
             case CORNICE_CHIUDI:  wayland_chiedi_chiusura(i); break;   /* "chiuditi": decide lui */
             case CORNICE_RIDUCI:  riducimi(i); break;
@@ -1857,6 +1858,14 @@ static void al_tasto_fisico(const struct evento *e) {
         avvisa(fuoco, (struct notizia){ .tipo = TASTO_FISICO, .tasto = e->tasto, .premuto = e->pulsanti });
 }
 
+/* I tasti GREZZI (codice di Linux e modificatori), per i programmi Wayland: li decide il
+ * fuoco, come per le nostre app, ma li consegna compositore_wayland.c (wl_keyboard). Le nostre
+ * app non li vedono mai; i tasti di sistema (volume...) si fermano qui anche per Wayland. */
+static void al_tasto_grezzo(const struct evento *e) {
+    if (tasto_di_sistema(e->tasto)) return;
+    wayland_tasto(e->tasto, (int)e->pulsanti, (unsigned int)e->dx);
+}
+
 static void al_tasto(const struct evento *e) {
     if (fuoco >= 0) avvisa(fuoco, (struct notizia){ .tipo = TASTO, .tasto = e->tasto });
 }
@@ -1908,6 +1917,7 @@ static int servi(int ms) {
         else if (e.tipo == EVENTO_ROTELLA) alla_rotella(&e);
         else if (e.tipo == EVENTO_TASTO) al_tasto(&e);
         else if (e.tipo == EVENTO_TASTO_FISICO) al_tasto_fisico(&e);
+        else if (e.tipo == EVENTO_TASTO_GREZZO) al_tasto_grezzo(&e);
     }
     /* prima i messaggi, poi i collegamenti nuovi: un collegamento nuovo potrebbe
      * riusare il numero di uno appena scollegato, e prendersi il suo 'pronto' */

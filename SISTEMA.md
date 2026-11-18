@@ -213,9 +213,10 @@ resta, passo dopo passo, solo per quello che è davvero nostro.
 1. **Passo 1 (fatto il 18/11/2026):** il compositore impara Wayland ACCANTO al protocollo di oggi.
    Un client Wayland piccolo (`utente/prove/wayland.c`) apre una finestra sulla scrivania; prova
    `wayland`. Dettagli sotto.
-2. **Passo 2 (da fare):** GKit diventa un client Wayland, un'app alla volta. Servono `wl_seat`
-   (tastiera e mouse), `wl_output`, il socket dato dal launcher come le altre porte, e il modo
-   di dire all'app quale finestra è sua (l'identità, per i permessi).
+2. **Passo 2 (in corso):** GKit diventa un client Wayland, un'app alla volta. **Fatto: `wl_seat`**
+   (mouse e tastiera nelle finestre Wayland, vedi "Mouse e tastiera" sotto). Mancano `wl_output`,
+   il socket dato dal launcher come le altre porte, e il modo di dire all'app quale finestra è sua
+   (l'identità, per i permessi).
 3. **Passo 3 (da fare):** via il vecchio protocollo. Resta Wayland con le nostre estensioni
    private: la finestra di scelta (`RUOLO_SCELTA`, il picker), l'identità dell'app per i
    permessi, i pannelli della scrivania (userbar, vassoio).
@@ -232,7 +233,7 @@ resta, passo dopo passo, solo per quello che è davvero nostro.
   e basta. Il codice è in `utente/programmi/compositore_wayland.c`, con un'interfaccia piccola
   verso `compositore.c` (`compositore_wayland.h`: il ponte, "IL PONTE" in `compositore.c`).
   Globali: `wl_compositor` (superfici: attach, damage, frame, commit), `wl_shm` (ARGB8888 e
-  XRGB8888) e `xdg_wm_base` (finestre con titolo, configure, chiusura). Niente seat, output e popup.
+  XRGB8888), `xdg_wm_base` (finestre con titolo, configure, chiusura) e `wl_seat` (passo 2). Niente output e popup.
 - **Come una finestra Wayland entra tra le finestre del compositore**: occupa un posto di
   `finestre[]` come le altre (con `wayland = 1`, senza collegamento né foglio). L'immagine è
   memoria del compositore: la cornice nostra disegnata da UIKit (`cornice_disegna`, `uikit_compositore.h`:
@@ -241,6 +242,28 @@ resta, passo dopo passo, solo per quello che è davvero nostro.
   smerigliato, primo piano e fuoco sono quelli di tutte le finestre. La cornice la gestisce il
   compositore sul puntatore: trascinare dalla testata, ridurre, e la X che manda
   `xdg_toplevel.close` (il programma decide).
+- **Mouse e tastiera (passo 2)**: `wl_seat` "seat0", versione 7, capacità puntatore e tastiera
+  (la tastiera solo se c'è la keymap). *Puntatore*: le notizie PUNTATORE, USCITO, ROTELLA e FUOCO
+  che `avvisa` manda alle nostre finestre arrivano a Wayland (`wayland_notizia`): chi "sente" il
+  puntatore lo decide quindi `al_mouse` come sempre (finestra sotto il puntatore, presa durante il
+  clic, niente puntatore che passa a una finestra senza fuoco). Le coordinate sono del contenuto
+  (sotto la testata); sulla cornice il programma non sente niente (leave), e un clic cominciato lì
+  non gli arriva. Pulsanti `BTN_LEFT/RIGHT/MIDDLE`, rotella come `axis` (10 per scatto) più
+  `axis_discrete`, ogni gruppo chiuso da `frame`. La rotella a una finestra senza fuoco arriva lo
+  stesso (enter, axis, leave). `set_cursor` si ignora: il compositore mostra la sua freccia.
+  *Tastiera*: enter/leave seguono il FUOCO (lo stesso delle nostre finestre); `key` ha il codice di
+  Linux (il programma aggiunge 8 lato XKB); `modifiers` dopo ogni tasto che li cambia; ripetizione
+  dal programma (`repeat_info`: 33 al secondo dopo 500 ms; `TASTI_RIPETI_*` in `chiamate.h`, gli
+  stessi valori che `eventi` chiede al kernel). **I codici grezzi** arrivano al compositore con un
+  evento in più, `EVENTO_TASTO_GREZZO` (`corekit/chiamate.h`): codice di Linux del tasto fisico (anche
+  il tastierino con Bloc Num spento, dove il vecchio `EVENTO_TASTO_FISICO` manda il tasto di
+  movimento), premuto, lasciato o ripetuto, e i modificatori DOPO il tasto (`GREZZO_*`). `eventi` lo
+  manda prima degli altri eventi dello stesso tasto; le nostre app non lo vedono mai. *La keymap*:
+  il testo XKB_V1 della tastiera italiana si compila a ogni compilazione con `xkbcomp`
+  (`strumenti/compilazione/tastiera.sh`: `pc+it+inet(evdev)+kpdl(comma)`, pacchetti Alpine `xkbcomp`
+  e `xkeyboard-config` negli attrezzi) e va in `/system/resources/keymaps/it.xkb`; il compositore la
+  legge all'avvio e la manda in un memfd sigillato a ogni `wl_keyboard`. Non c'è nessuna libreria
+  XKB nel compositore: i client la leggono con la loro.
 - **Il socket**: `/run/mshell/wayland-prova`, aperto dal compositore stesso (`wl_display_add_socket`;
   `/run` è in memoria, niente dati scrivibili sotto `/system`). Solo per la prova: lo apre root con
   i permessi normali, un'app della persona non lo raggiunge. Le app normali NON hanno ancora Wayland.

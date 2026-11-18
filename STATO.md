@@ -53,10 +53,23 @@ da sorgenti ufficiali, `strumenti/compilazione/wayland.sh`; `utente/programmi/co
 globali `wl_compositor`, `wl_shm`, `xdg_wm_base`; un client Wayland di prova
 (`utente/prove/wayland.c`, prova `wayland`, solo sandbox: `disco_wayland.img` non c'è ancora per
 QEMU) apre una finestra con la cornice nostra sulla scrivania, si sposta, si chiude con la X.
-Socket di prova `/run/mshell/wayland-prova`; le app normali NON hanno Wayland. **Passo 2 (da
-fare)**: GKit client Wayland, un'app alla volta (serve wl_seat per tastiera e mouse, wl_output,
-il socket dato dal launcher come le altre porte con `WAYLAND_SOCKET`, l'identità dell'app per i
-permessi, il ridimensionamento). **Ritmo dei fotogrammi: fatto (limite chiuso)**: il "fatto" dei
+Socket di prova `/run/mshell/wayland-prova`; le app normali NON hanno Wayland. **Passo 2, primo
+pezzo fatto (mouse e tastiera)**: `wl_seat` "seat0" (versione 7) con `wl_pointer` e `wl_keyboard`.
+Il puntatore va alla finestra Wayland con le stesse regole delle nostre (sotto il puntatore, presa
+durante il clic, niente puntatore che passa senza fuoco; la rotella invece arriva anche senza fuoco:
+enter, axis, leave), con le coordinate del CONTENUTO (sotto la testata); la cornice resta del
+compositore e un clic cominciato sulla cornice non arriva al programma. La tastiera segue il fuoco
+(enter/leave), con i codici di Linux e i modificatori (Maiusc, Ctrl, Alt, AltGr, Super, Bloc Maiusc,
+Bloc Num); la ripetizione la fa il programma (`repeat_info` 33 al secondo dopo 500 ms: il compositore
+scarta le ripetizioni del kernel). **Codici grezzi dei tasti**: `eventi` manda un evento in più,
+`EVENTO_TASTO_GREZZO` (codice di Linux del tasto fisico, premuto/lasciato/ripetuto, e i modificatori
+dopo il tasto); le nostre app non lo vedono. **La keymap** (XKB_V1, italiana) si compila a ogni
+compilazione con `xkbcomp` (`strumenti/compilazione/tastiera.sh`, layout "it" di xkeyboard-config,
+nei pacchetti degli attrezzi) e sta in `/system/resources/keymaps/it.xkb`; il compositore la legge
+all'avvio e la manda in un memfd sigillato (nessuna libreria XKB nel compositore). Prova
+`wayland_ingresso`. **Ancora da fare del passo 2**: GKit client Wayland, un'app alla volta (serve
+wl_output, il socket dato dal launcher come le altre porte con `WAYLAND_SOCKET`, l'identità dell'app
+per i permessi, il ridimensionamento, la forma del cursore scelta dal programma, gli appunti). **Ritmo dei fotogrammi: fatto (limite chiuso)**: il "fatto" dei
 frame callback non parte più a ogni giro del ciclo ma a 60 tic al secondo (orologio monotonico,
 allineato a multipli di 1000/60 ms), acceso solo se una finestra visibile aspetta; le finestre
 ridotte non ricevono niente. Prova `wayland_ritmo` (client `wayland_anima`, disco

@@ -20,6 +20,20 @@
  *
  * Quello che fa lo scrive nel registro, una riga per cosa ("wayland: ..."): la prova le legge.
  *
+ * IL SEAT (passo 2: mouse e tastiera). Il programma chiede wl_seat e, secondo le sue capacita',
+ * wl_pointer e wl_keyboard; tutto quello che riceve lo scrive nel registro, una riga per evento
+ * (le coordinate sono quelle del CONTENUTO, sotto la testata della cornice):
+ *   wayland: seat capacita' puntatore tastiera
+ *   wayland: puntatore entra 120,80  /  puntatore esce  /  puntatore muove 130,80
+ *   wayland: clic BTN_LEFT premuto 130,80  /  clic BTN_RIGHT rilasciato 130,80
+ *   wayland: rotella verticale 10  /  rotella scatti verticale 1  (e orizzontale)
+ *   wayland: keymap XKB_V1 56012 byte  /  ripetizione 33 al secondo dopo 500 ms
+ *   wayland: tastiera fuoco si (tasti gia' giu': ...)  /  tastiera fuoco no
+ *   wayland: tasto 30 premuto  /  tasto 30 rilasciato
+ *   wayland: modificatori premuti 0x1 agganciati 0x0 bloccati 0x10
+ * Il programma non decodifica i tasti in caratteri (non ha la libreria XKB): scrive i codici di
+ * Linux, che la prova controlla. Controlla anche che i numeri di serie non tornino mai indietro.
+ *
  * LA MODALITA' "ANIMA" (il ritmo dei fotogrammi, test/prove/wayland_ritmo.py): se il programma si
  * chiama wayland_anima (init li fa partire senza argomenti: il nome e' l'argomento), ridisegna
  * ad ogni "fatto" del frame callback, spostando un quadrato, e chiede subito il prossimo. Ogni
@@ -30,6 +44,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <poll.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +52,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
+#include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
 
@@ -56,6 +72,11 @@ static struct wl_surface *superficie_anima;
 static struct wl_buffer *buffer_anima;
 static uint32_t *pixel_anima;              /* il buffer, sempre mappato: si ridisegna ad ogni "fatto" */
 static unsigned int fotogrammi;            /* i "fatto" ricevuti (e fotogrammi disegnati) */
+static struct wl_seat *seat;
+static struct wl_pointer *puntatore;
+static struct wl_keyboard *tastiera;
+static uint32_t ultimo_serial;             /* i numeri di serie non devono mai tornare indietro */
+static int ultimo_x, ultimo_y;             /* l'ultima posizione del puntatore, sul contenuto */
 
 /* --- i globali --- */
 
@@ -67,11 +88,138 @@ static void globale(void *dati, struct wl_registry *registro, uint32_t nome, con
         shm = wl_registry_bind(registro, nome, &wl_shm_interface, 1);
     else if (!strcmp(interfaccia, xdg_wm_base_interface.name))
         base = wl_registry_bind(registro, nome, &xdg_wm_base_interface, versione < 3 ? versione : 3);
+    else if (!strcmp(interfaccia, wl_seat_interface.name))
+        seat = wl_registry_bind(registro, nome, &wl_seat_interface, versione < 7 ? versione : 7);
 }
 
 static void globale_tolto(void *dati, struct wl_registry *registro, uint32_t nome) { (void)dati; (void)registro; (void)nome; }
 
 static const struct wl_registry_listener registro_ascolto = { globale, globale_tolto };
+
+/* --- il seat: puntatore e tastiera --- */
+
+static void riga(const char *a, const char *formato, ...) __attribute__((format(printf, 2, 3)));
+static void riga(const char *a, const char *formato, ...) {
+    char testo[256];
+    va_list v;
+    va_start(v, formato);
+    vsnprintf(testo, sizeof testo, formato, v);
+    va_end(v);
+    scrivi_riga("wayland", a, testo);
+}
+
+static void controlla_serial(const char *cosa, uint32_t serial) {
+    if (serial < ultimo_serial) riga("FALLITA: ", "il numero di serie di %s torna indietro (%u dopo %u)", cosa, serial, ultimo_serial);
+    ultimo_serial = serial;
+}
+
+static const char *nome_pulsante(uint32_t codice) {
+    return codice == BTN_LEFT ? "BTN_LEFT" : codice == BTN_RIGHT ? "BTN_RIGHT" : codice == BTN_MIDDLE ? "BTN_MIDDLE" : "BTN_?";
+}
+
+static void pu_entra(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y) {
+    (void)d; (void)p; (void)s;
+    controlla_serial("pointer.enter", serial);
+    ultimo_x = wl_fixed_to_int(x);
+    ultimo_y = wl_fixed_to_int(y);
+    riga("puntatore entra ", "%d,%d", ultimo_x, ultimo_y);
+}
+static void pu_esce(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s) {
+    (void)d; (void)p; (void)s;
+    controlla_serial("pointer.leave", serial);
+    riga("puntatore esce", "%s", "");
+}
+static void pu_muove(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y) {
+    (void)d; (void)p; (void)t;
+    ultimo_x = wl_fixed_to_int(x);
+    ultimo_y = wl_fixed_to_int(y);
+    riga("puntatore muove ", "%d,%d", ultimo_x, ultimo_y);
+}
+static void pu_pulsante(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t pulsante, uint32_t stato) {
+    (void)d; (void)p; (void)t;
+    controlla_serial("pointer.button", serial);
+    riga("clic ", "%s %s %d,%d", nome_pulsante(pulsante), stato == WL_POINTER_BUTTON_STATE_PRESSED ? "premuto" : "rilasciato",
+         ultimo_x, ultimo_y);
+}
+static void pu_asse(void *d, struct wl_pointer *p, uint32_t t, uint32_t asse, wl_fixed_t valore) {
+    (void)d; (void)p; (void)t;
+    riga("rotella ", "%s %d", asse == WL_POINTER_AXIS_VERTICAL_SCROLL ? "verticale" : "orizzontale", wl_fixed_to_int(valore));
+}
+static void pu_asse_discreto(void *d, struct wl_pointer *p, uint32_t asse, int32_t scatti) {
+    (void)d; (void)p;
+    riga("rotella scatti ", "%s %d", asse == WL_POINTER_AXIS_VERTICAL_SCROLL ? "verticale" : "orizzontale", scatti);
+}
+static void pu_frame(void *d, struct wl_pointer *p) { (void)d; (void)p; }
+static void pu_sorgente(void *d, struct wl_pointer *p, uint32_t s) { (void)d; (void)p; (void)s; }
+static void pu_fine_asse(void *d, struct wl_pointer *p, uint32_t t, uint32_t a) { (void)d; (void)p; (void)t; (void)a; }
+static const struct wl_pointer_listener puntatore_ascolto = {
+    .enter = pu_entra, .leave = pu_esce, .motion = pu_muove, .button = pu_pulsante,
+    .axis = pu_asse, .frame = pu_frame, .axis_source = pu_sorgente, .axis_stop = pu_fine_asse,
+    .axis_discrete = pu_asse_discreto,
+};
+
+static void ta_keymap(void *d, struct wl_keyboard *k, uint32_t formato, int32_t fd, uint32_t byte) {
+    (void)d; (void)k;
+    /* la keymap si mappa per controllare che sia leggibile e finisca con lo zero; decodificarla
+     * serve la libreria XKB, che il programma di prova non ha */
+    char *testo = mmap(0, byte, PROT_READ, MAP_PRIVATE, fd, 0);
+    int valida = testo != MAP_FAILED && byte > 1 && testo[byte - 1] == 0 && strstr(testo, "xkb_keymap") != 0;
+    if (testo != MAP_FAILED) munmap(testo, byte);
+    close(fd);
+    riga("keymap ", "%s %u byte%s", formato == WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1 ? "XKB_V1" : "formato sconosciuto", byte,
+         valida ? "" : " (NON VALIDA)");
+}
+static void ta_entra(void *d, struct wl_keyboard *k, uint32_t serial, struct wl_surface *s, struct wl_array *giu) {
+    (void)d; (void)k; (void)s;
+    controlla_serial("keyboard.enter", serial);
+    char elenco[160] = "";
+    uint32_t *c;
+    wl_array_for_each(c, giu) {
+        size_t n = strlen(elenco);
+        snprintf(elenco + n, sizeof elenco - n, "%s%u", n ? "," : "", *c);
+    }
+    riga("tastiera fuoco si", " (tasti gia' giu': %s)", *elenco ? elenco : "nessuno");
+}
+static void ta_esce(void *d, struct wl_keyboard *k, uint32_t serial, struct wl_surface *s) {
+    (void)d; (void)k; (void)s;
+    controlla_serial("keyboard.leave", serial);
+    riga("tastiera fuoco no", "%s", "");
+}
+static void ta_tasto(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t t, uint32_t tasto, uint32_t stato) {
+    (void)d; (void)k; (void)t;
+    controlla_serial("keyboard.key", serial);
+    riga("tasto ", "%u %s", tasto, stato == WL_KEYBOARD_KEY_STATE_PRESSED ? "premuto" : "rilasciato");
+}
+static void ta_modificatori(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t premuti, uint32_t agganciati,
+                            uint32_t bloccati, uint32_t gruppo) {
+    (void)d; (void)k; (void)gruppo;
+    controlla_serial("keyboard.modifiers", serial);
+    riga("modificatori ", "premuti 0x%x agganciati 0x%x bloccati 0x%x", premuti, agganciati, bloccati);
+}
+static void ta_ripetizione(void *d, struct wl_keyboard *k, int32_t ritmo, int32_t attesa) {
+    (void)d; (void)k;
+    riga("ripetizione ", "%d al secondo dopo %d ms", ritmo, attesa);
+}
+static const struct wl_keyboard_listener tastiera_ascolto = {
+    .keymap = ta_keymap, .enter = ta_entra, .leave = ta_esce, .key = ta_tasto,
+    .modifiers = ta_modificatori, .repeat_info = ta_ripetizione,
+};
+
+static void seat_capacita(void *d, struct wl_seat *st, uint32_t capacita) {
+    (void)d;
+    riga("seat capacita' ", "%s%s", capacita & WL_SEAT_CAPABILITY_POINTER ? "puntatore " : "",
+         capacita & WL_SEAT_CAPABILITY_KEYBOARD ? "tastiera" : "");
+    if ((capacita & WL_SEAT_CAPABILITY_POINTER) && !puntatore) {
+        puntatore = wl_seat_get_pointer(st);
+        wl_pointer_add_listener(puntatore, &puntatore_ascolto, 0);
+    }
+    if ((capacita & WL_SEAT_CAPABILITY_KEYBOARD) && !tastiera) {
+        tastiera = wl_seat_get_keyboard(st);
+        wl_keyboard_add_listener(tastiera, &tastiera_ascolto, 0);
+    }
+}
+static void seat_nome(void *d, struct wl_seat *st, const char *nome) { (void)d; (void)st; riga("seat nome ", "%s", nome); }
+static const struct wl_seat_listener seat_ascolto = { seat_capacita, seat_nome };
 
 /* --- xdg --- */
 
@@ -234,6 +382,7 @@ int main(int quanti, char **argomenti) {
     }
     scrivi_riga("wayland", "collegata: wl_compositor, wl_shm, xdg_wm_base", "");
     xdg_wm_base_add_listener(base, &base_ascolto, 0);
+    if (seat) wl_seat_add_listener(seat, &seat_ascolto, 0);   /* le capacita' arrivano al prossimo dispatch */
 
     struct wl_surface *superficie = wl_compositor_create_surface(compositore);
     struct xdg_surface *xdg = xdg_wm_base_get_xdg_surface(base, superficie);

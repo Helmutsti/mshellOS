@@ -63,6 +63,9 @@ done
 (cd risorse && find . -type f | sort) | while read -r f; do
     metti_file "risorse/${f#./}" "/system/resources/${f#./}" 644
 done
+# la keymap della tastiera italiana per i programmi Wayland (xkbcomp, come build.sh)
+sh strumenti/compilazione/tastiera.sh "$O/it.xkb"
+metti_file "$O/it.xkb" /system/resources/keymaps/it.xkb 644
 metti_file $O/sandbox/init /system/init 755
 SERVIZI="compositore eventi launcher scrivania network catalog picker tasks"
 for nome in $SERVIZI; do metti_file "$O/sandbox/$nome" "/system/services/$nome/$nome" 755; done

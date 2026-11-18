@@ -206,7 +206,8 @@ mkdir -p "$SCARICO/$ARCH"
 # FAT della partizione di avvio, scritta senza montarla
 # make: la compilazione (programmi.mk); zip: i pacchetti delle app
 # efi-mkuki e systemd-efistub: la UKI (passo 5)
-ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub xz"
+# xkbcomp e xkeyboard-config: la keymap della tastiera italiana per i programmi Wayland (tastiera.sh)
+ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub xz xkbcomp xkeyboard-config"
 apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = "$(echo $ATTREZZI | wc -w)" ] ||
     apk add --cache-dir "$SCARICO/$ARCH" $ATTREZZI >/dev/null
 
@@ -360,6 +361,12 @@ done
 # legge dal disco (gkit/interno/materiali_file.c) e UIKit carica i suoi la prima volta che servono
 # (uikit/materiali.h). Sono di tutti da leggere: 644.
 metti_albero risorse /system/resources 0
+
+# La keymap della tastiera italiana (formato XKB) per i programmi Wayland: la compila xkbcomp dai
+# file di xkeyboard-config a ogni compilazione (strumenti/compilazione/tastiera.sh), il compositore
+# la legge all'avvio e la manda a chi chiede wl_keyboard. Come le altre risorse: 644.
+sh strumenti/compilazione/tastiera.sh "$P/it.xkb"
+metti_file "$P/it.xkb" /system/resources/keymaps/it.xkb 644
 
 # La configurazione predefinita dei servizi: i file di utente/config/ tali e quali in
 # /system/config (oggi network/network.conf e firewall.conf, letti dal servizio network). Di tutti da

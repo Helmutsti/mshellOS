@@ -4,4 +4,4 @@
 # Lo prepara strumenti/compilazione/attrezzi.sh (run.sh, run.ps1 e collaudo.py lo chiamano).
 # build.sh funziona anche in un alpine:3.24 nudo: installa da se' quello che manca.
 FROM alpine:3.24
-RUN apk add --no-cache clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub
+RUN apk add --no-cache clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub xkbcomp xkeyboard-config

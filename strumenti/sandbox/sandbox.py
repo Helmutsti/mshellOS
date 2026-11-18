@@ -82,7 +82,7 @@ def processore():
 CPU, ARCH, PIATTAFORMA = processore()
 # attrezzi e oggetti compilati sono per processore: non si mescolano (l'immagine "mshell-sandbox"
 # no, e' una sola e si rifa' a ogni compilazione)
-ATTREZZI = f"mshell-sandbox-attrezzi-4-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
+ATTREZZI = f"mshell-sandbox-attrezzi-5-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
 OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", f"mshell-sandbox-oggetti-{ARCH}")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
@@ -148,7 +148,7 @@ def prepara_attrezzi():
     nome = f"{ATTREZZI}-{os.getpid()}"
     # una sola cartella di pacchetti per processore, come build.sh: attrezzi e radice di musl
     # sono dello stesso processore, quello del computer
-    comando = (f"apk add --cache-dir /w/build/scarico/{ARCH} clang lld binutils make zip tar xz >/dev/null && "
+    comando = (f"apk add --cache-dir /w/build/scarico/{ARCH} clang lld binutils make zip tar xz xkbcomp xkeyboard-config >/dev/null && "
                f"apk --arch {ARCH} --root /radice --initdb --no-scripts "
                f"--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/{ARCH} "
                f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt ncurses-dev ncurses-static libffi-dev expat-dev expat-static >/dev/null")

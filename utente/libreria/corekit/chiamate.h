@@ -211,6 +211,25 @@ struct zona_schermo { int x0, y0, x1, y1; };   /* x0 <= x < x1, y0 <= y < y1 */
                             * linux/input-event-codes.h), 'pulsanti' vale 1 (premuto), 0
                             * (lasciato) o 2 (ripetuto: il tasto e' tenuto giu', come su
                             * Windows e Mac; i modificatori non si ripetono) */
+#define EVENTO_TASTO_GREZZO 6 /* un tasto, IDENTICO a come l'ha dato la tastiera: per i programmi
+                            * Wayland (wl_keyboard), che il carattere se lo traducono da se' con
+                            * la keymap. 'tasto' e' il codice di Linux del tasto FISICO (anche
+                            * del tastierino con Bloc Num spento, dove EVENTO_TASTO_FISICO
+                            * manda invece il tasto di movimento), 'pulsanti' vale 1, 0 o 2
+                            * (ripetuto: Wayland lo ripete il programma, il compositore lo
+                            * scarta), 'dx' sono i MODIFICATORI DOPO questo tasto (GREZZO_...).
+                            * E' un evento in piu': le nostre app non lo vedono mai */
+#define GREZZO_MAIUSC       1   /* i bit di 'dx' di EVENTO_TASTO_GREZZO: tenuti giu' (o accesi) */
+#define GREZZO_CTRL         2
+#define GREZZO_ALT          4
+#define GREZZO_ALTGR        8
+#define GREZZO_META         16  /* il tasto con il logo (Super) */
+#define GREZZO_BLOC_MAIUSC  32  /* acceso (Caps Lock) */
+#define GREZZO_BLOC_NUM     64  /* acceso (Num Lock) */
+/* La ripetizione dei tasti, UN solo posto: la regola eventi (EVIOCSREP) e quella che si dice ai
+ * programmi Wayland (wl_keyboard.repeat_info, che ripetono da soli). */
+#define TASTI_RIPETI_DOPO 500   /* ms prima di ripetere un tasto tenuto giu' */
+#define TASTI_RIPETI_OGNI  30   /* poi una volta ogni 30 ms */
 #define PUNTATORE_MAX 32767
 #define EVENTO_ROTELLA 4   /* la rotella del mouse ha girato di dy "scatti" (dx per quella
                             * orizzontale, se c'e'). Come gli spostamenti, dy positivo = verso

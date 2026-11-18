@@ -12,7 +12,8 @@
  *   2. guarda /dev/input (inotify): un dispositivo collegato dopo (le tastiere USB
  *      arrivano qualche momento dopo l'avvio, o quando le si attacca) si apre da solo;
  *   3. traduce: i tasti con la TASTIERA ITALIANA (qui sotto), i movimenti e i pulsanti
- *      in EVENTO_MOUSE / EVENTO_PUNTATORE, la rotella in EVENTO_ROTELLA (chiamate.h);
+ *      in EVENTO_MOUSE / EVENTO_PUNTATORE, la rotella in EVENTO_ROTELLA (chiamate.h); e per ogni
+ *      tasto manda anche, prima, un EVENTO_TASTO_GREZZO (il tasto com'e', per Wayland);
  *   4. manda ogni evento, un messaggio per evento, nel tubo che gli presta init al
  *      descrittore 0. All'altro capo legge il compositore.
  *
@@ -45,8 +46,8 @@
 #define D_TUBO 0            /* prestato da init: qui si scrivono gli eventi */
 #define MAX_DISPOSITIVI 16
 
-#define RIPETI_DOPO 500     /* ms prima di ripetere un tasto tenuto giu' */
-#define RIPETI_OGNI  30     /* poi una volta ogni 30 ms */
+#define RIPETI_DOPO TASTI_RIPETI_DOPO   /* ms prima di ripetere un tasto tenuto giu' (chiamate.h) */
+#define RIPETI_OGNI TASTI_RIPETI_OGNI   /* poi una volta ogni 30 ms */
 
 /* --- la tastiera italiana: dal TASTO premuto al CARATTERE ---
  *
@@ -135,6 +136,39 @@ static unsigned short mandato_dal_tastierino[KEY_KPDOT + 1];
 
 static void luce_bloc_num(void);
 
+/* --- i tasti GREZZI, per Wayland ---
+ *
+ * I programmi Wayland vogliono il tasto com'e' (il codice di Linux, premuto o lasciato) e lo
+ * stato dei modificatori: il carattere se lo traducono da se' con la keymap. Per ogni tasto,
+ * prima di tradurlo, si manda un EVENTO_TASTO_GREZZO. 'mod_giu' ha un bit per ogni tasto
+ * modificatore tenuto giu' (a sinistra e a destra contano ciascuno), cosi' rilasciare uno dei
+ * due Maiusc non spegne l'altro. */
+enum { M_LSHIFT, M_RSHIFT, M_LCTRL, M_RCTRL, M_LALT, M_RALT, M_LMETA, M_RMETA };
+static unsigned int mod_giu;
+
+static int bit_modificatore(unsigned int codice) {
+    switch (codice) {
+    case KEY_LEFTSHIFT: return M_LSHIFT;   case KEY_RIGHTSHIFT: return M_RSHIFT;
+    case KEY_LEFTCTRL:  return M_LCTRL;    case KEY_RIGHTCTRL:  return M_RCTRL;
+    case KEY_LEFTALT:   return M_LALT;     case KEY_RIGHTALT:   return M_RALT;
+    case KEY_LEFTMETA:  return M_LMETA;    case KEY_RIGHTMETA:  return M_RMETA;
+    default:            return -1;
+    }
+}
+
+/* I modificatori adesso, come bit GREZZO_... */
+static int modificatori_adesso(void) {
+    int m = 0;
+    if (mod_giu & (1u << M_LSHIFT | 1u << M_RSHIFT)) m |= GREZZO_MAIUSC;
+    if (mod_giu & (1u << M_LCTRL | 1u << M_RCTRL))   m |= GREZZO_CTRL;
+    if (mod_giu & (1u << M_LALT))                    m |= GREZZO_ALT;
+    if (mod_giu & (1u << M_RALT))                    m |= GREZZO_ALTGR;
+    if (mod_giu & (1u << M_LMETA | 1u << M_RMETA))   m |= GREZZO_META;
+    if (caps)    m |= GREZZO_BLOC_MAIUSC;
+    if (numlock) m |= GREZZO_BLOC_NUM;
+    return m;
+}
+
 static void manda_evento(const struct evento *e) {
     if (manda(D_TUBO, e, sizeof *e) < 0) esci();   /* il tubo non c'e' piu': init ci rifara' */
 }
@@ -166,6 +200,13 @@ static int e_modificatore(unsigned int codice) {
 static void tasto(unsigned int codice, int valore) {
     if (valore == 2 && e_modificatore(codice)) return;
     if (codice == KEY_NUMLOCK && valore == 1) { numlock = !numlock; luce_bloc_num(); }
+    if (codice == KEY_CAPSLOCK && valore == 1) caps = !caps;
+    /* il tasto grezzo (per Wayland), con lo stato dei modificatori DOPO di lui: i blocchi sono
+     * gia' cambiati qui sopra, i modificatori si aggiornano adesso */
+    int bit = bit_modificatore(codice);
+    if (bit >= 0 && valore != 2) mod_giu = valore ? mod_giu | 1u << bit : mod_giu & ~(1u << bit);
+    manda_evento(&(struct evento){ .tipo = EVENTO_TASTO_GREZZO, .tasto = codice, .dx = modificatori_adesso(),
+                                   .pulsanti = (unsigned int)valore });
     int cifra = 0;   /* il tasto del tastierino che qui e' una cifra (o la virgola) */
     if (e_tasto_di_numeri(codice)) {
         if (valore == 1)
@@ -183,7 +224,7 @@ static void tasto(unsigned int codice, int valore) {
     if (codice == KEY_LEFTSHIFT || codice == KEY_RIGHTSHIFT) { shift = valore != 0; return; }
     if (codice == KEY_RIGHTALT)                              { altgr = valore != 0; return; }
     if (valore == 0) return;                             /* gli altri rilasci non ci interessano */
-    if (codice == KEY_CAPSLOCK) { if (valore == 1) caps = !caps; return; }
+    if (codice == KEY_CAPSLOCK) return;   /* (il blocco e' gia' cambiato, in cima) */
     unsigned int c;
     if (cifra || codice == KEY_KPMINUS || codice == KEY_KPPLUS || codice == KEY_KPSLASH ||
         codice == KEY_KPENTER) {

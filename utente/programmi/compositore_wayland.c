@@ -24,13 +24,20 @@
  * LA CHIUSURA e' sempre una richiesta: la X manda xdg_toplevel.close e il programma decide (se
  * chiude, il socket si chiude e la finestra sparisce).
  *
- * COSA NON C'E' ANCORA (passo 2): wl_seat (tastiera e mouse), wl_output, i popup, il
- * ridimensionamento fatto dalla persona, i ping ai programmi, la cadenza dei fotogrammi. */
+ * IL PASSO 2 e' wl_seat: il puntatore e la tastiera (vedi "wl_seat", piu' sotto).
+ *
+ * COSA NON C'E' ANCORA: wl_output, i popup, il ridimensionamento fatto dalla persona, i ping ai
+ * programmi, la forma del cursore scelta dal programma, gli appunti (data_device). */
 #define _GNU_SOURCE
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
+#include <linux/input-event-codes.h>   /* BTN_LEFT, KEY_MAX */
 #include <wayland-server.h>
 #include "xdg-shell-server-protocol.h"
 
@@ -48,6 +55,9 @@
 #define LARGHEZZA_MINIMA 160
 
 static struct wl_display *display;
+
+/* quanti pixel di scorrimento vale uno scatto della rotella (wl_pointer.axis; weston usa 10) */
+#define PIXEL_PER_SCATTO 10
 
 /* Una SUPERFICIE: quello che il programma disegna. 'in_attesa': le richieste frame fatte dopo
  * l'ultimo commit; 'da_servire': quelle gia' confermate da un commit, che aspettano il prossimo
@@ -78,6 +88,13 @@ struct finestra_wl {
     int cl, ch;
     unsigned int *immagine;              /* cornice + contenuto: l x a */
     int l, a;
+    struct wl_client *cliente;           /* il programma: a lui vanno i wl_pointer e wl_keyboard */
+    /* il puntatore (vedi "wl_seat", piu' sotto) */
+    int dentro;                          /* il puntatore e' entrato nella superficie (wl_pointer.enter) */
+    int px, py;                          /* l'ultima posizione detta al programma, sulla superficie */
+    unsigned int visti;                  /* i pulsanti (PULSANTE_...) tenuti giu' all'ultima notizia */
+    unsigned int consegnati;             /* quelli premuti dentro la superficie, di cui il programma sa */
+    unsigned int ignorati;               /* quelli premuti fuori (sulla cornice): il programma non li vede */
 };
 /* chi e' di Wayland in ogni posto del compositore: cresce con i posti (a raddoppio, a zero) */
 static struct finestra_wl **per_posto;
@@ -339,6 +356,7 @@ static void wm_xdg_surface(struct wl_client *client, struct wl_resource *r, uint
         return;
     }
     w->superficie = s;
+    w->cliente = client;
     w->xdg_surface = x;
     w->slot = -1;
     s->finestra = w;
@@ -515,10 +533,319 @@ static void lega_compositor(struct wl_client *client, void *dati, uint32_t versi
     wl_resource_set_implementation(r, &comp_interfaccia, 0, 0);
 }
 
+/* --- wl_seat: il puntatore e la tastiera ---
+ *
+ * Un "seat" e' un posto davanti al computer: una tastiera e un mouse della stessa persona. Il
+ * programma ne chiede il wl_pointer (il mouse) e il wl_keyboard (la tastiera) e da li' gli
+ * arrivano gli eventi. Il compositore decide A CHI vanno con le stesse regole delle nostre
+ * finestre, senza regole nuove: le notizie PUNTATORE, USCITO, ROTELLA e FUOCO sono quelle di
+ * avvisa (compositore.c) per una finestra con il collegamento, e arrivano qui (wayland_notizia);
+ * i tasti grezzi li manda al_tasto_grezzo (wayland_tasto).
+ *
+ * IL PUNTATORE. Le coordinate che il programma vede sono quelle della SUPERFICIE, cioe' del
+ * contenuto: la testata (la cornice nostra) non e' sua. Sulla cornice il programma non sente
+ * niente: ci pensa il compositore (trascinare, ridurre, chiudere). Un clic cominciato sulla
+ * cornice non gli arriva, nemmeno quando il puntatore entra nel contenuto tenendo premuto; uno
+ * cominciato nel contenuto gli arriva anche quando il puntatore esce, fino al rilascio (come in
+ * ogni compositore: la "presa" del clic). Il puntatore e' "dentro" da enter a leave.
+ * Gli eventi di un gruppo (spostamento + pulsante) finiscono con wl_pointer.frame.
+ * La rotella a una finestra senza fuoco (che non sente il puntatore, scelta della persona)
+ * arriva lo stesso: per quel gruppo il puntatore "entra", gira, "esce".
+ *
+ * LA TASTIERA. Il programma riceve la keymap (il testo XKB dell'italiano, in un memfd: vedi
+ * carica_keymap), enter e leave quando la finestra prende o perde il FUOCO, i tasti con il
+ * codice di Linux (la libreria XKB del programma aggiunge 8) e i modificatori. La ripetizione
+ * dei tasti la fa il programma (repeat_info): il compositore scarta le ripetizioni del kernel. */
+
+/* wl_pointer.set_cursor: il compositore mostra sempre la sua freccia (la forma scelta dal
+ * programma non c'e' ancora). release e' il distruttore. */
+static void puntatore_cursore(struct wl_client *c, struct wl_resource *r, uint32_t serial, struct wl_resource *superficie,
+                              int32_t x, int32_t y) {
+    (void)c; (void)r; (void)serial; (void)superficie; (void)x; (void)y;
+}
+static void puntatore_rilascia(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static const struct wl_pointer_interface puntatore_interfaccia = {
+    .set_cursor = puntatore_cursore,
+    .release = puntatore_rilascia,
+};
+static void tastiera_rilascia(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static const struct wl_keyboard_interface tastiera_interfaccia = {
+    .release = tastiera_rilascia,
+};
+
+/* i wl_pointer e i wl_keyboard di tutti i programmi (ogni wl_seat.get_pointer ne crea uno) */
+static struct wl_list puntatori, tastiere;
+
+static void risorsa_tolta(struct wl_resource *r) { wl_list_remove(wl_resource_get_link(r)); }
+
+/* Un ciclo sulle risorse di una lista che sono del programma 'c' */
+#define PER_DEL_PROGRAMMA(r, lista, c) \
+    for (struct wl_resource *r = wl_resource_from_link((lista)->next); wl_resource_get_link(r) != (lista); \
+         r = wl_resource_from_link(wl_resource_get_link(r)->next)) \
+        if (wl_resource_get_client(r) == (c))
+
+/* La keymap: il testo XKB in un memfd chiuso (sigilli: nessuno lo puo' piu' cambiare). -1 se non
+ * c'e': allora il seat non ha la tastiera. */
+static int keymap_fd = -1;
+static uint32_t keymap_byte;
+
+#define FILE_KEYMAP "/system/resources/keymaps/it.xkb"
+
+/* LA KEYMAP si compila durante la compilazione del sistema (strumenti/compilazione/tastiera.sh:
+ * xkbcomp con il layout "it" di xkeyboard-config) e sta tra le risorse del sistema. Qui si legge
+ * una volta, all'avvio: dentro il compositore non c'e' (e non deve esserci) nessuna libreria XKB.
+ * Wayland vuole il testo CON lo zero finale, e la sua misura. */
+static void carica_keymap(void) {
+    int f = open(FILE_KEYMAP, O_RDONLY | O_CLOEXEC);
+    struct stat st;
+    if (f < 0 || fstat(f, &st) < 0 || st.st_size < 1 || st.st_size > (1 << 20)) {
+        if (f >= 0) close(f);
+        scrivi_riga("compositore", "senza keymap (" FILE_KEYMAP "): i programmi Wayland non hanno la tastiera", "");
+        return;
+    }
+    size_t n = (size_t)st.st_size;
+    char *testo = malloc(n + 1);
+    size_t letti = 0;
+    while (testo && letti < n) {
+        ssize_t k = read(f, testo + letti, n - letti);
+        if (k <= 0) break;
+        letti += (size_t)k;
+    }
+    close(f);
+    int m = testo && letti == n ? memfd_create("keymap", MFD_CLOEXEC | MFD_ALLOW_SEALING) : -1;
+    if (m >= 0) {
+        testo[n] = 0;
+        if (write(m, testo, n + 1) != (ssize_t)(n + 1)) { close(m); m = -1; }
+    }
+    free(testo);
+    if (m < 0) return;
+    fcntl(m, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE | F_SEAL_SEAL);
+    keymap_fd = m;
+    keymap_byte = (uint32_t)(n + 1);
+}
+
+/* La finestra con il fuoco (quella "attiva" che c'e' ancora): il compositore ne da' una sola. */
+static struct finestra_wl *finestra_con_fuoco(void) {
+    for (int i = 0; i < posti_wl; i++)
+        if (per_posto[i] && per_posto[i]->attiva && per_posto[i]->toplevel) return per_posto[i];
+    return 0;
+}
+
+static struct wl_resource *risorsa_superficie(const struct finestra_wl *w) {
+    return w->superficie ? w->superficie->risorsa : 0;
+}
+
+/* --- il puntatore --- */
+
+static void pu_frame(struct wl_resource *r) {
+    if (wl_resource_get_version(r) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(r);
+}
+
+/* La posizione sulla superficie; 1 se e' dentro il contenuto (non sulla cornice). */
+static int sulla_superficie(const struct finestra_wl *w, int x, int y, int *sx, int *sy) {
+    *sx = x;
+    *sy = y - cornice_testata_altezza();
+    return *sx >= 0 && *sx < w->cl && *sy >= 0 && *sy < w->ch;
+}
+
+static void pu_entra(struct finestra_wl *w, int sx, int sy) {
+    struct wl_resource *superficie = risorsa_superficie(w);
+    if (!superficie) return;
+    uint32_t serial = wl_display_next_serial(display);
+    PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) {
+        wl_pointer_send_enter(r, serial, superficie, wl_fixed_from_int(sx), wl_fixed_from_int(sy));
+        pu_frame(r);
+    }
+    w->dentro = 1;
+    w->px = sx;
+    w->py = sy;
+}
+
+static void pu_esce(struct finestra_wl *w) {
+    struct wl_resource *superficie = risorsa_superficie(w);
+    w->dentro = 0;
+    if (!superficie) return;
+    uint32_t serial = wl_display_next_serial(display);
+    PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) {
+        wl_pointer_send_leave(r, serial, superficie);
+        pu_frame(r);
+    }
+}
+
+static uint32_t codice_pulsante(unsigned int bit) {
+    return bit == PULSANTE_SINISTRO ? BTN_LEFT : bit == PULSANTE_DESTRO ? BTN_RIGHT : BTN_MIDDLE;
+}
+
+/* Il puntatore e' a (x, y) della finestra (cornice compresa) con questi pulsanti giu'. */
+static void pu_puntatore(struct finestra_wl *w, int x, int y, unsigned int pulsanti) {
+    int sx, sy;
+    int dentro = sulla_superficie(w, x, y, &sx, &sy);
+    unsigned int nuovi = pulsanti & ~w->visti, lasciati = w->visti & ~pulsanti;
+    w->visti = pulsanti;
+    w->ignorati &= pulsanti;                  /* un clic cominciato fuori e finito: non c'e' piu' */
+    int appena_entrato = 0;
+    if (!w->dentro) {
+        if (dentro && !w->ignorati) { pu_entra(w, sx, sy); appena_entrato = 1; }
+        else { w->ignorati |= nuovi; nuovi = 0; }   /* premuto sulla cornice: non e' del programma */
+    }
+    if (!w->dentro) return;
+    uint32_t t = tempo();
+    /* fuori dal contenuto si muove solo se c'e' un clic tenuto (la "presa"); se no e' un leave */
+    int cambia = (sx != w->px || sy != w->py) && (dentro || w->consegnati);
+    if (!appena_entrato && cambia) {
+        PER_DEL_PROGRAMMA(r, &puntatori, w->cliente)
+            wl_pointer_send_motion(r, t, wl_fixed_from_int(sx), wl_fixed_from_int(sy));
+        w->px = sx;
+        w->py = sy;
+    }
+    int detto = cambia && !appena_entrato;    /* c'e' qualcosa da chiudere con un frame */
+    for (unsigned int bit = 1; bit <= PULSANTE_CENTRALE; bit <<= 1) {
+        int premuto = (nuovi & bit) != 0;
+        if (!premuto && !(lasciati & bit & w->consegnati)) continue;
+        uint32_t serial = wl_display_next_serial(display);
+        PER_DEL_PROGRAMMA(r, &puntatori, w->cliente)
+            wl_pointer_send_button(r, serial, t, codice_pulsante(bit),
+                                   premuto ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
+        w->consegnati = premuto ? w->consegnati | bit : w->consegnati & ~bit;
+        detto = 1;
+    }
+    if (detto) PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) pu_frame(r);
+    if (!dentro && !w->consegnati) pu_esce(w);   /* uscito dal contenuto e nessun clic tenuto */
+}
+
+/* La rotella: scatti verticali e orizzontali (positivi: in basso e a destra) sul punto (x, y). */
+static void pu_rotella(struct finestra_wl *w, int x, int y, int scatti_x, int scatti_y) {
+    int sx, sy;
+    if (!sulla_superficie(w, x, y, &sx, &sy)) return;
+    int ospite = !w->dentro;                  /* senza fuoco il puntatore non c'e': entra solo per girare */
+    if (ospite) pu_entra(w, sx, sy);
+    uint32_t t = tempo();
+    PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) {
+        int v5 = wl_resource_get_version(r) >= WL_POINTER_AXIS_SOURCE_SINCE_VERSION;
+        if (v5) wl_pointer_send_axis_source(r, WL_POINTER_AXIS_SOURCE_WHEEL);
+        for (int asse = 0; asse < 2; asse++) {
+            int scatti = asse == 0 ? scatti_y : scatti_x;
+            if (!scatti) continue;
+            enum wl_pointer_axis a = asse == 0 ? WL_POINTER_AXIS_VERTICAL_SCROLL : WL_POINTER_AXIS_HORIZONTAL_SCROLL;
+            if (v5) wl_pointer_send_axis_discrete(r, a, scatti);
+            wl_pointer_send_axis(r, t, a, wl_fixed_from_int(scatti * PIXEL_PER_SCATTO));
+        }
+        pu_frame(r);
+    }
+    if (ospite) pu_esce(w);
+}
+
+/* --- la tastiera --- */
+
+static unsigned char tasti_giu[(KEY_MAX + 8) / 8];   /* i tasti tenuti giu' adesso (codici di Linux) */
+/* GREZZO_... adesso. Si parte con Bloc Num acceso, come eventi (che lo accende all'avvio): il
+ * primo tasto allinea comunque lo stato a quello vero. */
+static unsigned int modificatori = GREZZO_BLOC_NUM;
+
+/* I modificatori come li vuole XKB: le maschere dei modificatori "veri", che sono gli stessi
+ * in ogni keymap (Shift 0, Lock 1, Control 2, Mod1 3, Mod2 4, Mod4 6, Mod5 7): Alt e' Mod1, Bloc
+ * Num Mod2, il logo Mod4, AltGr (ISO_Level3_Shift) Mod5. 'premuti' e 'bloccati' sono le due maschere. */
+static void maschere_xkb(unsigned int mod, uint32_t *premuti, uint32_t *bloccati) {
+    *premuti = (mod & GREZZO_MAIUSC ? 1u << 0 : 0) | (mod & GREZZO_CTRL ? 1u << 2 : 0) | (mod & GREZZO_ALT ? 1u << 3 : 0) |
+               (mod & GREZZO_META ? 1u << 6 : 0) | (mod & GREZZO_ALTGR ? 1u << 7 : 0);
+    *bloccati = (mod & GREZZO_BLOC_MAIUSC ? 1u << 1 : 0) | (mod & GREZZO_BLOC_NUM ? 1u << 4 : 0);
+}
+
+static void ta_modificatori(struct wl_resource *r, uint32_t serial, unsigned int mod) {
+    uint32_t premuti, bloccati;
+    maschere_xkb(mod, &premuti, &bloccati);
+    wl_keyboard_send_modifiers(r, serial, premuti, 0, bloccati, 0);
+}
+
+/* Il programma riceve il fuoco della tastiera: enter con i tasti gia' giu', poi i modificatori. */
+static void ta_entra_in(struct wl_resource *r, struct finestra_wl *w) {
+    struct wl_resource *superficie = risorsa_superficie(w);
+    if (!superficie) return;
+    struct wl_array giu;
+    wl_array_init(&giu);
+    for (int k = 0; k <= KEY_MAX; k++)
+        if (tasti_giu[k / 8] >> (k % 8) & 1) {
+            uint32_t *e = wl_array_add(&giu, sizeof *e);
+            if (e) *e = (uint32_t)k;
+        }
+    wl_keyboard_send_enter(r, wl_display_next_serial(display), superficie, &giu);
+    wl_array_release(&giu);
+    ta_modificatori(r, wl_display_next_serial(display), modificatori);
+}
+
+static void ta_entra(struct finestra_wl *w) {
+    PER_DEL_PROGRAMMA(r, &tastiere, w->cliente) ta_entra_in(r, w);
+}
+
+static void ta_esce(struct finestra_wl *w) {
+    struct wl_resource *superficie = risorsa_superficie(w);
+    if (!superficie) return;
+    uint32_t serial = wl_display_next_serial(display);
+    PER_DEL_PROGRAMMA(r, &tastiere, w->cliente) wl_keyboard_send_leave(r, serial, superficie);
+}
+
+/* --- wl_seat --- */
+
+static void seat_puntatore(struct wl_client *client, struct wl_resource *seat, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(client, &wl_pointer_interface, wl_resource_get_version(seat), id);
+    if (!r) { wl_resource_post_no_memory(seat); return; }
+    wl_resource_set_implementation(r, &puntatore_interfaccia, 0, risorsa_tolta);
+    wl_list_insert(&puntatori, wl_resource_get_link(r));
+    /* se il puntatore e' gia' dentro una sua finestra (l'ha chiesto dopo), lo si dice adesso */
+    for (int i = 0; i < posti_wl; i++) {
+        struct finestra_wl *w = per_posto[i];
+        if (!w || w->cliente != client || !w->dentro || !risorsa_superficie(w)) continue;
+        wl_pointer_send_enter(r, wl_display_next_serial(display), risorsa_superficie(w),
+                              wl_fixed_from_int(w->px), wl_fixed_from_int(w->py));
+        pu_frame(r);
+    }
+}
+
+static void seat_tastiera(struct wl_client *client, struct wl_resource *seat, uint32_t id) {
+    if (keymap_fd < 0) {   /* senza keymap il seat non ha la tastiera (capacita' non detta) */
+        wl_resource_post_error(seat, WL_SEAT_ERROR_MISSING_CAPABILITY, "il seat non ha la tastiera");
+        return;
+    }
+    struct wl_resource *r = wl_resource_create(client, &wl_keyboard_interface, wl_resource_get_version(seat), id);
+    if (!r) { wl_resource_post_no_memory(seat); return; }
+    wl_resource_set_implementation(r, &tastiera_interfaccia, 0, risorsa_tolta);
+    wl_list_insert(&tastiere, wl_resource_get_link(r));
+    wl_keyboard_send_keymap(r, WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, keymap_fd, keymap_byte);
+    if (wl_resource_get_version(r) >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION)   /* il ritmo: 30 ms = 33 al secondo */
+        wl_keyboard_send_repeat_info(r, 1000 / TASTI_RIPETI_OGNI, TASTI_RIPETI_DOPO);
+    struct finestra_wl *f = finestra_con_fuoco();   /* se ha gia' il fuoco, enter subito */
+    if (f && f->cliente == client) ta_entra_in(r, f);
+}
+
+static void seat_tocco(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    (void)c; (void)id;
+    wl_resource_post_error(r, WL_SEAT_ERROR_MISSING_CAPABILITY, "il seat non ha lo schermo a tocco");
+}
+static void seat_rilascia(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static const struct wl_seat_interface seat_interfaccia = {
+    .get_pointer = seat_puntatore,
+    .get_keyboard = seat_tastiera,
+    .get_touch = seat_tocco,
+    .release = seat_rilascia,
+};
+
+static void lega_seat(struct wl_client *client, void *dati, uint32_t versione, uint32_t id) {
+    (void)dati;
+    struct wl_resource *r = wl_resource_create(client, &wl_seat_interface, versione > 7 ? 7 : (int)versione, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &seat_interfaccia, 0, 0);
+    wl_seat_send_capabilities(r, WL_SEAT_CAPABILITY_POINTER | (keymap_fd >= 0 ? WL_SEAT_CAPABILITY_KEYBOARD : 0));
+    if (wl_resource_get_version(r) >= WL_SEAT_NAME_SINCE_VERSION) wl_seat_send_name(r, "seat0");
+}
+
 /* --- quello che vede il compositore --- */
 
 int wayland_inizia(void) {
     wl_list_init(&superfici);
+    wl_list_init(&puntatori);
+    wl_list_init(&tastiere);
+    carica_keymap();
     /* wl_display_add_socket cerca la cartella in XDG_RUNTIME_DIR */
     setenv("XDG_RUNTIME_DIR", CARTELLA_SOCKET, 1);
     display = wl_display_create();
@@ -526,7 +853,8 @@ int wayland_inizia(void) {
     if (wl_display_add_socket(display, NOME_SOCKET) < 0 ||
         !wl_global_create(display, &wl_compositor_interface, 4, 0, lega_compositor) ||
         wl_display_init_shm(display) < 0 ||   /* wl_shm, con ARGB8888 e XRGB8888 */
-        !wl_global_create(display, &xdg_wm_base_interface, 3, 0, lega_wm)) {
+        !wl_global_create(display, &xdg_wm_base_interface, 3, 0, lega_wm) ||
+        !wl_global_create(display, &wl_seat_interface, 7, 0, lega_seat)) {
         wl_display_destroy(display);
         display = 0;
         return -1;
@@ -542,11 +870,45 @@ void wayland_servi(void) {
 
 void wayland_notizia(int i, const struct notizia *n) {
     struct finestra_wl *w = al_posto(i);
-    if (!w || n->tipo != FUOCO) return;
-    if (w->attiva == (int)(n->fuoco != 0)) return;
-    w->attiva = n->fuoco != 0;
-    ridisegna(w);                         /* il titolo e i comandi cambiano */
-    if (w->toplevel && w->configurata) invia_configure(w);   /* e il programma lo sa */
+    if (!w) return;
+    switch (n->tipo) {
+    case FUOCO:
+        if (w->attiva == (int)(n->fuoco != 0)) return;
+        w->attiva = n->fuoco != 0;
+        ridisegna(w);                         /* il titolo e i comandi cambiano */
+        if (w->toplevel && w->configurata) invia_configure(w);   /* e il programma lo sa */
+        if (w->attiva) ta_entra(w);           /* il fuoco della tastiera: enter con i tasti gia' giu' */
+        else ta_esce(w);
+        break;
+    case PUNTATORE: pu_puntatore(w, n->x, n->y, n->pulsanti); break;
+    case USCITO:
+        if (w->dentro) pu_esce(w);
+        w->ignorati = w->visti;               /* i clic ancora tenuti il programma non li sa piu' */
+        w->consegnati = 0;
+        break;
+    case ROTELLA: pu_rotella(w, n->x, n->y, n->scatti_x, n->scatti_y); break;
+    default: return;                          /* TASTO e TASTO_FISICO: ci sono i tasti grezzi */
+    }
+    wl_display_flush_clients(display);
+}
+
+/* Un tasto grezzo. Lo stato (tasti giu', modificatori) si tiene sempre, anche senza fuoco: il
+ * programma che lo prende ne ha bisogno nell'enter. Al fuoco: key e, se i modificatori sono
+ * cambiati, modifiers subito dopo (come fa weston). */
+void wayland_tasto(unsigned int codice, int valore, unsigned int mod) {
+    if (!display || valore == 2 || codice > KEY_MAX) return;   /* la ripetizione la fa il programma */
+    if (valore) tasti_giu[codice / 8] |= (unsigned char)(1u << (codice % 8));
+    else tasti_giu[codice / 8] &= (unsigned char)~(1u << (codice % 8));
+    unsigned int prima = modificatori;
+    modificatori = mod;
+    struct finestra_wl *w = finestra_con_fuoco();
+    if (!w) return;
+    uint32_t t = tempo(), serial = wl_display_next_serial(display);
+    PER_DEL_PROGRAMMA(r, &tastiere, w->cliente) {
+        wl_keyboard_send_key(r, serial, t, codice, valore ? WL_KEYBOARD_KEY_STATE_PRESSED : WL_KEYBOARD_KEY_STATE_RELEASED);
+        if (mod != prima) ta_modificatori(r, wl_display_next_serial(display), mod);
+    }
+    wl_display_flush_clients(display);
 }
 
 void wayland_chiedi_chiusura(int i) {
