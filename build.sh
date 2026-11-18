@@ -383,11 +383,12 @@ APPS=""
 # I programmi del sistema (utente/programmi): init in /system, i servizi in
 # /system/services/<servizio>/<servizio> (il programma si chiama come il servizio: cosi' lo si
 # riconosce nell'elenco dei processi). Sono programmi: 755. I pezzi del picker (picker_nome.c,
-# picker_finestra.c) non sono programmi: sono gia' dentro il picker (programmi.mk).
+# picker_finestra.c) e del compositore (compositore_wayland.c, il server Wayland) non sono
+# programmi: sono gia' dentro il picker e il compositore (programmi.mk, PEZZI_*).
 for f in utente/programmi/*.c; do
     nome=$(basename "$f" .c)
     case "$nome" in
-        picker_*) continue ;;
+        picker_*|compositore_*) continue ;;
         init) posto=/system/init ;;
         shell) posto=/system/bin/$nome ;;   # la shell di prova
         *)    posto=/system/services/$nome/$nome; SERVIZI="$SERVIZI $nome" ;;
