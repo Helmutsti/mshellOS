@@ -55,10 +55,12 @@ int programma_valido(const char *nome) {
     int n = 0;
     for (; nome[n]; n++) {
         char c = nome[n];
-        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-'))
+        int inizio = n == 0 || nome[n - 1] == '/';   /* il primo carattere di un nome */
+        if (c == '/' ? inizio || !nome[n + 1] : inizio && c == '.') return 0;   /* "//", "/" in fondo, ".x" */
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-' || c == '/'))
             return 0;
     }
-    return n > 0 && n < MAX_PROGRAMMA && nome[0] != '.';
+    return n > 0 && n < MAX_PROGRAMMA;
 }
 
 /* --- dal TOML alla struct --- */
@@ -141,6 +143,12 @@ int manifesto_leggi(char *testo, struct manifesto *m, char *errore, int max_erro
         if (!v.ok) m->sbagliate |= VOCE_NELLA_BARRA;
         else m->nella_barra = v.u.b ? 1 : 0;
     }
+    if (toml_key_exists(t, "linux")) {
+        m->presenti |= VOCE_LINUX;
+        toml_datum_t v = toml_bool_in(t, "linux");
+        if (!v.ok) m->sbagliate |= VOCE_LINUX;
+        else m->app_linux = v.u.b ? 1 : 0;
+    }
     if (toml_key_exists(t, "sistema_minimo")) {
         m->presenti |= VOCE_SISTEMA_MINIMO;
         toml_datum_t v = toml_int_in(t, "sistema_minimo");
@@ -208,6 +216,7 @@ int leggi_descrizione(const char *app, struct descrizione *d) {
         strcat(d->programma, "/");
         strcat(d->programma, m->programma);
         d->di_sistema = i == CARTELLA_APP_SISTEMA;
+        d->app_linux = m->app_linux;
         esito = 0;
     }
     free(m);

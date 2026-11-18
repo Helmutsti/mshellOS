@@ -305,6 +305,77 @@ static unsigned int uid_dell_app(const struct descrizione *d) {
     return UID_APPLICAZIONI;
 }
 
+/* LE APP LINUX (manifesto linux = true; APPLICAZIONI.md, "Le app Linux"). Decisione della persona
+ * (18/11/2026): come sul Mac, ogni app Linux porta nel pacchetto le sue librerie, in un albero
+ * tipo Alpine (<pacchetto>/linux/lib, linux/usr/lib, linux/usr/share, linux/etc). Il programma
+ * ha scritto dentro dove cercare il caricatore di musl (/lib/ld-musl-<cpu>.so.1), che da noi non
+ * c'e': quindi si fa partire direttamente il caricatore del pacchetto, dicendogli dove sono le
+ * librerie e quale programma caricare. Il file dell'app non si tocca.
+ * Le variabili d'ambiente standard dicono all'app dove sono le sue cose: i caratteri
+ * (FONTCONFIG_FILE, il fonts.conf del pacchetto, che punta a cartelle relative a se'), i dati
+ * condivisi (XDG_DATA_DIRS), e le sue cartelle scrivibili, tutte nella sua cartella dei dati
+ * (XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_RUNTIME_DIR). HOME e'
+ * la Home della persona, SHELL e PATH la nostra shell e i nostri comandi.
+ * PER ORA SENZA RECINTO (decisione della persona: il sistema deve funzionare anche senza). */
+#if defined(__x86_64__)
+#define CARICATORE_MUSL "ld-musl-x86_64.so.1"
+#elif defined(__aarch64__)
+#define CARICATORE_MUSL "ld-musl-aarch64.so.1"
+#endif
+#define MAX_VARIABILE (32 + MAX_PERCORSO)
+
+static int avvia_app_linux(const struct descrizione *d, unsigned int uid, const char *argomento, const int *passati,
+                           int quanti, const char *elenco, int wayland) {
+    static char pacchetto[MAX_PERCORSO], caricatore[MAX_PERCORSO], librerie[2 * MAX_PERCORSO + 1], dati[MAX_PERCORSO],
+        home[MAX_PERCORSO];
+    static char v[10][MAX_VARIABILE];
+    descrizione_copia(pacchetto, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
+                      sizeof pacchetto);
+    descrizione_aggiungi(pacchetto, "/", sizeof pacchetto);
+    descrizione_aggiungi(pacchetto, d->id, sizeof pacchetto);
+    descrizione_copia(caricatore, pacchetto, sizeof caricatore);
+    descrizione_aggiungi(caricatore, "/linux/lib/" CARICATORE_MUSL, sizeof caricatore);
+    descrizione_copia(librerie, pacchetto, sizeof librerie);
+    descrizione_aggiungi(librerie, "/linux/lib:", sizeof librerie);
+    descrizione_aggiungi(librerie, pacchetto, sizeof librerie);
+    descrizione_aggiungi(librerie, "/linux/usr/lib", sizeof librerie);
+    if (pacchetto_cartella_dati(d->id, dati, sizeof dati) < 0 || cartella_della_persona(home, "home") < 0) {
+        registro("la cartella dei dati o la Home non vanno bene per ", d->id);
+        return -1;
+    }
+    /* una variabile: NOME=<base><resto> */
+    int k = 0;
+#define VARIABILE(nome, base, resto)                                     \
+    do {                                                                 \
+        descrizione_copia(v[k], nome "=", MAX_VARIABILE);                \
+        descrizione_aggiungi(v[k], base, MAX_VARIABILE);                 \
+        descrizione_aggiungi(v[k], resto, MAX_VARIABILE);                \
+        k++;                                                             \
+    } while (0)
+    VARIABILE("FONTCONFIG_FILE", pacchetto, "/linux/etc/fonts/fonts.conf");
+    VARIABILE("XDG_DATA_DIRS", pacchetto, "/linux/usr/share");
+    VARIABILE("XDG_CONFIG_HOME", dati, "/config");
+    VARIABILE("XDG_CACHE_HOME", dati, "/cache");
+    VARIABILE("XDG_DATA_HOME", dati, "/data");
+    VARIABILE("XDG_STATE_HOME", dati, "/state");
+    VARIABILE("XDG_RUNTIME_DIR", dati, "");
+    VARIABILE("HOME", home, "");
+#undef VARIABILE
+    const char *ambiente[16];
+    int n = 0;
+    ambiente[n++] = elenco;
+    if (wayland) ambiente[n++] = "WAYLAND_SOCKET=9";
+    for (int i = 0; i < k; i++) ambiente[n++] = v[i];
+    ambiente[n++] = "SHELL=/system/bin/shell";
+    ambiente[n++] = "PATH=/system/bin";
+    ambiente[n++] = "LANG=C.UTF-8";
+    ambiente[n] = 0;
+    const char *argomenti[] = { caricatore, "--library-path", librerie, d->programma,
+                                argomento && argomento[0] ? argomento : 0, 0 };
+    registro(d->id, ": app Linux, parte con il caricatore del suo pacchetto, senza recinto");
+    return avvia_app_con_argomenti(caricatore, uid, argomenti, passati, quanti, ambiente);
+}
+
 static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     const char *programma = d->programma;
     int nulla = apri_nulla();
@@ -318,8 +389,11 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
      * di aperto a suo nome */
     static struct recinto recinto;
     unsigned int uid = uid_dell_app(d);
-    int con_recinto = uid != UID_SISTEMA;   /* solo il Terminale del sistema ne e' fuori */
-    if (!con_recinto) {
+    /* fuori dal recinto: il Terminale del sistema e, per ora, le app Linux */
+    int con_recinto = uid != UID_SISTEMA && !d->app_linux;
+    if (d->app_linux) {
+        /* (lo dice avvia_app_linux) */
+    } else if (!con_recinto) {
         registro(d->id, ": senza recinto (il Terminale, decisione della persona)");
     } else if (prepara_recinto(d, &app, &recinto) < 0) {
         registro("niente recinto, l'app non parte: ", programma);
@@ -372,9 +446,9 @@ static int fai_partire_app(const struct descrizione *d, const char *argomento) {
     if (wayland >= 0) descrizione_aggiungi(riga, " wayland", sizeof riga);
     registro(riga, "");
     int quanti = (int)(sizeof passati / sizeof passati[0]);
-    int numero = con_recinto
-                     ? avvia_app_nel_recinto(programma, uid, argomento, passati, quanti, ambiente, &recinto)
-                     : avvia_app(programma, uid, argomento, passati, quanti, ambiente);
+    int numero = d->app_linux    ? avvia_app_linux(d, uid, argomento, passati, quanti, elenco, wayland >= 0)
+                 : con_recinto ? avvia_app_nel_recinto(programma, uid, argomento, passati, quanti, ambiente, &recinto)
+                               : avvia_app(programma, uid, argomento, passati, quanti, ambiente);
     if (numero < 0) registro("l'app non e' partita: ", programma);
     chiudi(nulla);
     if (compositore >= 0) chiudi(compositore);

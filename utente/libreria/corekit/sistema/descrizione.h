@@ -53,7 +53,7 @@
 #define MAX_AUTORE       64
 #define MAX_DESCRIZIONE 256
 #define MAX_PROCESSORE   16
-#define MAX_PROGRAMMA    16     /* un file della cartella dell'app, senza "/" */
+#define MAX_PROGRAMMA    64     /* un file del pacchetto: "code", o per un'app Linux "linux/usr/bin/foot" */
 #define MAX_VOCI          8     /* permessi, deviazioni, funzioni: quanti al massimo */
 #define MAX_VOCE         32     /* la lunghezza di ognuno */
 #define MAX_PNG           4     /* le PNG di un tema */
@@ -83,6 +83,7 @@ struct icone_tema {
 #define VOCE_FUNZIONI        (1u << 10)
 #define VOCE_ICONE           (1u << 11)
 #define VOCE_NELLA_BARRA     (1u << 12)
+#define VOCE_LINUX           (1u << 13)
 
 struct manifesto {
     char id[MAX_ID];
@@ -94,6 +95,8 @@ struct manifesto {
     int sistema_minimo;                      /* 0 se manca */
     char programma[MAX_PROGRAMMA];
     int nella_barra;                         /* 1 se manca: l'app di sistema sta anche nella userbar */
+    int app_linux;                             /* 1: un'app Linux di altri, con le sue librerie nel pacchetto
+                                              * (linux = true; APPLICAZIONI.md, "Le app Linux") */
     int quanti_permessi, quante_deviazioni, quante_funzioni;
     char permessi[MAX_VOCI][MAX_VOCE];
     char deviazioni[MAX_VOCI][MAX_VOCE];
@@ -123,8 +126,10 @@ int versione_valida(const char *v);
  * sono uguali): negativo se a viene prima, 0 se sono uguali, positivo se dopo. */
 int confronta_versioni(const char *a, const char *b);
 
-/* 1 se 'nome' va bene come programma: un file della cartella dell'app (niente "/"),
- * minuscole, cifre, '.', '_' e '-', che non comincia con un punto. */
+/* 1 se 'nome' va bene come programma: un file del pacchetto, "code" o un percorso dentro il
+ * pacchetto ("linux/usr/bin/foot": le app Linux), fatto di nomi con minuscole, cifre, '.', '_'
+ * e '-', separati da "/", nessuno vuoto e nessuno che comincia con un punto (niente "..").
+ * Mai un percorso che comincia con "/". */
 int programma_valido(const char *nome);
 
 /* LE CARTELLE DELLE APPLICAZIONI, nell'ordine in cui si guardano. Sono variabili (e non
@@ -141,6 +146,8 @@ struct descrizione {
     char nome[MAX_NOME_APP];
     char programma[MAX_PERCORSO_PROGRAMMA];   /* il percorso completo: /system/apps/<id>/code */
     int di_sistema;                 /* 1 se sta in /system/apps */
+    int app_linux;                    /* 1: un'app Linux (manifesto linux = true): il launcher la fa
+                                     * partire con il caricatore del suo pacchetto, senza recinto */
 };
 
 /* Legge il manifesto dell'applicazione 'app' (il suo identificativo, che e' anche il nome
