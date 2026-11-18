@@ -4,6 +4,13 @@
 #include "gkit/gkit.h"
 #include "gkit/sistema/protocollo.h"
 #include "corekit/messaggi.h"   /* porta_di: l'elenco delle porte che il launcher ha dato all'app */
+#include "gkit/interno/finestra_wayland.h"
+
+/* DUE STRADE. Le finestre normali di un programma partito dal launcher (che gli da' la
+ * connessione Wayland, WAYLAND_SOCKET) sono un client Wayland: finestra_wayland.c; il campo
+ * 'wl' della finestra e' il suo stato. Le finestre del sistema (sfondo, pannelli, scelta) e i
+ * programmi senza connessione Wayland restano sul protocollo nostro (protocollo.h): 'wl' e' 0 e
+ * 'collegamento' e' il descrittore del compositore. */
 
 /* La porta dell'app verso il compositore (protocollo.h, LA PORTA DELL'APP): solo se il launcher
  * l'ha messa nell'elenco delle porte dell'app (porta_di: prima il tipo, poi chi e'). Si guarda
@@ -40,6 +47,7 @@ static int collega_compositore(void) {
 }
 
 int finestra_schermo(int *larghezza, int *altezza) {
+    if (fw_attivo() && fw_schermo(larghezza, altezza) == 0) return 0;
     int d = collega_compositore();
     if (d < 0) return -1;
     struct chiedi_schermo m = { .tipo = CHIEDI_SCHERMO };
@@ -57,6 +65,7 @@ int finestra_schermo(int *larghezza, int *altezza) {
 static int finestra_apri_superficie(struct finestra *f, int larghezza, int altezza, const char *titolo,
                                     unsigned int ruolo, unsigned int pannello, int x, int y,
                                     unsigned int raggio, const char *sopra) {
+    f->wl = 0;
     f->collegamento = collega_compositore();
     if (f->collegamento < 0) return -1;
 
@@ -81,8 +90,40 @@ static int finestra_apri_superficie(struct finestra *f, int larghezza, int altez
     return manda_foglio(f->collegamento, &m, sizeof m, f->foglio) < 0 ? -1 : 0;
 }
 
+/* La finestra normale come client Wayland: il foglio con le due immagini lo fa GKit, il resto
+ * (superficie, buffer, configure) finestra_wayland.c. */
+static int finestra_apri_wayland(struct finestra *f, int larghezza, int altezza, const char *titolo) {
+    f->collegamento = -1;
+    unsigned int pixel = larghezza * altezza;
+    f->foglio = foglio(2 * pixel * 4);
+    unsigned int *memoria = f->foglio < 0 ? 0 : mappa(f->foglio, 0);
+    if (!memoria) {
+        if (f->foglio >= 0) chiudi(f->foglio);
+        f->foglio = -1;
+        return -1;
+    }
+    f->larghezza = larghezza;
+    f->altezza = altezza;
+    f->immagini[0] = memoria;
+    f->immagini[1] = memoria + pixel;
+    f->libera[0] = f->libera[1] = 1;
+    f->in_uso = 0;
+    f->quante = 0;
+    f->quante_arretrate[0] = f->quante_arretrate[1] = -1;
+    f->wl = 0;
+    if (fw_apri(f, larghezza, altezza, titolo) < 0) {
+        togli(f->immagini[0]);
+        chiudi(f->foglio);
+        f->foglio = -1;
+        f->immagini[0] = f->immagini[1] = 0;
+        return -1;
+    }
+    return 0;
+}
+
 int finestra_apri_come(struct finestra *f, int larghezza, int altezza, const char *titolo,
                        unsigned int ruolo, int x, int y, unsigned int raggio) {
+    if (ruolo == RUOLO_FINESTRA && fw_attivo()) return finestra_apri_wayland(f, larghezza, altezza, titolo);
     return finestra_apri_superficie(f, larghezza, altezza, titolo, ruolo, PANNELLO_BARRA, x, y, raggio, 0);
 }
 
@@ -99,6 +140,7 @@ int finestra_apri_pannello(struct finestra *f, int larghezza, int altezza, const
 }
 
 void finestra_chiudi(struct finestra *f) {
+    if (f->wl) fw_chiudi(f);
     if (f->collegamento >= 0) chiudi(f->collegamento);
     if (f->immagini[0]) togli(f->immagini[0]);
     if (f->foglio >= 0) chiudi(f->foglio);
@@ -110,7 +152,25 @@ int finestra_apri(struct finestra *f, int larghezza, int altezza, const char *ti
     return finestra_apri_come(f, larghezza, altezza, titolo, RUOLO_FINESTRA, 0, 0, RAGGIO_PREDEFINITO);
 }
 
+/* La prima notizia della coda della finestra (0 se e' vuota). */
+static int estrai(struct finestra *f, struct notizia *n) {
+    if (!f->quante) return 0;
+    *n = f->messe_da_parte[0];
+    f->quante--;
+    for (int i = 0; i < f->quante; i++) f->messe_da_parte[i] = f->messe_da_parte[i + 1];
+    return 1;
+}
+
 int finestra_ricevi(struct finestra *f, struct notizia *n) {
+    if (f->wl) {
+        /* la connessione e' di tutte le finestre del programma: gli eventi si smistano nelle
+         * code, e se non ce n'e' per questa si da' una notizia di servizio ("niente") */
+        if (estrai(f, n)) return 1;
+        if (fw_leggi(-1) < 0) return 0;
+        if (estrai(f, n)) return 1;
+        *n = (struct notizia){ .tipo = RILASCIATA, .immagine = 2 };
+        return 1;
+    }
     if (ricevi(f->collegamento, n, sizeof *n) != sizeof *n) return 0;
     if (n->tipo == RILASCIATA && n->immagine < 2) f->libera[n->immagine] = 1;
     if (n->tipo == PING) {
@@ -125,6 +185,12 @@ int finestra_di_servizio(const struct notizia *n) {
 }
 
 unsigned int *finestra_tela(struct finestra *f) {
+    if (f->wl) {                          /* le notizie arrivate nel frattempo vanno nella coda */
+        while (!f->libera[0] && !f->libera[1])
+            if (fw_leggi(-1) < 0) return 0;
+        f->in_uso = f->libera[0] ? 0 : 1;
+        return f->immagini[f->in_uso];
+    }
     while (!f->libera[0] && !f->libera[1]) {
         struct notizia n;
         if (!finestra_ricevi(f, &n)) return 0;
@@ -159,38 +225,58 @@ int finestra_mostra_zone(struct finestra *f, const struct zona_finestra *zone, i
             zone_aggiungi(f->arretrate[altra], &f->quante_arretrate[altra], MAX_ZONE_MOSTRA, m.zone[k]);
     f->quante_arretrate[f->in_uso] = 0;
     f->libera[f->in_uso] = 0;
+    if (f->wl) return fw_mostra(f, m.zone, n, quante <= 0);
     return manda(f->collegamento, &m, sizeof m);
 }
 
 int finestra_mostra(struct finestra *f) { return finestra_mostra_zone(f, 0, 0); }
 
 int finestra_trascinami(struct finestra *f) {
+    if (f->wl) return fw_trascinami(f);
     struct trascinami m = { .tipo = TRASCINAMI };
     return manda(f->collegamento, &m, sizeof m);
 }
 
 int finestra_tasti_fisici(struct finestra *f) {
+    if (f->wl) return fw_tasti_fisici(f);
     struct voglio_tasti_fisici m = { .tipo = VOGLIO_TASTI_FISICI };
     return manda(f->collegamento, &m, sizeof m);
 }
 
 int finestra_riducimi(struct finestra *f) {
+    if (f->wl) return fw_riducimi(f);
     struct riducimi m = { .tipo = RIDUCIMI };
     return manda(f->collegamento, &m, sizeof m);
 }
 
 int finestra_forma_puntatore(struct finestra *f, unsigned int forma) {
+    if (f->wl) return fw_forma(f, forma);
     struct mostra_puntatore m = { .tipo = MOSTRA_PUNTATORE, .forma = forma };
     return manda(f->collegamento, &m, sizeof m);
 }
 
+int finestra_descrittore(const struct finestra *f) { return f->wl ? fw_descrittore() : f->collegamento; }
+
+int finestra_in_coda(const struct finestra *f) { return f->quante; }
+
+void finestra_scarica(struct finestra *f) {
+    if (f->wl) fw_scarica();
+}
+
+int finestra_scadenza_ms(const struct finestra *f) { return f->wl ? fw_scadenza_ms() : -1; }
+
+void finestra_servi_scadenze(struct finestra *f) {
+    if (f->wl) fw_servi_scadenze();
+}
+
 int finestra_notizia(struct finestra *f, struct notizia *n) {
-    if (f->quante) {
-        *n = f->messe_da_parte[0];
-        f->quante--;
-        for (int i = 0; i < f->quante; i++) f->messe_da_parte[i] = f->messe_da_parte[i + 1];
-        return 1;
+    if (f->wl) {
+        for (;;) {
+            if (estrai(f, n)) return 1;
+            if (fw_leggi(-1) < 0) return 0;
+        }
     }
+    if (estrai(f, n)) return 1;
     do {
         if (!finestra_ricevi(f, n)) return 0;
     } while (finestra_di_servizio(n));

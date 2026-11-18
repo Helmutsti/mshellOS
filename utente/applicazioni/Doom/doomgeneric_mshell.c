@@ -87,11 +87,12 @@ static void metti_tasto(int premuto, unsigned char tasto) {
 /* La prossima notizia senza aspettare. 0 se non ce n'e'. */
 static int prendi_notizia(struct notizia *n) {
     for (;;) {
-        if (fin.quante) {
+        if (finestra_in_coda(&fin)) {
             finestra_notizia(&fin, n);
             return 1;
         }
-        struct da_guardare g = { fin.collegamento, 0 };
+        struct da_guardare g = { finestra_descrittore(&fin), 0 };
+        finestra_scarica(&fin);
         if (aspetta(&g, 1, 0) <= 0) return 0;
         if (!finestra_ricevi(&fin, n)) exit(0);   /* il compositore ha chiuso */
         if (!finestra_di_servizio(n)) return 1;
@@ -115,6 +116,8 @@ static void servi_notizie(void) {
                 if (n.x >= LARG - BARRA) exit(0);   /* la x per chiudere */
                 finestra_trascinami(&fin);
             }
+        } else if (n.tipo == CHIUDITI) {
+            exit(0);                          /* il compositore chiede di chiudere */
         } else if (n.tipo == USCITO) {
             pulsanti_prima = 0;
         }

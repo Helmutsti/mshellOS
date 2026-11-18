@@ -104,7 +104,11 @@ GKIT := $(O)/libgkit.a
 # UIKit: i suoi .c
 UIKIT_OGGETTI := $(patsubst %.c,$(O)/%.o,$(sort $(wildcard utente/libreria/uikit/interno/*.c)))
 UIKIT := $(O)/libuikit.a
-LIBRERIE := $(UIKIT) $(GKIT) $(COREKIT)
+# GKit e' un client Wayland per le finestre normali (gkit/interno/finestra_wayland.c): dopo GKit
+# vengono libwayland-client e libffi (vedi la sezione Wayland, sotto), prima di CoreKit. Ne entra
+# solo quello che il programma usa.
+WAYLAND_CLIENT := $(O)/wayland/libwayland-client.a $(LIBC)/libffi.a
+LIBRERIE := $(UIKIT) $(GKIT) $(WAYLAND_CLIENT) $(COREKIT)
 
 $(COREKIT): $(COREKIT_OGGETTI)
 	@rm -f $@
@@ -138,6 +142,8 @@ $(O)/wayland/libwayland-client.a: $(WAYLAND)
 $(O)/utente/programmi/compositore_wayland.o: UTENTE += -I$(O)/wayland/include
 $(O)/utente/programmi/compositore_wayland.o: $(WAYLAND)
 $(O)/utente/prove/wayland.o: UTENTE += -I$(O)/wayland/include
+$(O)/utente/libreria/gkit/interno/finestra_wayland.o: UTENTE += -I$(O)/wayland/include
+$(O)/utente/libreria/gkit/interno/finestra_wayland.o: $(WAYLAND)
 $(O)/utente/prove/wayland.o: $(WAYLAND)
 compositore_ESTERNE := $(WAYLAND) $(LIBC)/libffi.a
 wayland_ESTERNE := $(O)/wayland/libwayland-client.a $(LIBC)/libffi.a

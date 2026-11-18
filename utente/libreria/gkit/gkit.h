@@ -101,6 +101,9 @@ void zone_aggiungi(struct zona_finestra *zone, int *quante, int massimo, struct 
                         * (positivo: a destra), con il puntatore in x, y. Va alla finestra
                         * sotto il puntatore, anche se non ha il fuoco: come sul Mac e in
                         * Wayland, si scorre quello che si guarda */
+#define CHIUDITI  13   /* il compositore chiede di chiudere la finestra (come la X): chi apre
+                        * la propria barra del titolo (UIKit) la tratta come il suo pulsante di
+                        * chiusura. Solo per le finestre normali di un programma Wayland */
 #define TASTO_FISICO 12  /* (solo a chi l'ha chiesto con finestra_tasti_fisici) il tasto
                           * Linux 'tasto' (KEY_...) e' stato premuto ('premuto' = 1),
                           * lasciato (0) o ripetuto perche' e' tenuto giu' ('premuto' = 2:
@@ -160,7 +163,7 @@ struct notizia {
  * bloccata altrove la risposta non parte, e il compositore ne ridisegna la barra in rosso,
  * con il pulsante di chiusura d'emergenza (come GNOME e il Mac). */
 
-#define DA_PARTE 16
+#define DA_PARTE 64
 
 /* Una finestra aperta. La riempie finestra_apri: i campi sono della libreria, l'applicazione
  * non li tocca. */
@@ -175,6 +178,9 @@ struct finestra {
     /* le zone che mancano a ogni immagine rispetto all'ultima mostrata (-1: tutta) */
     struct zona_finestra arretrate[2][MAX_ZONE_MOSTRA];
     int quante_arretrate[2];
+    /* (della libreria) lo stato Wayland di questa finestra, 0 se e' sul protocollo nostro (le
+     * finestre del sistema, e i programmi partiti senza il launcher): 'collegamento' vale -1 */
+    void *wl;
 };
 
 /* Quanto e' grande lo schermo: lo chiede al compositore (se non e' ancora pronto riprova per
@@ -267,6 +273,31 @@ int finestra_riducimi(struct finestra *f);
  * solo (uikit.h, finestra_tk_forma). 0, o -1 se il compositore ha chiuso. */
 int finestra_forma_puntatore(struct finestra *f, unsigned int forma);
 
+
+/* IL CICLO DEGLI EVENTI E IL TEMPO. Chi tiene il ciclo (UIKit, Doom) dorme con aspetta su un
+ * descrittore: per una finestra Wayland e' quello della connessione, UNICO per tutte le finestre
+ * del programma (gli eventi si smistano per finestra: finestra_ricevi li legge tutti e ne da' uno
+ * di QUESTA finestra, gli altri restano in coda alla loro finestra: finestra_in_coda). */
+
+/* Il descrittore da guardare con aspetta per sapere che c'e' qualcosa da ricevere. */
+int finestra_descrittore(const struct finestra *f);
+
+/* Quante notizie ci sono gia' in coda per questa finestra (finestra_notizia le da' senza
+ * aspettare). */
+int finestra_in_coda(const struct finestra *f);
+
+/* Da chiamare prima di ogni attesa (aspetta): manda al compositore quello che e' ancora da
+ * spedire. */
+void finestra_scarica(struct finestra *f);
+
+/* La libreria ha cose da fare a tempo (la ripetizione dei tasti tenuti giu': con Wayland la fa il
+ * client). Dice tra quanti millisecondi bisogna richiamare finestra_servi_scadenze: 0 se e' gia'
+ * ora, -1 se non c'e' niente da aspettare. Chi aspetta con un tempo massimo lo accorcia a questo. */
+int finestra_scadenza_ms(const struct finestra *f);
+
+/* Fa le cose a tempo arrivate a scadenza (le ripetizioni dei tasti diventano notizie in coda). Da
+ * chiamare a ogni giro del ciclo, anche se l'attesa e' finita per altro. */
+void finestra_servi_scadenze(struct finestra *f);
 
 /* La prossima notizia per l'applicazione (un clic, un tasto...): prima quelle messe da
  * parte, poi dorme finche' ne arriva una. 1, o 0 se il compositore ha chiuso. */

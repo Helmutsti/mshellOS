@@ -184,9 +184,7 @@ void finestra_tk_chiudi_altra(struct finestra_tk *f) {
     if (!a) return;
     f->altra = 0;
     a->aperta = 0;
-    chiudi(a->finestra.collegamento);
-    if (a->finestra.immagini[0]) togli(a->finestra.immagini[0]);
-    chiudi(a->finestra.foglio);
+    finestra_chiudi(&a->finestra);
     a->catturato = a->sotto = a->con_fuoco = 0;
     a->modificatori = a->pulsanti_prima = 0;
     a->chiudi_premuto = a->riduci_premuto = a->comando_sopra = 0;
@@ -208,6 +206,8 @@ static void uikit_consegna(struct finestra_tk *f, const struct notizia *n) {
         uikit_sotto(f, 0);
     } else if (n->tipo == ROTELLA) {
         uikit_rotella(f, n->x, n->y, n->scatti_x, n->scatti_y);
+    } else if (n->tipo == CHIUDITI) {
+        f->da_chiudere = 1;                   /* il compositore chiede di chiudere: come la X */
     } else if (n->tipo == TASTO_FISICO) {
         uikit_tasto_fisico(f, n->tasto, n->premuto);
     } else if (n->tipo == TASTO && (f->modificatori & (MOD_CTRL | MOD_ALT))) {
@@ -299,6 +299,7 @@ static int esegui(struct finestra_tk *f, const char *sopra) {
 
     struct notizia n;
     for (;;) {
+        finestra_servi_scadenze(&f->finestra);    /* le ripetizioni dei tasti (Wayland) */
         if (f->da_ridisegnare && finestra_libera(&f->finestra) && !uikit_ridisegna(f)) return 1;
         if (f->altra && f->altra->da_ridisegnare && finestra_libera(&f->altra->finestra) &&
             !uikit_ridisegna(f->altra))
@@ -307,7 +308,7 @@ static int esegui(struct finestra_tk *f, const char *sopra) {
         struct sospesa_tk sospesa = { 0 };
         for (int servite = 0; servite < 64; servite++) {
             /* prima le notizie messe da parte da finestra_tela, poi il compositore */
-            struct finestra_tk *da = f->finestra.quante ? f : f->altra && f->altra->finestra.quante ? f->altra : 0;
+            struct finestra_tk *da = finestra_in_coda(&f->finestra) ? f : f->altra && finestra_in_coda(&f->altra->finestra) ? f->altra : 0;
             if (da) {
                 finestra_notizia(&da->finestra, &n);
             } else {
@@ -316,12 +317,19 @@ static int esegui(struct finestra_tk *f, const char *sopra) {
                     struct chiamata_tk *prima = uikit_prima_chiamata(f);
                     resta = prima ? (int)(prima->scadenza - tempo()) : -1;
                     if (prima && resta < 0) resta = 0;
+                    int tra = finestra_scadenza_ms(&f->finestra);   /* una ripetizione di tasto */
+                    if (tra >= 0 && (resta < 0 || tra < resta)) resta = tra;
                 }
                 /* la finestra, l'altra (se c'e'), il descrittore guardato (se c'e') e gli avvisi di
                  * catalog (se ci sono) */
-                struct da_guardare g[4] = { { .descrittore = f->finestra.collegamento } };
+                struct da_guardare g[4] = { { .descrittore = finestra_descrittore(&f->finestra) } };
                 int quanti = 1, altra = 0, guardato = 0, catalog = 0;
-                if (f->altra) { altra = quanti; g[quanti++].descrittore = f->altra->finestra.collegamento; }
+                /* con Wayland il descrittore e' lo stesso per tutte le finestre del programma */
+                if (f->altra && finestra_descrittore(&f->altra->finestra) != g[0].descrittore) {
+                    altra = quanti;
+                    g[quanti++].descrittore = finestra_descrittore(&f->altra->finestra);
+                }
+                finestra_scarica(&f->finestra);        /* quello che e' ancora da spedire, prima di dormire */
                 if (f->al_pronto) { guardato = quanti; g[quanti++].descrittore = f->guardato; }
                 if (avvisi_catalog >= 0) { catalog = quanti; g[quanti++].descrittore = avvisi_catalog; }
                 int pronti = aspetta(g, quanti, resta);
