@@ -17,6 +17,11 @@
  *   - SPOSTA le finestre quando un'applicazione chiede TRASCINAMI, e porta davanti
  *     quella cliccata.
  *
+ * WAYLAND, ACCANTO. Il compositore e' anche un server Wayland (compositore_wayland.c, passo 1
+ * della decisione "il compositore passa a Wayland", SISTEMA.md): il ciclo guarda anche il suo
+ * descrittore, e una finestra Wayland diventa un posto di 'finestre' come le altre (il ponte,
+ * piu' sotto: ponte_*). Il resto di questo file non sa cos'e' Wayland.
+ *
  * LE SUE RISORSE GLIELE PRESTA INIT. Lo schermo, tastiera e mouse, e il nome
  * "compositore" su cui si collegano le applicazioni non li apre lui: li tiene init,
  * che glieli passa gia' aperti ai descrittori 0, 1 e 2 (avvia_con). Se il compositore
@@ -63,6 +68,7 @@
 #include "gkit/sistema/pixel.h"        /* i conti per pixel: comporre le finestre */
 #include "uikit/sistema/uikit_compositore.h"
 #include "corekit/catalog.h"             /* il tema, e i suoi avvisi */
+#include "compositore_wayland.h"         /* il server Wayland, e il ponte verso questo file */
 
 /* Le risorse che init gli passa gia' aperte (vedi sopra). */
 #define D_SCHERMO 0
@@ -143,6 +149,9 @@ struct finestra_compositore {
                                                * launcher se e' arrivata dalla porta dell'app */
     char sopra[MAX_PERCORSO_PROGRAMMA];   /* una SCELTA: il programma dell'app che copre ("" per le altre) */
     int dalla_porta;            /* arrivata dalla porta di un'app: 'programma' e' gia' giusto */
+    int wayland;                /* una finestra Wayland (compositore_wayland.c): niente collegamento
+                                 * (-1) ne' foglio, l'immagine e' di Wayland e la cornice la disegna
+                                 * il compositore; vedi "IL PONTE" */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
@@ -773,6 +782,10 @@ static void disegna_finestra(int i, int ricalcola) {
  * piena: non legge piu', quindi e' bloccata. 1 se e' partito, 0 se no. (Se invece ha
  * chiuso, ce ne accorgeremo leggendo dal suo collegamento.) */
 static int avvisa(int i, struct notizia n) {
+    if (finestre[i].wayland) {          /* non ha un collegamento: la notizia va a Wayland */
+        wayland_notizia(i, &n);
+        return 1;
+    }
     if (manda_subito(finestre[i].collegamento, &n, sizeof n) == sizeof n) return 1;
     finestre[i].non_risponde = 1;
     return 0;
@@ -861,9 +874,9 @@ static void scollega(int i) {
     struct finestra_compositore *f = &finestre[i];
     if (!f->usata) return;
     if (f->annunciata) racconta(i, FINESTRA_CHIUSA);
-    if (f->immagini[0]) togli(f->immagini[0]);
+    if (f->immagini[0] && !f->wayland) togli(f->immagini[0]);   /* quella di Wayland non e' un foglio */
     if (f->foglio >= 0) chiudi(f->foglio);
-    chiudi(f->collegamento);
+    if (f->collegamento >= 0) chiudi(f->collegamento);
     f->usata = 0;
     int k = 0;
     while (k < quante && ordine[k] != i) k++;
@@ -891,7 +904,7 @@ static void scollega(int i) {
 static int nuova_finestra(int d) {
     int i = 0;
     while (i < MAX_FINESTRE && finestre[i].usata) i++;
-    if (i == MAX_FINESTRE) { chiudi(d); return -1; }   /* troppe finestre */
+    if (i == MAX_FINESTRE) { if (d >= 0) chiudi(d); return -1; }   /* troppe finestre */
     struct finestra_compositore *f = &finestre[i];
     *f = (struct finestra_compositore){ .usata = 1, .collegamento = d, .foglio = -1, .mostrata = -1,
                             .da_rilasciare = -1, .ultimo_ping = tempo() };
@@ -1041,6 +1054,72 @@ static void mostra(int i, const struct mostra *m) {
     }
 }
 
+/* IL PONTE VERSO WAYLAND (compositore_wayland.h). Il server Wayland sta dentro questo
+ * programma (compositore_wayland.c): i programmi Wayland non passano dal nostro protocollo
+ * (collegamento + foglio), ma una loro finestra diventa uno di questi posti di 'finestre', come
+ * le altre. Cosa cambia per un posto con 'wayland' a 1:
+ *   - non ha collegamento ne' foglio: chi parla con quel programma e' Wayland, e le notizie
+ *     (il fuoco) gli arrivano da avvisa;
+ *   - l'immagine e' memoria di Wayland (cornice del compositore piu' contenuto del programma),
+ *     sempre l'immagine 0: ogni volta che cambia, ponte_mostra e' il suo MOSTRA;
+ *   - non si manda il "ci sei?": Wayland ha i suoi ping;
+ *   - la cornice (titolo, riduci, chiudi, trascinamento) la gestisce il compositore: lo fa
+ *     al_mouse, perche' il programma non sa dove sta il puntatore.
+ * Il resto (ombra, vetro, primo piano, fuoco, userbar) e' quello di tutte le finestre. */
+
+/* Un posto per la finestra di un programma Wayland, di cui 'cliente' e' il socket (serve a
+ * sapere di chi e': programma_di). Il numero del posto, o -1 se sono tutti presi. */
+int ponte_apri(int cliente) {
+    int i = nuova_finestra(-1);
+    if (i < 0) return -1;
+    struct finestra_compositore *f = &finestre[i];
+    f->wayland = 1;
+    f->ruolo = RUOLO_FINESTRA;
+    if (programma_di(cliente, f->programma) < 0) f->programma[0] = 0;
+    return i;
+}
+
+/* L'immagine del posto 'i' e' pronta (o e' cambiata): 'pixel' sono l x a pixel premoltiplicati,
+ * titolo compreso. La prima volta la finestra compare (a cascata, davanti, con il fuoco);
+ * se cambia la misura si rifa' l'ombra. */
+void ponte_mostra(int i, unsigned int *pixel, int l, int a, const char *titolo) {
+    struct finestra_compositore *f = &finestre[i];
+    if (!f->usata || !f->wayland || l < 1 || a < 1 || l > larghezza || a > altezza) return;
+    int nuova = !f->immagini[0];
+    int misura = f->l != l || f->a != a;
+    f->immagini[0] = f->immagini[1] = pixel;
+    f->l = l;
+    f->a = a;
+    for (int k = 0; k < MAX_TITOLO - 1 && titolo[k]; k++) f->titolo[k] = titolo[k];
+    f->titolo[MAX_TITOLO - 1] = 0;
+    if (nuova) {
+        f->id = prossimo_id++;
+        f->raggio = cornice_raggio();
+        f->x = 60 + i * 40;   /* a cascata, dentro lo schermo */
+        f->y = 50 + i * 40;
+        if (f->x + l > larghezza) f->x = larghezza - l;
+        if (f->y + a > altezza) f->y = altezza - a;
+    }
+    if (nuova || misura) prepara_ombra(i);
+    mostra(i, &(struct mostra){ .tipo = MOSTRA, .immagine = 0, .quante = 0 });   /* tutta cambiata */
+}
+
+/* Wayland non ha piu' la finestra del posto 'i' (il programma l'ha chiusa o e' finito). */
+void ponte_togli(int i) {
+    if (finestre[i].usata && finestre[i].wayland) scollega(i);
+}
+
+/* Si vede (non e' ridotta)? Una finestra nascosta non riceve i "disegna il prossimo fotogramma". */
+int ponte_visibile(int i) {
+    return finestre[i].usata && finestre[i].mostrata >= 0 && !finestre[i].ridotta;
+}
+
+/* Quanto e' grande lo schermo. */
+void ponte_schermo(int *l, int *a) {
+    *l = larghezza;
+    *a = altezza;
+}
+
 /* PONG: ha risposto. Se era bloccata, torna normale, e le si dice quello che si era
  * perso: l'immagine da restituire e se ha il fuoco. */
 static void pong(int i, const struct pong *m) {
@@ -1061,7 +1140,7 @@ static void controlla_risposte(void) {
     unsigned int adesso = tempo();
     for (int i = 0; i < MAX_FINESTRE; i++) {
         struct finestra_compositore *f = &finestre[i];
-        if (!f->usata || !f->immagini[0]) continue;
+        if (!f->usata || !f->immagini[0] || f->wayland) continue;   /* Wayland ha i suoi ping */
         /* Con sopra una finestra di scelta (Apri/Salva) l'app aspetta la risposta e non legge: non si giudica,
          * e il conto riparte (deciso il 17/11/2026, STATO.md sez. 7). */
         if (f->ping_atteso && scelta_sopra(i) >= 0) f->ultimo_ping = adesso;
@@ -1576,6 +1655,17 @@ static void al_mouse(const struct evento *e) {
             if (i >= 0) in_primo_piano(i);
         }
         if (i >= 0) presa = i;
+        if (i >= 0 && finestre[i].wayland) {
+            /* la cornice di una finestra Wayland e' nostra: i suoi comandi e il trascinamento li
+             * gestiamo qui (una finestra nostra lo chiede con RIDUCIMI e TRASCINAMI). Sotto la
+             * testata c'e' il programma, ma senza seat non sente il puntatore. */
+            switch (cornice_comando(finestre[i].l, px - finestre[i].x, py - finestre[i].y)) {
+            case CORNICE_CHIUDI:  wayland_chiedi_chiusura(i); break;   /* "chiuditi": decide lui */
+            case CORNICE_RIDUCI:  riducimi(i); break;
+            case CORNICE_TESTATA: trascinami(i); break;
+            default: break;
+            }
+        }
     }
     if (trascinata >= 0) {
         if (!premuto) presa = trascinata = -1;   /* lasciata: lo spostamento finisce */
@@ -1653,26 +1743,33 @@ static void al_tasto(const struct evento *e) {
     if (fuoco >= 0) avvisa(fuoco, (struct notizia){ .tipo = TASTO, .tasto = e->tasto });
 }
 
+/* Il descrittore del server Wayland (wayland_inizia), che il ciclo guarda insieme agli altri;
+ * -1 se non si e' acceso (il compositore funziona uguale, solo senza Wayland). */
+static int descrittore_wayland = -1;
+
 /* Un giro di attesa: aspetta al massimo 'ms' millisecondi (0: guarda e basta) che
  * succeda qualcosa, e serve quello che e' pronto: un evento, i messaggi delle
  * applicazioni, un collegamento nuovo. Quanti erano pronti (0: niente), -1 se le
  * risorse di init non ci sono piu'. */
 static int servi(int ms) {
     const int eventi = D_EVENTI, ascolto = D_ASCOLTO;   /* prestati da init */
-    struct da_guardare g[3 + MAX_FINESTRE + MAX_PORTE];
-    int chi[3 + MAX_FINESTRE + MAX_PORTE];   /* una finestra (>= 0), una porta (-2 - k), o -1 */
+    struct da_guardare g[4 + MAX_FINESTRE + MAX_PORTE];
+    int chi[4 + MAX_FINESTRE + MAX_PORTE];   /* una finestra (>= 0), una porta (-2 - k), o -1 */
     int n = 0;
     g[n].descrittore = eventi;  chi[n++] = -1;
     g[n].descrittore = ascolto; chi[n++] = -1;
-    for (int i = 0; i < MAX_FINESTRE; i++)
-        if (finestre[i].usata) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
+    for (int i = 0; i < MAX_FINESTRE; i++)   /* quelle di Wayland non hanno un collegamento */
+        if (finestre[i].usata && finestre[i].collegamento >= 0) { g[n].descrittore = finestre[i].collegamento; chi[n++] = i; }
     for (int k = 0; k < MAX_PORTE; k++)
         if (porte[k].usata) { g[n].descrittore = porte[k].d; chi[n++] = -2 - k; }
     int catalog = 0;   /* gli avvisi di catalog, in fondo (se ci sono) */
     if (avvisi_catalog >= 0) { catalog = n; g[n].descrittore = avvisi_catalog; chi[n++] = -1; }
+    int wl = -1;       /* Wayland, accanto al nostro protocollo (se si e' acceso) */
+    if (descrittore_wayland >= 0) { wl = n; g[n].descrittore = descrittore_wayland; chi[n++] = -1; }
     int pronti = aspetta(g, n, ms);
     if (pronti <= 0) return pronti;
     if (catalog && g[catalog].pronto) avviso_catalog();
+    if (wl >= 0 && g[wl].pronto) wayland_servi();
 
     if (g[0].pronto) {
         struct evento e;
@@ -1721,6 +1818,7 @@ int main(void) {
     scena = (struct tela){ disegno, larghezza, altezza };
     pennello_prepara(&pennello, &scena);
     componi();
+    descrittore_wayland = wayland_inizia();   /* Wayland accanto al nostro protocollo (passo 1) */
 
     /* Il ciclo di ogni compositore: aspetta che succeda qualcosa (un evento, un
      * collegamento, un messaggio da un'applicazione), poi SVUOTA LA CODA: serve tutto
@@ -1741,5 +1839,6 @@ int main(void) {
         }
         controlla_risposte();
         componi();
+        if (descrittore_wayland >= 0) wayland_fotogramma();   /* "fatto": il programma disegna il prossimo */
     }
 }

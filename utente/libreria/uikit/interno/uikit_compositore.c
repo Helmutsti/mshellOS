@@ -3,6 +3,7 @@
  * uguali a quelli delle applicazioni. */
 #include "gkit/gkit.h"   /* MAX_TITOLO */
 #include "uikit/stile.h"
+#include "uikit/uikit.h"   /* testo_centrato, larghezza_testo_stile */
 #include "uikit/sistema/uikit_compositore.h"
 
 /* Le misure della barra, come la testata della finestra di UIKit (finestra_tk, uikit.h): alta
@@ -70,6 +71,55 @@ void barra_congelata_disegna(struct pennello *p, int x, int y, int l, int a, con
     struct tondo tutta = tondo(x, y, l, a, RAGGIO_FINESTRA_NUOVO);
     pennello_colore(p, STATO_ERRORE);
     contorna_forma(p, &tutta, 256);
+}
+
+/* --- LA CORNICE di una finestra che non e' di UIKit (Wayland) ---
+ * Una finestra Wayland disegna solo il suo contenuto: la cornice (il vetro, la testata con il
+ * titolo, i comandi riduci e chiudi, il filo di luce interno) la mette il compositore, con
+ * lo stesso disegno della finestra di UIKit (finestra_tk.c: finestra_tk_contenuto_disegna e
+ * finestra_tk_titolo_disegna). La testata e' quella della finestra normale (40 di altezza,
+ * comandi da 32); la finestra di UIKit disegna il fondo, il titolo e i comandi; qui, uguale. */
+int cornice_testata_altezza(void) { return congelata_alta(0); }
+int cornice_raggio(void) { return RAGGIO_FINESTRA_NUOVO; }
+
+int cornice_comando(int l, int x, int y) {
+    if (x < 0 || x >= l || y < 0 || y >= congelata_alta(0)) return CORNICE_NIENTE;
+    if (barra_congelata_sul_chiudi(l, 0, x, y)) return CORNICE_CHIUDI;
+    int cx = congelata_comando_x(l, 0, 0), cy = congelata_comando_y(0), lato = congelata_lato(0);
+    if (x >= cx && x < cx + lato && y >= cy && y < cy + lato) return CORNICE_RIDUCI;
+    return CORNICE_TESTATA;
+}
+
+void cornice_disegna(struct pennello *p, int l, int a, const char *titolo, int attiva) {
+    int alta = congelata_alta(0), lato = congelata_lato(0);
+    pulisci(p);
+    struct tondo contenuto = { 0, alta, l, a - alta, { 0, 0, RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO } };
+    pennello_colore(p, SUPERFICIE_VETRO);
+    riempi_forma(p, &contenuto);
+    struct tondo testata = { 0, 0, l, alta, { RAGGIO_FINESTRA_NUOVO, RAGGIO_FINESTRA_NUOVO, 0, 0 } };
+    riempi_forma(p, &testata);
+
+    /* il titolo al centro, tra lo spazio vuoto a sinistra (largo quanto i comandi) e i comandi */
+    const struct font *font = FONT_TITOLO_FINESTRA;
+    pennello_salva(p);
+    int margine = TITOLO_COMANDI_LARGHEZZA + SPAZIO_8;
+    pennello_ritaglia(p, margine, 0, l - 2 * margine, alta);
+    pennello_colore(p, attiva ? TESTO_PRIMARIO : TESTO_SECONDARIO);
+    testo_centrato(p, font, (l - larghezza_testo_stile(font, titolo)) / 2, 0, alta, titolo);
+    pennello_ripristina(p);
+
+    /* i comandi, senza fondo a riposo (il puntatore su di loro non si segue: nessun seat) */
+    pennello_salva(p);
+    if (!attiva) pennello_opacita(p, OPACITA_COMANDI_INATTIVI);
+    pennello_colore(p, COLORE_ICONA(COLORE_ICONA_PRIMARIO));
+    for (int chiudi = 0; chiudi < 2; chiudi++) {
+        int cx = congelata_comando_x(l, 0, chiudi), cy = congelata_comando_y(0);
+        icona(p, chiudi ? ICONA_X : ICONA_MINUS, ICONA_S, cx + (lato - ICONA_S) / 2, cy + (lato - ICONA_S) / 2);
+    }
+    pennello_ripristina(p);
+
+    struct tondo tutta = tondo(0, 0, l, a, RAGGIO_FINESTRA_NUOVO);
+    ombre_strati_dentro(p, &tutta, OMBRA_TAB(finestra), OMBRA_N(finestra));
 }
 
 void velo_finestra_disegna(struct pennello *p, int x, int y, int l, int a, int raggio) {

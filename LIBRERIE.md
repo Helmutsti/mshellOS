@@ -175,6 +175,16 @@ gli fornisce una sola funzione, "disegna la barra del titolo congelata", che con
 barre mini. Così la dipendenza è una, scritta e voluta, e risolve anche il problema delle
 finestre mini segnalato dalla libreria.
 
+**Aggiunto il 18/11/2026 (Wayland, passo 1).** Alla stessa dipendenza UIKit dà al compositore
+anche LA CORNICE di una finestra che non è di UIKit (`cornice_disegna`, `cornice_comando`,
+`cornice_testata_altezza`, `cornice_raggio`, in `uikit/sistema/uikit_compositore.h`): il vetro, la
+testata con il titolo e i comandi riduci e chiudi, il filo di luce del tema scuro, con lo stesso
+disegno della finestra di UIKit. Una finestra Wayland disegna solo il suo contenuto, e la cornice
+la mette il compositore (`SISTEMA.md`, "Wayland"). GKit non cambia: quando diventerà un client
+Wayland (passo 2), questo è il pezzo che resta fuori da lui. I buffer dei programmi Wayland sono
+fogli di memoria condivisa come quelli di GKit (memfd), ma li gestisce libwayland, non il nostro
+protocollo.
+
 ## Come diventa il codice (dopo l'approvazione)
 
 - Due cartelle: `utente/libreria/gkit/` (`gkit.h` la base, `gkit_disegno.h` gli strumenti) e

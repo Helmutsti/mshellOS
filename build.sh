@@ -68,6 +68,7 @@
 #       disco_custode.img   per la prova delle porte delle app custodite da init (programma custode)
 #       disco_stato_rete.img  per la prova della porta di controllo della rete (programma stato_rete)
 #       disco_recinto.img     per la prova del recinto delle app (programma recinto)
+#       disco_wayland.img     per la prova di Wayland (il client Wayland di prova)
 #       disco_picker.img      per la prova del servizio picker (il picker con la finestra finta)
 #   build/scarico/     i pacchetti di Alpine e i sorgenti di curl, libvterm e vim scaricati, tenuti per la
 #                      prossima volta
@@ -205,7 +206,7 @@ mkdir -p "$SCARICO/$ARCH"
 # FAT della partizione di avvio, scritta senza montarla
 # make: la compilazione (programmi.mk); zip: i pacchetti delle app
 # efi-mkuki e systemd-efistub: la UKI (passo 5)
-ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub"
+ATTREZZI="clang lld binutils make e2fsprogs sfdisk mtools zip efi-mkuki systemd-efistub xz"
 apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = "$(echo $ATTREZZI | wc -w)" ] ||
     apk add --cache-dir "$SCARICO/$ARCH" $ATTREZZI >/dev/null
 
@@ -218,6 +219,9 @@ apk info -e $ATTREZZI >/dev/null 2>&1 && [ "$(apk info -e $ATTREZZI | wc -l)" = 
 #   - ncurses-dev, ncurses-static: ncurses, la libreria che dice come si parla a un
 #     terminale (la lega dentro vim), con le descrizioni dei terminali (terminfo) da cui
 #     strumenti/compilazione/vim.sh prende quelle che vanno nel disco;
+#   - libffi-dev, expat-dev, expat-static: libffi.a (la usa Wayland per chiamare le nostre funzioni dai
+#     messaggi) e libexpat.a (wayland-scanner legge i file XML dei protocolli); li usa
+#     strumenti/compilazione/wayland.sh, che compila le librerie di Wayland dai sorgenti;
 #   - ca-certificates-bundle: i certificati radice (le autorita' di cui ci si fida per HTTPS),
 #     che vanno in /etc/ssl/certs/ca-certificates.crt.
 # Le firme dei pacchetti si controllano con le chiavi di Alpine per quella CPU.
@@ -227,7 +231,7 @@ rm -rf "$RADICE"
 apk --arch "$ARCH" --root "$RADICE" --initdb --no-scripts \
     --repositories-file /etc/apk/repositories --keys-dir "/usr/share/apk/keys/$ARCH" \
     --cache-dir "$SCARICO/$ARCH" add musl-dev linux-headers compiler-rt \
-    mbedtls-dev mbedtls-static ncurses-dev ncurses-static ca-certificates-bundle \
+    mbedtls-dev mbedtls-static ncurses-dev ncurses-static libffi-dev expat-dev expat-static ca-certificates-bundle \
     $PACCHETTI_KERNEL >/dev/null
 VERSIONE_K=$(ls "$RADICE/lib/modules")
 MODULI_K="$RADICE/lib/modules/$VERSIONE_K"
@@ -785,6 +789,17 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_recinto.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_recinto.img pronto: con il programma recinto in /data/tests"
 
+# IL DISCO DELLA PROVA DI WAYLAND: lo stesso, con in /data/tests solo il client Wayland di prova
+# (utente/prove/wayland.c), che apre la finestra "Prova Wayland" sul socket di prova del
+# compositore (/run/mshell/wayland-prova). Lo usa test/prove/wayland.py (provata nella sandbox;
+# in QEMU ancora no).
+cp "$B/disco_app.img" "$B/disco_wayland.img"
+rm -f "$(vero /data/tests)"/recinto
+metti_file "$P/bin/prove/wayland" "/data/tests/wayland" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_wayland.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_wayland.img pronto: con il programma wayland in /data/tests"
+
 # IL DISCO DELLA PROVA DEL PICKER: come disco_app.img, ma il picker del sistema e' quello con la
 # finestra finta, senza grafica (bin/prove/picker_finto: utente/prove/picker_finestra_finta.c),
 # che "sceglie" leggendo /data/tests/window/choice (una cartella: init la salta). In
@@ -793,7 +808,7 @@ echo "$B/disco_recinto.img pronto: con il programma recinto in /data/tests"
 # firewall.conf del sistema (disco_firewall_aperto.img l'aveva cambiato) e il picker finto; poi
 # nell'albero torna il picker vero.
 cp "$B/disco_app.img" "$B/disco_picker.img"
-rm -f "$(vero /data/tests)"/recinto
+rm -f "$(vero /data/tests)"/wayland
 metti_file "$P/bin/prove/picker" "/data/tests/picker" 755 >/dev/null
 metti_cartella /data/tests/window 0 755 >/dev/null
 printf '# la scelta della finestra finta del picker (utente/prove/picker_finestra_finta.c)\nfolder=Documenti\nopen=prova.txt\n' \

@@ -172,6 +172,7 @@ metti_file $O/bin/prove/riempitivo /.sandbox/prove/riempitivo 755
 metti_file $O/bin/prove/pacchetti /.sandbox/prove/pacchetti 755
 metti_file $O/bin/prove/messaggi /.sandbox/prove/messaggi 755
 metti_file $O/bin/prove/catalog /.sandbox/prove/catalog 755
+metti_file $O/bin/prove/wayland /.sandbox/prove/wayland 755
 
 mkdir -p /w/build/sandbox
 (cd "$A" && tar -cf /w/build/sandbox/radice.tar --numeric-owner .)

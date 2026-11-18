@@ -46,6 +46,19 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
    (decisione della persona, sezione 7). Dettagli in `disegni/ApriSalva/PICKER_DA_FINIRE.md`.
 12. **x86_64**: build completa e prove passate sul PC Windows (17/11/2026).
 
+**Wayland (decisione della persona, 18/11/2026): il compositore passa a Wayland, a passi, senza
+rompere niente** (`SISTEMA.md`, "Wayland"). **Passo 1 fatto** (ramo di lavoro, non ancora in `main`):
+il server Wayland sta dentro il compositore, accanto al protocollo di oggi (libwayland-server statica
+da sorgenti ufficiali, `strumenti/compilazione/wayland.sh`; `utente/programmi/compositore_wayland.c`);
+globali `wl_compositor`, `wl_shm`, `xdg_wm_base`; un client Wayland di prova
+(`utente/prove/wayland.c`, prova `wayland`, solo sandbox: `disco_wayland.img` non c'è ancora per
+QEMU) apre una finestra con la cornice nostra sulla scrivania, si sposta, si chiude con la X.
+Socket di prova `/run/mshell/wayland-prova`; le app normali NON hanno Wayland. **Passo 2 (da
+fare)**: GKit client Wayland, un'app alla volta (serve wl_seat per tastiera e mouse, wl_output,
+il socket dato dal launcher come le altre porte con `WAYLAND_SOCKET`, l'identità dell'app per i
+permessi, il ritmo dei fotogrammi, il ridimensionamento). **Passo 3 (da fare)**: via il vecchio
+protocollo, resta Wayland con le nostre estensioni (finestra di scelta del picker, identità, pannelli).
+
 **Cosa resta, nell'ordine:**
 1. il **recinto vero nel launcher**: unire quello che la prova `recinto` dimostra (Home secondo
    `files.*`, sfondi per `settings.system`, rete secondo `network.use`, seccomp, porte e

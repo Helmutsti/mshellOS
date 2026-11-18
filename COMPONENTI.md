@@ -71,6 +71,7 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Cosa fa**: padrone dello schermo. Compone finestre (con ombre e sfocatura), sfondo e pannelli, smista tastiera e mouse, sposta le finestre. Le app disegnano da sole in memoria condivisa. Riceve dal launcher la porta di ogni app (PORTA_APP, solo da uid 0) e lega a quell'app le finestre che arrivano dalla porta (`gkit/sistema/protocollo.h`, "LA PORTA DELL'APP"); i programmi del sistema si collegano ancora per nome.
   **La finestra di scelta** (`RUOLO_SCELTA`, `gkit/sistema/protocollo.h`, "LA FINESTRA DI SCELTA"): sta in uno strato proprio, sopra tutte le finestre e sotto i pannelli; si mette centrata sopra la finestra più in primo piano dell'app `sopra` (o al centro dello schermo); prende il fuoco quando compare e non è annunciata alla scrivania. Finché è aperta ogni finestra di quell'app è velata (il velo `SUPERFICIE_VELO`, disegnato con `velo_finestra_disegna` di UIKit sulla forma della finestra) e non riceve puntatore, rotella né tasti: un clic su una velata porta davanti la scelta. Quando si chiude, velo via e fuoco all'app. Accettata solo dal collegamento per nome il cui programma (lo dice il kernel) è `/system/services/picker/picker`.
   **Il puntatore**: le cinque forme sono le immagini del disegno esportate da Figma (`risorse/puntatore/`, PNG con alfa), convertite da `strumenti/grafica/puntatore.py` in `utente/programmi/puntatori.h` (0xAARRGGBB premoltiplicato, ombra compresa, uguale nei due temi). Il compositore le mescola con la scena (`sopra_a`) senza colori del tema.
+  **Wayland (passo 1, dal 18/11/2026)**: il compositore è anche un server Wayland (`compositore_wayland.c`, libwayland-server statica, `SISTEMA.md` "Wayland"). Apre il socket di prova `/run/mshell/wayland-prova` e il suo ciclo guarda anche il descrittore di Wayland. Globali: `wl_compositor`, `wl_shm`, `xdg_wm_base` (niente seat né popup). Una finestra Wayland occupa un posto di `finestre[]` come le altre: la cornice (vetro, testata con titolo e comandi) la disegna il compositore con UIKit (`cornice_disegna`), il contenuto è quello del programma; sposta, porta davanti, riduce e chiude (la X manda `xdg_toplevel.close`) il compositore. Le app normali non hanno ancora Wayland (passo 2).
 - **Tipo**: servizio.
 - **Lanciato da**: init (con schermo, tubo eventi e porta "compositore" già aperti).
 - **Lancia**: nessuno.
@@ -161,6 +162,10 @@ Nota sui permessi: `ha_permesso` (corekit, `interno/messaggi.c`; la regola in `s
 - **Lancia**: nessuno (`:!` lancerebbe una shell `sh`, che nel sistema non c'è).
 - **Gira come**: chi lo lancia; oggi, dalla shell, uid 0. Non imposta uid.
 - **Poteri**: no. Scrive i file con i permessi di chi lo lancia; il file di scambio (`.swp`) accanto al file, oppure in `/tmp`.
+
+### libwayland (`strumenti/compilazione/wayland.sh`)
+- **Cosa fa**: le librerie di Wayland (libwayland-server nel compositore, libwayland-client nel client di prova). Non sono nostre: sorgenti ufficiali (wayland 1.25.0 e wayland-protocols 1.48, le versioni di Alpine 3.24), compilate STATICHE senza meson; `wayland-scanner` (statico, solo per la compilazione) genera le intestazioni da `wayland.xml` e `xdg-shell.xml`. Legano `libffi.a` e `expat-static` (solo lo scanner) della radice di Alpine.
+- **Tipo**: libreria. Gira come il programma che la lega. Poteri: no.
 
 ---
 
@@ -264,7 +269,7 @@ Collegate dentro ogni programma (statico): non girano da sole e non hanno uid. O
 
 ## Programmi di prova (`utente/prove/`)
 
-Programmi di prova, solo per i test automatici, non fanno parte del sistema: `argomenti`, `firewall`, `messaggi`, `pacchetti`, `rete`, `riempitivo`, `stato_rete` (messi in `/data/tests`, avviati da init come sistema, uid 0, quando esiste quella cartella) e le app di prova `applicazioni/Contatore` e `applicazioni/Esempio` (Esempio ha `network.use` nel manifesto: all'avvio chiede il tema a catalog e lo stato a network dalle sue porte, per provarle).
+Programmi di prova, solo per i test automatici, non fanno parte del sistema: `argomenti`, `firewall`, `messaggi`, `pacchetti`, `rete`, `riempitivo`, `stato_rete`, `wayland` (un client Wayland: apre la finestra "Prova Wayland" sul socket di prova del compositore, prova `wayland`) (messi in `/data/tests`, avviati da init come sistema, uid 0, quando esiste quella cartella) e le app di prova `applicazioni/Contatore` e `applicazioni/Esempio` (Esempio ha `network.use` nel manifesto: all'avvio chiede il tema a catalog e lo stato a network dalle sue porte, per provarle).
 
 ---
 

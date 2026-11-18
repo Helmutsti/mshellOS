@@ -203,6 +203,52 @@ per ognuna, poi `restored`): il servizio le rimette nella sua tabella e le app n
 della caduta. Il compositore no (se riparte le finestre si perdono comunque). Le funzioni comuni
 sono in `corekit/sistema/servizi.h` (`custodisci_porta`, `riprendi_porte`).
 
+### Wayland: il compositore parla il protocollo di tutti (deciso il 18 novembre 2026)
+
+**Decisione della persona:** il compositore passa a **Wayland**, a passi, senza mai rompere
+niente. Il server Wayland sta **dentro il compositore** (come ChromeOS con Exo, e come Mutter
+o KWin): non è un ponte esterno. Wayland dà una cosa che oggi non abbiamo, il suo mondo di
+programmi (toolkit, browser, app Linux), e il nostro protocollo (`gkit/sistema/protocollo.h`)
+resta, passo dopo passo, solo per quello che è davvero nostro.
+1. **Passo 1 (fatto il 18/11/2026):** il compositore impara Wayland ACCANTO al protocollo di oggi.
+   Un client Wayland piccolo (`utente/prove/wayland.c`) apre una finestra sulla scrivania; prova
+   `wayland`. Dettagli sotto.
+2. **Passo 2 (da fare):** GKit diventa un client Wayland, un'app alla volta. Servono `wl_seat`
+   (tastiera e mouse), `wl_output`, il socket dato dal launcher come le altre porte, e il modo
+   di dire all'app quale finestra è sua (l'identità, per i permessi).
+3. **Passo 3 (da fare):** via il vecchio protocollo. Resta Wayland con le nostre estensioni
+   private: la finestra di scelta (`RUOLO_SCELTA`, il picker), l'identità dell'app per i
+   permessi, i pannelli della scrivania (userbar, vassoio).
+
+**Come è fatto il passo 1.**
+- **libwayland-server** (e libwayland-client, per i client di prova) si compila STATICA dai
+  sorgenti ufficiali, versione fissata: wayland 1.25.0 e wayland-protocols 1.48 (le stesse di
+  Alpine 3.24), scaricate in `build/scarico` e controllate con lo sha256. Lo fa
+  `strumenti/compilazione/wayland.sh` (chiamato da `programmi.mk`, quindi da `build.sh` e dalla
+  sandbox) senza meson: `wayland-scanner` (statico, solo per la compilazione, non va nel disco)
+  genera le intestazioni e il codice dai file XML (`wayland.xml`, `xdg-shell.xml`). Il compositore
+  lega anche `libffi.a` (da `libffi-dev` nella radice di Alpine, come `expat-static` per lo scanner).
+- **Dentro il compositore**: il ciclo guarda anche il descrittore del server (`wl_event_loop_get_fd`)
+  e basta. Il codice è in `utente/programmi/compositore_wayland.c`, con un'interfaccia piccola
+  verso `compositore.c` (`compositore_wayland.h`: il ponte, "IL PONTE" in `compositore.c`).
+  Globali: `wl_compositor` (superfici: attach, damage, frame, commit), `wl_shm` (ARGB8888 e
+  XRGB8888) e `xdg_wm_base` (finestre con titolo, configure, chiusura). Niente seat, output e popup.
+- **Come una finestra Wayland entra tra le finestre del compositore**: occupa un posto di
+  `finestre[]` come le altre (con `wayland = 1`, senza collegamento né foglio). L'immagine è
+  memoria del compositore: la cornice nostra disegnata da UIKit (`cornice_disegna`, `uikit_compositore.h`:
+  vetro, testata di 40 con titolo e comandi, filo di luce del tema scuro, gli stessi della finestra
+  di UIKit) e sotto la testata il contenuto del programma, copiato a ogni commit. Ombra, vetro
+  smerigliato, primo piano e fuoco sono quelli di tutte le finestre. La cornice la gestisce il
+  compositore sul puntatore: trascinare dalla testata, ridurre, e la X che manda
+  `xdg_toplevel.close` (il programma decide).
+- **Il socket**: `/run/mshell/wayland-prova`, aperto dal compositore stesso (`wl_display_add_socket`;
+  `/run` è in memoria, niente dati scrivibili sotto `/system`). Solo per la prova: lo apre root con
+  i permessi normali, un'app della persona non lo raggiunge. Le app normali NON hanno ancora Wayland.
+  Per il passo 2 la strada è quella delle altre porte: il launcher apre una coppia di socket, tiene un
+  capo e passa l'altro all'app al descrittore dato, che l'app usa con `WAYLAND_SOCKET` (la libreria
+  lo prende come connessione già aperta: `wl_client_create` lato server, con l'identità che
+  il launcher ha già, senza socket con nome per le app).
+
 ## 4. Domande aperte
 
 - **Comandi distribuiti dalla persona.** Già deciso: i comandi della persona stanno in `/data/users/<uid>/bin`, cercati dopo `/system/bin`. Da decidere: come si distribuiscono (un'app che li dichiara nel manifesto, un pacchetto di soli comandi, o solo copia a mano) e con quali poteri girano. Oggi un comando ha tutti i permessi della persona, come su Linux e Mac: va bene per i propri, è un rischio per quelli di altri.

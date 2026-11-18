@@ -14,6 +14,8 @@
 # Cosa esce, in O:
 #   lib{corekit,gkit,uikit}.a      le tre librerie (LIBRERIE.md)
 #   libvterm/                      libvterm.a e le sue intestazioni (solo per il Terminale)
+#   wayland/                       libwayland-server.a (nel compositore), libwayland-client.a
+#                                  (nel client di prova) e le intestazioni (wayland.sh)
 #   vim/                           il comando vim e le descrizioni dei terminali (vim.sh)
 #   bin/<nome>                     i programmi del sistema (utente/programmi/<nome>.c)
 #   bin/comandi/<nome>             i comandi (utente/comandi/<nome>.c), solo CoreKit
@@ -124,6 +126,22 @@ $(VTERM): strumenti/compilazione/libvterm.sh $(O)/.firma
 $(O)/utente/applicazioni/Terminale/terminale.o: $(VTERM)
 terminale_ESTERNE := $(VTERM)
 
+# Wayland (il protocollo con cui un programma grafico dice al compositore "ecco la mia finestra"),
+# dai sorgenti ufficiali: li scarica e li compila wayland.sh, che dice come. libwayland-server
+# si lega nel compositore (con compositore_wayland.c), libwayland-client nei programmi Wayland
+# di prova; tutte e due con libffi (libffi-dev nella radice, libffi.a). Le intestazioni, anche
+# quelle fatte da wayland-scanner, sono in $(O)/wayland/include.
+WAYLAND := $(O)/wayland/libwayland-server.a
+$(WAYLAND): strumenti/compilazione/wayland.sh $(O)/.firma
+	@sh strumenti/compilazione/wayland.sh $(ARCH) $(RADICE) $(SCARICO) $(O)/wayland "$(CC)"
+$(O)/wayland/libwayland-client.a: $(WAYLAND)
+$(O)/utente/programmi/compositore_wayland.o: UTENTE += -I$(O)/wayland/include
+$(O)/utente/programmi/compositore_wayland.o: $(WAYLAND)
+$(O)/utente/prove/wayland.o: UTENTE += -I$(O)/wayland/include
+$(O)/utente/prove/wayland.o: $(WAYLAND)
+compositore_ESTERNE := $(WAYLAND) $(LIBC)/libffi.a
+wayland_ESTERNE := $(O)/wayland/libwayland-client.a $(LIBC)/libffi.a
+
 # vim (l'editor, la versione piu' piccola), dai sorgenti ufficiali: lo scarica e lo compila
 # vim.sh, che dice come; accanto mette le descrizioni dei terminali (vim/terminfo/) che vanno
 # in /etc/terminfo. Non e' codice nostro: si compila con il suo configure, fuori da make.
@@ -143,10 +161,12 @@ $(VIM): strumenti/compilazione/vim.sh $(O)/.firma
 # disco di quella prova. Senza picker_finestra.c il picker del sistema non si puo' legare: make
 # si ferma e lo dice.
 PEZZI_PICKER := picker_nome picker_finestra
+# Anche il compositore ha un pezzo che non e' un programma: il server Wayland (compositore_wayland.c)
+PEZZI_COMPOSITORE := compositore_wayland
 PICKER_PEZZI := $(O)/utente/programmi/picker_nome.o $(O)/utente/programmi/picker_finestra.o
 PICKER_FINTO_PEZZI := $(O)/utente/programmi/picker.o $(O)/utente/programmi/picker_nome.o \
                       $(O)/utente/prove/picker_finestra_finta.o
-PROGRAMMI := $(filter-out $(PEZZI_PICKER),$(basename $(notdir $(wildcard utente/programmi/*.c))))
+PROGRAMMI := $(filter-out $(PEZZI_PICKER) $(PEZZI_COMPOSITORE),$(basename $(notdir $(wildcard utente/programmi/*.c))))
 COMANDI   := $(basename $(notdir $(wildcard utente/comandi/*.c)))
 PROVE     := $(filter-out picker_finestra_finta,$(basename $(notdir $(wildcard utente/prove/*.c)))) picker_finto
 
@@ -156,8 +176,10 @@ utente/programmi/picker_finestra.c:
 # i programmi del sistema (init, i servizi, la shell di prova). Il picker ha in piu' i suoi
 # pezzi, legati dopo il servizio ($< e' sempre il primo)
 $(O)/bin/picker: $(PICKER_PEZZI)
+# il compositore: il server Wayland (compositore_wayland.o) e le sue librerie (compositore_ESTERNE)
+$(O)/bin/compositore: $(O)/utente/programmi/compositore_wayland.o
 $(addprefix $(O)/bin/,$(PROGRAMMI)): $(O)/bin/%: $(O)/utente/programmi/%.o $(LIBRERIE)
-	$(call lega,$@,$< $(filter-out $<,$(filter %.o,$^)) $(LIBRERIE))
+	$(call lega,$@,$< $(filter-out $<,$(filter %.o,$^)) $($*_ESTERNE) $(LIBRERIE))
 # i comandi: programmi senza grafica, solo CoreKit (SISTEMA.md)
 # Un comando che usa una libreria di Alpine la dice in LIBRERIE_<nome> (legata dentro il
 # programma, dopo CoreKit). Oggi nessuno.
@@ -165,7 +187,7 @@ $(addprefix $(O)/bin/comandi/,$(COMANDI)): $(O)/bin/comandi/%: $(O)/utente/coman
 	$(call lega,$@,$< $(COREKIT) -L$(LIBC) $(LIBRERIE_$*))
 # i programmi delle prove (utente/prove): solo nei dischi delle prove
 $(addprefix $(O)/bin/prove/,$(filter-out picker_finto,$(PROVE))): $(O)/bin/prove/%: $(O)/utente/prove/%.o $(LIBRERIE)
-	$(call lega,$@,$< $(LIBRERIE))
+	$(call lega,$@,$< $($*_ESTERNE) $(LIBRERIE))
 # il picker con la finestra finta, per la sua prova (vedi PEZZI_PICKER, sopra)
 $(O)/bin/prove/picker_finto: $(PICKER_FINTO_PEZZI) $(LIBRERIE)
 	$(call lega,$@,$(PICKER_FINTO_PEZZI) $(LIBRERIE))

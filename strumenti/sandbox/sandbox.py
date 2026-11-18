@@ -18,7 +18,7 @@ solo i capi "di hardware" (strumenti/sandbox/sandbox.h): lo schermo e' un file i
 sistema), /data scrivibile (un volume che sparisce alla fine), /run e /tmp in memoria.
 
 LE IMMAGINI DOCKER
-    mshell-sandbox-attrezzi-3-<arch>   alpine con clang, lld, make, zip e la radice di musl e ncurses (come
+    mshell-sandbox-attrezzi-4-<arch>   alpine con clang, lld, make, zip e la radice di musl e ncurses (come
                               build.sh, con la stessa cartella di pacchetti build/scarico/<arch>):
                               si fa una volta sola
     mshell-sandbox            il sistema: FROM scratch, con dentro solo l'albero di
@@ -82,13 +82,13 @@ def processore():
 CPU, ARCH, PIATTAFORMA = processore()
 # attrezzi e oggetti compilati sono per processore: non si mescolano (l'immagine "mshell-sandbox"
 # no, e' una sola e si rifa' a ogni compilazione)
-ATTREZZI = f"mshell-sandbox-attrezzi-3-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
+ATTREZZI = f"mshell-sandbox-attrezzi-4-{ARCH}"   # il numero cambia quando cambiano i pacchetti (prepara_attrezzi)
 OGGETTI = __import__("os").environ.get("SANDBOX_OGGETTI", f"mshell-sandbox-oggetti-{ARCH}")
 PORTA = 7000                                     # SANDBOX_PORTA in sandbox.h
 COSTRUITO = REPO / "build" / "sandbox"
 # i dischi delle prove di build.sh, e cosa vuol dire per la sandbox (avvio_sandbox.c)
 DISCHI = {"disco.img": "nessuna", "disco_app.img": "nessuna", "disco_prove.img": "riempitivi", "disco_pacchetti.img": "pacchetti",
-          "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog"}
+          "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog", "disco_wayland.img": "wayland"}
 
 # I codici dei tasti di Linux (KEY_*, linux/input-event-codes.h) per i nomi dei tasti di
 # QEMU (i "qcode" che usano le prove: "a", "ret", "shift"...).
@@ -147,10 +147,10 @@ def prepara_attrezzi():
     nome = f"{ATTREZZI}-{os.getpid()}"
     # una sola cartella di pacchetti per processore, come build.sh: attrezzi e radice di musl
     # sono dello stesso processore, quello del computer
-    comando = (f"apk add --cache-dir /w/build/scarico/{ARCH} clang lld binutils make zip tar >/dev/null && "
+    comando = (f"apk add --cache-dir /w/build/scarico/{ARCH} clang lld binutils make zip tar xz >/dev/null && "
                f"apk --arch {ARCH} --root /radice --initdb --no-scripts "
                f"--repositories-file /etc/apk/repositories --keys-dir /usr/share/apk/keys/{ARCH} "
-               f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt ncurses-dev ncurses-static >/dev/null")
+               f"--cache-dir /w/build/scarico/{ARCH} add musl-dev linux-headers compiler-rt ncurses-dev ncurses-static libffi-dev expat-dev expat-static >/dev/null")
     (REPO / "build" / "scarico" / ARCH).mkdir(parents=True, exist_ok=True)
     r = subprocess.run(["docker", "run", "--name", nome, "--platform", PIATTAFORMA,
                         "-v", f"{REPO}:/w", "alpine:3.24", "sh", "-c", comando])

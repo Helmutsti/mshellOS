@@ -40,6 +40,24 @@ int barra_congelata_sul_chiudi(int larghezza, int mini, int x, int y);
 void barra_congelata_disegna(struct pennello *p, int x, int y, int l, int a, const char *titolo,
                              int mini);
 
+/* LA CORNICE DELLE FINESTRE CHE NON SONO DI UIKIT (Wayland: il programma disegna solo il suo
+ * contenuto). Il compositore la disegna con lo stesso disegno della finestra di UIKit: il vetro,
+ * la testata con il titolo centrato, i comandi riduci e chiudi, il filo di luce interno del tema
+ * scuro. L'immagine e' l x a (premoltiplicata, 0xAARRGGBB) su cui 'p' disegna: il contenuto del
+ * programma va sotto la testata, da cornice_testata_altezza() in giu', sul vetro (che dopo
+ * si ritaglia con gli angoli: cornice_raggio()). 'attiva': ha il fuoco (titolo e comandi pieni;
+ * se no, titolo secondario e comandi al 50%). */
+int cornice_testata_altezza(void);
+int cornice_raggio(void);
+void cornice_disegna(struct pennello *p, int l, int a, const char *titolo, int attiva);
+
+/* Cosa c'e' nel punto (x, y), dentro la cornice larga l: */
+#define CORNICE_NIENTE  0   /* sotto la testata: e' del programma */
+#define CORNICE_RIDUCI  1
+#define CORNICE_CHIUDI  2
+#define CORNICE_TESTATA 3   /* il resto della testata: si trascina la finestra */
+int cornice_comando(int l, int x, int y);
+
 /* Il velo di una finestra coperta da una finestra di scelta (componente "Velo della finestra",
  * 138:455): SUPERFICIE_VELO sulla forma della finestra in (x, y), larga l e alta a, con gli
  * angoli di 'raggio'. */
