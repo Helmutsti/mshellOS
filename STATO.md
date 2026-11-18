@@ -37,9 +37,12 @@ App Linux = pacchetto con le sue librerie (come il Mac: `utente/applicazioni_lin
 sistema (`/system/lib`, collegamento in `/lib`); il launcher le fa partire senza recinto con
 `LD_LIBRARY_PATH` e le variabili XDG. Il compositore ha in piu': xdg-decoration, move,
 set_minimized, ping, cursor-shape, wl_output, sottosuperfici, appunti. **Da fare:** prova
-automatica di Foot (scrivere un comando), prove in QEMU con Foot; il RALLENTAMENTO in QEMU
-(`wayland_ritmo` 39-49 fotogrammi/s, compositore all'88%: nato con il commit 3a11cfc, nella
-sandbox non si vede); Files e Store in QEMU falliscono per il recinto (rimandato). Avvisi di Foot:
+automatica di Foot (scrivere un comando), prove in QEMU con Foot; Files e Store in QEMU
+falliscono per il recinto (rimandato). (Il "rallentamento" di `wayland_ritmo` in QEMU non c'era:
+misurato a PC fermo, oggi e stamattina 60 fotogrammi/s con il compositore al 38-42%. Sul PC QEMU
+emula il processore e va piu' lento quando il PC lavora, per esempio con agenti che compilano:
+le misure di velocita' si fanno a PC fermo.) Manina su tutto quello che si clicca (regola della
+persona), con la prova `puntatore_manina`. Avvisi di Foot:
 mancano selezione primaria, xdg-activation, fractional-scale, xdg-toplevel-icon, text-input,
 tabelle Compose.
 
