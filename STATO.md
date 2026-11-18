@@ -23,9 +23,11 @@ elenca i programmi; tastierino numerico, Bloc Num, tasti multimediali al composi
 (area di testo UIKit a griglia, a capo con "_", Tab '\t' largo 4, Maiusc+Tab; Nuovo, Apri, Salva con
 nome, "*" dopo il nome, "Salvare le modifiche?"); il puntatore dalle PNG di Figma (risorse/puntatore/).
 
-**Da fare sul PC Windows (x86_64), prima di tutto:** build completa e collaudo x86_64; rifare le foto
-di riferimento x86_64 (cambiano userbar con il Blocco note e il puntatore); caricare online il ramo del
-recinto nel launcher (`worktree-agent-a6fd0d6238144e1f4`, esiste solo sul PC).
+**Sul PC Windows (x86_64), 18/11/2026:** build completa e collaudo x86_64 fatti; foto di riferimento
+x86_64 rifatte (userbar con il Blocco note, puntatore nuovo); ramo del recinto nel launcher
+(`worktree-agent-a6fd0d6238144e1f4`) caricato online. Le righe di `avvio` (archivio di avvio) ora
+vanno nel registro del kernel (`/dev/kmsg`, decisione della persona): il kernel non le spezza piu'
+(prima la prova `avvio` falliva a caso). **Da rifare sul Mac:** collaudo arm64 dopo questo cambio.
 
 **Domande aperte della persona (Blocco note):** Salva su un file aperto con Apri (il picker oggi lo da'
 in sola lettura; consigliata una richiesta del picker in lettura e scrittura); la domanda "Salvare le
@@ -875,9 +877,9 @@ saltate perché solo QEMU). Le tre che non passano:
 - `avvio` (2 volte su 4): il programma dell'archivio di avvio scrive la riga
   `avvio: / montato (ext4 su /dev/vda2, sola lettura)` in tre pezzi, e il kernel ci infila in
   mezzo il suo messaggio "EXT4-fs ... mounted": la prova non trova la riga. È un difetto di
-  `utente/avvio/avvio.c`, non della prova (sul PC non ancora visto, ma può capitare uguale).
-  Da decidere come correggerlo (ogni riga in una sola scrittura, o le righe dell'avvio nel
-  registro del kernel, `/dev/kmsg`, come fanno gli initramfs di Linux).
+  `utente/avvio/avvio.c`, non della prova. Una sola scrittura per riga non bastava (visto anche
+  sul PC il 18/11); corretto il 18/11/2026: le righe dell'avvio vanno nel registro del kernel,
+  `/dev/kmsg`, come fanno gli initramfs di Linux.
 - `files` e `immagini`, uguali nella sandbox (stessi pixel): le foto di riferimento sono di
   prima del puntatore nuovo (freccia grigia con bordo bianco) e dei cambi di UIKit del 14/11
   (spaziatura delle lettere nei testi piccoli di Files: titoli della barra laterale, sigle

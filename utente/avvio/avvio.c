@@ -48,23 +48,27 @@
 #define REGISTRO 16            /* dove i programmi trovano la console (corekit/interno/interno.h) */
 #define ATTESA_DISCO 100       /* volte da 100 ms: 10 secondi al massimo */
 
-static void di(const char *s) {
-    ssize_t n = write(1, s, strlen(s));
-    (void)n;
-}
+/* Le righe di avvio vanno nel REGISTRO DEL KERNEL (/dev/kmsg), come fanno gli initramfs di
+ * Linux: ogni write su /dev/kmsg e' un messaggio intero, che il kernel mette in fila con i
+ * suoi (EXT4-fs ... mounted, usb ...) e stampa sulla console senza mai spezzarlo. Scritte
+ * sulla console come un programma qualsiasi, invece, il kernel ci infilava in mezzo le sue
+ * righe. "<5>" e' il livello (notice): si vede sulla console come i messaggi del kernel.
+ * Finche' /dev non c'e' (o se /dev/kmsg non si apre) si scrive sulla console. */
+static int kmsg = -1;
 
-/* Una riga del registro va scritta con UNA sola write: se la si scrive a pezzi, il kernel
- * (EXT4-fs ... mounted) o un altro programma puo' infilarsi in mezzo e la riga si spezza.
- * Qui si compone la riga in un buffer (fino a sei pezzi, NULL = nessuno) e la si scrive in una volta. */
 static void riga(const char *a, const char *b, const char *c, const char *d, const char *e, const char *f) {
-    char buf[512];
-    size_t n = 0;
+    char buf[512] = "<5>";
+    size_t n = 3;
     const char *pezzi[6] = { a, b, c, d, e, f };
     for (int i = 0; i < 6; i++)
         for (const char *s = pezzi[i]; s && *s && n < sizeof buf - 1; s++) buf[n++] = *s;
     buf[n++] = '\n';
-    ssize_t w = write(1, buf, n);
+    ssize_t w = kmsg >= 0 ? write(kmsg, buf, n) : write(1, buf + 3, n - 3);
     (void)w;
+}
+
+static void di(const char *s) {
+    riga(s, NULL, NULL, NULL, NULL, NULL);
 }
 
 /* Scrive le cifre di n in c (almeno 12 caratteri) e dice da dove iniziano. */
@@ -165,7 +169,8 @@ int main(void) {
         int c = open("/dev/console", O_RDWR);
         if (c >= 0) { dup2(c, 0); dup2(c, 1); dup2(c, 2); if (c > 2) close(c); }
     }
-    di("avvio: ciao, sono il primo programma\n");
+    kmsg = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);   /* si chiude da sola all'execve di init */
+    di("avvio: ciao, sono il primo programma");
 
     /* 2. */
     int caricati = carica_moduli();
@@ -175,11 +180,11 @@ int main(void) {
     /* 3. */
     char sistema[64], dati[64];
     if (!trova_partizione(PARTIZIONE_SISTEMA, sistema)) {
-        di("avvio: non riesco a trovare la partizione \"" PARTIZIONE_SISTEMA "\"\n");
+        di("avvio: non riesco a trovare la partizione \"" PARTIZIONE_SISTEMA "\"");
         ferma();
     }
     if (!trova_partizione(PARTIZIONE_DATI, dati)) {
-        di("avvio: non riesco a trovare la partizione \"" PARTIZIONE_DATI "\"\n");
+        di("avvio: non riesco a trovare la partizione \"" PARTIZIONE_DATI "\"");
         ferma();
     }
 
