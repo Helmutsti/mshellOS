@@ -5,7 +5,8 @@
 #   1. mmdebstrap crea in RADICE un Debian 13 con SOLO i pacchetti obbligatori ("essential") e
 #      quelli di pacchetti.txt (approvati dalla persona), piu' le librerie che servono;
 #   2. l'archivio d'avvio (initramfs) con dracut degli attrezzi, con i moduli del kernel del sistema;
-#   3. le impostazioni: il nome del computer, l'accesso automatico dell'amministratore;
+#   3. le impostazioni: il nome del computer, l'accesso automatico (greetd sullo schermo,
+#      l'amministratore sulla seriale);
 #      poi si compilano i programmi di mshell (utente/) e si mettono in /usr/bin;
 #   4. si tolgono i pacchetti "da terminale" e quelli "per installare" (decisione della persona):
 #      si cancellano i loro file, poi il registro dei pacchetti;
@@ -53,19 +54,13 @@ dracut --quiet --force --no-hostonly --kver "$KVER" --kmoddir "$RADICE/lib/modul
 echo "3. impostazioni"
 echo mshell > "$RADICE/etc/hostname"
 : > "$RADICE/etc/fstab"
-# L'ACCESSO AUTOMATICO (decisione della persona: "accesso automatico classico"). Sul terminale
-# c'e' agetty, il programma che apre la console, con --autologin root: fa partire login, che
-# passa da PAM, e PAM (pam_systemd) registra la SESSIONE presso logind. Cosi' la shell e' una
-# sessione vera, come in un sistema normale: allo spegnimento si chiude bene, ha la sua
-# cartella /run/user/0. tty1 e' lo schermo, ttyS0 la seriale. La shell di root e' /bin/sh
-# (dash): bash non c'e'.
+# L'ACCESSO SULLA SERIALE (ttyS0, per le prove): agetty, il programma che apre la console, con
+# --autologin root: fa partire login, che passa da PAM, e PAM (pam_systemd) registra la
+# SESSIONE presso logind. Cosi' la shell e' una sessione vera: allo spegnimento si chiude bene,
+# ha la sua cartella /run/user/0. La shell di root e' /bin/sh (dash): bash non c'e'.
+# Lo schermo (tty1) e' di greetd: vedi piu' sotto, "LA SCRIVANIA".
 S="$RADICE/etc/systemd/system"
-mkdir -p "$S/getty@tty1.service.d" "$S/serial-getty@ttyS0.service.d"
-cat > "$S/getty@tty1.service.d/accesso-automatico.conf" <<'FINE'
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
-FINE
+mkdir -p "$S/serial-getty@ttyS0.service.d"
 cat > "$S/serial-getty@ttyS0.service.d/accesso-automatico.conf" <<'FINE'
 [Service]
 ExecStart=
@@ -73,6 +68,38 @@ ExecStart=-/sbin/agetty --autologin root --keep-baud 115200,57600,38400,9600 - $
 FINE
 sed -i 's#^\(root:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\)/bin/bash$#\1/bin/sh#' "$RADICE/etc/passwd"
 ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
+# LA SCRIVANIA PARTE DA SOLA, COME PERSONA NORMALE (decisione della persona). Il gestore
+# dell'accesso e' greetd (la strada standard, la stessa che usera' la schermata di accesso):
+# all'accensione apre una sessione di utente1 senza chiedere niente (initial_session) e lancia
+# il compositore con il programma di prova. Passa da PAM come login, quindi logind registra la
+# sessione su seat0: il compositore (libseat) chiede a logind schermo e tastiera, e utente1 non
+# ha bisogno di gruppi speciali. Quando la sessione finisce, greetd mostra agreety, l'accesso
+# testuale del pacchetto (default_session, con l'utente _greetd creato dal pacchetto).
+# greetd prende tty1 (Debian gli da' tty7): getty@tty1 non si accende piu' (via il suo
+# collegamento in getty.target) e, come nel greetd originale, i due si escludono.
+# Il pacchetto stesso abilita greetd come display-manager.service (lo vuole graphical.target).
+# Il comando e' con "env" davanti perche' greetd lo lancia come "exec <comando>", e exec non
+# accetta l'assegnazione WLR_RENDERER=pixman (disegno solo con il processore) prima del programma.
+cat > "$RADICE/etc/greetd/config.toml" <<'FINE'
+# fatto da costruisci.sh
+[terminal]
+vt = 1
+
+[default_session]
+command = "/usr/sbin/agreety --cmd /bin/sh"
+user = "_greetd"
+
+[initial_session]
+command = "env WLR_RENDERER=pixman mshell-compositore -s mshell-prova-wayland"
+user = "utente1"
+FINE
+rm -f "$S/getty.target.wants/getty@tty1.service"
+mkdir -p "$S/greetd.service.d"
+cat > "$S/greetd.service.d/tty1.conf" <<'FINE'
+[Unit]
+After=getty@tty1.service
+Conflicts=getty@tty1.service
+FINE
 # I SERVIZI CHE NON SERVONO (decisione della persona): il sistema si ricostruisce da capo a
 # ogni modifica, quindi quello che rifanno dopo un aggiornamento si fa qui, una volta sola
 # (l'elenco delle librerie, le spiegazioni dei messaggi del registro).
@@ -144,6 +171,13 @@ FINE
 od -An -N16 -tx1 /dev/urandom | tr -d ' \n' > "$RADICE/etc/machine-id"
 echo >> "$RADICE/etc/machine-id"
 systemd-sysusers --root="$RADICE" >/dev/null
+# LA PERSONA: utente1 (UID 1000), con il suo gruppo. Si crea con useradd degli attrezzi, che
+# scrive /etc/passwd, /etc/group e /etc/shadow della radice (--root) come farebbe nel sistema;
+# la password resta bloccata ("!"): entra solo con l'accesso automatico. La Home si crea a mano
+# nell'albero dei dati (/data/home diventa /home), sua e chiusa agli altri (700).
+useradd --root "$RADICE" --uid 1000 --user-group --no-create-home --home-dir /home/utente1     --shell /bin/sh utente1
+mkdir -m 700 "$DATI/home/utente1"
+chown 1000:1000 "$DATI/home/utente1"
 
 # --- 5. il kernel tutto-in-uno ---
 echo "5. UKI"
