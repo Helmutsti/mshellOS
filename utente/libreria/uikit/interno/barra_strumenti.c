@@ -174,7 +174,7 @@ static const struct tipo_widget tipo_pulsante_barra = {
 
 void pulsante_barra_prepara(struct pulsante_barra *b, int icona,
                             al_clic_pulsante_barra al_clic, void *dati) {
-    *b = (struct pulsante_barra){ .base = { .tipo = &tipo_pulsante_barra }, .icona = icona,
+    *b = (struct pulsante_barra){ .base = { .tipo = &tipo_pulsante_barra, .forma_puntatore = FORMA_COLLEGAMENTO }, .icona = icona,
                                   .al_clic = al_clic, .dati = dati };
 }
 
@@ -319,8 +319,9 @@ void percorso_metti(struct percorso *p, const char *const *nomi, int quanti) {
     p->quanti = quanti;
     for (int i = 0; i < quanti; i++) {
         struct nome_percorso *n = &p->nomi[i];
-        *n = (struct nome_percorso){ .base = { .tipo = i == quanti - 1 ? &tipo_nome_percorso_qui
-                                                                       : &tipo_nome_percorso },
+        int qui = i == quanti - 1;      /* dove si e': non si clicca, la freccia; gli altri nomi, la manina */
+        *n = (struct nome_percorso){ .base = { .tipo = qui ? &tipo_nome_percorso_qui : &tipo_nome_percorso,
+                                               .forma_puntatore = qui ? FORMA_NORMALE : FORMA_COLLEGAMENTO },
                                      .indice = i };
         copia_testo(n->nome, nomi[i], MAX_TESTO_WIDGET);
         widget_aggiungi(&p->base, &n->base);

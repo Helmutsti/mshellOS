@@ -246,18 +246,22 @@ static int vassoio_aperto, vassoio_x, vassoio_y;
 struct puntatore_pannello {
     int sopra, premuta;         /* -1 nessuna */
     unsigned int pulsanti_prima;
+    unsigned int forma;         /* l'ultima forma detta al compositore */
 };
 
-static struct puntatore_pannello su_barra = { -1, -1, 0 }, su_vassoio = { -1, -1, 0 };
+static struct puntatore_pannello su_barra = { -1, -1, 0, 0 }, su_vassoio = { -1, -1, 0, 0 };
 
 /* Una notizia del puntatore per il pannello 'pp', con 'voce' quella sotto il punto. Torna
  * la voce cliccata (premuta e lasciata sopra), o -1; *cambiato a 1 se va ridisegnato. */
-static int puntatore_pannello(struct puntatore_pannello *pp, const struct notizia *n, int voce,
-                              int *cambiato) {
+static int puntatore_pannello(struct puntatore_pannello *pp, struct finestra *fin, const struct notizia *n,
+                              int voce, int *cambiato) {
     int giu = n->pulsanti & PULSANTE_SINISTRO, prima = pp->pulsanti_prima & PULSANTE_SINISTRO;
     int sopra_prima = pp->sopra, premuta_prima = pp->premuta, cliccata = -1;
     pp->pulsanti_prima = n->pulsanti;
     pp->sopra = voce;
+    /* la manina su un'icona o un pulsante (si cliccano), la freccia sul resto */
+    unsigned int forma = voce >= 0 ? FORMA_COLLEGAMENTO : FORMA_NORMALE;
+    if (forma != pp->forma) { pp->forma = forma; finestra_forma_puntatore(fin, forma); }
     if (giu && !prima) pp->premuta = voce;
     if (!giu && prima) {
         if (pp->premuta >= 0 && voce == pp->premuta) cliccata = voce;
@@ -318,7 +322,7 @@ static void apri_vassoio(void) {
     /* centrato sul pulsante App, ma dentro lo schermo */
     if (vassoio_y + a > schermo_a - USERBAR_DAL_BORDO) vassoio_y = schermo_a - USERBAR_DAL_BORDO - a;
     if (vassoio_y < USERBAR_DAL_BORDO) vassoio_y = USERBAR_DAL_BORDO;
-    su_vassoio = (struct puntatore_pannello){ -1, -1, 0 };
+    su_vassoio = (struct puntatore_pannello){ -1, -1, 0, 0 };
     if (finestra_apri_pannello(&vassoio, l, a, "vassoio", PANNELLO_SOPRA, vassoio_x, vassoio_y,
                                VASSOIO_RAGGIO) < 0)
         return;
@@ -349,7 +353,7 @@ static int notizia_barra(const struct notizia *n) {
     if (n->tipo != PUNTATORE && n->tipo != USCITO) return 0;
     int voce = n->tipo == PUNTATORE ? userbar_voce_sotto(0, 0, quante_fissate, n->x, n->y) : -1;
     int cambiato = 0;
-    int cliccata = puntatore_pannello(&su_barra, n->tipo == PUNTATORE ? n : &(struct notizia){ .tipo = USCITO },
+    int cliccata = puntatore_pannello(&su_barra, &barra, n->tipo == PUNTATORE ? n : &(struct notizia){ .tipo = USCITO },
                                       voce, &cambiato);
     if (cliccata == 0) {                     /* il pulsante App: apre o chiude il vassoio */
         if (vassoio_aperto) chiudi_vassoio();
@@ -368,7 +372,7 @@ static int notizia_vassoio(const struct notizia *n) {
     if (!vassoio_aperto || (n->tipo != PUNTATORE && n->tipo != USCITO)) return 0;
     int voce = n->tipo == PUNTATORE ? vassoio_voce_sotto(0, 0, quante_app, n->x, n->y) : -1;
     int cambiato = 0;
-    int cliccata = puntatore_pannello(&su_vassoio, n->tipo == PUNTATORE ? n : &(struct notizia){ .tipo = USCITO },
+    int cliccata = puntatore_pannello(&su_vassoio, &vassoio, n->tipo == PUNTATORE ? n : &(struct notizia){ .tipo = USCITO },
                                       voce, &cambiato);
     if (cliccata >= 0) {
         chiudi_vassoio();

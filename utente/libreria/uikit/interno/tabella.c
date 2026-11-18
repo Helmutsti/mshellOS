@@ -194,6 +194,7 @@ void tabella_tk_riga_cambiata(struct tabella_tk *t, int k) {
 static void tabella_tk_movimento(struct widget *w, int x, int y) {
     struct tabella_tk *t = (struct tabella_tk *)w;
     int k = tabella_tk_riga_in(t, x, y);
+    w->forma_puntatore = k >= 0 ? FORMA_COLLEGAMENTO : FORMA_NORMALE;   /* la manina solo sulle righe */
     if (k == t->sopra) return;
     tabella_tk_riga_cambiata(t, t->sopra);
     t->sopra = k;
@@ -202,6 +203,7 @@ static void tabella_tk_movimento(struct widget *w, int x, int y) {
 
 static void tabella_tk_sopra(struct widget *w) {
     struct tabella_tk *t = (struct tabella_tk *)w;
+    if (!w->sopra) w->forma_puntatore = FORMA_NORMALE;
     if (!w->sopra && t->sopra >= 0) { tabella_tk_riga_cambiata(t, t->sopra); t->sopra = -1; }
 }
 

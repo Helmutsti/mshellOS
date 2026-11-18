@@ -77,6 +77,7 @@ static void schede_puntatore(struct widget *w, int x, int y, unsigned int pulsan
 static void schede_movimento(struct widget *w, int x, int y) {
     struct schede *s = (struct schede *)w;
     int i = scheda_in(s, x, y);
+    w->forma_puntatore = i >= 0 ? FORMA_COLLEGAMENTO : FORMA_NORMALE;   /* la manina solo sulle schede */
     if (i == s->sopra) return;
     s->sopra = i;
     widget_cambiato(w);
@@ -84,6 +85,7 @@ static void schede_movimento(struct widget *w, int x, int y) {
 
 static void schede_sopra_cambiato(struct widget *w) {
     struct schede *s = (struct schede *)w;
+    if (!w->sopra) w->forma_puntatore = FORMA_NORMALE;
     if (!w->sopra && s->sopra >= 0) { s->sopra = -1; widget_cambiato(w); }
 }
 

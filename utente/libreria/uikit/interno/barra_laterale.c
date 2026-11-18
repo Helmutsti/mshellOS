@@ -82,6 +82,7 @@ static void laterale_voce_cambiata(struct barra_laterale_tk *b, int i) {
 static void barra_laterale_movimento(struct widget *w, int x, int y) {
     struct barra_laterale_tk *b = (struct barra_laterale_tk *)w;
     int voce = laterale_voce_in(b, x, y);
+    w->forma_puntatore = voce >= 0 ? FORMA_COLLEGAMENTO : FORMA_NORMALE;   /* la manina solo sulle voci */
     if (voce == b->sopra) return;
     laterale_voce_cambiata(b, b->sopra);
     b->sopra = voce;
@@ -90,6 +91,7 @@ static void barra_laterale_movimento(struct widget *w, int x, int y) {
 
 static void barra_laterale_sopra(struct widget *w) {
     struct barra_laterale_tk *b = (struct barra_laterale_tk *)w;
+    if (!w->sopra) w->forma_puntatore = FORMA_NORMALE;
     if (!w->sopra && b->sopra >= 0) { laterale_voce_cambiata(b, b->sopra); b->sopra = -1; }
 }
 

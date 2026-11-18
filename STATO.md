@@ -777,9 +777,10 @@ da scegliere un disegnatore di SVG e di TrueType, se un giorno serviranno.
 6. ~~**Pezzi della libreria che mancano**~~: tutti fatti il 14/11/2026: menu a tendina
    (`tendina.h`), suggerimento (`widget_suggerimento`), barra di scorrimento orizzontale (nessuna
    app la usa ancora), testo con spaziatura delle lettere (titolo -1%, etichetta +2%), forme del puntatore (foto in `disegni/Puntatore/codice/`); restano da
-   decidere: (a) il disegno dice che la mano va anche sulle voci di elenco e sulle icone cliccabili
-   (non sui pulsanti), ora UIKit la usa solo dove un widget la chiede (`forma_puntatore`: ancora
-   nessuno, non ci sono collegamenti); (b) il disegno dice che sopra un controllo disabilitato il
+   decidere: (a) RISOLTA il 18/11/2026 dalla persona: la manina su TUTTO quello che si clicca (pulsanti
+   compresi), la barra a I dove si scrive, la freccia sul resto; nei widget composti (barra
+   laterale, griglia, tabella, menu, schede, scorrimento, testata) solo sulle parti cliccabili
+   (`forma_puntatore`, aggiornato nel `movimento`; prova `puntatore_manina`); (b) il disegno dice che sopra un controllo disabilitato il
    puntatore resta la freccia: il divieto lo chiede l'app (`finestra_tk_forma`) per un'azione
    rifiutata; (c) l'anello: l'SVG del disegno non mostra la "pista" (l'anello intero sotto
    l'arco), nel chiaro si vede al 22% e nello scuro quasi pieno; nel codice 22% in tutti e due.

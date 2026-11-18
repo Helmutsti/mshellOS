@@ -117,6 +117,7 @@ struct finestra_tk *widget_finestra(struct widget *w);
  * qualcosa sotto il puntatore (l'avviso, il menu, widget_nascondi). Un'app non la usa: UIKit
  * segue il puntatore da sola. */
 void uikit_sotto(struct finestra_tk *f, struct widget *w);
+void uikit_forma(struct finestra_tk *f);   /* rilegge la forma del puntatore e, se e' cambiata, la dice */
 
 /* --- suggerimento.c --- */
 

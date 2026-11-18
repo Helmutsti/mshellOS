@@ -218,13 +218,24 @@ static void barra_scorrimento_su_rotella(struct widget *w, int sx, int sy) {
     barra_scorrimento_rotella_xy((struct barra_scorrimento *)w, sx, sy);
 }
 
+/* La manina solo sul cursore (si prende e si trascina); sulla guida la freccia, come negli altri
+ * sistemi: li' il clic salta e basta. Mentre si trascina resta la forma di quando si e' preso. */
+static void barra_scorrimento_movimento(struct widget *w, int x, int y) {
+    struct barra_scorrimento *b = (struct barra_scorrimento *)w;
+    int inizio, lungo;
+    barra_scorrimento_cursore(b, &inizio, &lungo);
+    int c = b->orizzontale ? x : y;
+    w->forma_puntatore = c >= inizio && c < inizio + lungo ? FORMA_COLLEGAMENTO : FORMA_NORMALE;
+}
+
 static void barra_scorrimento_sopra(struct widget *w) {
+    if (!w->sopra) w->forma_puntatore = FORMA_NORMALE;
     barra_scorrimento_sveglia((struct barra_scorrimento *)w);
 }
 
 const struct tipo_widget tipo_barra_scorrimento = {
     0, 0, barra_scorrimento_disegna, barra_scorrimento_puntatore, 0,
-    barra_scorrimento_su_rotella, barra_scorrimento_sopra, 0, 0
+    barra_scorrimento_su_rotella, barra_scorrimento_sopra, barra_scorrimento_movimento, 0
 };
 
 void barra_scorrimento_prepara(struct barra_scorrimento *b) {

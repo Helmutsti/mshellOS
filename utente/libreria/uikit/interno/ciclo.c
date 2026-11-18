@@ -84,7 +84,7 @@ static void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pu
      * altrove, su un widget) */
     int bloccata = finestra_tk_bloccata(f);   /* un avviso bloccante: niente comandi ne' trascinami */
     int comando = f->catturato || bloccata ? 0 : su_comando(f, 1, x, y) ? 2 : su_comando(f, 0, x, y) ? 1 : 0;
-    if (comando != f->comando_sopra) { f->comando_sopra = comando; uikit_cambiata_testata(f); }
+    if (comando != f->comando_sopra) { f->comando_sopra = comando; uikit_cambiata_testata(f); uikit_forma(f); }
 
     if (appena_premuto) {
         suggerimento_ferma(f);
@@ -124,6 +124,7 @@ static void uikit_puntatore(struct finestra_tk *f, int x, int y, unsigned int pu
     }
     uikit_sotto(f, uikit_widget_sotto(f, x, y));
     if (!giu && f->sotto && f->sotto->tipo->movimento) f->sotto->tipo->movimento(f->sotto, x, y);
+    uikit_forma(f);                         /* 'movimento' puo' aver cambiato la forma (la parte sotto il puntatore) */
 }
 
 /* L'avviso aperto che sente la tastiera: quello bloccante, o quello che ha il fuoco (lui o

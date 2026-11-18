@@ -119,7 +119,7 @@ static const struct tipo_widget tipo_pulsante = {
 
 void pulsante_prepara(struct pulsante *b, const char *testo, int icona,
                       al_clic_pulsante al_clic, void *dati) {
-    *b = (struct pulsante){ .base = { .tipo = &tipo_pulsante }, .icona = icona,
+    *b = (struct pulsante){ .base = { .tipo = &tipo_pulsante, .forma_puntatore = FORMA_COLLEGAMENTO }, .icona = icona,
                             .colore = SECONDARIO, .dimensione = MISURA_M, .al_clic = al_clic, .dati = dati };
     copia_testo(b->testo, testo, MAX_TESTO_WIDGET);
 }
@@ -213,7 +213,7 @@ static const struct tipo_widget tipo_casella = {
 
 void casella_prepara(struct casella *c, const char *testo, int valore,
                      al_cambio_casella al_cambio, void *dati) {
-    *c = (struct casella){ .base = { .tipo = &tipo_casella }, .valore = valore,
+    *c = (struct casella){ .base = { .tipo = &tipo_casella, .forma_puntatore = FORMA_COLLEGAMENTO }, .valore = valore,
                            .al_cambio = al_cambio, .dati = dati };
     copia_testo(c->testo, testo, MAX_TESTO_WIDGET);
 }
@@ -268,6 +268,6 @@ static const struct tipo_widget tipo_interruttore = {
 
 void interruttore_prepara(struct interruttore *i, int acceso, al_cambio_interruttore al_cambio,
                           void *dati) {
-    *i = (struct interruttore){ .base = { .tipo = &tipo_interruttore }, .acceso = acceso,
+    *i = (struct interruttore){ .base = { .tipo = &tipo_interruttore, .forma_puntatore = FORMA_COLLEGAMENTO }, .acceso = acceso,
                                 .al_cambio = al_cambio, .dati = dati };
 }

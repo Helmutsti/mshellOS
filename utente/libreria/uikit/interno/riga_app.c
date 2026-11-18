@@ -46,7 +46,7 @@ static const struct tipo_widget tipo_riga_app = {
 
 void riga_app_prepara(struct riga_app *r, const char *nome, const char *dettagli,
                       al_clic_riga_app al_clic, void *dati) {
-    *r = (struct riga_app){ .base = { .tipo = &tipo_riga_app, .largo = 1 }, .al_clic = al_clic, .dati = dati };
+    *r = (struct riga_app){ .base = { .tipo = &tipo_riga_app, .largo = 1, .forma_puntatore = FORMA_COLLEGAMENTO }, .al_clic = al_clic, .dati = dati };
     copia_testo(r->nome, nome, MAX_TESTO_WIDGET);
     copia_testo(r->dettagli, dettagli ? dettagli : "", (int)sizeof r->dettagli);
 }

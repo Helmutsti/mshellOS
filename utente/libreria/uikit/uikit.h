@@ -195,10 +195,13 @@ struct widget {
     int nascosto;                      /* non c'e': non si misura, non si vede, non sente */
     const char *suggerimento;          /* il testo del suggerimento (widget_suggerimento), o 0 */
     const char *scorciatoia;           /* la scorciatoia nel suggerimento, o 0 */
-    /* la forma del puntatore (FORMA_..., gkit.h) quando e' sopra di lui: FORMA_TESTO per chi si
-     * scrive (il campo), FORMA_COLLEGAMENTO per un collegamento. 0 (FORMA_NORMALE): la freccia,
-     * come per i pulsanti, le voci degli elenchi e tutto il resto. Disabilitato: sempre la
-     * freccia (come nel disegno). Lo mette chi prepara il widget. */
+    /* la forma del puntatore (FORMA_..., gkit.h) quando e' sopra di lui. REGOLA: la MANINA
+     * (FORMA_COLLEGAMENTO) su tutto quello che si clicca (pulsanti, caselle, schede, voci...);
+     * il TESTO (FORMA_TESTO) dove si scrive (campo, area di testo); la freccia (0, FORMA_NORMALE)
+     * sul resto. Disabilitato: sempre la freccia. Un widget semplice la mette una volta
+     * preparandosi; un widget composto (barra laterale, griglia, tabella, menu, schede, barra di
+     * scorrimento) la aggiorna nel suo 'movimento': manina solo sopra le parti che si cliccano,
+     * freccia sullo spazio vuoto. UIKit la rilegge dopo ogni 'movimento'. */
     unsigned int forma_puntatore;
     /* un TASTO FISICO (tasti.h: i codici, i modificatori) premuto o ripetuto mentre il widget ha il
      * fuoco: frecce, Home, Fine, PagSu, PagGiu, Canc, Ctrl+A... Quello che non e' un carattere, e

@@ -210,6 +210,8 @@ static void menu_movimento(struct widget *w, int x, int y) {
     struct menu_tk *m = (struct menu_tk *)w;
     int id = menu_voce_in(m, x, y);
     if (id < -1) id = -1;
+    const struct voce_menu_tk *voce = menu_voce_di(m, id);
+    w->forma_puntatore = voce && menu_voce_attiva(m, voce->azione) ? FORMA_COLLEGAMENTO : FORMA_NORMALE;   /* la manina sulle voci abilitate */
     menu_accendi(m, id);
 }
 
@@ -217,6 +219,7 @@ static void menu_movimento(struct widget *w, int x, int y) {
  * accesa si spegne. */
 static void menu_sopra_cambiato(struct widget *w) {
     struct menu_tk *m = (struct menu_tk *)w;
+    if (!w->sopra) w->forma_puntatore = FORMA_NORMALE;
     if (w->sopra || m->sopra < 0) return;
     menu_segna_voce(m, m->sopra);
     m->sopra = -1;

@@ -109,7 +109,7 @@ static int tendina_spuntata(int azione, void *dati) {
 
 void tendina_prepara(struct tendina_tk *t, const struct voce_menu_tk *voci, int quante, int valore,
                      const char *segnaposto, al_cambio_tendina al_cambio, void *dati) {
-    *t = (struct tendina_tk){ .base = { .tipo = &tipo_tendina }, .misura = MISURA_M, .voci = voci,
+    *t = (struct tendina_tk){ .base = { .tipo = &tipo_tendina, .forma_puntatore = FORMA_COLLEGAMENTO }, .misura = MISURA_M, .voci = voci,
                               .quante = quante, .valore = valore, .segnaposto = segnaposto,
                               .al_cambio = al_cambio, .dati = dati };
     menu_prepara(&t->menu, MISURA_M, 0, 0, tendina_spuntata, tendina_scelto, t);

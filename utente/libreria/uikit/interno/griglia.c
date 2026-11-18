@@ -129,6 +129,7 @@ static void griglia_tile_cambiato(struct griglia_tk *g, int i) {
 static void griglia_movimento(struct widget *w, int x, int y) {
     struct griglia_tk *g = (struct griglia_tk *)w;
     int i = griglia_in(g, x, y);
+    w->forma_puntatore = i >= 0 ? FORMA_COLLEGAMENTO : FORMA_NORMALE;   /* la manina solo sugli elementi */
     if (i == g->sopra) return;
     griglia_tile_cambiato(g, g->sopra);
     g->sopra = i;
@@ -137,6 +138,7 @@ static void griglia_movimento(struct widget *w, int x, int y) {
 
 static void griglia_sopra(struct widget *w) {
     struct griglia_tk *g = (struct griglia_tk *)w;
+    if (!w->sopra) w->forma_puntatore = FORMA_NORMALE;
     if (!w->sopra && g->sopra >= 0) { griglia_tile_cambiato(g, g->sopra); g->sopra = -1; }
 }
 

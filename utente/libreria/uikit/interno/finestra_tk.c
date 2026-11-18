@@ -337,8 +337,9 @@ void uikit_disegna_tutto(struct finestra_tk *f, struct pennello *p) {
 
 /* La forma del puntatore adesso (quella voluta dall'app, se c'e'; se no quella del widget sotto
  * il puntatore, tranne se e' disabilitato): al compositore si dice solo quando cambia. */
-static void uikit_forma(struct finestra_tk *f) {
+void uikit_forma(struct finestra_tk *f) {
     unsigned int forma = f->forma_chiesta;
+    if (!forma && f->comando_sopra) forma = FORMA_COLLEGAMENTO;   /* riduci e chiudi: la manina */
     if (!forma && f->sotto && !f->sotto->disabilitato) forma = f->sotto->forma_puntatore;
     if (forma == f->forma_inviata) return;
     f->forma_inviata = forma;
