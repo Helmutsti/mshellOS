@@ -221,6 +221,15 @@ resta, passo dopo passo, solo per quello che è davvero nostro.
    private: la finestra di scelta (`RUOLO_SCELTA`, il picker), l'identità dell'app per i
    permessi, i pannelli della scrivania (userbar, vassoio).
 
+**La barra del titolo la disegna l'app (deciso il 18/11/2026).** Il server offre `xdg-decoration`:
+se l'app chiede `client_side` la finestra non ha la cornice del compositore (l'immagine è il suo
+buffer, ombra e vetro come le finestre nostre, coordinate del puntatore senza testata); senza
+oggetto decoration o con `server_side` resta la cornice nostra. Lo stesso lato server di
+`xdg_toplevel.move` (come TRASCINAMI: vale solo col pulsante ancora giù), `set_minimized` (come
+RIDUCIMI), `xdg_wm_base.ping/pong` (stesse attese e stessa barra di emergenza delle finestre
+nostre; con sopra la finestra di scelta non si giudica) e `cursor-shape` v1 (la forma per nome, come
+MOSTRA_PUNTATORE). Prova: `wayland_senza_cornice` (client `wayland_csd`).
+
 **Come è fatto il passo 1.**
 - **libwayland-server** (e libwayland-client, per i client di prova) si compila STATICA dai
   sorgenti ufficiali, versione fissata: wayland 1.25.0 e wayland-protocols 1.48 (le stesse di

@@ -46,7 +46,8 @@
  *     "collegamento" (la mano), a destra "normale"; la dice a ogni enter e quando cambia ("wayland:
  *     forma testo"). Sul contenuto, sempre "normale";
  *   - xdg_wm_base.ping: risponde col pong e scrive "wayland: ping"; premendo il tasto X (KEY_X)
- *     smette di rispondere ("wayland: non rispondo piu' ai ping"), per provare la barra di emergenza;
+ *     smette di rispondere ("wayland: non rispondo piu' ai ping"), per provare la barra di emergenza,
+ *     e con Z (KEY_Z) riprende ("wayland: rispondo di nuovo ai ping");
  *   - "wayland: decorazione client_side" (o server_side) quando il compositore dice il modo.
  *
  * LA MODALITA' "ANIMA" (il ritmo dei fotogrammi, test/prove/wayland_ritmo.py): se il programma si
@@ -89,6 +90,7 @@ static int csd;                            /* il nome del programma e' wayland_c
 static int altezza_buffer = ALTEZZA;       /* ALTEZZA, o ALTEZZA + BARRA_ALTEZZA in modalita' csd */
 static int sposta_y;                       /* dove comincia il disegno di base: 0, o BARRA_ALTEZZA */
 static int muto;                           /* non risponde piu' ai ping */
+static uint32_t ping_tenuto;               /* l'ultimo ping a cui non ha risposto: alla ripresa si risponde */
 static struct zxdg_decoration_manager_v1 *decorazioni;
 static struct wp_cursor_shape_manager_v1 *forme;
 static struct wp_cursor_shape_device_v1 *forma_puntatore;
@@ -289,6 +291,11 @@ static void ta_tasto(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t t
     if (csd && tasto == KEY_X && stato == WL_KEYBOARD_KEY_STATE_PRESSED) {
         muto = 1;
         riga("non rispondo piu' ai ping", "%s", "");
+    } else if (csd && tasto == KEY_Z && stato == WL_KEYBOARD_KEY_STATE_PRESSED && muto) {
+        muto = 0;                       /* e risponde al ping che aveva lasciato senza risposta */
+        if (ping_tenuto) xdg_wm_base_pong(base, ping_tenuto);
+        ping_tenuto = 0;
+        riga("rispondo di nuovo ai ping", "%s", "");
     }
 }
 static void ta_modificatori(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t premuti, uint32_t agganciati,
@@ -328,6 +335,7 @@ static void ping(void *dati, struct xdg_wm_base *b, uint32_t serial) {
     (void)dati;
     if (csd) riga("ping ", "%u%s", serial, muto ? " (non rispondo)" : "");
     if (!muto) xdg_wm_base_pong(b, serial);
+    else ping_tenuto = serial;
 }
 
 static void deco_configure(void *dati, struct zxdg_toplevel_decoration_v1 *d, uint32_t modo) {
