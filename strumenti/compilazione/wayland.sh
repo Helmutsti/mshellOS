@@ -30,7 +30,10 @@
 #      dello stesso processore del sistema (si compila sempre nativi) e legato statico a
 #      expat-static della radice. Non va nel disco.
 #   2. con lo scanner: wayland-server-protocol.h e wayland-client-protocol.h, wayland-protocol.c,
-#      e lo stesso per xdg-shell (stable, xdg-shell.xml);
+#      e lo stesso per i protocolli di wayland-protocols in ESTENSIONI (qui sotto): xdg-shell
+#      (le finestre), xdg-decoration (chi disegna la barra del titolo: decisione della persona,
+#      la disegna l'app), cursor-shape (la forma del puntatore per nome) e tablet-v2 (solo perche'
+#      cursor-shape lo nomina);
 #   3. i sorgenti delle librerie con il compilatore del sistema (musl, --sysroot della radice);
 #      la libreria C ha tutto quello che serve (accept4, memfd_create, gettid, mremap, ...):
 #      il config.h che meson genererebbe e' qui sotto, scritto a mano;
@@ -82,9 +85,13 @@ LAVORO=/tmp/wayland-$ARCH
 rm -rf "$LAVORO"
 mkdir -p "$LAVORO"
 tar -xJf "$SCARICO/wayland-$VERSIONE.tar.xz" -C "$LAVORO"
-tar -xJf "$SCARICO/wayland-protocols-$PROTOCOLLI.tar.xz" -C "$LAVORO" \
-    "wayland-protocols-$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml"
-XDG="$LAVORO/wayland-protocols-$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml"
+# i protocolli in piu' (percorso dentro wayland-protocols): per ognuno l'intestazione del server,
+# quella del client e il codice, con il nome del file (es. xdg-shell-server-protocol.h)
+ESTENSIONI="stable/xdg-shell/xdg-shell.xml unstable/xdg-decoration/xdg-decoration-unstable-v1.xml
+staging/cursor-shape/cursor-shape-v1.xml stable/tablet/tablet-v2.xml"
+for e in $ESTENSIONI; do
+    tar -xJf "$SCARICO/wayland-protocols-$PROTOCOLLI.tar.xz" -C "$LAVORO" "wayland-protocols-$PROTOCOLLI/$e"
+done
 cd "$LAVORO/wayland-$VERSIONE"
 
 echo "wayland $VERSIONE: compilo ..."
@@ -126,9 +133,15 @@ S=./wayland-scanner
 $S -s server-header protocol/wayland.xml gen/wayland-server-protocol.h
 $S -s client-header protocol/wayland.xml gen/wayland-client-protocol.h
 $S -s public-code   protocol/wayland.xml gen/wayland-protocol.c
-$S -s server-header "$XDG" gen/xdg-shell-server-protocol.h
-$S -s client-header "$XDG" gen/xdg-shell-client-protocol.h
-$S -s public-code   "$XDG" gen/xdg-shell-protocol.c
+ALTRI_O=""
+for e in $ESTENSIONI; do
+    x="$LAVORO/wayland-protocols-$PROTOCOLLI/$e"
+    n=$(basename "$e" .xml)
+    $S -s server-header "$x" "gen/$n-server-protocol.h"
+    $S -s client-header "$x" "gen/$n-client-protocol.h"
+    $S -s public-code   "$x" "gen/$n-protocol.c"
+    ALTRI_O="$ALTRI_O o/$n-protocol.o"
+done
 
 # 3. le librerie. Non e' codice nostro: gli avvisi si spengono (-w). -D_POSIX_C_SOURCE come
 # meson; gli header e il codice generato si vedono da gen/ e src/.
@@ -136,10 +149,10 @@ mkdir -p o
 COMPILA="$CC -w -std=c99 -D_POSIX_C_SOURCE=200809L -include config.h -I. -Isrc -Igen -Iprotocol"
 for f in src/connection.c src/wayland-os.c src/wayland-util.c src/wayland-server.c \
          src/wayland-shm.c src/event-loop.c src/wayland-client.c gen/wayland-protocol.c \
-         gen/xdg-shell-protocol.c; do
+         $(for e in $ESTENSIONI; do echo "gen/$(basename "$e" .xml)-protocol.c"; done); do
     $COMPILA -c "$f" -o "o/$(basename "$f" .c).o"
 done
-COMUNI="o/connection.o o/wayland-os.o o/wayland-util.o o/wayland-protocol.o o/xdg-shell-protocol.o"
+COMUNI="o/connection.o o/wayland-os.o o/wayland-util.o o/wayland-protocol.o $ALTRI_O"
 rm -f libwayland-server.a libwayland-client.a
 ar rcs libwayland-server.a $COMUNI o/wayland-server.o o/wayland-shm.o o/event-loop.o
 ar rcs libwayland-client.a $COMUNI o/wayland-client.o
