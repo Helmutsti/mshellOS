@@ -818,6 +818,17 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
     "$B/disco_wayland_ritmo.img" $((MISURA_DATI * MB / 4096))
 echo "$B/disco_wayland_ritmo.img pronto: con il programma wayland_anima in /data/tests"
 
+# IL DISCO DELLA PROVA DELLA BARRA DEL TITOLO DEL PROGRAMMA: come disco_wayland.img, ma il client si
+# chiama wayland_csd (lo stesso programma: il nome gli fa chiedere xdg-decoration client_side e
+# disegnare la sua barra). Lo usa test/prove/wayland_senza_cornice.py.
+cp "$B/disco_app.img" "$B/disco_wayland_csd.img"
+rm -f "$(vero /data/tests)"/wayland_anima
+metti_file "$P/bin/prove/wayland" "/data/tests/wayland_csd" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI" \
+    "$B/disco_wayland_csd.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_wayland_csd.img pronto: con il programma wayland_csd in /data/tests"
+rm -f "$(vero /data/tests)"/wayland_csd
+
 # IL DISCO DELLA PROVA DELLE FINESTRE MOLTE: come disco_app.img, con in /data/tests otto copie del
 # client Wayland di prova (wayland_1 ... wayland_8, tutte "Prova Wayland"): init le fa partire, e
 # test/prove/finestre_molte.py ci aggiunge le app della userbar per superare le 16 finestre.

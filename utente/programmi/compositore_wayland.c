@@ -21,13 +21,29 @@
  * riusare), si rifa' l'immagine e si dice al compositore (ponte_mostra). Spostare, portare
  * davanti, ridurre e chiudere con la X li fa il compositore sulla cornice (al_mouse).
  *
+ * LA BARRA DEL TITOLO LA PUO' DISEGNARE IL PROGRAMMA (xdg-decoration, la decisione e' della
+ * persona: come GNOME e il Mac). Se il programma non crea l'oggetto decoration, o chiede
+ * server_side, e' tutto come sopra. Se chiede client_side la finestra NON ha la cornice nostra:
+ * l'immagine e' il buffer del programma cosi' com'e', le coordinate del puntatore sono quelle del
+ * buffer (nessuno spostamento della testata), e il compositore non gestisce piu' trascinamento e
+ * comandi (ponte_senza_cornice): li chiede il programma, con xdg_toplevel.move (il numero di
+ * serie e' quello del clic, che deve essere ancora premuto) e set_minimized, e con la chiusura
+ * come sempre (close). Ombra, vetro e angoli sono quelli delle finestre nostre. La forma del
+ * puntatore la dice il programma con cursor-shape (set_shape), e il compositore la mostra come
+ * quella di MOSTRA_PUNTATORE delle finestre nostre.
+ *
+ * I PING. Il compositore, come per le finestre nostre, ogni secondo chiede "ci sei?"
+ * (xdg_wm_base.ping) a chi ha una finestra, e dopo 3 secondi senza pong la giudica bloccata:
+ * stessa regola e stessa barra di emergenza di compositore.c (controlla_risposte, ponte_pong).
+ *
  * LA CHIUSURA e' sempre una richiesta: la X manda xdg_toplevel.close e il programma decide (se
  * chiude, il socket si chiude e la finestra sparisce).
  *
  * IL PASSO 2 e' wl_seat: il puntatore e la tastiera (vedi "wl_seat", piu' sotto).
  *
- * COSA NON C'E' ANCORA: wl_output, i popup, il ridimensionamento fatto dalla persona, i ping ai
- * programmi, la forma del cursore scelta dal programma, gli appunti (data_device). */
+ * COSA NON C'E' ANCORA: i popup, il ridimensionamento fatto dalla persona, gli appunti
+ * (data_device), la forma del cursore come immagine (wl_pointer.set_cursor: solo le forme per
+ * nome di cursor-shape). */
 #define _GNU_SOURCE
 #include <fcntl.h>
 #include <stdint.h>
@@ -40,9 +56,12 @@
 #include <linux/input-event-codes.h>   /* BTN_LEFT, KEY_MAX */
 #include <wayland-server.h>
 #include "xdg-shell-server-protocol.h"
+#include "xdg-decoration-unstable-v1-server-protocol.h"
+#include "cursor-shape-v1-server-protocol.h"
 
 #include "compositore_wayland.h"
 #include "gkit/gkit_disegno.h"
+#include "gkit/sistema/protocollo.h"   /* PING */
 #include "gkit/sistema/pixel.h"
 #include "uikit/sistema/uikit_compositore.h"
 
@@ -89,6 +108,14 @@ struct finestra_wl {
     unsigned int *immagine;              /* cornice + contenuto: l x a */
     int l, a;
     struct wl_client *cliente;           /* il programma: a lui vanno i wl_pointer e wl_keyboard */
+    /* chi disegna la barra del titolo (xdg-decoration): 'decorazione' e' l'oggetto, se il programma
+     * l'ha creato; 'csd_voluto' cio' che ha chiesto (client_side), 'csd' cio' che vale per
+     * l'immagine che c'e' (si adegua al primo buffer dopo la richiesta) */
+    struct wl_resource *decorazione;
+    int csd_voluto, csd;
+    unsigned int ping_serial;            /* il ping mandato, di cui si aspetta il pong (0: nessuno) */
+    uint32_t serial_clic;                /* il numero di serie dell'ultimo clic mandato (per move) */
+    uint32_t serial_entra;               /* quello dell'ultimo enter del puntatore (per set_shape) */
     /* il puntatore (vedi "wl_seat", piu' sotto) */
     int dentro;                          /* il puntatore e' entrato nella superficie (wl_pointer.enter) */
     int px, py;                          /* l'ultima posizione detta al programma, sulla superficie */
@@ -134,9 +161,10 @@ static unsigned int coperto_di(unsigned int p, int c) {
  * contenuto piu' la testata: se il programma cambia misura, cambia anche la finestra. */
 static void ridisegna(struct finestra_wl *w) {
     if (w->slot < 0 || !w->contenuto) return;
-    int alta = cornice_testata_altezza(), schermo_l, schermo_a;
+    int csd = w->csd;       /* la barra e' del programma: niente cornice, l'immagine e' il suo buffer */
+    int alta = csd ? 0 : cornice_testata_altezza(), schermo_l, schermo_a;
     ponte_schermo(&schermo_l, &schermo_a);
-    int l = w->cl > LARGHEZZA_MINIMA ? w->cl : LARGHEZZA_MINIMA, a = alta + w->ch;
+    int l = csd || w->cl > LARGHEZZA_MINIMA ? w->cl : LARGHEZZA_MINIMA, a = alta + w->ch;
     if (l > schermo_l) l = schermo_l;      /* piu' grande dello schermo: si taglia */
     if (a > schermo_a) a = schermo_a;
     if (!w->immagine || w->l != l || w->a != a) {
@@ -146,22 +174,29 @@ static void ridisegna(struct finestra_wl *w) {
         w->a = a;
         if (!w->immagine) return;
     }
-    struct tela tela = { w->immagine, l, a };
-    struct pennello pennello;
-    pennello_prepara(&pennello, &tela);
-    cornice_disegna(&pennello, l, a, w->titolo, w->attiva);
-    /* il contenuto, sul vetro, sotto la testata (un ARGB8888 trasparente lascia vedere il vetro) */
-    int righe = w->ch < a - alta ? w->ch : a - alta, colonne = w->cl < l ? w->cl : l;
-    for (int r = 0; r < righe; r++)
-        sopra_a_riga(&w->immagine[(alta + r) * l], &w->contenuto[r * w->cl], colonne);
-    /* gli angoli in basso sono arrotondati: il contenuto non deve uscirne */
-    int raggio = cornice_raggio();
-    struct tondo forma = tondo(0, 0, l, a, raggio);
-    for (int y = a - raggio; y < a; y++) {
-        if (y < alta) continue;
-        for (int x = 0; x < raggio && x < l; x++) w->immagine[y * l + x] = coperto_di(w->immagine[y * l + x], coperto(distanza(&forma, x, y)));
-        for (int x = l - raggio > raggio ? l - raggio : raggio; x < l; x++)
-            w->immagine[y * l + x] = coperto_di(w->immagine[y * l + x], coperto(distanza(&forma, x, y)));
+    ponte_senza_cornice(w->slot, csd);
+    if (csd) {
+        /* senza cornice: l'immagine e' il buffer del programma, com'e' (gli angoli, se li vuole
+         * arrotondati, li fa lui: trasparenti) */
+        memcpy(w->immagine, w->contenuto, (size_t)l * (size_t)a * sizeof(unsigned int));
+    } else {
+        struct tela tela = { w->immagine, l, a };
+        struct pennello pennello;
+        pennello_prepara(&pennello, &tela);
+        cornice_disegna(&pennello, l, a, w->titolo, w->attiva);
+        /* il contenuto, sul vetro, sotto la testata (un ARGB8888 trasparente lascia vedere il vetro) */
+        int righe = w->ch < a - alta ? w->ch : a - alta, colonne = w->cl < l ? w->cl : l;
+        for (int r = 0; r < righe; r++)
+            sopra_a_riga(&w->immagine[(alta + r) * l], &w->contenuto[r * w->cl], colonne);
+        /* gli angoli in basso sono arrotondati: il contenuto non deve uscirne */
+        int raggio = cornice_raggio();
+        struct tondo forma = tondo(0, 0, l, a, raggio);
+        for (int y = a - raggio; y < a; y++) {
+            if (y < alta) continue;
+            for (int x = 0; x < raggio && x < l; x++) w->immagine[y * l + x] = coperto_di(w->immagine[y * l + x], coperto(distanza(&forma, x, y)));
+            for (int x = l - raggio > raggio ? l - raggio : raggio; x < l; x++)
+                w->immagine[y * l + x] = coperto_di(w->immagine[y * l + x], coperto(distanza(&forma, x, y)));
+        }
     }
     if (ponte_mostra(w->slot, w->immagine, l, a, w->titolo) < 0) {
         /* memoria finita: il compositore ha tolto la finestra. Il posto non e' piu' nostro (se
@@ -214,6 +249,9 @@ static void invia_configure(struct finestra_wl *w) {
         uint32_t *s = wl_array_add(&stati, sizeof *s);
         if (s) *s = XDG_TOPLEVEL_STATE_ACTIVATED;
     }
+    if (w->decorazione)     /* chi disegna la barra: prima del configure, che lo rende valido */
+        zxdg_toplevel_decoration_v1_send_configure(w->decorazione, w->csd_voluto ? ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE
+                                                                                   : ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     xdg_toplevel_send_configure(w->toplevel, 0, 0, &stati);
     xdg_surface_send_configure(w->xdg_surface, ++w->serial);
     wl_array_release(&stati);
@@ -252,26 +290,47 @@ static void toplevel_distrutto(struct wl_resource *r) {
     w->configurata = 0;
 }
 
-/* Si ignorano: il genitore, l'id dell'app, i limiti di misura, massimizza, schermo intero,
- * riduci (xdg-shell permette al compositore di ignorarle). move, resize e show_window_menu
- * hanno bisogno di un wl_seat (un clic con il suo numero di serie): senza seat un programma non
- * le puo' chiamare, e non ci sono (se le chiama, la libreria lo disconnette: "listener
- * function is NULL"). */
+/* TRASCINAMI: xdg_toplevel.move. Vale solo se 'serial' e' quello dell'ultimo clic che abbiamo
+ * mandato al programma e il pulsante e' ancora giu' (come TRASCINAMI delle finestre nostre: se
+ * l'ha gia' lasciato non si sposta niente); ponte_trascinami controlla anche che il clic sia
+ * sulla finestra. */
+static void toplevel_muovi(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial) {
+    (void)c; (void)seat;
+    struct finestra_wl *w = wl_resource_get_user_data(r);
+    if (!w || w->slot < 0 || !w->consegnati || serial != w->serial_clic) return;
+    ponte_trascinami(w->slot);
+}
+
+/* RIDUCIMI: xdg_toplevel.set_minimized. */
+static void toplevel_riduci(struct wl_client *c, struct wl_resource *r) {
+    (void)c;
+    struct finestra_wl *w = wl_resource_get_user_data(r);
+    if (w && w->slot >= 0) ponte_riduci(w->slot);
+}
+
+/* Si ignorano: il genitore, l'id dell'app, i limiti di misura, massimizza, schermo intero, il menu
+ * della finestra e il ridimensionamento (xdg-shell permette al compositore di ignorarle). */
+static void toplevel_menu(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial, int32_t x, int32_t y) {
+    (void)c; (void)r; (void)seat; (void)serial; (void)x; (void)y;
+}
+static void toplevel_ridimensiona(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial, uint32_t bordo) {
+    (void)c; (void)r; (void)seat; (void)serial; (void)bordo;
+}
 static const struct xdg_toplevel_interface toplevel_interfaccia = {
     .destroy = toplevel_distruggi,
     .set_parent = toplevel_con_risorsa,
     .set_title = toplevel_titolo,
     .set_app_id = toplevel_con_testo,
-    .show_window_menu = 0,
-    .move = 0,
-    .resize = 0,
+    .show_window_menu = toplevel_menu,
+    .move = toplevel_muovi,
+    .resize = toplevel_ridimensiona,
     .set_max_size = toplevel_con_misura,
     .set_min_size = toplevel_con_misura,
     .set_maximized = toplevel_senza,
     .unset_maximized = toplevel_senza,
     .set_fullscreen = toplevel_con_risorsa,
     .unset_fullscreen = toplevel_senza,
-    .set_minimized = toplevel_senza,
+    .set_minimized = toplevel_riduci,
 };
 
 /* --- xdg_surface --- */
@@ -320,6 +379,7 @@ static const struct xdg_surface_interface xdg_surface_interfaccia = {
 
 static void xdg_surface_distrutta(struct wl_resource *r) {
     struct finestra_wl *w = wl_resource_get_user_data(r);
+    if (w->decorazione) wl_resource_set_user_data(w->decorazione, 0);   /* la finestra sta per sparire */
     if (w->toplevel) {                    /* il toplevel non e' ancora distrutto: si stacca */
         wl_resource_set_user_data(w->toplevel, 0);
         if (w->slot >= 0) {
@@ -363,7 +423,24 @@ static void wm_xdg_surface(struct wl_client *client, struct wl_resource *r, uint
     wl_resource_set_implementation(x, &xdg_surface_interfaccia, w, xdg_surface_distrutta);
 }
 
-static void wm_pong(struct wl_client *c, struct wl_resource *r, uint32_t serial) { (void)c; (void)r; (void)serial; }
+static void risorsa_tolta_base(struct wl_resource *r) { wl_list_remove(wl_resource_get_link(r)); }
+
+/* PING e PONG. Il compositore chiede "ci sei?" (wayland_notizia, PING) con xdg_wm_base.ping: il
+ * numero di serie e' quello di compositore.c, e si tiene nella finestra a cui si e' chiesto. Il
+ * pong con quel numero va a ponte_pong, che lo gira come il PONG delle finestre nostre. Un pong
+ * con un numero che nessuna finestra del programma aspetta si ignora. */
+static struct wl_list basi;      /* gli xdg_wm_base di tutti i programmi */
+
+static void wm_pong(struct wl_client *c, struct wl_resource *r, uint32_t serial) {
+    (void)r;
+    for (int i = 0; i < posti_wl; i++) {
+        struct finestra_wl *w = per_posto[i];
+        if (!w || w->cliente != c || !w->ping_serial || w->ping_serial != serial) continue;
+        w->ping_serial = 0;
+        ponte_pong(i, serial);
+        return;
+    }
+}
 
 static const struct xdg_wm_base_interface wm_interfaccia = {
     .destroy = wm_distruggi,
@@ -376,7 +453,8 @@ static void lega_wm(struct wl_client *client, void *dati, uint32_t versione, uin
     (void)dati;
     struct wl_resource *r = wl_resource_create(client, &xdg_wm_base_interface, versione > 3 ? 3 : (int)versione, id);
     if (!r) { wl_client_post_no_memory(client); return; }
-    wl_resource_set_implementation(r, &wm_interfaccia, 0, 0);
+    wl_resource_set_implementation(r, &wm_interfaccia, 0, risorsa_tolta_base);
+    wl_list_insert(&basi, wl_resource_get_link(r));
 }
 
 /* --- wl_surface --- */
@@ -448,6 +526,7 @@ static void sup_commit(struct wl_client *c, struct wl_resource *r) {
         return;
     }
     if (!con_buffer) return;              /* solo frame o stato: l'immagine e' quella */
+    if (buffer) w->csd = w->csd_voluto;     /* chi disegna la barra: vale da questo buffer */
     if (buffer && copia_buffer(w, buffer)) ridisegna(w);
     if (buffer) wl_buffer_send_release(buffer);   /* gia' copiato: il programma lo puo' riusare */
 }
@@ -644,7 +723,7 @@ static void pu_frame(struct wl_resource *r) {
 /* La posizione sulla superficie; 1 se e' dentro il contenuto (non sulla cornice). */
 static int sulla_superficie(const struct finestra_wl *w, int x, int y, int *sx, int *sy) {
     *sx = x;
-    *sy = y - cornice_testata_altezza();
+    *sy = y - (w->csd ? 0 : cornice_testata_altezza());   /* senza cornice nostra la finestra e' il buffer */
     return *sx >= 0 && *sx < w->cl && *sy >= 0 && *sy < w->ch;
 }
 
@@ -656,6 +735,8 @@ static void pu_entra(struct finestra_wl *w, int sx, int sy) {
         wl_pointer_send_enter(r, serial, superficie, wl_fixed_from_int(sx), wl_fixed_from_int(sy));
         pu_frame(r);
     }
+    w->serial_entra = serial;
+    ponte_forma(w->slot, FORMA_NORMALE);      /* a ogni enter si riparte dalla freccia: la forma la dice il programma */
     w->dentro = 1;
     w->px = sx;
     w->py = sy;
@@ -703,6 +784,7 @@ static void pu_puntatore(struct finestra_wl *w, int x, int y, unsigned int pulsa
         int premuto = (nuovi & bit) != 0;
         if (!premuto && !(lasciati & bit & w->consegnati)) continue;
         uint32_t serial = wl_display_next_serial(display);
+        if (premuto) w->serial_clic = serial;     /* xdg_toplevel.move lo cita */
         PER_DEL_PROGRAMMA(r, &puntatori, w->cliente)
             wl_pointer_send_button(r, serial, t, codice_pulsante(bit),
                                    premuto ? WL_POINTER_BUTTON_STATE_PRESSED : WL_POINTER_BUTTON_STATE_RELEASED);
@@ -795,8 +877,8 @@ static void seat_puntatore(struct wl_client *client, struct wl_resource *seat, u
     for (int i = 0; i < posti_wl; i++) {
         struct finestra_wl *w = per_posto[i];
         if (!w || w->cliente != client || !w->dentro || !risorsa_superficie(w)) continue;
-        wl_pointer_send_enter(r, wl_display_next_serial(display), risorsa_superficie(w),
-                              wl_fixed_from_int(w->px), wl_fixed_from_int(w->py));
+        w->serial_entra = wl_display_next_serial(display);
+        wl_pointer_send_enter(r, w->serial_entra, risorsa_superficie(w), wl_fixed_from_int(w->px), wl_fixed_from_int(w->py));
         pu_frame(r);
     }
 }
@@ -865,12 +947,156 @@ static void lega_output(struct wl_client *client, void *dati, uint32_t versione,
     if (v >= WL_OUTPUT_DONE_SINCE_VERSION) wl_output_send_done(r);
 }
 
+/* --- xdg-decoration: chi disegna la barra del titolo ---
+ *
+ * Il programma crea un oggetto decoration per il suo toplevel e chiede client_side (la barra la
+ * disegna lui) o server_side (la nostra cornice), oppure toglie la richiesta (unset_mode). Si
+ * risponde sempre con un configure del modo, e si fa quello che chiede: senza oggetto decoration
+ * il modo e' server_side, cioe' com'era prima. */
+
+static void deco_configura(struct finestra_wl *w) {
+    if (w->toplevel && w->configurata) invia_configure(w);   /* se no, lo porta il primo configure */
+}
+
+static void deco_modo(struct wl_client *c, struct wl_resource *r, uint32_t modo) {
+    (void)c;
+    if (modo != ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE && modo != ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE) {
+        wl_resource_post_error(r, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_INVALID_MODE, "modo sconosciuto");
+        return;
+    }
+    struct finestra_wl *w = wl_resource_get_user_data(r);
+    if (!w) return;
+    w->csd_voluto = modo == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
+    deco_configura(w);
+}
+
+static void deco_senza_modo(struct wl_client *c, struct wl_resource *r) {
+    (void)c;
+    struct finestra_wl *w = wl_resource_get_user_data(r);
+    if (!w) return;
+    w->csd_voluto = 0;                       /* nessuna preferenza: la nostra cornice */
+    deco_configura(w);
+}
+
+static void deco_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static void deco_distrutta(struct wl_resource *r) {
+    struct finestra_wl *w = wl_resource_get_user_data(r);
+    if (!w) return;
+    w->decorazione = 0;
+    w->csd_voluto = 0;                       /* senza oggetto: server_side, come oggi */
+}
+
+static const struct zxdg_toplevel_decoration_v1_interface deco_interfaccia = {
+    .destroy = deco_distruggi,
+    .set_mode = deco_modo,
+    .unset_mode = deco_senza_modo,
+};
+
+static void decorazioni_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static void decorazioni_prendi(struct wl_client *client, struct wl_resource *r, uint32_t id, struct wl_resource *toplevel) {
+    struct finestra_wl *w = wl_resource_get_user_data(toplevel);
+    struct wl_resource *d = wl_resource_create(client, &zxdg_toplevel_decoration_v1_interface, wl_resource_get_version(r), id);
+    if (!d) { wl_resource_post_no_memory(r); return; }
+    if (w && w->decorazione) {
+        wl_resource_post_error(r, ZXDG_TOPLEVEL_DECORATION_V1_ERROR_ALREADY_CONSTRUCTED, "il toplevel ha gia' una decorazione");
+        return;
+    }
+    wl_resource_set_implementation(d, &deco_interfaccia, w, deco_distrutta);
+    if (!w) return;
+    w->decorazione = d;
+    deco_configura(w);                       /* se il primo configure e' gia' partito, il modo va detto adesso */
+}
+
+static const struct zxdg_decoration_manager_v1_interface decorazioni_interfaccia = {
+    .destroy = decorazioni_distruggi,
+    .get_toplevel_decoration = decorazioni_prendi,
+};
+
+static void lega_decorazioni(struct wl_client *client, void *dati, uint32_t versione, uint32_t id) {
+    (void)dati;
+    struct wl_resource *r = wl_resource_create(client, &zxdg_decoration_manager_v1_interface, versione > 1 ? 1 : (int)versione, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &decorazioni_interfaccia, 0, 0);
+}
+
+/* --- cursor-shape: la forma del puntatore, per nome ---
+ *
+ * Il programma sceglie una forma del puntatore con un nome (default, text, pointer...), citando il
+ * numero di serie dell'enter. Il compositore la mostra mentre il puntatore sta su quella finestra,
+ * come MOSTRA_PUNTATORE delle finestre nostre: le forme che abbiamo sono la freccia, la mano, la
+ * barra a I, il divieto e l'attesa (FORMA_..., gkit.h); le altre, la freccia. */
+
+static unsigned int forma_di(uint32_t nome) {
+    switch (nome) {
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER: return FORMA_COLLEGAMENTO;
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT:
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_VERTICAL_TEXT: return FORMA_TESTO;
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_WAIT:
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_PROGRESS: return FORMA_ATTESA;
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NOT_ALLOWED:
+    case WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_NO_DROP: return FORMA_NON_DISPONIBILE;
+    default: return FORMA_NORMALE;           /* default e tutte le altre */
+    }
+}
+
+/* Il dispositivo del puntatore ha come dato il suo wl_pointer; quello della penna (tablet) nessuno,
+ * e per la penna non facciamo niente. */
+static void forma_scegli(struct wl_client *c, struct wl_resource *r, uint32_t serial, uint32_t nome) {
+    if (!wl_resource_get_user_data(r)) return;
+    for (int i = 0; i < posti_wl; i++) {
+        struct finestra_wl *w = per_posto[i];
+        if (!w || w->cliente != c || !w->dentro || w->serial_entra != serial) continue;
+        ponte_forma(i, forma_di(nome));      /* una forma sconosciuta e' la freccia */
+        return;
+    }
+}
+
+static void forma_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static const struct wp_cursor_shape_device_v1_interface forma_interfaccia = {
+    .destroy = forma_distruggi,
+    .set_shape = forma_scegli,
+};
+
+static void forme_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static void forme_dispositivo(struct wl_client *client, struct wl_resource *r, uint32_t id, void *dato) {
+    struct wl_resource *d = wl_resource_create(client, &wp_cursor_shape_device_v1_interface, wl_resource_get_version(r), id);
+    if (!d) { wl_resource_post_no_memory(r); return; }
+    wl_resource_set_implementation(d, &forma_interfaccia, dato, 0);
+}
+
+static void forme_puntatore(struct wl_client *c, struct wl_resource *r, uint32_t id, struct wl_resource *puntatore) {
+    forme_dispositivo(c, r, id, puntatore);
+}
+
+static void forme_penna(struct wl_client *c, struct wl_resource *r, uint32_t id, struct wl_resource *penna) {
+    (void)penna;
+    forme_dispositivo(c, r, id, 0);          /* non c'e' nessuna penna: il dispositivo c'e' ma non fa niente */
+}
+
+static const struct wp_cursor_shape_manager_v1_interface forme_interfaccia = {
+    .destroy = forme_distruggi,
+    .get_pointer = forme_puntatore,
+    .get_tablet_tool_v2 = forme_penna,
+};
+
+static void lega_forme(struct wl_client *client, void *dati, uint32_t versione, uint32_t id) {
+    (void)dati;
+    struct wl_resource *r = wl_resource_create(client, &wp_cursor_shape_manager_v1_interface, versione > 1 ? 1 : (int)versione, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &forme_interfaccia, 0, 0);
+}
+
 /* --- quello che vede il compositore --- */
 
 int wayland_inizia(void) {
     wl_list_init(&superfici);
     wl_list_init(&puntatori);
     wl_list_init(&tastiere);
+    wl_list_init(&basi);
     carica_keymap();
     /* wl_display_add_socket cerca la cartella in XDG_RUNTIME_DIR */
     setenv("XDG_RUNTIME_DIR", CARTELLA_SOCKET, 1);
@@ -881,7 +1107,9 @@ int wayland_inizia(void) {
         wl_display_init_shm(display) < 0 ||   /* wl_shm, con ARGB8888 e XRGB8888 */
         !wl_global_create(display, &xdg_wm_base_interface, 3, 0, lega_wm) ||
         !wl_global_create(display, &wl_seat_interface, 7, 0, lega_seat) ||
-        !wl_global_create(display, &wl_output_interface, 4, 0, lega_output)) {
+        !wl_global_create(display, &wl_output_interface, 4, 0, lega_output) ||
+        !wl_global_create(display, &zxdg_decoration_manager_v1_interface, 1, 0, lega_decorazioni) ||
+        !wl_global_create(display, &wp_cursor_shape_manager_v1_interface, 1, 0, lega_forme)) {
         wl_display_destroy(display);
         display = 0;
         return -1;
@@ -915,7 +1143,7 @@ void wayland_notizia(int i, const struct notizia *n) {
     case FUOCO:
         if (w->attiva == (int)(n->fuoco != 0)) return;
         w->attiva = n->fuoco != 0;
-        ridisegna(w);                         /* il titolo e i comandi cambiano */
+        if (!w->csd) ridisegna(w);            /* il titolo e i comandi cambiano (se la barra e' nostra) */
         if (w->toplevel && w->configurata) invia_configure(w);   /* e il programma lo sa */
         if (w->attiva) ta_entra(w);           /* il fuoco della tastiera: enter con i tasti gia' giu' */
         else ta_esce(w);
@@ -927,6 +1155,11 @@ void wayland_notizia(int i, const struct notizia *n) {
         w->consegnati = 0;
         break;
     case ROTELLA: pu_rotella(w, n->x, n->y, n->scatti_x, n->scatti_y); break;
+    case PING: {                              /* "ci sei?": xdg_wm_base.ping, il pong torna da wm_pong */
+        w->ping_serial = n->numero ? n->numero : 1;
+        PER_DEL_PROGRAMMA(r, &basi, w->cliente) { xdg_wm_base_send_ping(r, w->ping_serial); break; }
+        break;
+    }
     default: return;                          /* TASTO e TASTO_FISICO: ci sono i tasti grezzi */
     }
     wl_display_flush_clients(display);
@@ -949,6 +1182,12 @@ void wayland_tasto(unsigned int codice, int valore, unsigned int mod) {
         if (mod != prima) ta_modificatori(r, wl_display_next_serial(display), mod);
     }
     wl_display_flush_clients(display);
+}
+
+void wayland_termina(int i) {
+    struct finestra_wl *w = al_posto(i);
+    if (!w || !w->cliente) return;
+    wl_client_destroy(w->cliente);    /* le sue finestre spariscono (toplevel_distrutto) */
 }
 
 void wayland_chiedi_chiusura(int i) {

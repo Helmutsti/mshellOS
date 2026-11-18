@@ -157,6 +157,9 @@ struct finestra_compositore {
     int wayland;                /* una finestra Wayland (compositore_wayland.c): niente collegamento
                                  * (-1) ne' foglio, l'immagine e' di Wayland e la cornice la disegna
                                  * il compositore; vedi "IL PONTE" */
+    int senza_cornice;          /* Wayland: la barra del titolo la disegna il programma (xdg-decoration
+                                 * client_side): l'immagine e' la sua, senza la nostra cornice, e il
+                                 * trascinamento e il riduci li chiede lui (ponte_trascinami, ponte_riduci) */
     int annunciata;             /* la scrivania sa che c'e' (FINESTRA_APERTA) */
     int tasti_fisici;           /* vuole anche TASTO_FISICO (VOGLIO_TASTI_FISICI) */
     int ridotta;                /* nascosta (RIDUCIMI): torna con PORTA_DAVANTI */
@@ -1152,9 +1155,13 @@ static void mostra(int i, const struct mostra *m) {
  *     (il fuoco) gli arrivano da avvisa;
  *   - l'immagine e' memoria di Wayland (cornice del compositore piu' contenuto del programma),
  *     sempre l'immagine 0: ogni volta che cambia, ponte_mostra e' il suo MOSTRA;
- *   - non si manda il "ci sei?": Wayland ha i suoi ping;
- *   - la cornice (titolo, riduci, chiudi, trascinamento) la gestisce il compositore: lo fa
- *     al_mouse, perche' il programma non sa dove sta il puntatore.
+ *   - il "ci sei?" e' xdg_wm_base.ping (compositore_wayland.c): controlla_risposte lo manda con
+ *     avvisa(PING) e la risposta arriva da ponte_pong, come il PONG delle finestre nostre;
+ *   - la cornice (titolo, riduci, chiudi, trascinamento) di norma la gestisce il compositore: lo
+ *     fa al_mouse, perche' il programma non sa dove sta il puntatore. Se il programma chiede la
+ *     barra del titolo sua (xdg-decoration client_side: 'senza_cornice') non c'e' cornice nostra,
+ *     e il trascinamento, il riduci e la forma del puntatore li chiede lui (ponte_trascinami,
+ *     ponte_riduci, ponte_forma), come una finestra nostra.
  * Il resto (ombra, vetro, primo piano, fuoco, userbar) e' quello di tutte le finestre. */
 
 /* Un posto per la finestra di un programma Wayland, di cui 'cliente' e' il socket. Di chi e':
@@ -1223,6 +1230,16 @@ void ponte_schermo(int *l, int *a) {
     *a = altezza;
 }
 
+/* La finestra del posto 'i' ha (si = 1) o non ha (0) la barra del titolo disegnata dal programma. */
+void ponte_senza_cornice(int i, int si) {
+    if (finestre[i].usata && finestre[i].wayland) finestre[i].senza_cornice = si != 0;
+}
+
+/* La forma del puntatore sulla finestra (FORMA_...), come MOSTRA_PUNTATORE. */
+void ponte_forma(int i, unsigned int forma) {
+    if (finestre[i].usata && finestre[i].wayland && forma <= FORMA_ATTESA) finestre[i].forma = forma;
+}
+
 /* PONG: ha risposto. Se era bloccata, torna normale, e le si dice quello che si era
  * perso: l'immagine da restituire e se ha il fuoco. */
 static void pong(int i, const struct pong *m) {
@@ -1243,7 +1260,7 @@ static void controlla_risposte(void) {
     unsigned int adesso = tempo();
     for (int i = 0; i < posti; i++) {
         struct finestra_compositore *f = &finestre[i];
-        if (!f->usata || !f->immagini[0] || f->wayland) continue;   /* Wayland ha i suoi ping */
+        if (!f->usata || !f->immagini[0]) continue;   /* (per Wayland, avvisa manda xdg_wm_base.ping) */
         /* Con sopra una finestra di scelta (Apri/Salva) l'app aspetta la risposta e non legge: non si giudica,
          * e il conto riparte (deciso il 17/11/2026, STATO.md sez. 7). */
         if (f->ping_atteso && scelta_sopra(i) >= 0) f->ultimo_ping = adesso;
@@ -1283,6 +1300,21 @@ static void riducimi(int i) {
         sotto = -1;
     }
     if (fuoco == i) dai_fuoco(piu_davanti());
+}
+
+/* xdg_toplevel.move e set_minimized: come TRASCINAMI e RIDUCIMI di una finestra nostra (la
+ * validita' del trascinamento, il pulsante ancora giu', la controlla trascinami). */
+void ponte_trascinami(int i) {
+    if (finestre[i].usata && finestre[i].wayland) trascinami(i);
+}
+
+void ponte_riduci(int i) {
+    if (finestre[i].usata && finestre[i].wayland) riducimi(i);
+}
+
+/* xdg_wm_base.pong: come il PONG di una finestra nostra. */
+void ponte_pong(int i, unsigned int numero) {
+    if (finestre[i].usata && finestre[i].wayland) pong(i, &(struct pong){ .tipo = PONG, .numero = numero });
 }
 
 /* PORTA_DAVANTI, da un pannello (la scrivania): la finestra torna visibile, davanti a
@@ -1787,7 +1819,8 @@ static void al_mouse(const struct evento *e) {
             barra_congelata_sul_chiudi(finestre[i].l, MINI, px - finestre[i].x, py - finestre[i].y)) {
             /* il "chiudi" rosso di emergenza: si chiude il programma. La finestra sparira'
              * quando il suo collegamento si chiude (lo chiude il kernel). */
-            termina(finestre[i].collegamento);
+            if (finestre[i].wayland) wayland_termina(i);   /* si chiude la sua connessione */
+            else termina(finestre[i].collegamento);
             return;
         }
         if (i < 0 || finestre[i].ruolo == RUOLO_FINESTRA || finestre[i].ruolo == RUOLO_SCELTA) {
@@ -1795,7 +1828,7 @@ static void al_mouse(const struct evento *e) {
             if (i >= 0) in_primo_piano(i);
         }
         if (i >= 0) presa = i;
-        if (i >= 0 && finestre[i].wayland) {
+        if (i >= 0 && finestre[i].wayland && !finestre[i].senza_cornice) {
             /* la cornice di una finestra Wayland e' nostra: i suoi comandi e il trascinamento li
              * gestiamo qui (una finestra nostra lo chiede con RIDUCIMI e TRASCINAMI). Sotto la
              * testata c'e' il programma: il puntatore sul suo contenuto lo sente (wl_pointer),

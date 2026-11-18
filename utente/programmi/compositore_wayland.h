@@ -38,14 +38,19 @@ void wayland_servi(void);
 
 /* Una notizia per la finestra del posto 'i' (le stesse che avvisa manda alle nostre finestre):
  * FUOCO (la cornice cambia, il programma e' "attivo" e riceve enter/leave della tastiera),
- * PUNTATORE (x, y sono della finestra, cornice compresa: il programma le vede sul contenuto),
- * USCITO e ROTELLA (wl_pointer). TASTO e TASTO_FISICO non servono: ci sono i tasti grezzi. */
+ * PUNTATORE (x, y sono della finestra, cornice compresa se c'e': il programma le vede sul contenuto),
+ * USCITO e ROTELLA (wl_pointer), PING (xdg_wm_base.ping, con 'numero': la risposta torna da
+ * ponte_pong; il compositore giudica "non risponde" come per le finestre nostre). TASTO e TASTO_FISICO non servono: ci sono i tasti grezzi. */
 void wayland_notizia(int i, const struct notizia *n);
 
 /* Un tasto grezzo (EVENTO_TASTO_GREZZO, corekit/chiamate.h): 'codice' di Linux, 'valore' 1
  * premuto, 0 lasciato, 2 ripetuto (si scarta: ripete il programma), 'mod' i GREZZO_... DOPO il tasto.
  * Va al programma della finestra con il fuoco (wl_keyboard.key e modifiers). */
 void wayland_tasto(unsigned int codice, int valore, unsigned int mod);
+
+/* La persona vuole chiudere il programma del posto 'i' che non risponde (il "chiudi" rosso della
+ * barra di emergenza): si chiude la sua connessione, e le sue finestre spariscono. */
+void wayland_termina(int i);
 
 /* La X della cornice: il programma riceve "chiuditi" (xdg_toplevel.close) e decide lui. */
 void wayland_chiedi_chiusura(int i);
@@ -81,5 +86,22 @@ int ponte_visibile(int i);
 
 /* La misura dello schermo. */
 void ponte_schermo(int *larghezza, int *altezza);
+
+/* LA BARRA DEL TITOLO LA DISEGNA IL PROGRAMMA (xdg-decoration, modo client_side). 'si' a 1: la
+ * finestra del posto 'i' non ha la cornice del compositore, l'immagine di ponte_mostra e' il buffer
+ * del programma cosi' com'e' (ombra, vetro e angoli come una finestra nostra) e il compositore non
+ * gestisce piu' trascinamento e comandi sulla cornice. Va detto prima di ponte_mostra. */
+void ponte_senza_cornice(int i, int si);
+
+/* Il programma chiede (xdg_toplevel.move, set_minimized): come TRASCINAMI e RIDUCIMI delle finestre
+ * nostre. Il trascinamento vale solo finche' il pulsante premuto sulla finestra e' ancora giu'. */
+void ponte_trascinami(int i);
+void ponte_riduci(int i);
+
+/* La risposta a un ping (xdg_wm_base.pong): 'numero' e' quello mandato con wayland_notizia(PING). */
+void ponte_pong(int i, unsigned int numero);
+
+/* La forma del puntatore (FORMA_... di gkit.h) mentre sta sulla finestra del posto 'i'. */
+void ponte_forma(int i, unsigned int forma);
 
 #endif

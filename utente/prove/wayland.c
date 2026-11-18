@@ -34,6 +34,21 @@
  * Il programma non decodifica i tasti in caratteri (non ha la libreria XKB): scrive i codici di
  * Linux, che la prova controlla. Controlla anche che i numeri di serie non tornino mai indietro.
  *
+ * LA MODALITA' "CSD" (la barra del titolo la disegna il programma, test/prove/wayland_senza_cornice.py):
+ * se il programma si chiama wayland_csd chiede al compositore xdg-decoration client_side e si
+ * disegna da solo la barra (BARRA_ALTEZZA = 40 pixel, viola, con un quadratino chiaro a destra:
+ * "riduci"), sopra lo stesso disegno di prima: la finestra e' quindi 320 x 240 e il contenuto
+ * comincia sempre 40 pixel sotto il bordo, ma stavolta la barra e' sua. Fa questo, e per ogni cosa
+ * scrive nel registro una riga:
+ *   - trascinare: un clic sulla barra chiama xdg_toplevel.move ("wayland: move chiesto");
+ *   - ridurre: un clic sul quadratino chiama set_minimized ("wayland: riduci chiesto");
+ *   - la forma del puntatore (cursor-shape): sulla barra a sinistra "testo" (barra a I), al centro
+ *     "collegamento" (la mano), a destra "normale"; la dice a ogni enter e quando cambia ("wayland:
+ *     forma testo"). Sul contenuto, sempre "normale";
+ *   - xdg_wm_base.ping: risponde col pong e scrive "wayland: ping"; premendo il tasto X (KEY_X)
+ *     smette di rispondere ("wayland: non rispondo piu' ai ping"), per provare la barra di emergenza;
+ *   - "wayland: decorazione client_side" (o server_side) quando il compositore dice il modo.
+ *
  * LA MODALITA' "ANIMA" (il ritmo dei fotogrammi, test/prove/wayland_ritmo.py): se il programma si
  * chiama wayland_anima (init li fa partire senza argomenti: il nome e' l'argomento), ridisegna
  * ad ogni "fatto" del frame callback, spostando un quadrato, e chiede subito il prossimo. Ogni
@@ -55,6 +70,8 @@
 #include <linux/input-event-codes.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
+#include "cursor-shape-v1-client-protocol.h"
 
 #include "corekit/corekit.h"
 
@@ -63,6 +80,21 @@
 #define QUADRATO  48
 #define MARGINE   16
 
+#define BARRA_ALTEZZA 40                   /* la barra del titolo disegnata dal programma (modalita' csd) */
+#define BARRA_COLORE  0xFF6A2FA8u
+#define RIDUCI_LATO   24                   /* il quadratino "riduci": a 8 dal bordo destro, a 8 dall'alto */
+#define RIDUCI_COLORE 0xFFE0E0E0u
+
+static int csd;                            /* il nome del programma e' wayland_csd */
+static int altezza_buffer = ALTEZZA;       /* ALTEZZA, o ALTEZZA + BARRA_ALTEZZA in modalita' csd */
+static int sposta_y;                       /* dove comincia il disegno di base: 0, o BARRA_ALTEZZA */
+static int muto;                           /* non risponde piu' ai ping */
+static struct zxdg_decoration_manager_v1 *decorazioni;
+static struct wp_cursor_shape_manager_v1 *forme;
+static struct wp_cursor_shape_device_v1 *forma_puntatore;
+static struct xdg_toplevel *toplevel_csd;
+static uint32_t serial_entra;
+static int forma_ora = -1;                 /* l'ultima forma chiesta: 0 normale, 1 collegamento, 2 testo */
 static struct wl_compositor *compositore;
 static struct wl_shm *shm;
 static struct xdg_wm_base *base;
@@ -90,6 +122,10 @@ static void globale(void *dati, struct wl_registry *registro, uint32_t nome, con
         shm = wl_registry_bind(registro, nome, &wl_shm_interface, 1);
     else if (!strcmp(interfaccia, xdg_wm_base_interface.name))
         base = wl_registry_bind(registro, nome, &xdg_wm_base_interface, versione < 3 ? versione : 3);
+    else if (!strcmp(interfaccia, zxdg_decoration_manager_v1_interface.name))
+        decorazioni = wl_registry_bind(registro, nome, &zxdg_decoration_manager_v1_interface, 1);
+    else if (!strcmp(interfaccia, wp_cursor_shape_manager_v1_interface.name))
+        forme = wl_registry_bind(registro, nome, &wp_cursor_shape_manager_v1_interface, 1);
     else if (!strcmp(interfaccia, wl_seat_interface.name))
         seat = wl_registry_bind(registro, nome, &wl_seat_interface, versione < 7 ? versione : 7);
     else if (!strcmp(interfaccia, wl_output_interface.name) && !uscita)
@@ -146,12 +182,31 @@ static const char *nome_pulsante(uint32_t codice) {
     return codice == BTN_LEFT ? "BTN_LEFT" : codice == BTN_RIGHT ? "BTN_RIGHT" : codice == BTN_MIDDLE ? "BTN_MIDDLE" : "BTN_?";
 }
 
+/* La forma che il programma vuole in (x, y), in modalita' csd (vedi in testa): 2 testo, 1 collegamento, 0 normale. */
+static int forma_per(int x, int y) {
+    if (y >= BARRA_ALTEZZA) return 0;
+    return x < 96 ? 2 : x < 192 ? 1 : 0;
+}
+
+static void scegli_forma(struct wl_pointer *p, int forma) {
+    if (!forme || forma == forma_ora) return;
+    if (!forma_puntatore) forma_puntatore = wp_cursor_shape_manager_v1_get_pointer(forme, p);
+    wp_cursor_shape_device_v1_set_shape(forma_puntatore, serial_entra,
+        forma == 2 ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_TEXT : forma == 1 ? WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_POINTER
+                                                                      : WP_CURSOR_SHAPE_DEVICE_V1_SHAPE_DEFAULT);
+    forma_ora = forma;
+    riga("forma ", "%s", forma == 2 ? "testo" : forma == 1 ? "collegamento" : "normale");
+}
+
 static void pu_entra(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y) {
-    (void)d; (void)p; (void)s;
+    (void)d; (void)s;
     controlla_serial("pointer.enter", serial);
     ultimo_x = wl_fixed_to_int(x);
     ultimo_y = wl_fixed_to_int(y);
     riga("puntatore entra ", "%d,%d", ultimo_x, ultimo_y);
+    serial_entra = serial;
+    forma_ora = -1;                     /* a ogni enter il compositore riparte dalla freccia: si dice di nuovo */
+    if (csd) scegli_forma(p, forma_per(ultimo_x, ultimo_y));
 }
 static void pu_esce(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s) {
     (void)d; (void)p; (void)s;
@@ -159,16 +214,29 @@ static void pu_esce(void *d, struct wl_pointer *p, uint32_t serial, struct wl_su
     riga("puntatore esce", "%s", "");
 }
 static void pu_muove(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y) {
-    (void)d; (void)p; (void)t;
+    (void)d; (void)t;
     ultimo_x = wl_fixed_to_int(x);
     ultimo_y = wl_fixed_to_int(y);
     riga("puntatore muove ", "%d,%d", ultimo_x, ultimo_y);
+    if (csd) scegli_forma(p, forma_per(ultimo_x, ultimo_y));
 }
 static void pu_pulsante(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t pulsante, uint32_t stato) {
     (void)d; (void)p; (void)t;
     controlla_serial("pointer.button", serial);
     riga("clic ", "%s %s %d,%d", nome_pulsante(pulsante), stato == WL_POINTER_BUTTON_STATE_PRESSED ? "premuto" : "rilasciato",
          ultimo_x, ultimo_y);
+    /* modalita' csd: un clic sulla barra (disegnata da noi) trascina la finestra, quello sul
+     * quadratino la riduce */
+    if (csd && toplevel_csd && pulsante == BTN_LEFT && stato == WL_POINTER_BUTTON_STATE_PRESSED && ultimo_y < BARRA_ALTEZZA) {
+        int sul_quadratino = ultimo_x >= LARGHEZZA - 8 - RIDUCI_LATO && ultimo_x < LARGHEZZA - 8 && ultimo_y >= 8 && ultimo_y < 8 + RIDUCI_LATO;
+        if (sul_quadratino) {
+            xdg_toplevel_set_minimized(toplevel_csd);
+            riga("riduci chiesto", "%s", "");
+        } else {
+            xdg_toplevel_move(toplevel_csd, seat, serial);
+            riga("move chiesto", "%s", "");
+        }
+    }
 }
 static void pu_asse(void *d, struct wl_pointer *p, uint32_t t, uint32_t asse, wl_fixed_t valore) {
     (void)d; (void)p; (void)t;
@@ -218,6 +286,10 @@ static void ta_tasto(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t t
     (void)d; (void)k; (void)t;
     controlla_serial("keyboard.key", serial);
     riga("tasto ", "%u %s", tasto, stato == WL_KEYBOARD_KEY_STATE_PRESSED ? "premuto" : "rilasciato");
+    if (csd && tasto == KEY_X && stato == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        muto = 1;
+        riga("non rispondo piu' ai ping", "%s", "");
+    }
 }
 static void ta_modificatori(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t premuti, uint32_t agganciati,
                             uint32_t bloccati, uint32_t gruppo) {
@@ -252,7 +324,17 @@ static const struct wl_seat_listener seat_ascolto = { seat_capacita, seat_nome }
 
 /* --- xdg --- */
 
-static void ping(void *dati, struct xdg_wm_base *b, uint32_t serial) { (void)dati; xdg_wm_base_pong(b, serial); }
+static void ping(void *dati, struct xdg_wm_base *b, uint32_t serial) {
+    (void)dati;
+    if (csd) riga("ping ", "%u%s", serial, muto ? " (non rispondo)" : "");
+    if (!muto) xdg_wm_base_pong(b, serial);
+}
+
+static void deco_configure(void *dati, struct zxdg_toplevel_decoration_v1 *d, uint32_t modo) {
+    (void)dati; (void)d;
+    riga("decorazione ", "%s", modo == ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE ? "client_side" : "server_side");
+}
+static const struct zxdg_toplevel_decoration_v1_listener deco_ascolto = { deco_configure };
 static const struct xdg_wm_base_listener base_ascolto = { ping };
 
 static void xdg_configure(void *dati, struct xdg_surface *superficie, uint32_t serial) {
@@ -283,23 +365,29 @@ static const struct xdg_toplevel_listener toplevel_ascolto = { toplevel_configur
 
 static void quadrato(uint32_t *pixel, int x, int y, uint32_t colore) {
     for (int r = 0; r < QUADRATO; r++)
-        for (int c = 0; c < QUADRATO; c++) pixel[(y + r) * LARGHEZZA + x + c] = colore;
+        for (int c = 0; c < QUADRATO; c++) pixel[(sposta_y + y + r) * LARGHEZZA + x + c] = colore;
 }
 
 static void disegna(uint32_t *pixel) {
     for (int y = 0; y < ALTEZZA; y++)
         for (int x = 0; x < LARGHEZZA; x++)
-            pixel[y * LARGHEZZA + x] = 0xFF000000u | (uint32_t)(x * 255 / (LARGHEZZA - 1)) << 16 |
-                                       (uint32_t)(y * 255 / (ALTEZZA - 1)) << 8 | 96;
+            pixel[(sposta_y + y) * LARGHEZZA + x] = 0xFF000000u | (uint32_t)(x * 255 / (LARGHEZZA - 1)) << 16 |
+                                                    (uint32_t)(y * 255 / (ALTEZZA - 1)) << 8 | 96;
     quadrato(pixel, MARGINE, MARGINE, 0xFFE61E1Eu);
     quadrato(pixel, LARGHEZZA - MARGINE - QUADRATO, MARGINE, 0xFF1EC83Cu);
     quadrato(pixel, MARGINE, ALTEZZA - MARGINE - QUADRATO, 0xFF2850E6u);
     quadrato(pixel, LARGHEZZA - MARGINE - QUADRATO, ALTEZZA - MARGINE - QUADRATO, 0xFFF0D228u);
+    if (!csd) return;
+    /* la barra del titolo, disegnata da noi: viola, con il quadratino "riduci" */
+    for (int y = 0; y < BARRA_ALTEZZA; y++)
+        for (int x = 0; x < LARGHEZZA; x++) pixel[y * LARGHEZZA + x] = BARRA_COLORE;
+    for (int y = 8; y < 8 + RIDUCI_LATO; y++)
+        for (int x = LARGHEZZA - 8 - RIDUCI_LATO; x < LARGHEZZA - 8; x++) pixel[y * LARGHEZZA + x] = RIDUCI_COLORE;
 }
 
 /* Il buffer: un foglio di memoria condivisa (memfd) con il disegno, dato al compositore. */
 static struct wl_buffer *crea_buffer(void) {
-    int byte = LARGHEZZA * ALTEZZA * 4;
+    int byte = LARGHEZZA * altezza_buffer * 4;
     int foglio = memfd_create("prova-wayland", MFD_CLOEXEC);
     if (foglio < 0 || ftruncate(foglio, byte) < 0) return 0;
     void *dati = mmap(0, (size_t)byte, PROT_READ | PROT_WRITE, MAP_SHARED, foglio, 0);
@@ -307,7 +395,7 @@ static struct wl_buffer *crea_buffer(void) {
     disegna(dati);
     pixel_anima = dati;
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, foglio, byte);
-    struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, LARGHEZZA, ALTEZZA, LARGHEZZA * 4, WL_SHM_FORMAT_ARGB8888);
+    struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, LARGHEZZA, altezza_buffer, LARGHEZZA * 4, WL_SHM_FORMAT_ARGB8888);
     wl_shm_pool_destroy(pool);
     close(foglio);                     /* il compositore ha la sua copia del descrittore */
     return b;
@@ -390,6 +478,11 @@ static int aspetta_messaggi(struct wl_display *display, int ms) {
 
 int main(int quanti, char **argomenti) {
     anima = quanti > 0 && strstr(argomenti[0], "wayland_anima") != 0;
+    csd = quanti > 0 && strstr(argomenti[0], "wayland_csd") != 0;
+    if (csd) {
+        altezza_buffer = ALTEZZA + BARRA_ALTEZZA;
+        sposta_y = BARRA_ALTEZZA;
+    }
     /* il socket di prova del compositore (compositore_wayland.c): il compositore parte con il
      * sistema, quindi si riprova finche' non c'e' */
     setenv("XDG_RUNTIME_DIR", "/run/mshell", 1);
@@ -420,6 +513,16 @@ int main(int quanti, char **argomenti) {
     struct xdg_toplevel *finestra = xdg_surface_get_toplevel(xdg);
     xdg_toplevel_add_listener(finestra, &toplevel_ascolto, 0);
     xdg_toplevel_set_title(finestra, "Prova Wayland");
+    if (csd) {
+        toplevel_csd = finestra;
+        if (!decorazioni) {
+            scrivi_riga("wayland", "FALLITA: manca xdg-decoration", "");
+            return 1;
+        }
+        struct zxdg_toplevel_decoration_v1 *deco = zxdg_decoration_manager_v1_get_toplevel_decoration(decorazioni, finestra);
+        zxdg_toplevel_decoration_v1_add_listener(deco, &deco_ascolto, 0);
+        zxdg_toplevel_decoration_v1_set_mode(deco, ZXDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE);
+    }
     xdg_toplevel_set_app_id(finestra, "prova-wayland");
     wl_surface_commit(superficie);     /* senza contenuto: il compositore risponde con il configure */
     while (!configurata && !chiusa)
@@ -437,7 +540,7 @@ int main(int quanti, char **argomenti) {
     buffer_anima = buffer;
     if (anima) chiedi_fotogramma();    /* il primo "fatto" arriva dopo questo commit */
     wl_surface_attach(superficie, buffer, 0, 0);
-    wl_surface_damage_buffer(superficie, 0, 0, LARGHEZZA, ALTEZZA);
+    wl_surface_damage_buffer(superficie, 0, 0, LARGHEZZA, altezza_buffer);
     wl_surface_commit(superficie);
     scrivi_riga("wayland", "finestra mostrata: Prova Wayland", "");
 
