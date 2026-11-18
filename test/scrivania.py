@@ -48,9 +48,10 @@ SEGNO_X = (BARRA_X + 1, BARRA_X + 4)   # dove sta il segno "aperta", nel margine
 ORA = (BARRA_X, BARRA_Y + 4 + 8 * 32 + 7 * 8 + 16 + 32, BARRA_X + 40,
        BARRA_Y + 4 + 8 * 32 + 7 * 8 + 16 + 72 + 8)
 
-# Il vassoio con le 8 app del sistema: quelle della userbar e il Terminale, in ordine
-# alfabetico (con Contatore installata le righe restano 3: VASSOIO vale per le 7 e le 8).
-NEL_VASSOIO = FISSATE + ["Terminale"]
+# Il vassoio con le 9 app del sistema: quelle della userbar, Foot (app Linux) e il Terminale, in
+# ordine alfabetico (con Contatore installata le app diventano 10 e le righe 4: le posizioni di
+# VASSOIO restano le stesse, cambia solo la misura del vassoio).
+NEL_VASSOIO = sorted(FISSATE + ["Foot", "Terminale"])
 VASSOIO_ANGOLO = (52, 108)
 VASSOIO = {nome: (52 + 16 + 40 + 88 * (i % 3), 108 + 16 + 24 + 76 * (i // 3))
            for i, nome in enumerate(NEL_VASSOIO)}
