@@ -17,7 +17,8 @@
  *            o "wayland" (il client Wayland di prova, utente/prove/wayland.c) o
  *            "wayland_anima" (lo stesso client con il nome wayland_anima: anima, per il ritmo) o
  *            "wayland_molte" (otto copie del client, wayland_1 ... wayland_8: finestre_molte) o
- *            "wayland_csd" (lo stesso client con il nome wayland_csd: si disegna la barra del titolo)
+ *            "wayland_csd" (lo stesso client con il nome wayland_csd: si disegna la barra del titolo) o
+ *            "wayland_sotto" (lo stesso client con il nome wayland_sotto: crea le sottosuperfici)
  *
  * LE DATE DELLA CASA. In QEMU l'orologio e' fermo al 1/1/2026 e i file della casa sono del
  * 31/12/2025 alle 18:02: Files scrive "ieri, 18:02". Il container ha l'orologio vero (non
@@ -94,7 +95,7 @@ int main(int quanti, char **argomenti) {
 
     if (!strcmp(prove, "riempitivi") || !strcmp(prove, "pacchetti") || !strcmp(prove, "messaggi") ||
         !strcmp(prove, "catalog") || !strcmp(prove, "wayland") || !strcmp(prove, "wayland_anima") ||
-        !strcmp(prove, "wayland_molte") || !strcmp(prove, "wayland_csd")) {
+        !strcmp(prove, "wayland_molte") || !strcmp(prove, "wayland_csd") || !strcmp(prove, "wayland_sotto")) {
         mkdir("/data/tests", 0755);
         chmod("/data/tests", 0755);
         if (!strcmp(prove, "riempitivi"))
@@ -105,6 +106,8 @@ int main(int quanti, char **argomenti) {
             metti_prova("wayland", "wayland_anima");   /* lo stesso client: il nome lo fa animare */
         else if (!strcmp(prove, "wayland_csd"))
             metti_prova("wayland", "wayland_csd");     /* lo stesso client: il nome gli fa disegnare la barra */
+        else if (!strcmp(prove, "wayland_sotto"))
+            metti_prova("wayland", "wayland_sotto");   /* lo stesso client: il nome gli fa creare le sottosuperfici */
         else
             metti_prova(prove, prove);      /* un programma solo, con lo stesso nome */
     }

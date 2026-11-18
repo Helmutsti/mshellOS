@@ -39,9 +39,19 @@
  * LA CHIUSURA e' sempre una richiesta: la X manda xdg_toplevel.close e il programma decide (se
  * chiude, il socket si chiude e la finestra sparisce).
  *
+ * LE SOTTOSUPERFICI (wl_subcompositor v1, wl_subsurface). Le usano i programmi veri (foot ne ha bisogno per
+ * avviarsi). Il contenuto della finestra (quello che sta sotto la testata) e' la superficie principale
+ * con le sottosuperfici sopra e sotto, nelle loro posizioni, tagliato ai bordi della principale
+ * (componi). Posizione e ordine valgono al commit del genitore; il contenuto di una sottosuperficie
+ * "sincrona" (la prima volta lo e' sempre) vale col commit del genitore (cache), quello di una
+ * "asincrona" col suo. Il puntatore va alla superficie che sta sotto (colpisci), con le coordinate di
+ * quella, e rispetta wl_surface.set_input_region se e' una somma di rettangoli (se no, tutta). Vedi il
+ * commento di 'struct superficie'. Prova: wayland_sottosuperfici (client wayland_sotto).
+ *
  * IL PASSO 2 e' wl_seat: il puntatore e la tastiera (vedi "wl_seat", piu' sotto).
  *
- * COSA NON C'E' ANCORA: i popup, il ridimensionamento fatto dalla persona, gli appunti
+ * COSA NON C'E' ANCORA: la scala (wl_surface.set_buffer_scale e set_buffer_transform si accettano ma si
+ * disegna sempre a scala 1, senza ruotare), l'opacita' (set_opaque_region), i popup, il ridimensionamento fatto dalla persona, gli appunti
  * (data_device), la forma del cursore come immagine (wl_pointer.set_cursor: solo le forme per
  * nome di cursor-shape). */
 #define _GNU_SOURCE
@@ -78,9 +88,29 @@ static struct wl_display *display;
 /* quanti pixel di scorrimento vale uno scatto della rotella (wl_pointer.axis; weston usa 10) */
 #define PIXEL_PER_SCATTO 10
 
+/* Una regione (di input): fino a MAX_RETT rettangoli sommati; 'tutta' vale per "tutta la superficie"
+ * (nessuna regione, oppure una troppo complicata: con sottrazioni o con troppi rettangoli). */
+#define MAX_RETT 16
+struct area {
+    int n, tutta;
+    int r[MAX_RETT][4];                  /* x, y, larghezza, altezza */
+};
+
 /* Una SUPERFICIE: quello che il programma disegna. 'in_attesa': le richieste frame fatte dopo
  * l'ultimo commit; 'da_servire': quelle gia' confermate da un commit, che aspettano il prossimo
- * fotogramma del compositore. */
+ * fotogramma del compositore.
+ *
+ * LE SOTTOSUPERFICI (wl_subcompositor). Una superficie puo' avere sopra o sotto di se' altre
+ * superfici (le "sottosuperfici"), ognuna a una posizione sua, relativa al genitore. Servono ai
+ * programmi veri (un video dentro una pagina, il cursore del testo, i menu a tendina). Il
+ * contenuto che il compositore vede per una finestra e' l'insieme: la superficie principale con le
+ * sue sottosuperfici, nell'ordine 'pila', tagliato ai bordi della principale (componi).
+ *   - 'pila' e' l'ordine dal fondo alla cima: i figli e, al posto giusto, il 'segno' della superficie
+ *     stessa. 'pila_att' e' l'ordine richiesto (place_above/below) che vale al commit del genitore.
+ *   - lo stato di una sottosuperficie (contenuto, regione) e' "sincrono" (valore di partenza): un suo
+ *     commit va nella cache ('cache_*') e vale quando il genitore applica il suo; se e' "asincrono"
+ *     (set_desync) e nessun antenato e' sincrono, vale subito.
+ *   - 'pix' e' il contenuto valido (premoltiplicato, l x a), 0 se la superficie non e' mappata. */
 struct finestra_wl;
 struct superficie {
     struct wl_resource *risorsa;
@@ -90,6 +120,26 @@ struct superficie {
     struct wl_list in_attesa, da_servire;
     struct wl_list link;
     struct finestra_wl *finestra;        /* il suo ruolo (xdg_surface), o 0 */
+    struct area input_attesa;            /* set_input_region dall'ultimo commit (se ha_input) */
+    int ha_input;
+    unsigned int *pix;                   /* il contenuto valido */
+    int l, a;
+    struct area input;                   /* dove si clicca */
+    /* il ruolo di sottosuperficie */
+    int e_sotto;                         /* ha (o ha avuto) il ruolo wl_subsurface */
+    struct wl_resource *sotto;           /* il wl_subsurface, o 0 */
+    struct superficie *genitore;         /* 0: la principale, o una sottosuperficie rimasta senza genitore */
+    int x, y, px, py;                    /* posizione valida e in attesa, sul genitore */
+    int sync;                            /* set_sync / set_desync */
+    struct wl_list fratello, fratello_att;   /* nella pila (valida / in attesa) del genitore */
+    struct wl_list pila, pila_att, segno, segno_att;
+    /* lo stato di un commit non ancora valido (sincrono: aspetta il genitore) */
+    int cache;
+    int cache_contenuto, cache_ha_input;
+    unsigned int *cache_pix;
+    int cache_l, cache_a;
+    struct area cache_input;
+    struct wl_list in_cache;             /* i frame callback del commit nella cache */
 };
 static struct wl_list superfici;
 
@@ -108,6 +158,7 @@ struct finestra_wl {
     unsigned int *immagine;              /* cornice + contenuto: l x a */
     int l, a;
     struct wl_client *cliente;           /* il programma: a lui vanno i wl_pointer e wl_keyboard */
+    struct superficie *focus;            /* la superficie (principale o sotto) che il puntatore ha davanti: enter/leave sono sue */
     /* chi disegna la barra del titolo (xdg-decoration): 'decorazione' e' l'oggetto, se il programma
      * l'ha creato; 'csd_voluto' cio' che ha chiesto (client_side), 'csd' cio' che vale per
      * l'immagine che c'e' (si adegua al primo buffer dopo la richiesta) */
@@ -117,7 +168,7 @@ struct finestra_wl {
     uint32_t serial_clic;                /* il numero di serie dell'ultimo clic mandato (per move) */
     uint32_t serial_entra;               /* quello dell'ultimo enter del puntatore (per set_shape) */
     /* il puntatore (vedi "wl_seat", piu' sotto) */
-    int dentro;                          /* il puntatore e' entrato nella superficie (wl_pointer.enter) */
+    int dentro;                          /* il puntatore e' entrato in una superficie (wl_pointer.enter): 'focus' */
     int px, py;                          /* l'ultima posizione detta al programma, sulla superficie */
     unsigned int visti;                  /* i pulsanti (PULSANTE_...) tenuti giu' all'ultima notizia */
     unsigned int consegnati;             /* quelli premuti dentro la superficie, di cui il programma sa */
@@ -208,10 +259,11 @@ static void ridisegna(struct finestra_wl *w) {
     }
 }
 
-/* Il contenuto di un buffer shm in 'contenuto' (rifatto se la misura e' cambiata). 1 se fatto.
+/* Il contenuto di un buffer shm: una copia nuova, premoltiplicata (l x a), in *pix. 1 se fatto, 0 se il
+ * buffer non va (non e' shm, misura vuota o piu' grande dello schermo, memoria finita).
  * Il buffer si legge dentro wl_shm_buffer_begin_access: se il programma accorcia il foglio
  * mentre si legge, la libreria lo evita (niente SIGBUS). */
-static int copia_buffer(struct finestra_wl *w, struct wl_resource *buffer) {
+static int copia_buffer(struct wl_resource *buffer, unsigned int **pix, int *pl, int *pa) {
     struct wl_shm_buffer *shm = wl_shm_buffer_get(buffer);
     if (!shm) return 0;
     uint32_t formato = wl_shm_buffer_get_format(shm);
@@ -220,22 +272,173 @@ static int copia_buffer(struct finestra_wl *w, struct wl_resource *buffer) {
     int schermo_l, schermo_a;
     ponte_schermo(&schermo_l, &schermo_a);
     if (l < 1 || a < 1 || l > schermo_l || a > schermo_a) return 0;
-    if (w->cl != l || w->ch != a || !w->contenuto) {
-        free(w->contenuto);
-        w->contenuto = malloc((size_t)l * (size_t)a * sizeof(unsigned int));
-        w->cl = l;
-        w->ch = a;
-        if (!w->contenuto) return 0;
-    }
+    unsigned int *nuovo = malloc((size_t)l * (size_t)a * sizeof(unsigned int));
+    if (!nuovo) return 0;
     unsigned int opaco = formato == WL_SHM_FORMAT_XRGB8888 ? 0xFF000000u : 0;   /* ARGB: ha il suo */
     wl_shm_buffer_begin_access(shm);
     const unsigned char *dati = wl_shm_buffer_get_data(shm);
     for (int r = 0; r < a; r++) {
         const unsigned int *riga = (const unsigned int *)(const void *)(dati + (size_t)r * (size_t)passo);
-        for (int c = 0; c < l; c++) w->contenuto[r * l + c] = riga[c] | opaco;
+        for (int c = 0; c < l; c++) nuovo[r * l + c] = riga[c] | opaco;
     }
     wl_shm_buffer_end_access(shm);
+    *pix = nuovo;
+    *pl = l;
+    *pa = a;
     return 1;
+}
+
+/* --- le sottosuperfici: l'albero, lo stato che vale, la composizione --- */
+
+/* Oltre questa profondita' (sottosuperfici di sottosuperfici...) non si disegna ne' si cerca. */
+#define PROFONDITA_MAX 32
+/* Una posizione piu' lontana di cosi' si taglia (le somme lungo l'albero non vanno in overflow). */
+#define POSIZIONE_MAX 100000
+
+/* La principale: la cima dell'albero. (Il nome 'radice' e' gia' la radice quadrata di pixel.h.) */
+static struct superficie *capostipite(struct superficie *s) {
+    for (int n = 0; s->genitore && n < 1000; n++) s = s->genitore;
+    return s;
+}
+
+/* Il commit di s e' "sincrono"? Lo e' se lo e' lei o un antenato (finche' si e' sottosuperfici). */
+static int sync_effettivo(const struct superficie *s) {
+    for (int n = 0; s && s->e_sotto && n < 1000; s = s->genitore, n++)
+        if (s->sync) return 1;
+    return 0;
+}
+
+/* Dove sta s sulla finestra (somma delle posizioni valide lungo gli antenati). */
+static void origine(const struct superficie *s, int *ox, int *oy) {
+    int x = 0, y = 0;
+    for (int n = 0; s->genitore && n < 1000; s = s->genitore, n++) { x += s->x; y += s->y; }
+    *ox = x;
+    *oy = y;
+}
+
+/* Il punto (x, y) della superficie e' dentro la regione? */
+static int nell_area(const struct area *r, int x, int y) {
+    if (r->tutta) return 1;
+    for (int i = 0; i < r->n; i++)
+        if (x >= r->r[i][0] && y >= r->r[i][1] && x < r->r[i][0] + r->r[i][2] && y < r->r[i][1] + r->r[i][3]) return 1;
+    return 0;
+}
+
+/* Il contenuto in cache diventa quello valido: pixel, regione, frame callback. 1 se i pixel sono cambiati. */
+static int applica_stato(struct superficie *s) {
+    if (!s->cache) return 0;
+    s->cache = 0;
+    int cambiato = s->cache_contenuto;
+    if (s->cache_contenuto) {
+        free(s->pix);
+        s->pix = s->cache_pix;
+        s->l = s->cache_l;
+        s->a = s->cache_a;
+        s->cache_pix = 0;
+        s->cache_contenuto = 0;
+    }
+    if (s->cache_ha_input) { s->input = s->cache_input; s->cache_ha_input = 0; }
+    wl_list_insert_list(s->da_servire.prev, &s->in_cache);
+    wl_list_init(&s->in_cache);
+    return cambiato;
+}
+
+/* Lo stato di s vale. E vale anche cio' che il genitore applica ai figli: la posizione, l'ordine, e lo
+ * stato in cache dei figli (a cascata). 1 se e' cambiato qualcosa che si vede. */
+static int applica(struct superficie *s, int prof) {
+    int cambiato = applica_stato(s);
+    if (prof > PROFONDITA_MAX) return cambiato;
+    for (struct wl_list *p = s->pila.next; p != &s->pila; p = p->next) {
+        if (p == &s->segno) continue;
+        struct superficie *c = wl_container_of(p, c, fratello);
+        if (c->x != c->px || c->y != c->py) cambiato = 1;
+        c->x = c->px;
+        c->y = c->py;
+    }
+    /* l'ordine in attesa diventa quello valido: ogni nodo, nell'ordine in attesa, va in fondo alla pila */
+    struct wl_list *cursore = s->pila.next;
+    for (struct wl_list *q = s->pila_att.next; q != &s->pila_att; q = q->next) {
+        struct wl_list *vero = &s->segno;
+        if (q != &s->segno_att) {
+            struct superficie *c = wl_container_of(q, c, fratello_att);
+            vero = &c->fratello;
+        }
+        if (vero != cursore) cambiato = 1;
+        else cursore = cursore->next;
+        wl_list_remove(vero);
+        wl_list_insert(s->pila.prev, vero);
+    }
+    for (struct wl_list *p = s->pila.next; p != &s->pila; p = p->next) {
+        if (p == &s->segno) continue;
+        struct superficie *c = wl_container_of(p, c, fratello);
+        if (c->cache && applica(c, prof + 1)) cambiato = 1;
+    }
+    return cambiato;
+}
+
+/* Disegna s e i suoi figli (nell'ordine della pila) su 'dest' (dl x da), con s in (ox, oy): quello che esce
+ * dai bordi si taglia. Il mescolamento e' quello del resto: premoltiplicato. Una sottosuperficie senza
+ * contenuto non c'e', e con lei i suoi figli. */
+static void componi_albero(struct superficie *s, int ox, int oy, int prof, unsigned int *dest, int dl, int da) {
+    if (prof > PROFONDITA_MAX) return;
+    for (struct wl_list *p = s->pila.next; p != &s->pila; p = p->next) {
+        if (p == &s->segno) {
+            int x0 = ox < 0 ? 0 : ox, x1 = ox + s->l > dl ? dl : ox + s->l;
+            if (!s->pix || x0 >= x1) continue;
+            for (int r = 0; r < s->a; r++) {
+                int y = oy + r;
+                if (y < 0 || y >= da) continue;
+                sopra_a_riga(&dest[y * dl + x0], &s->pix[r * s->l + (x0 - ox)], x1 - x0);
+            }
+        } else {
+            struct superficie *c = wl_container_of(p, c, fratello);
+            if (c->pix) componi_albero(c, ox + c->x, oy + c->y, prof + 1, dest, dl, da);
+        }
+    }
+}
+
+/* L'immagine del contenuto della finestra (w->contenuto, cl x ch): la principale con le sottosuperfici. 1 se fatta. */
+static int componi(struct finestra_wl *w) {
+    struct superficie *s = w->superficie;
+    if (!s || !s->pix) return 0;
+    if (w->cl != s->l || w->ch != s->a || !w->contenuto) {
+        free(w->contenuto);
+        w->contenuto = malloc((size_t)s->l * (size_t)s->a * sizeof(unsigned int));
+        w->cl = s->l;
+        w->ch = s->a;
+        if (!w->contenuto) return 0;
+    }
+    memset(w->contenuto, 0, (size_t)s->l * (size_t)s->a * sizeof(unsigned int));
+    componi_albero(s, 0, 0, 0, w->contenuto, s->l, s->a);
+    return 1;
+}
+
+/* Qualcosa che si vede e' cambiato in s o sotto di lei: si rifa' l'immagine della finestra a cui appartiene. */
+static void ricompone(struct superficie *s) {
+    struct finestra_wl *w = capostipite(s)->finestra;
+    if (w && w->slot >= 0 && w->configurata && componi(w)) ridisegna(w);
+}
+
+/* Quale superficie sta sotto il punto (px, py) della finestra: la piu' in alto che e' mappata e ha l'input
+ * li' (senza regione, tutta). In *sx, *sy il punto sulla superficie trovata; 0 se nessuna. */
+static struct superficie *colpisci(struct superficie *s, int ox, int oy, int px, int py, int prof, int *sx, int *sy) {
+    if (prof > PROFONDITA_MAX) return 0;
+    for (struct wl_list *p = s->pila.prev; p != &s->pila; p = p->prev) {
+        if (p == &s->segno) {
+            int lx = px - ox, ly = py - oy;
+            if (s->pix && lx >= 0 && ly >= 0 && lx < s->l && ly < s->a && nell_area(&s->input, lx, ly)) {
+                *sx = lx;
+                *sy = ly;
+                return s;
+            }
+        } else {
+            struct superficie *c = wl_container_of(p, c, fratello);
+            if (!c->pix) continue;
+            struct superficie *r = colpisci(c, ox + c->x, oy + c->y, px, py, prof + 1, sx, sy);
+            if (r) return r;
+        }
+    }
+    return 0;
 }
 
 /* --- xdg_toplevel --- */
@@ -404,7 +607,7 @@ static void wm_posizionatore(struct wl_client *c, struct wl_resource *r, uint32_
 
 static void wm_xdg_surface(struct wl_client *client, struct wl_resource *r, uint32_t id, struct wl_resource *superficie) {
     struct superficie *s = wl_resource_get_user_data(superficie);
-    if (s->finestra) {
+    if (s->finestra || s->e_sotto) {
         wl_resource_post_error(r, XDG_WM_BASE_ERROR_ROLE, "la superficie ha gia' un ruolo");
         return;
     }
@@ -457,7 +660,56 @@ static void lega_wm(struct wl_client *client, void *dati, uint32_t versione, uin
     wl_list_insert(&basi, wl_resource_get_link(r));
 }
 
+/* --- wl_region: dove si clicca ---
+ * Se ne tiene solo la forma semplice: una somma di rettangoli (add), al massimo MAX_RETT. Una sottrazione
+ * o troppi rettangoli la rendono "tutta la superficie" (come se non ci fosse regione). */
+
+static void regione_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static void regione_tolta(struct wl_resource *r) { free(wl_resource_get_user_data(r)); }
+static void regione_aggiungi(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t l, int32_t a) {
+    (void)c;
+    struct area *g = wl_resource_get_user_data(r);
+    if (g->tutta || l <= 0 || a <= 0) return;
+    if (g->n >= MAX_RETT) { g->tutta = 1; return; }
+    g->r[g->n][0] = x;
+    g->r[g->n][1] = y;
+    g->r[g->n][2] = l;
+    g->r[g->n][3] = a;
+    g->n++;
+}
+static void regione_sottrai(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t l, int32_t a) {
+    (void)c; (void)x; (void)y; (void)l; (void)a;
+    struct area *g = wl_resource_get_user_data(r);
+    g->tutta = 1;
+}
+static const struct wl_region_interface regione_interfaccia = {
+    .destroy = regione_distruggi,
+    .add = regione_aggiungi,
+    .subtract = regione_sottrai,
+};
+
 /* --- wl_surface --- */
+
+static void pu_esce(struct finestra_wl *w);
+
+/* La superficie non e' piu' sotto il suo genitore (distrutta o staccata): si toglie dalle sue pile. */
+static void stacca(struct superficie *s) {
+    if (!s->genitore) return;
+    wl_list_remove(&s->fratello);
+    wl_list_remove(&s->fratello_att);
+    s->genitore = 0;
+}
+
+/* Il puntatore e' su una superficie che non e' piu' dell'albero della sua finestra (staccata): leave. */
+static void focus_controlla(void) {
+    for (int i = 0; i < posti_wl; i++) {
+        struct finestra_wl *w = per_posto[i];
+        if (!w || !w->dentro || !w->focus || (w->superficie && capostipite(w->focus) == w->superficie)) continue;
+        pu_esce(w);
+        w->ignorati = w->visti;
+        w->consegnati = 0;
+    }
+}
 
 static void sup_senza_buffer(struct superficie *s) {
     if (s->buffer) wl_list_remove(&s->ascolto_buffer.link);
@@ -500,39 +752,83 @@ static void sup_frame(struct wl_client *client, struct wl_resource *r, uint32_t 
     wl_list_insert(s->in_attesa.prev, wl_resource_get_link(cb));
 }
 
+/* L'opacita' (dove la superficie e' piena): non serve, si mescola sempre. */
 static void sup_regione(struct wl_client *c, struct wl_resource *r, struct wl_resource *regione) {
-    (void)c; (void)r; (void)regione;   /* l'opacita' e dove si clicca: non servono (niente seat) */
+    (void)c; (void)r; (void)regione;
 }
 
+/* DOVE SI CLICCA: la regione vale al commit (come il resto). Senza regione, tutta la superficie. */
+static void sup_regione_input(struct wl_client *c, struct wl_resource *r, struct wl_resource *regione) {
+    (void)c;
+    struct superficie *s = wl_resource_get_user_data(r);
+    if (regione) s->input_attesa = *(struct area *)wl_resource_get_user_data(regione);
+    else { memset(&s->input_attesa, 0, sizeof s->input_attesa); s->input_attesa.tutta = 1; }
+    s->ha_input = 1;
+}
+
+/* IL COMMIT. Quello che il programma ha detto dall'ultimo commit (buffer, regione, frame) diventa lo stato
+ * "in cache" di questa superficie. Se non e' sincrona, vale subito (e con lei la posizione e l'ordine dei
+ * suoi figli e il loro stato in cache); se lo e' (una sottosuperficie sincrona, di default), vale quando il
+ * genitore applica il suo. Il buffer si copia e si rilascia subito: il programma lo puo' riusare. */
 static void sup_commit(struct wl_client *c, struct wl_resource *r) {
     (void)c;
     struct superficie *s = wl_resource_get_user_data(r);
     struct finestra_wl *w = s->finestra;
-    /* le richieste di "avvisami del prossimo fotogramma" fatte fin qui valgono adesso */
-    wl_list_insert_list(s->da_servire.prev, &s->in_attesa);
+    int sync = sync_effettivo(s);
+    /* le richieste di "avvisami del prossimo fotogramma" fatte fin qui valgono adesso (o col genitore) */
+    wl_list_insert_list(sync ? s->in_cache.prev : s->da_servire.prev, &s->in_attesa);
     wl_list_init(&s->in_attesa);
 
     struct wl_resource *buffer = s->buffer;
     int con_buffer = s->ha_attach;
     sup_senza_buffer(s);
     s->ha_attach = 0;
-    if (!w || w->slot < 0) {              /* senza ruolo di finestra: niente da mostrare */
-        if (buffer) wl_buffer_send_release(buffer);
-        return;
+    if (!s->e_sotto) {                    /* la principale */
+        if (!w || w->slot < 0) {          /* senza ruolo di finestra: niente da mostrare */
+            if (buffer) wl_buffer_send_release(buffer);
+            return;
+        }
+        if (!w->configurata) {            /* il primo commit, senza contenuto: il configure iniziale */
+            if (buffer) wl_buffer_send_release(buffer);
+            invia_configure(w);
+            return;
+        }
+        if (buffer) w->csd = w->csd_voluto;     /* chi disegna la barra: vale da questo buffer */
     }
-    if (!w->configurata) {                /* il primo commit, senza contenuto: il configure iniziale */
-        if (buffer) wl_buffer_send_release(buffer);
-        invia_configure(w);
-        return;
+    if (con_buffer) {
+        if (buffer) {
+            unsigned int *pix;
+            int pl, pa;
+            if (copia_buffer(buffer, &pix, &pl, &pa)) {
+                free(s->cache_pix);
+                s->cache_pix = pix;
+                s->cache_l = pl;
+                s->cache_a = pa;
+                s->cache_contenuto = 1;
+            }
+            wl_buffer_send_release(buffer);
+        } else if (s->e_sotto) {          /* attach vuoto: la sottosuperficie non e' piu' mappata */
+            free(s->cache_pix);
+            s->cache_pix = 0;
+            s->cache_contenuto = 1;
+        }
     }
-    if (!con_buffer) return;              /* solo frame o stato: l'immagine e' quella */
-    if (buffer) w->csd = w->csd_voluto;     /* chi disegna la barra: vale da questo buffer */
-    if (buffer && copia_buffer(w, buffer)) ridisegna(w);
-    if (buffer) wl_buffer_send_release(buffer);   /* gia' copiato: il programma lo puo' riusare */
+    if (s->ha_input) {
+        s->cache_input = s->input_attesa;
+        s->cache_ha_input = 1;
+        s->ha_input = 0;
+    }
+    s->cache = 1;
+    if (sync) return;                     /* aspetta il commit del genitore */
+    if (applica(s, 0)) ricompone(s);
 }
 
+/* La scala e la trasformazione del buffer: si accettano, ma si disegna sempre a scala 1 e senza ruotare. */
 static void sup_trasformazione(struct wl_client *c, struct wl_resource *r, int32_t t) { (void)c; (void)r; (void)t; }
-static void sup_scala(struct wl_client *c, struct wl_resource *r, int32_t s) { (void)c; (void)r; (void)s; }
+static void sup_scala(struct wl_client *c, struct wl_resource *r, int32_t s) {
+    (void)c;
+    if (s < 1) wl_resource_post_error(r, WL_SURFACE_ERROR_INVALID_SCALE, "la scala deve essere almeno 1");
+}
 static void sup_scostamento(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y) { (void)c; (void)r; (void)x; (void)y; }
 
 static const struct wl_surface_interface sup_interfaccia = {
@@ -541,7 +837,7 @@ static const struct wl_surface_interface sup_interfaccia = {
     .damage = sup_danno,
     .frame = sup_frame,
     .set_opaque_region = sup_regione,
-    .set_input_region = sup_regione,
+    .set_input_region = sup_regione_input,
     .commit = sup_commit,
     .set_buffer_transform = sup_trasformazione,
     .set_buffer_scale = sup_scala,
@@ -552,30 +848,156 @@ static const struct wl_surface_interface sup_interfaccia = {
 static void sup_distrutta(struct wl_resource *r) {
     struct superficie *s = wl_resource_get_user_data(r);
     sup_senza_buffer(s);
-    struct wl_list *liste[2] = { &s->in_attesa, &s->da_servire };
-    for (int k = 0; k < 2; k++) {
+    struct wl_list *liste[3] = { &s->in_attesa, &s->da_servire, &s->in_cache };
+    for (int k = 0; k < 3; k++) {
         struct wl_list *l = liste[k];
         for (struct wl_list *p = l->next, *n; p != l; p = n) {
             n = p->next;
             wl_resource_destroy(wl_resource_from_link(p));   /* si toglie da solo dalla lista */
         }
     }
+    /* il puntatore non l'ha piu': la superficie non c'e' piu', niente leave */
+    for (int i = 0; i < posti_wl; i++) {
+        struct finestra_wl *w = per_posto[i];
+        if (!w || w->focus != s) continue;
+        w->focus = 0;
+        w->dentro = 0;
+        w->consegnati = 0;
+        w->ignorati = w->visti;
+    }
+    /* i figli restano senza genitore (inerti: non si vedono piu'), lei esce dall'albero del suo */
+    struct superficie *cima = s->genitore ? capostipite(s->genitore) : 0;
+    for (struct wl_list *p = s->pila.next, *n; p != &s->pila; p = n) {
+        n = p->next;
+        if (p == &s->segno) continue;
+        struct superficie *c = wl_container_of(p, c, fratello);
+        stacca(c);
+    }
+    stacca(s);
+    if (s->sotto) wl_resource_set_user_data(s->sotto, 0);
+    if (cima) ricompone(cima);
+    focus_controlla();
     if (s->finestra) s->finestra->superficie = 0;
+    free(s->pix);
+    free(s->cache_pix);
     wl_list_remove(&s->link);
     free(s);
 }
 
-/* --- wl_region (non serve a niente oggi, ma i programmi la creano) --- */
+/* --- wl_subcompositor e wl_subsurface ---
+ *
+ * get_subsurface(superficie, genitore) da' alla superficie il ruolo di sottosuperficie del genitore:
+ * nasce in cima alla pila dei fratelli, in posizione (0, 0) e sincrona. Gli errori di protocollo sono
+ * quelli del wayland.xml: la superficie ha gia' un ruolo (finestra o sottosuperficie), il genitore e' lei
+ * stessa o una sua discendente (un giro nell'albero), il fratello di place_above/below non e' un fratello.
+ * Posizione e ordine (set_position, place_above, place_below) valgono al commit del genitore. */
 
-static void regione_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
-static void regione_rettangolo(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y, int32_t l, int32_t a) {
-    (void)c; (void)r; (void)x; (void)y; (void)l; (void)a;
+static void sotto_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+/* Il wl_subsurface e' distrutto: la superficie esce subito dallo schermo (resta senza genitore). */
+static void sotto_distrutta(struct wl_resource *r) {
+    struct superficie *s = wl_resource_get_user_data(r);
+    if (!s) return;                       /* la superficie e' gia' distrutta */
+    s->sotto = 0;
+    struct superficie *cima = s->genitore ? capostipite(s->genitore) : 0;
+    stacca(s);
+    free(s->pix);
+    s->pix = 0;
+    free(s->cache_pix);
+    s->cache_pix = 0;
+    s->cache = 0;
+    s->cache_contenuto = 0;
+    s->cache_ha_input = 0;
+    if (cima) ricompone(cima);
+    focus_controlla();
 }
-static const struct wl_region_interface regione_interfaccia = {
-    .destroy = regione_distruggi,
-    .add = regione_rettangolo,
-    .subtract = regione_rettangolo,
+
+static void sotto_posizione(struct wl_client *c, struct wl_resource *r, int32_t x, int32_t y) {
+    (void)c;
+    struct superficie *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    s->px = x < -POSIZIONE_MAX ? -POSIZIONE_MAX : x > POSIZIONE_MAX ? POSIZIONE_MAX : x;
+    s->py = y < -POSIZIONE_MAX ? -POSIZIONE_MAX : y > POSIZIONE_MAX ? POSIZIONE_MAX : y;
+}
+
+/* place_above e place_below: nell'ordine in attesa, subito sopra (o sotto) il fratello o il genitore. */
+static void sotto_ordina(struct wl_resource *r, struct wl_resource *fratello, int sopra) {
+    struct superficie *s = wl_resource_get_user_data(r);
+    if (!s || !s->genitore) return;
+    struct superficie *f = wl_resource_get_user_data(fratello), *g = s->genitore;
+    if (f == s || (f != g && f->genitore != g)) {
+        wl_resource_post_error(r, WL_SUBSURFACE_ERROR_BAD_SURFACE, "la superficie non e' un fratello ne' il genitore");
+        return;
+    }
+    struct wl_list *rif = f == g ? &g->segno_att : &f->fratello_att;
+    wl_list_remove(&s->fratello_att);
+    wl_list_insert(sopra ? rif : rif->prev, &s->fratello_att);
+}
+static void sotto_sopra(struct wl_client *c, struct wl_resource *r, struct wl_resource *f) { (void)c; sotto_ordina(r, f, 1); }
+static void sotto_sotto(struct wl_client *c, struct wl_resource *r, struct wl_resource *f) { (void)c; sotto_ordina(r, f, 0); }
+
+static void sotto_sincrona(struct wl_client *c, struct wl_resource *r) {
+    (void)c;
+    struct superficie *s = wl_resource_get_user_data(r);
+    if (s) s->sync = 1;
+}
+
+/* Da asincrona: se c'e' uno stato in cache e nessun antenato e' sincrono, vale subito. */
+static void sotto_asincrona(struct wl_client *c, struct wl_resource *r) {
+    (void)c;
+    struct superficie *s = wl_resource_get_user_data(r);
+    if (!s) return;
+    s->sync = 0;
+    if (s->cache && !sync_effettivo(s) && applica(s, 0)) ricompone(s);
+}
+
+static const struct wl_subsurface_interface sotto_interfaccia = {
+    .destroy = sotto_distruggi,
+    .set_position = sotto_posizione,
+    .place_above = sotto_sopra,
+    .place_below = sotto_sotto,
+    .set_sync = sotto_sincrona,
+    .set_desync = sotto_asincrona,
 };
+
+static void subc_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+
+static void subc_prendi(struct wl_client *client, struct wl_resource *r, uint32_t id, struct wl_resource *superficie,
+                        struct wl_resource *genitore) {
+    struct superficie *s = wl_resource_get_user_data(superficie), *g = wl_resource_get_user_data(genitore);
+    if (s->finestra || s->sotto) {
+        wl_resource_post_error(r, WL_SUBCOMPOSITOR_ERROR_BAD_SURFACE, "la superficie ha gia' un ruolo");
+        return;
+    }
+    int n = 0;
+    for (struct superficie *a = g; a && n < 1000; a = a->genitore, n++)
+        if (a == s) {
+            wl_resource_post_error(r, WL_SUBCOMPOSITOR_ERROR_BAD_PARENT, "il genitore e' la superficie o una sua discendente");
+            return;
+        }
+    struct wl_resource *x = wl_resource_create(client, &wl_subsurface_interface, wl_resource_get_version(r), id);
+    if (!x) { wl_resource_post_no_memory(r); return; }
+    s->e_sotto = 1;
+    s->sotto = x;
+    s->genitore = g;
+    s->x = s->y = s->px = s->py = 0;
+    s->sync = 1;
+    wl_list_insert(g->pila.prev, &s->fratello);          /* in cima ai fratelli */
+    wl_list_insert(g->pila_att.prev, &s->fratello_att);
+    wl_resource_set_implementation(x, &sotto_interfaccia, s, sotto_distrutta);
+}
+
+static const struct wl_subcompositor_interface subc_interfaccia = {
+    .destroy = subc_distruggi,
+    .get_subsurface = subc_prendi,
+};
+
+static void lega_subcompositor(struct wl_client *client, void *dati, uint32_t versione, uint32_t id) {
+    (void)dati; (void)versione;
+    struct wl_resource *r = wl_resource_create(client, &wl_subcompositor_interface, 1, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &subc_interfaccia, 0, 0);
+}
 
 /* --- wl_compositor --- */
 
@@ -590,14 +1012,21 @@ static void comp_superficie(struct wl_client *client, struct wl_resource *r, uin
     s->risorsa = x;
     wl_list_init(&s->in_attesa);
     wl_list_init(&s->da_servire);
+    wl_list_init(&s->in_cache);
+    s->input.tutta = s->input_attesa.tutta = s->cache_input.tutta = 1;   /* senza regione si clicca dappertutto */
+    wl_list_init(&s->pila);
+    wl_list_init(&s->pila_att);
+    wl_list_insert(&s->pila, &s->segno);                 /* la pila ha solo lei */
+    wl_list_insert(&s->pila_att, &s->segno_att);
     wl_list_insert(&superfici, &s->link);
     wl_resource_set_implementation(x, &sup_interfaccia, s, sup_distrutta);
 }
 
 static void comp_regione(struct wl_client *client, struct wl_resource *r, uint32_t id) {
     struct wl_resource *x = wl_resource_create(client, &wl_region_interface, wl_resource_get_version(r), id);
-    if (!x) { wl_resource_post_no_memory(r); return; }
-    wl_resource_set_implementation(x, &regione_interfaccia, 0, 0);
+    struct area *g = calloc(1, sizeof *g);
+    if (!x || !g) { free(g); wl_resource_post_no_memory(r); return; }
+    wl_resource_set_implementation(x, &regione_interfaccia, g, regione_tolta);
 }
 
 static const struct wl_compositor_interface comp_interfaccia = {
@@ -720,16 +1149,24 @@ static void pu_frame(struct wl_resource *r) {
     if (wl_resource_get_version(r) >= WL_POINTER_FRAME_SINCE_VERSION) wl_pointer_send_frame(r);
 }
 
-/* La posizione sulla superficie; 1 se e' dentro il contenuto (non sulla cornice). */
-static int sulla_superficie(const struct finestra_wl *w, int x, int y, int *sx, int *sy) {
-    *sx = x;
-    *sy = y - (w->csd ? 0 : cornice_testata_altezza());   /* senza cornice nostra la finestra e' il buffer */
-    return *sx >= 0 && *sx < w->cl && *sy >= 0 && *sy < w->ch;
+/* Il punto (x, y) della finestra (cornice compresa) sul suo contenuto (senza cornice nostra la finestra e' il buffer). */
+static void sul_contenuto(const struct finestra_wl *w, int x, int y, int *cx, int *cy) {
+    *cx = x;
+    *cy = y - (w->csd ? 0 : cornice_testata_altezza());
 }
 
-static void pu_entra(struct finestra_wl *w, int sx, int sy) {
-    struct wl_resource *superficie = risorsa_superficie(w);
-    if (!superficie) return;
+/* La superficie (principale o sotto) che sta sotto il punto (x, y) della finestra, e il punto su di lei.
+ * 0 se il punto e' sulla cornice, fuori dal contenuto, o se li' nessuna superficie prende il puntatore. */
+static struct superficie *bersaglio(const struct finestra_wl *w, int x, int y, int *sx, int *sy) {
+    int cx, cy;
+    sul_contenuto(w, x, y, &cx, &cy);
+    if (!w->superficie || cx < 0 || cx >= w->cl || cy < 0 || cy >= w->ch) return 0;
+    return colpisci(w->superficie, 0, 0, cx, cy, 0, sx, sy);
+}
+
+/* wl_pointer.enter: il puntatore entra nella superficie 'sup' (della finestra w), nel punto (sx, sy) di lei. */
+static void pu_entra(struct finestra_wl *w, struct superficie *sup, int sx, int sy) {
+    struct wl_resource *superficie = sup->risorsa;
     uint32_t serial = wl_display_next_serial(display);
     PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) {
         wl_pointer_send_enter(r, serial, superficie, wl_fixed_from_int(sx), wl_fixed_from_int(sy));
@@ -737,18 +1174,21 @@ static void pu_entra(struct finestra_wl *w, int sx, int sy) {
     }
     w->serial_entra = serial;
     ponte_forma(w->slot, FORMA_NORMALE);      /* a ogni enter si riparte dalla freccia: la forma la dice il programma */
+    w->focus = sup;
     w->dentro = 1;
     w->px = sx;
     w->py = sy;
 }
 
+/* wl_pointer.leave dalla superficie che aveva il puntatore. */
 static void pu_esce(struct finestra_wl *w) {
-    struct wl_resource *superficie = risorsa_superficie(w);
+    struct superficie *f = w->focus;
     w->dentro = 0;
-    if (!superficie) return;
+    w->focus = 0;
+    if (!f) return;
     uint32_t serial = wl_display_next_serial(display);
     PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) {
-        wl_pointer_send_leave(r, serial, superficie);
+        wl_pointer_send_leave(r, serial, f->risorsa);
         pu_frame(r);
     }
 }
@@ -757,22 +1197,37 @@ static uint32_t codice_pulsante(unsigned int bit) {
     return bit == PULSANTE_SINISTRO ? BTN_LEFT : bit == PULSANTE_DESTRO ? BTN_RIGHT : BTN_MIDDLE;
 }
 
-/* Il puntatore e' a (x, y) della finestra (cornice compresa) con questi pulsanti giu'. */
+/* Il puntatore deve essere su 'hit' (0: su nessuna): se era su un'altra superficie, leave e poi enter. 1 se e'
+ * appena entrato. Un clic cominciato fuori (ignorati) non lascia entrare. */
+static int pu_cambia(struct finestra_wl *w, struct superficie *hit, int hx, int hy) {
+    if (w->dentro && hit == w->focus) return 0;
+    if (w->dentro) pu_esce(w);
+    if (!hit || w->ignorati) return 0;
+    pu_entra(w, hit, hx, hy);
+    return 1;
+}
+
+/* Il puntatore e' a (x, y) della finestra (cornice compresa) con questi pulsanti giu'. Va alla superficie che
+ * sta sotto (principale o sotto), con le coordinate di quella; un clic tenuto giu' tiene il puntatore sulla
+ * superficie in cui e' cominciato (la "presa"), anche se il puntatore passa su un'altra. */
 static void pu_puntatore(struct finestra_wl *w, int x, int y, unsigned int pulsanti) {
-    int sx, sy;
-    int dentro = sulla_superficie(w, x, y, &sx, &sy);
+    int hx = 0, hy = 0;
+    struct superficie *hit = bersaglio(w, x, y, &hx, &hy);
     unsigned int nuovi = pulsanti & ~w->visti, lasciati = w->visti & ~pulsanti;
     w->visti = pulsanti;
     w->ignorati &= pulsanti;                  /* un clic cominciato fuori e finito: non c'e' piu' */
     int appena_entrato = 0;
-    if (!w->dentro) {
-        if (dentro && !w->ignorati) { pu_entra(w, sx, sy); appena_entrato = 1; }
-        else { w->ignorati |= nuovi; nuovi = 0; }   /* premuto sulla cornice: non e' del programma */
+    if (!(w->dentro && w->consegnati)) {      /* senza presa conta quello che sta sotto il puntatore */
+        appena_entrato = pu_cambia(w, hit, hx, hy);
+        if (!w->dentro) w->ignorati |= nuovi, nuovi = 0;   /* premuto sulla cornice: non e' del programma */
     }
     if (!w->dentro) return;
+    int cx, cy, ox, oy;
+    sul_contenuto(w, x, y, &cx, &cy);
+    origine(w->focus, &ox, &oy);
+    int sx = cx - ox, sy = cy - oy;           /* il punto sulla superficie che ha il puntatore */
     uint32_t t = tempo();
-    /* fuori dal contenuto si muove solo se c'e' un clic tenuto (la "presa"); se no e' un leave */
-    int cambia = (sx != w->px || sy != w->py) && (dentro || w->consegnati);
+    int cambia = sx != w->px || sy != w->py;
     if (!appena_entrato && cambia) {
         PER_DEL_PROGRAMMA(r, &puntatori, w->cliente)
             wl_pointer_send_motion(r, t, wl_fixed_from_int(sx), wl_fixed_from_int(sy));
@@ -792,15 +1247,18 @@ static void pu_puntatore(struct finestra_wl *w, int x, int y, unsigned int pulsa
         detto = 1;
     }
     if (detto) PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) pu_frame(r);
-    if (!dentro && !w->consegnati) pu_esce(w);   /* uscito dal contenuto e nessun clic tenuto */
+    /* niente clic tenuto e il puntatore non e' piu' sulla superficie che lo aveva: leave, e se sta su
+     * un'altra superficie della finestra, enter */
+    if (!w->consegnati && hit != w->focus) pu_cambia(w, hit, hx, hy);
 }
 
 /* La rotella: scatti verticali e orizzontali (positivi: in basso e a destra) sul punto (x, y). */
 static void pu_rotella(struct finestra_wl *w, int x, int y, int scatti_x, int scatti_y) {
     int sx, sy;
-    if (!sulla_superficie(w, x, y, &sx, &sy)) return;
+    struct superficie *hit = bersaglio(w, x, y, &sx, &sy);
+    if (!hit) return;
     int ospite = !w->dentro;                  /* senza fuoco il puntatore non c'e': entra solo per girare */
-    if (ospite) pu_entra(w, sx, sy);
+    if (ospite) pu_entra(w, hit, sx, sy);
     uint32_t t = tempo();
     PER_DEL_PROGRAMMA(r, &puntatori, w->cliente) {
         int v5 = wl_resource_get_version(r) >= WL_POINTER_AXIS_SOURCE_SINCE_VERSION;
@@ -876,9 +1334,9 @@ static void seat_puntatore(struct wl_client *client, struct wl_resource *seat, u
     /* se il puntatore e' gia' dentro una sua finestra (l'ha chiesto dopo), lo si dice adesso */
     for (int i = 0; i < posti_wl; i++) {
         struct finestra_wl *w = per_posto[i];
-        if (!w || w->cliente != client || !w->dentro || !risorsa_superficie(w)) continue;
+        if (!w || w->cliente != client || !w->dentro || !w->focus) continue;
         w->serial_entra = wl_display_next_serial(display);
-        wl_pointer_send_enter(r, w->serial_entra, risorsa_superficie(w), wl_fixed_from_int(w->px), wl_fixed_from_int(w->py));
+        wl_pointer_send_enter(r, w->serial_entra, w->focus->risorsa, wl_fixed_from_int(w->px), wl_fixed_from_int(w->py));
         pu_frame(r);
     }
 }
@@ -1104,6 +1562,7 @@ int wayland_inizia(void) {
     if (!display) return -1;
     if (wl_display_add_socket(display, NOME_SOCKET) < 0 ||
         !wl_global_create(display, &wl_compositor_interface, 4, 0, lega_compositor) ||
+        !wl_global_create(display, &wl_subcompositor_interface, 1, 0, lega_subcompositor) ||
         wl_display_init_shm(display) < 0 ||   /* wl_shm, con ARGB8888 e XRGB8888 */
         !wl_global_create(display, &xdg_wm_base_interface, 3, 0, lega_wm) ||
         !wl_global_create(display, &wl_seat_interface, 7, 0, lega_seat) ||
@@ -1199,9 +1658,10 @@ void wayland_chiedi_chiusura(int i) {
 
 /* Una superficie aspetta il prossimo fotogramma e si vede (la finestra ridotta non conta:
  * non si disegna cio' che nessuno guarda). */
-static int aspetta_visibile(const struct superficie *s) {
+static int aspetta_visibile(struct superficie *s) {
     if (wl_list_empty(&s->da_servire)) return 0;
-    if (s->finestra && s->finestra->slot >= 0 && !ponte_visibile(s->finestra->slot)) return 0;
+    struct finestra_wl *w = capostipite(s)->finestra;   /* una sottosuperficie e' visibile come la sua finestra */
+    if (w && w->slot >= 0 && !ponte_visibile(w->slot)) return 0;
     return 1;
 }
 

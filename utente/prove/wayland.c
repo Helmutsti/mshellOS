@@ -50,6 +50,28 @@
  *     e con Z (KEY_Z) riprende ("wayland: rispondo di nuovo ai ping");
  *   - "wayland: decorazione client_side" (o server_side) quando il compositore dice il modo.
  *
+ * LA MODALITA' "SOTTO" (le sottosuperfici, test/prove/wayland_sottosuperfici.py): se il programma si
+ * chiama wayland_sotto, sopra il disegno di base (320 x 200, la barra e' la nostra) mette quattro
+ * sottosuperfici (wl_subcompositor), tutte sincrone all'inizio, che si vedono nella foto:
+ *   A  96 x 64 in (40, 30), blu al 50% (alfa: lascia vedere il disegno sotto)
+ *   B  64 x 64 in (120, 60), arancione pieno, sopra A (ha una zona in comune con lei)
+ *   C  64 x 64 in (290, 150), viola pieno, in parte FUORI dal bordo della finestra (si taglia)
+ *   D  64 x 48 in (200, 20), verde acqua, che prende il puntatore solo nella meta' sinistra
+ *      (wl_surface.set_input_region)
+ * Le posizioni sono sul contenuto della finestra. Il puntatore, il clic e gli enter sono scritti nel
+ * registro come sempre, e se la superficie non e' la principale con il suo nome ("(sotto A)"), con le
+ * coordinate DI QUELLA superficie. I tasti fanno i passi (ognuno scrive una riga "wayland: ..."):
+ *   1: A in (40, 100) e B sotto A, senza commit del genitore (non vale ancora)
+ *   2: commit del genitore (adesso vale)
+ *   3: A cambia colore (blu -> verde) con un commit suo, sincrona: non si vede ancora
+ *   4: commit del genitore: si vede il verde
+ *   5: A diventa asincrona (set_desync) e cambia colore (giallo pieno) con un commit suo: si vede subito
+ *   6: la superficie D e' distrutta (il puntatore puo' esserci sopra)
+ *   7: una superficie genitore (senza finestra) e la sua figlia: il genitore e' distrutto, la figlia resta
+ *      inerte e si aggiorna senza danni
+ *   8: errore di protocollo voluto (get_subsurface con il genitore uguale alla superficie): scrive "errore
+ *      di protocollo bad_parent" e il programma finisce (il compositore deve restare in piedi).
+ *
  * LA MODALITA' "ANIMA" (il ritmo dei fotogrammi, test/prove/wayland_ritmo.py): se il programma si
  * chiama wayland_anima (init li fa partire senza argomenti: il nome e' l'argomento), ridisegna
  * ad ogni "fatto" del frame callback, spostando un quadrato, e chiede subito il prossimo. Ogni
@@ -87,6 +109,11 @@
 #define RIDUCI_COLORE 0xFFE0E0E0u
 
 static int csd;                            /* il nome del programma e' wayland_csd */
+static int sotto;                          /* il nome del programma e' wayland_sotto */
+static int errore_atteso;                  /* l'errore di protocollo e' voluto: non e' una FALLITA */
+static struct wl_subcompositor *subcompositore;
+static struct wl_display *display_prova;
+static struct wl_surface *radice_prova;    /* la superficie principale */
 static int altezza_buffer = ALTEZZA;       /* ALTEZZA, o ALTEZZA + BARRA_ALTEZZA in modalita' csd */
 static int sposta_y;                       /* dove comincia il disegno di base: 0, o BARRA_ALTEZZA */
 static int muto;                           /* non risponde piu' ai ping */
@@ -124,6 +151,8 @@ static void globale(void *dati, struct wl_registry *registro, uint32_t nome, con
         shm = wl_registry_bind(registro, nome, &wl_shm_interface, 1);
     else if (!strcmp(interfaccia, xdg_wm_base_interface.name))
         base = wl_registry_bind(registro, nome, &xdg_wm_base_interface, versione < 3 ? versione : 3);
+    else if (!strcmp(interfaccia, wl_subcompositor_interface.name))
+        subcompositore = wl_registry_bind(registro, nome, &wl_subcompositor_interface, 1);
     else if (!strcmp(interfaccia, zxdg_decoration_manager_v1_interface.name))
         decorazioni = wl_registry_bind(registro, nome, &zxdg_decoration_manager_v1_interface, 1);
     else if (!strcmp(interfaccia, wp_cursor_shape_manager_v1_interface.name))
@@ -184,6 +213,27 @@ static const char *nome_pulsante(uint32_t codice) {
     return codice == BTN_LEFT ? "BTN_LEFT" : codice == BTN_RIGHT ? "BTN_RIGHT" : codice == BTN_MIDDLE ? "BTN_MIDDLE" : "BTN_?";
 }
 
+/* --- le sottosuperfici di prova (modalita' sotto) --- */
+
+struct sotto_prova {
+    struct wl_surface *superficie;
+    struct wl_subsurface *sotto;
+    char nome;
+};
+static struct sotto_prova sub_a = { .nome = 'A' }, sub_b = { .nome = 'B' }, sub_c = { .nome = 'C' }, sub_d = { .nome = 'D' };
+static struct sotto_prova *tutte_sotto[] = { &sub_a, &sub_b, &sub_c, &sub_d };
+static const char *focus_nome = "";        /* la superficie che ha il puntatore: "" (la principale) o " (sotto A)" */
+
+static void nome_superficie(struct wl_surface *s) {
+    static char testo[16];
+    focus_nome = "";
+    for (unsigned i = 0; i < sizeof tutte_sotto / sizeof *tutte_sotto; i++)
+        if (s && tutte_sotto[i]->superficie == s) {
+            snprintf(testo, sizeof testo, " (sotto %c)", tutte_sotto[i]->nome);
+            focus_nome = testo;
+        }
+}
+
 /* La forma che il programma vuole in (x, y), in modalita' csd (vedi in testa): 2 testo, 1 collegamento, 0 normale. */
 static int forma_per(int x, int y) {
     if (y >= BARRA_ALTEZZA) return 0;
@@ -201,11 +251,12 @@ static void scegli_forma(struct wl_pointer *p, int forma) {
 }
 
 static void pu_entra(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s, wl_fixed_t x, wl_fixed_t y) {
-    (void)d; (void)s;
+    (void)d;
     controlla_serial("pointer.enter", serial);
     ultimo_x = wl_fixed_to_int(x);
     ultimo_y = wl_fixed_to_int(y);
-    riga("puntatore entra ", "%d,%d", ultimo_x, ultimo_y);
+    nome_superficie(s);
+    riga("puntatore entra ", "%d,%d%s", ultimo_x, ultimo_y, focus_nome);
     serial_entra = serial;
     forma_ora = -1;                     /* a ogni enter il compositore riparte dalla freccia: si dice di nuovo */
     if (csd) scegli_forma(p, forma_per(ultimo_x, ultimo_y));
@@ -213,20 +264,21 @@ static void pu_entra(void *d, struct wl_pointer *p, uint32_t serial, struct wl_s
 static void pu_esce(void *d, struct wl_pointer *p, uint32_t serial, struct wl_surface *s) {
     (void)d; (void)p; (void)s;
     controlla_serial("pointer.leave", serial);
-    riga("puntatore esce", "%s", "");
+    riga("puntatore esce", "%s", focus_nome);
+    focus_nome = "";
 }
 static void pu_muove(void *d, struct wl_pointer *p, uint32_t t, wl_fixed_t x, wl_fixed_t y) {
     (void)d; (void)t;
     ultimo_x = wl_fixed_to_int(x);
     ultimo_y = wl_fixed_to_int(y);
-    riga("puntatore muove ", "%d,%d", ultimo_x, ultimo_y);
+    riga("puntatore muove ", "%d,%d%s", ultimo_x, ultimo_y, focus_nome);
     if (csd) scegli_forma(p, forma_per(ultimo_x, ultimo_y));
 }
 static void pu_pulsante(void *d, struct wl_pointer *p, uint32_t serial, uint32_t t, uint32_t pulsante, uint32_t stato) {
     (void)d; (void)p; (void)t;
     controlla_serial("pointer.button", serial);
-    riga("clic ", "%s %s %d,%d", nome_pulsante(pulsante), stato == WL_POINTER_BUTTON_STATE_PRESSED ? "premuto" : "rilasciato",
-         ultimo_x, ultimo_y);
+    riga("clic ", "%s %s %d,%d%s", nome_pulsante(pulsante), stato == WL_POINTER_BUTTON_STATE_PRESSED ? "premuto" : "rilasciato",
+         ultimo_x, ultimo_y, focus_nome);
     /* modalita' csd: un clic sulla barra (disegnata da noi) trascina la finestra, quello sul
      * quadratino la riduce */
     if (csd && toplevel_csd && pulsante == BTN_LEFT && stato == WL_POINTER_BUTTON_STATE_PRESSED && ultimo_y < BARRA_ALTEZZA) {
@@ -284,10 +336,13 @@ static void ta_esce(void *d, struct wl_keyboard *k, uint32_t serial, struct wl_s
     controlla_serial("keyboard.leave", serial);
     riga("tastiera fuoco no", "%s", "");
 }
+static void passo_sotto(uint32_t tasto);
+
 static void ta_tasto(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t t, uint32_t tasto, uint32_t stato) {
     (void)d; (void)k; (void)t;
     controlla_serial("keyboard.key", serial);
     riga("tasto ", "%u %s", tasto, stato == WL_KEYBOARD_KEY_STATE_PRESSED ? "premuto" : "rilasciato");
+    if (sotto && stato == WL_KEYBOARD_KEY_STATE_PRESSED) passo_sotto(tasto);
     if (csd && tasto == KEY_X && stato == WL_KEYBOARD_KEY_STATE_PRESSED) {
         muto = 1;
         riga("non rispondo piu' ai ping", "%s", "");
@@ -409,6 +464,116 @@ static struct wl_buffer *crea_buffer(void) {
     return b;
 }
 
+/* --- la modalita' sotto --- */
+
+/* Un buffer tutto di un colore (ARGB8888, premoltiplicato), l x a. */
+static struct wl_buffer *buffer_pieno(int l, int a, uint32_t colore) {
+    int byte = l * a * 4;
+    int foglio = memfd_create("prova-sotto", MFD_CLOEXEC);
+    if (foglio < 0 || ftruncate(foglio, byte) < 0) return 0;
+    uint32_t *dati = mmap(0, (size_t)byte, PROT_READ | PROT_WRITE, MAP_SHARED, foglio, 0);
+    if (dati == MAP_FAILED) return 0;
+    for (int i = 0; i < l * a; i++) dati[i] = colore;
+    munmap(dati, (size_t)byte);
+    struct wl_shm_pool *pool = wl_shm_create_pool(shm, foglio, byte);
+    struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, l, a, l * 4, WL_SHM_FORMAT_ARGB8888);
+    wl_shm_pool_destroy(pool);
+    close(foglio);
+    return b;
+}
+
+/* Disegna 'colore' sulla superficie 'su' (l x a) e fa il commit (di quella superficie). */
+static void riempi(struct wl_surface *su, int l, int a, uint32_t colore) {
+    wl_surface_attach(su, buffer_pieno(l, a, colore), 0, 0);
+    wl_surface_damage_buffer(su, 0, 0, l, a);
+    wl_surface_commit(su);
+}
+
+static void sotto_crea(struct sotto_prova *sp, struct wl_surface *genitore, int x, int y, int l, int a, uint32_t colore) {
+    sp->superficie = wl_compositor_create_surface(compositore);
+    sp->sotto = wl_subcompositor_get_subsurface(subcompositore, sp->superficie, genitore);
+    wl_subsurface_set_position(sp->sotto, x, y);
+    riempi(sp->superficie, l, a, colore);   /* sincrona: aspetta il commit della principale */
+}
+
+#define COLORE_A1 0x8000007Fu   /* blu al 50%, premoltiplicato */
+#define COLORE_A2 0x80007F00u   /* verde al 50% */
+#define COLORE_A3 0xFFDCDC00u   /* giallo pieno */
+
+static void crea_sottosuperfici(struct wl_surface *radice) {
+    if (!subcompositore) {
+        scrivi_riga("wayland", "FALLITA: manca wl_subcompositor", "");
+        return;
+    }
+    sotto_crea(&sub_a, radice, 40, 30, 96, 64, COLORE_A1);
+    sotto_crea(&sub_b, radice, 120, 60, 64, 64, 0xFFF08C14u);
+    sotto_crea(&sub_c, radice, 290, 150, 64, 64, 0xFF8C28D2u);
+    sotto_crea(&sub_d, radice, 200, 20, 64, 48, 0xFF14B4A0u);
+    struct wl_region *meta = wl_compositor_create_region(compositore);   /* solo la meta' sinistra prende il puntatore */
+    wl_region_add(meta, 0, 0, 32, 48);
+    wl_surface_set_input_region(sub_d.superficie, meta);
+    wl_region_destroy(meta);
+    wl_surface_commit(sub_d.superficie);
+    scrivi_riga("wayland", "sottosuperfici create: A B C D", "");
+}
+
+/* I passi del programma, uno per tasto (vedi in testa). */
+static void passo_sotto(uint32_t tasto) {
+    if (!subcompositore) return;
+    switch (tasto) {
+    case KEY_1:
+        wl_subsurface_set_position(sub_a.sotto, 40, 100);
+        wl_subsurface_place_below(sub_b.sotto, sub_a.superficie);
+        riga("passo 1: A spostata e B sotto A, il genitore non ha fatto commit", "%s", "");
+        break;
+    case KEY_2:
+        wl_surface_commit(radice_prova);
+        riga("passo 2: commit del genitore", "%s", "");
+        break;
+    case KEY_3:
+        riempi(sub_a.superficie, 96, 64, COLORE_A2);
+        riga("passo 3: A verde (sincrona, commit suo)", "%s", "");
+        break;
+    case KEY_4:
+        wl_surface_commit(radice_prova);
+        riga("passo 4: commit del genitore", "%s", "");
+        break;
+    case KEY_5:
+        wl_subsurface_set_desync(sub_a.sotto);
+        riempi(sub_a.superficie, 96, 64, COLORE_A3);
+        riga("passo 5: A asincrona e gialla", "%s", "");
+        break;
+    case KEY_6:
+        wl_surface_destroy(sub_d.superficie);       /* il wl_subsurface resta: e' inerte */
+        wl_subsurface_destroy(sub_d.sotto);
+        sub_d.superficie = 0;
+        riga("passo 6: D distrutta", "%s", "");
+        break;
+    case KEY_7: {
+        struct wl_surface *genitore = wl_compositor_create_surface(compositore);   /* senza ruolo: non ha finestra */
+        struct wl_surface *figlia = wl_compositor_create_surface(compositore);
+        struct wl_subsurface *ss = wl_subcompositor_get_subsurface(subcompositore, figlia, genitore);
+        riempi(figlia, 16, 16, 0xFFFFFFFFu);
+        wl_surface_commit(genitore);
+        wl_surface_destroy(genitore);
+        riempi(figlia, 16, 16, 0xFF000000u);        /* la figlia e' inerte: nessun danno */
+        wl_subsurface_destroy(ss);
+        wl_surface_destroy(figlia);
+        riga("passo 7: genitore distrutto, figlia aggiornata e distrutta", "%s", "");
+        break;
+    }
+    case KEY_8: {
+        struct wl_surface *s = wl_compositor_create_surface(compositore);
+        errore_atteso = 1;
+        wl_subcompositor_get_subsurface(subcompositore, s, s);      /* il genitore e' la superficie stessa */
+        riga("passo 8: get_subsurface con il genitore uguale alla superficie", "%s", "");
+        break;
+    }
+    default: return;
+    }
+    wl_display_flush(display_prova);
+}
+
 /* --- la modalita' anima --- */
 
 #define LATO_ANIMA 24
@@ -487,6 +652,7 @@ static int aspetta_messaggi(struct wl_display *display, int ms) {
 int main(int quanti, char **argomenti) {
     anima = quanti > 0 && strstr(argomenti[0], "wayland_anima") != 0;
     csd = quanti > 0 && strstr(argomenti[0], "wayland_csd") != 0;
+    sotto = quanti > 0 && strstr(argomenti[0], "wayland_sotto") != 0;
     if (csd) {
         altezza_buffer = ALTEZZA + BARRA_ALTEZZA;
         sposta_y = BARRA_ALTEZZA;
@@ -503,6 +669,7 @@ int main(int quanti, char **argomenti) {
         scrivi_riga("wayland", "FALLITA: non trovo il compositore", "");
         return 1;
     }
+    display_prova = display;
     struct wl_registry *registro = wl_display_get_registry(display);
     wl_registry_add_listener(registro, &registro_ascolto, 0);
     wl_display_roundtrip(display);
@@ -545,7 +712,9 @@ int main(int quanti, char **argomenti) {
         return 1;
     }
     superficie_anima = superficie;
+    radice_prova = superficie;
     buffer_anima = buffer;
+    if (sotto) crea_sottosuperfici(superficie);
     if (anima) chiedi_fotogramma();    /* il primo "fatto" arriva dopo questo commit */
     wl_surface_attach(superficie, buffer, 0, 0);
     wl_surface_damage_buffer(superficie, 0, 0, LARGHEZZA, altezza_buffer);
@@ -570,6 +739,14 @@ int main(int quanti, char **argomenti) {
 
     while (!chiusa)
         if (wl_display_dispatch(display) < 0) {
+            if (errore_atteso) {            /* l'errore di protocollo voluto (passo 8): il compositore ci ha chiuso */
+                const struct wl_interface *interfaccia = 0;
+                uint32_t id;
+                uint32_t codice = wl_display_get_protocol_error(display, &interfaccia, &id);
+                riga("errore di protocollo ", "%s su %s", codice == WL_SUBCOMPOSITOR_ERROR_BAD_PARENT ? "bad_parent" : "altro",
+                     interfaccia ? interfaccia->name : "?");
+                return 0;
+            }
             scrivi_riga("wayland", "FALLITA: connessione persa", "");
             return 1;
         }

@@ -90,7 +90,7 @@ COSTRUITO = REPO / "build" / "sandbox"
 DISCHI = {"disco.img": "nessuna", "disco_app.img": "nessuna", "disco_prove.img": "riempitivi", "disco_pacchetti.img": "pacchetti",
           "disco_messaggi.img": "messaggi", "disco_catalog.img": "catalog", "disco_wayland.img": "wayland",
           "disco_wayland_ritmo.img": "wayland_anima", "disco_finestre_molte.img": "wayland_molte",
-          "disco_wayland_csd.img": "wayland_csd"}
+          "disco_wayland_csd.img": "wayland_csd", "disco_wayland_sotto.img": "wayland_sotto"}
 
 # I codici dei tasti di Linux (KEY_*, linux/input-event-codes.h) per i nomi dei tasti di
 # QEMU (i "qcode" che usano le prove: "a", "ret", "shift"...).

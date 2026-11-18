@@ -230,6 +230,16 @@ RIDUCIMI), `xdg_wm_base.ping/pong` (stesse attese e stessa barra di emergenza de
 nostre; con sopra la finestra di scelta non si giudica) e `cursor-shape` v1 (la forma per nome, come
 MOSTRA_PUNTATORE). Prova: `wayland_senza_cornice` (client `wayland_csd`).
 
+**Sottosuperfici (`wl_subcompositor` v1).** Le usano le app vere (foot non parte senza). L'immagine
+della finestra è la superficie principale con le sottosuperfici sopra e sotto, nelle loro posizioni
+e tagliata ai bordi della principale (alfa premoltiplicato come il resto). Posizione e ordine
+(`set_position`, `place_above/below`) valgono al commit del genitore; una sottosuperficie sincrona
+(valore di partenza) tiene il suo stato in cache fino al commit del genitore, una `set_desync`
+vale subito (se nessun antenato è sincrono). Il puntatore va alla superficie sotto, con le sue
+coordinate; `set_input_region` vale se è una somma di rettangoli (se no, tutta la superficie). Non
+fatto: scala e trasformazione del buffer (accettate, si disegna a scala 1), `set_opaque_region`.
+Prova: `wayland_sottosuperfici` (client `wayland_sotto`).
+
 **Come è fatto il passo 1.**
 - **libwayland-server** (e libwayland-client, per i client di prova) si compila STATICA dai
   sorgenti ufficiali, versione fissata: wayland 1.25.0 e wayland-protocols 1.48 (le stesse di
