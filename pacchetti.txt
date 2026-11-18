@@ -1,0 +1,9 @@
+# I PACCHETTI DEL SISTEMA. Ogni pacchetto passa dal giudizio della persona (CLAUDE.md).
+# Una riga: il pacchetto, poi "#" e cos'e' / perche' c'e'.
+# Oltre a questi, mmdebstrap mette i pacchetti obbligatori di Debian ("essential") e le librerie
+# che servono: quelli "da terminale" e quelli "per installare" li toglie costruisci.sh alla fine
+# (elenchi TOGLIERE in costruisci.sh).
+
+systemd          # il primo programma (PID 1), con journald (registro), logind (sessioni), udev (dispositivi)
+systemd-sysv     # fa di systemd il programma /sbin/init che il kernel fa partire
+linux-image-amd64  # il kernel di Debian con i suoi moduli
