@@ -305,53 +305,41 @@ static unsigned int uid_dell_app(const struct descrizione *d) {
     return UID_APPLICAZIONI;
 }
 
-/* LE APP LINUX (manifesto linux = true; APPLICAZIONI.md, "Le app Linux"). Decisione della persona
+/* LE APP LINUX (manifesto linux = true; APPLICAZIONI.md, "Le app Linux"). Decisioni della persona
  * (18/11/2026): come sul Mac, ogni app Linux porta nel pacchetto le sue librerie, in un albero
- * tipo Alpine (<pacchetto>/linux/lib, linux/usr/lib, linux/usr/share, linux/etc). Il programma
- * ha scritto dentro dove cercare il caricatore di musl (/lib/ld-musl-<cpu>.so.1), che da noi non
- * c'e': quindi si fa partire direttamente il caricatore del pacchetto, dicendogli dove sono le
- * librerie e quale programma caricare. Il file dell'app non si tocca.
- * Le variabili d'ambiente standard dicono all'app dove sono le sue cose: i caratteri
+ * tipo Alpine (<pacchetto>/linux/lib, linux/usr/lib, linux/usr/share, linux/etc); il caricatore
+ * di musl invece e' del SISTEMA, come dyld sul Mac (/lib/ld-musl-<cpu>.so.1, il percorso che i
+ * programmi hanno scritto dentro, collegamento al file vero in /system/lib: build.sh). Quindi
+ * l'app parte come un programma Linux qualsiasi: il kernel fa partire il caricatore, che cerca
+ * le librerie in LD_LIBRARY_PATH (le due cartelle del pacchetto). LD_LIBRARY_PATH passa anche ai
+ * programmi Linux che l'app fa partire, che trovano lo stesso caricatore.
+ * Le altre variabili d'ambiente standard dicono all'app dove sono le sue cose: i caratteri
  * (FONTCONFIG_FILE, il fonts.conf del pacchetto, che punta a cartelle relative a se'), i dati
- * condivisi (XDG_DATA_DIRS), e le sue cartelle scrivibili, tutte nella sua cartella dei dati
- * (XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME, XDG_STATE_HOME, XDG_RUNTIME_DIR). HOME e'
- * la Home della persona, SHELL e PATH la nostra shell e i nostri comandi.
+ * condivisi (XDG_DATA_DIRS), le descrizioni dei terminali (TERMINFO), e le sue cartelle
+ * scrivibili, tutte nella sua cartella dei dati (XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_DATA_HOME,
+ * XDG_STATE_HOME, XDG_RUNTIME_DIR). HOME e' la Home della persona, SHELL e PATH la nostra shell
+ * e i nostri comandi.
  * PER ORA SENZA RECINTO (decisione della persona: il sistema deve funzionare anche senza). */
-#if defined(__x86_64__)
-#define CARICATORE_MUSL "ld-musl-x86_64.so.1"
-#elif defined(__aarch64__)
-#define CARICATORE_MUSL "ld-musl-aarch64.so.1"
-#endif
-#define MAX_VARIABILE (32 + MAX_PERCORSO)
+#define MAX_VARIABILE (32 + 2 * MAX_PERCORSO)
 
 static int avvia_app_linux(const struct descrizione *d, unsigned int uid, const char *argomento, const int *passati,
                            int quanti, const char *elenco, int wayland) {
-    static char pacchetto[MAX_PERCORSO], caricatore[MAX_PERCORSO], librerie[2 * MAX_PERCORSO + 1], dati[MAX_PERCORSO],
-        home[MAX_PERCORSO];
-    static char v[10][MAX_VARIABILE];
+    static char pacchetto[MAX_PERCORSO], dati[MAX_PERCORSO], home[MAX_PERCORSO];
+    static char v[12][MAX_VARIABILE];
     descrizione_copia(pacchetto, cartelle_applicazioni[d->di_sistema ? CARTELLA_APP_SISTEMA : CARTELLA_APP_DATI],
                       sizeof pacchetto);
     descrizione_aggiungi(pacchetto, "/", sizeof pacchetto);
     descrizione_aggiungi(pacchetto, d->id, sizeof pacchetto);
-    descrizione_copia(caricatore, pacchetto, sizeof caricatore);
-    descrizione_aggiungi(caricatore, "/linux/lib/" CARICATORE_MUSL, sizeof caricatore);
-    descrizione_copia(librerie, pacchetto, sizeof librerie);
-    descrizione_aggiungi(librerie, "/linux/lib:", sizeof librerie);
-    descrizione_aggiungi(librerie, pacchetto, sizeof librerie);
-    descrizione_aggiungi(librerie, "/linux/usr/lib", sizeof librerie);
     if (pacchetto_cartella_dati(d->id, dati, sizeof dati) < 0 || cartella_della_persona(home, "home") < 0) {
         registro("la cartella dei dati o la Home non vanno bene per ", d->id);
         return -1;
     }
     /* una variabile: NOME=<base><resto> */
     int k = 0;
-#define VARIABILE(nome, base, resto)                                     \
-    do {                                                                 \
-        descrizione_copia(v[k], nome "=", MAX_VARIABILE);                \
-        descrizione_aggiungi(v[k], base, MAX_VARIABILE);                 \
-        descrizione_aggiungi(v[k], resto, MAX_VARIABILE);                \
-        k++;                                                             \
-    } while (0)
+#define VARIABILE(nome, base, resto)                                         do {                                                                         descrizione_copia(v[k], nome "=", MAX_VARIABILE);                        descrizione_aggiungi(v[k], base, MAX_VARIABILE);                         descrizione_aggiungi(v[k], resto, MAX_VARIABILE);                        k++;                                                                 } while (0)
+    VARIABILE("LD_LIBRARY_PATH", pacchetto, "/linux/lib:");          /* le librerie del pacchetto */
+    descrizione_aggiungi(v[k - 1], pacchetto, MAX_VARIABILE);
+    descrizione_aggiungi(v[k - 1], "/linux/usr/lib", MAX_VARIABILE);
     VARIABILE("FONTCONFIG_FILE", pacchetto, "/linux/etc/fonts/fonts.conf");
     VARIABILE("XDG_DATA_DIRS", pacchetto, "/linux/usr/share");
     VARIABILE("TERMINFO", pacchetto, "/linux/usr/share/terminfo");   /* le descrizioni dei terminali */
@@ -362,7 +350,7 @@ static int avvia_app_linux(const struct descrizione *d, unsigned int uid, const 
     VARIABILE("XDG_RUNTIME_DIR", dati, "");
     VARIABILE("HOME", home, "");
 #undef VARIABILE
-    const char *ambiente[16];
+    const char *ambiente[20];
     int n = 0;
     ambiente[n++] = elenco;
     if (wayland) ambiente[n++] = "WAYLAND_SOCKET=9";
@@ -371,10 +359,8 @@ static int avvia_app_linux(const struct descrizione *d, unsigned int uid, const 
     ambiente[n++] = "PATH=/system/bin";
     ambiente[n++] = "LANG=C.UTF-8";
     ambiente[n] = 0;
-    const char *argomenti[] = { caricatore, "--library-path", librerie, d->programma,
-                                argomento && argomento[0] ? argomento : 0, 0 };
-    registro(d->id, ": app Linux, parte con il caricatore del suo pacchetto, senza recinto");
-    return avvia_app_con_argomenti(caricatore, uid, argomenti, passati, quanti, ambiente);
+    registro(d->id, ": app Linux, con le librerie del suo pacchetto e il caricatore del sistema, senza recinto");
+    return avvia_app(d->programma, uid, argomento, passati, quanti, ambiente);
 }
 
 static int fai_partire_app(const struct descrizione *d, const char *argomento) {

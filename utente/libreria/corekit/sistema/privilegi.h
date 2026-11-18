@@ -44,13 +44,6 @@ int avvia_app(const char *percorso, unsigned int uid, const char *argomento, con
 int avvia_app_nel_recinto(const char *percorso, unsigned int uid, const char *argomento, const int *descrittori,
                           int quanti, const char *const *ambiente, const struct recinto *recinto);
 
-/* Come avvia_app (senza recinto), ma con l'elenco intero degli argomenti 'argomenti' (argv,
- * finito da 0; il primo e' il nome del programma). Lo usa il launcher per le app Linux, che
- * partono con il caricatore di musl del loro pacchetto: percorso = il caricatore, argomenti =
- * { caricatore, "--library-path", "...", programma, 0 }. */
-int avvia_app_con_argomenti(const char *percorso, unsigned int uid, const char *const *argomenti,
-                            const int *descrittori, int quanti, const char *const *ambiente);
-
 /* /dev/null, aperto in lettura e scrittura: da prestare come ingresso, uscita ed errori a un
  * programma che non ne ha (apri, in corekit.h, i dispositivi non li apre). Il descrittore, o -1. */
 int apri_nulla(void);

@@ -383,6 +383,16 @@ printf '  %-40s -> /run/network/resolv.conf
 # i certificati radice per HTTPS (ca-certificates-bundle di Alpine, nella RADICE): curl li
 # cerca nel posto solito di Linux. Si aggiornano rifacendo il build.
 metti_file "$RADICE/etc/ssl/certs/ca-certificates.crt" /etc/ssl/certs/ca-certificates.crt 644
+# IL CARICATORE DELLE APP LINUX (decisione della persona, 18/11/2026: nel sistema, come dyld sul
+# Mac). Le app Linux hanno scritto dentro /lib/ld-musl-<arch>.so.1: il kernel fa partire lui, che
+# carica le librerie dell'app (LD_LIBRARY_PATH, il launcher) e poi l'app. Il file vero sta in
+# /system/lib (tutto il sistema in /system), in /lib c'e' solo il collegamento. E' il musl di
+# Alpine (lo stesso dei pacchetti delle app): si aggiorna con il sistema; musl resta compatibile
+# all'indietro, quindi le app fatte con un musl piu' vecchio vanno lo stesso.
+metti_file "$RADICE/lib/ld-musl-$ARCH.so.1" "/system/lib/ld-musl-$ARCH.so.1" 755
+metti_cartella /lib 0 755
+ln -s "/system/lib/ld-musl-$ARCH.so.1" "$(vero /lib/ld-musl-$ARCH.so.1)"
+printf '  %-40s -> /system/lib/ld-musl-%s.so.1\n' "/lib/ld-musl-$ARCH.so.1" "$ARCH"
 
 SERVIZI=""
 APPS=""
