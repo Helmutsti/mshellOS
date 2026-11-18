@@ -1313,8 +1313,11 @@ static void ta_entra_in(struct wl_resource *r, struct finestra_wl *w) {
     ta_modificatori(r, wl_display_next_serial(display), modificatori);
 }
 
+static void appunti_al_programma(struct wl_client *c);
+
 static void ta_entra(struct finestra_wl *w) {
     PER_DEL_PROGRAMMA(r, &tastiere, w->cliente) ta_entra_in(r, w);
+    appunti_al_programma(w->cliente);   /* la selezione arriva DOPO l'enter della tastiera */
 }
 
 static void ta_esce(struct finestra_wl *w) {
@@ -1377,6 +1380,184 @@ static void lega_seat(struct wl_client *client, void *dati, uint32_t versione, u
     wl_resource_set_implementation(r, &seat_interfaccia, 0, 0);
     wl_seat_send_capabilities(r, WL_SEAT_CAPABILITY_POINTER | (keymap_fd >= 0 ? WL_SEAT_CAPABILITY_KEYBOARD : 0));
     if (wl_resource_get_version(r) >= WL_SEAT_NAME_SINCE_VERSION) wl_seat_send_name(r, "seat0");
+}
+
+/* --- gli appunti: wl_data_device_manager (copia e incolla tra programmi Wayland) ---
+ *
+ * Chi copia crea una SORGENTE (wl_data_source) e dice in che formati sa dare il contenuto (tipi
+ * MIME: "text/plain;charset=utf-8", ...), poi la mette come selezione del seat (set_selection):
+ * il contenuto NON viaggia ancora, resta nel programma. Chi incolla (il programma con il fuoco della
+ * tastiera) riceve un'OFFERTA (wl_data_offer) con gli stessi tipi, ne sceglie uno e fa receive(tipo,
+ * fd) con un descrittore (un pipe) dove vuole il contenuto: il compositore gira la richiesta alla
+ * sorgente (send(tipo, fd)), che scrive nel pipe e lo chiude; il compositore chiude subito il suo
+ * capo. I dati non passano mai dal compositore.
+ *
+ * La selezione e' una sola per il seat. Ogni programma con un wl_data_device la riceve (data_offer +
+ * selection) quando prende il fuoco della tastiera (ta_entra), quando la selezione cambia (se ha il
+ * fuoco) e quando chiede il suo wl_data_device mentre ha gia' il fuoco. "selection(nessuna)" se non
+ * c'e': mai impostata o sorgente distrutta. Quando una sorgente ne sostituisce un'altra, la vecchia
+ * riceve "cancelled". Il trascinamento (start_drag) non c'e' ancora: la sorgente riceve subito
+ * "cancelled", cosi' il programma non va in errore e non succede niente. Il numero di serie delle
+ * richieste non si controlla. */
+
+struct sorgente {
+    struct wl_resource *risorsa;
+    char **mime;
+    int n_mime;
+    struct wl_list offerte;           /* le offerte nate da questa sorgente (struct offerta.link) */
+};
+struct offerta {
+    struct wl_resource *risorsa;
+    struct sorgente *sorgente;        /* 0 se la sorgente e' sparita: receive non da' piu' niente */
+    struct wl_list link;
+};
+
+static struct sorgente *selezione;   /* la selezione del seat, 0 se non c'e' */
+static struct wl_list dispositivi;   /* i wl_data_device di tutti i programmi */
+
+static void sorgente_offri(struct wl_client *c, struct wl_resource *r, const char *mime) {
+    (void)c;
+    struct sorgente *s = wl_resource_get_user_data(r);
+    char *copia = strdup(mime);
+    char **nuovo = copia ? realloc(s->mime, (size_t)(s->n_mime + 1) * sizeof *nuovo) : 0;
+    if (!nuovo) { free(copia); wl_resource_post_no_memory(r); return; }
+    s->mime = nuovo;
+    s->mime[s->n_mime++] = copia;
+}
+static void sorgente_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static void sorgente_azioni(struct wl_client *c, struct wl_resource *r, uint32_t azioni) { (void)c; (void)r; (void)azioni; }
+static const struct wl_data_source_interface sorgente_interfaccia = {
+    .offer = sorgente_offri,
+    .destroy = sorgente_distruggi,
+    .set_actions = sorgente_azioni,
+};
+
+static void appunti_al_fuoco(void);
+
+static void sorgente_distrutta(struct wl_resource *r) {
+    struct sorgente *s = wl_resource_get_user_data(r);
+    struct offerta *o, *t;
+    wl_list_for_each_safe(o, t, &s->offerte, link) {   /* le offerte restano, ma vuote */
+        o->sorgente = 0;
+        wl_list_remove(&o->link);
+        wl_list_init(&o->link);
+    }
+    int era_la_selezione = selezione == s;
+    if (era_la_selezione) selezione = 0;
+    for (int i = 0; i < s->n_mime; i++) free(s->mime[i]);
+    free(s->mime);
+    free(s);
+    if (era_la_selezione) appunti_al_fuoco();
+}
+
+static void offerta_accetta(struct wl_client *c, struct wl_resource *r, uint32_t serial, const char *mime) {
+    (void)c; (void)r; (void)serial; (void)mime;   /* serve al trascinamento: per le selezioni non fa niente */
+}
+static void offerta_ricevi(struct wl_client *c, struct wl_resource *r, const char *mime, int32_t fd) {
+    (void)c;
+    struct offerta *o = wl_resource_get_user_data(r);
+    int offerto = 0;
+    if (o->sorgente)
+        for (int i = 0; i < o->sorgente->n_mime; i++)
+            if (!strcmp(o->sorgente->mime[i], mime)) offerto = 1;
+    if (offerto) wl_data_source_send_send(o->sorgente->risorsa, mime, fd);
+    close(fd);   /* il nostro capo: la sorgente ha il suo (arrivato con il messaggio) */
+}
+static void offerta_distruggi(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static void offerta_finito(struct wl_client *c, struct wl_resource *r) {
+    (void)c;
+    wl_resource_post_error(r, WL_DATA_OFFER_ERROR_INVALID_FINISH, "finish vale solo per il trascinamento");
+}
+static void offerta_azioni(struct wl_client *c, struct wl_resource *r, uint32_t azioni, uint32_t preferita) {
+    (void)c; (void)r; (void)azioni; (void)preferita;   /* solo trascinamento */
+}
+static const struct wl_data_offer_interface offerta_interfaccia = {
+    .accept = offerta_accetta,
+    .receive = offerta_ricevi,
+    .destroy = offerta_distruggi,
+    .finish = offerta_finito,
+    .set_actions = offerta_azioni,
+};
+
+static void offerta_distrutta(struct wl_resource *r) {
+    struct offerta *o = wl_resource_get_user_data(r);
+    if (o->sorgente) wl_list_remove(&o->link);
+    free(o);
+}
+
+/* La selezione di adesso al wl_data_device 'd': l'offerta con i tipi e poi selection. */
+static void appunti_a(struct wl_resource *d) {
+    if (!selezione) { wl_data_device_send_selection(d, 0); return; }
+    struct offerta *o = calloc(1, sizeof *o);
+    if (!o) { wl_resource_post_no_memory(d); return; }
+    o->risorsa = wl_resource_create(wl_resource_get_client(d), &wl_data_offer_interface, wl_resource_get_version(d), 0);
+    if (!o->risorsa) { free(o); wl_resource_post_no_memory(d); return; }
+    o->sorgente = selezione;
+    wl_list_insert(&selezione->offerte, &o->link);
+    wl_resource_set_implementation(o->risorsa, &offerta_interfaccia, o, offerta_distrutta);
+    wl_data_device_send_data_offer(d, o->risorsa);
+    for (int i = 0; i < selezione->n_mime; i++) wl_data_offer_send_offer(o->risorsa, selezione->mime[i]);
+    wl_data_device_send_selection(d, o->risorsa);
+}
+
+/* A tutti i wl_data_device del programma 'c' */
+static void appunti_al_programma(struct wl_client *c) {
+    PER_DEL_PROGRAMMA(d, &dispositivi, c) appunti_a(d);
+}
+
+/* Al programma con il fuoco della tastiera (la selezione e' cambiata) */
+static void appunti_al_fuoco(void) {
+    struct finestra_wl *f = finestra_con_fuoco();
+    if (f) appunti_al_programma(f->cliente);
+}
+
+static void dispositivo_trascina(struct wl_client *c, struct wl_resource *r, struct wl_resource *sorgente,
+                                 struct wl_resource *origine, struct wl_resource *icona, uint32_t serial) {
+    (void)c; (void)r; (void)origine; (void)icona; (void)serial;
+    if (sorgente) wl_data_source_send_cancelled(sorgente);   /* niente trascinamento: il programma lo sa e va avanti */
+}
+static void dispositivo_selezione(struct wl_client *c, struct wl_resource *r, struct wl_resource *sorgente, uint32_t serial) {
+    (void)c; (void)r; (void)serial;
+    struct sorgente *nuova = sorgente ? wl_resource_get_user_data(sorgente) : 0;
+    if (nuova == selezione) return;
+    struct sorgente *vecchia = selezione;
+    selezione = nuova;
+    if (vecchia) wl_data_source_send_cancelled(vecchia->risorsa);
+    appunti_al_fuoco();
+}
+static void dispositivo_rilascia(struct wl_client *c, struct wl_resource *r) { (void)c; wl_resource_destroy(r); }
+static const struct wl_data_device_interface dispositivo_interfaccia = {
+    .start_drag = dispositivo_trascina,
+    .set_selection = dispositivo_selezione,
+    .release = dispositivo_rilascia,
+};
+
+static void appunti_crea_sorgente(struct wl_client *client, struct wl_resource *r, uint32_t id) {
+    struct sorgente *s = calloc(1, sizeof *s);
+    if (!s) { wl_resource_post_no_memory(r); return; }
+    s->risorsa = wl_resource_create(client, &wl_data_source_interface, wl_resource_get_version(r), id);
+    if (!s->risorsa) { free(s); wl_resource_post_no_memory(r); return; }
+    wl_list_init(&s->offerte);
+    wl_resource_set_implementation(s->risorsa, &sorgente_interfaccia, s, sorgente_distrutta);
+}
+static void appunti_prendi_dispositivo(struct wl_client *client, struct wl_resource *r, uint32_t id, struct wl_resource *seat) {
+    (void)seat;
+    struct wl_resource *d = wl_resource_create(client, &wl_data_device_interface, wl_resource_get_version(r), id);
+    if (!d) { wl_resource_post_no_memory(r); return; }
+    wl_resource_set_implementation(d, &dispositivo_interfaccia, 0, risorsa_tolta);
+    wl_list_insert(&dispositivi, wl_resource_get_link(d));
+    struct finestra_wl *f = finestra_con_fuoco();   /* se ha gia' il fuoco, subito */
+    if (f && f->cliente == client) appunti_a(d);
+}
+static const struct wl_data_device_manager_interface appunti_interfaccia = {
+    .create_data_source = appunti_crea_sorgente,
+    .get_data_device = appunti_prendi_dispositivo,
+};
+static void lega_appunti(struct wl_client *client, void *dati, uint32_t versione, uint32_t id) {
+    (void)dati;
+    struct wl_resource *r = wl_resource_create(client, &wl_data_device_manager_interface, versione > 3 ? 3 : (int)versione, id);
+    if (!r) { wl_client_post_no_memory(client); return; }
+    wl_resource_set_implementation(r, &appunti_interfaccia, 0, 0);
 }
 
 /* --- wl_output: lo schermo ---
@@ -1554,6 +1735,7 @@ int wayland_inizia(void) {
     wl_list_init(&superfici);
     wl_list_init(&puntatori);
     wl_list_init(&tastiere);
+    wl_list_init(&dispositivi);
     wl_list_init(&basi);
     carica_keymap();
     /* wl_display_add_socket cerca la cartella in XDG_RUNTIME_DIR */
@@ -1567,6 +1749,7 @@ int wayland_inizia(void) {
         !wl_global_create(display, &xdg_wm_base_interface, 3, 0, lega_wm) ||
         !wl_global_create(display, &wl_seat_interface, 7, 0, lega_seat) ||
         !wl_global_create(display, &wl_output_interface, 4, 0, lega_output) ||
+        !wl_global_create(display, &wl_data_device_manager_interface, 3, 0, lega_appunti) ||
         !wl_global_create(display, &zxdg_decoration_manager_v1_interface, 1, 0, lega_decorazioni) ||
         !wl_global_create(display, &wp_cursor_shape_manager_v1_interface, 1, 0, lega_forme)) {
         wl_display_destroy(display);

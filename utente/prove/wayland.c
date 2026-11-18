@@ -109,6 +109,8 @@
 #define RIDUCI_COLORE 0xFFE0E0E0u
 
 static int csd;                            /* il nome del programma e' wayland_csd */
+static int copia;                          /* il nome del programma e' wayland_copia: mette una selezione */
+static int incolla;                        /* il nome e' wayland_incolla: riceve la selezione */
 static int sotto;                          /* il nome del programma e' wayland_sotto */
 static int errore_atteso;                  /* l'errore di protocollo e' voluto: non e' una FALLITA */
 static struct wl_subcompositor *subcompositore;
@@ -134,6 +136,7 @@ static struct wl_buffer *buffer_anima;
 static uint32_t *pixel_anima;              /* il buffer, sempre mappato: si ridisegna ad ogni "fatto" */
 static unsigned int fotogrammi;            /* i "fatto" ricevuti (e fotogrammi disegnati) */
 static struct wl_seat *seat;
+static struct wl_data_device_manager *appunti_manager;
 static struct wl_output *uscita;           /* lo schermo (wl_output) */
 static int schermo_l, schermo_a, schermo_hz, schermo_scala;
 static struct wl_pointer *puntatore;
@@ -159,6 +162,8 @@ static void globale(void *dati, struct wl_registry *registro, uint32_t nome, con
         forme = wl_registry_bind(registro, nome, &wp_cursor_shape_manager_v1_interface, 1);
     else if (!strcmp(interfaccia, wl_seat_interface.name))
         seat = wl_registry_bind(registro, nome, &wl_seat_interface, versione < 7 ? versione : 7);
+    else if (!strcmp(interfaccia, wl_data_device_manager_interface.name))
+        appunti_manager = wl_registry_bind(registro, nome, &wl_data_device_manager_interface, versione < 3 ? versione : 3);
     else if (!strcmp(interfaccia, wl_output_interface.name) && !uscita)
         uscita = wl_registry_bind(registro, nome, &wl_output_interface, versione < 4 ? versione : 4);
 }
@@ -337,12 +342,14 @@ static void ta_esce(void *d, struct wl_keyboard *k, uint32_t serial, struct wl_s
     riga("tastiera fuoco no", "%s", "");
 }
 static void passo_sotto(uint32_t tasto);
+static void passo_appunti(uint32_t tasto);
 
 static void ta_tasto(void *d, struct wl_keyboard *k, uint32_t serial, uint32_t t, uint32_t tasto, uint32_t stato) {
     (void)d; (void)k; (void)t;
     controlla_serial("keyboard.key", serial);
     riga("tasto ", "%u %s", tasto, stato == WL_KEYBOARD_KEY_STATE_PRESSED ? "premuto" : "rilasciato");
     if (sotto && stato == WL_KEYBOARD_KEY_STATE_PRESSED) passo_sotto(tasto);
+    if (incolla && stato == WL_KEYBOARD_KEY_STATE_PRESSED) passo_appunti(tasto);
     if (csd && tasto == KEY_X && stato == WL_KEYBOARD_KEY_STATE_PRESSED) {
         muto = 1;
         riga("non rispondo piu' ai ping", "%s", "");
@@ -574,6 +581,113 @@ static void passo_sotto(uint32_t tasto) {
     wl_display_flush(display_prova);
 }
 
+/* --- gli appunti di prova (modalita' copia e incolla) --- */
+
+#define MIME_TESTO "text/plain;charset=utf-8"
+#define TESTO_COPIA "ciao dagli appunti"
+#define TESTO_SECONDO "secondo testo"
+
+static struct wl_data_device *appunti_dispositivo;
+static struct wl_data_source *appunti_sorgente;
+static const char *appunti_testo = TESTO_COPIA;   /* quello che la nostra sorgente da' */
+static int appunti_proprio;                       /* la selezione di adesso e' la nostra */
+static int offerta_con_testo;                     /* l'offerta in arrivo ha il tipo MIME_TESTO */
+
+static void sorgente_bersaglio(void *d, struct wl_data_source *s, const char *m) { (void)d; (void)s; (void)m; }
+static void sorgente_manda(void *d, struct wl_data_source *s, const char *mime, int32_t fd) {
+    (void)d; (void)s;
+    if (!strcmp(mime, MIME_TESTO)) {
+        ssize_t n = write(fd, appunti_testo, strlen(appunti_testo));
+        (void)n;
+    }
+    close(fd);
+    riga("appunti ", "dato a chi lo chiede: %s", mime);
+}
+static void sorgente_cancellata(void *d, struct wl_data_source *s) {
+    (void)d;
+    wl_data_source_destroy(s);
+    appunti_sorgente = 0;
+    appunti_proprio = 0;
+    riga("appunti ", "sorgente cancellata");
+    if (copia) chiusa = 1;   /* chi copia esce */
+}
+static void sorgente_azione_nessuna(void *d, struct wl_data_source *s) { (void)d; (void)s; }
+static void sorgente_azione(void *d, struct wl_data_source *s, uint32_t a) { (void)d; (void)s; (void)a; }
+static const struct wl_data_source_listener sorgente_ascolto = {
+    sorgente_bersaglio, sorgente_manda, sorgente_cancellata, sorgente_azione_nessuna, sorgente_azione_nessuna, sorgente_azione,
+};
+
+/* Mette una sorgente nostra (con MIME_TESTO e il testo dato) come selezione. */
+static void appunti_copia(const char *testo) {
+    appunti_testo = testo;
+    appunti_sorgente = wl_data_device_manager_create_data_source(appunti_manager);
+    wl_data_source_add_listener(appunti_sorgente, &sorgente_ascolto, 0);
+    wl_data_source_offer(appunti_sorgente, MIME_TESTO);
+    appunti_proprio = 1;
+    wl_data_device_set_selection(appunti_dispositivo, appunti_sorgente, ultimo_serial);
+    riga("appunti ", "copiato: %s", testo);
+    wl_display_flush(display_prova);
+}
+
+static void offerta_tipo(void *d, struct wl_data_offer *o, const char *mime) {
+    (void)d; (void)o;
+    if (!strcmp(mime, MIME_TESTO)) offerta_con_testo = 1;
+}
+static void offerta_azioni_a(void *d, struct wl_data_offer *o, uint32_t a) { (void)d; (void)o; (void)a; }
+static const struct wl_data_offer_listener offerta_ascolto = { offerta_tipo, offerta_azioni_a, offerta_azioni_a };
+
+static void disp_offerta(void *d, struct wl_data_device *dev, struct wl_data_offer *o) {
+    (void)d; (void)dev;
+    offerta_con_testo = 0;
+    wl_data_offer_add_listener(o, &offerta_ascolto, 0);
+}
+static void disp_entra(void *d, struct wl_data_device *dev, uint32_t s, struct wl_surface *su, wl_fixed_t x, wl_fixed_t y,
+                       struct wl_data_offer *o) { (void)d; (void)dev; (void)s; (void)su; (void)x; (void)y; (void)o; }
+static void disp_esce(void *d, struct wl_data_device *dev) { (void)d; (void)dev; }
+static void disp_muove(void *d, struct wl_data_device *dev, uint32_t t, wl_fixed_t x, wl_fixed_t y) {
+    (void)d; (void)dev; (void)t; (void)x; (void)y;
+}
+static void disp_rilascia(void *d, struct wl_data_device *dev) { (void)d; (void)dev; }
+static void disp_selezione(void *d, struct wl_data_device *dev, struct wl_data_offer *o) {
+    (void)d; (void)dev;
+    if (!o) { riga("appunti ", "selezione vuota"); return; }
+    if (appunti_proprio) {      /* la selezione e' la nostra: leggerla vorrebbe dire aspettare noi stessi */
+        riga("appunti ", "selezione propria");
+        wl_data_offer_destroy(o);
+        return;
+    }
+    if (!offerta_con_testo) { riga("appunti ", "selezione senza testo"); wl_data_offer_destroy(o); return; }
+    int pipe_[2];
+    if (pipe(pipe_) < 0) { riga("FALLITA: ", "pipe"); return; }
+    wl_data_offer_receive(o, MIME_TESTO, pipe_[1]);
+    close(pipe_[1]);
+    wl_display_flush(display_prova);
+    char testo[256];
+    size_t n = 0;
+    ssize_t k;
+    while (n < sizeof testo - 1 && (k = read(pipe_[0], testo + n, sizeof testo - 1 - n)) > 0) n += (size_t)k;
+    close(pipe_[0]);
+    testo[n] = 0;
+    wl_data_offer_destroy(o);
+    riga("appunti ", "ricevuto: %s", testo);
+}
+static const struct wl_data_device_listener disp_ascolto = {
+    disp_offerta, disp_entra, disp_esce, disp_muove, disp_rilascia, disp_selezione,
+};
+
+/* I passi dell'incolla, uno per tasto: 1 prende la selezione con un testo suo, 2 distrugge la sua sorgente. */
+static void passo_appunti(uint32_t tasto) {
+    if (!appunti_manager || !appunti_dispositivo) return;
+    if (tasto == KEY_1) appunti_copia(TESTO_SECONDO);
+    else if (tasto == KEY_2 && appunti_sorgente) {
+        wl_data_source_destroy(appunti_sorgente);
+        appunti_sorgente = 0;
+        appunti_proprio = 0;
+        riga("appunti ", "sorgente distrutta");
+        wl_display_flush(display_prova);
+    }
+}
+
 /* --- la modalita' anima --- */
 
 #define LATO_ANIMA 24
@@ -653,6 +767,9 @@ int main(int quanti, char **argomenti) {
     anima = quanti > 0 && strstr(argomenti[0], "wayland_anima") != 0;
     csd = quanti > 0 && strstr(argomenti[0], "wayland_csd") != 0;
     sotto = quanti > 0 && strstr(argomenti[0], "wayland_sotto") != 0;
+    copia = quanti > 0 && strstr(argomenti[0], "wayland_copia") != 0;
+    incolla = quanti > 0 && strstr(argomenti[0], "wayland_incolla") != 0;
+    if (incolla) dormi(3000);   /* si apre DOPO chi copia: la sua finestra e' l'ultima, con il fuoco */
     if (csd) {
         altezza_buffer = ALTEZZA + BARRA_ALTEZZA;
         sposta_y = BARRA_ALTEZZA;
@@ -680,6 +797,13 @@ int main(int quanti, char **argomenti) {
     scrivi_riga("wayland", "collegata: wl_compositor, wl_shm, xdg_wm_base", "");
     xdg_wm_base_add_listener(base, &base_ascolto, 0);
     if (seat) wl_seat_add_listener(seat, &seat_ascolto, 0);
+    if ((copia || incolla) && appunti_manager && seat) {
+        appunti_dispositivo = wl_data_device_manager_get_data_device(appunti_manager, seat);
+        wl_data_device_add_listener(appunti_dispositivo, &disp_ascolto, 0);
+    } else if (copia || incolla) {
+        scrivi_riga("wayland", "FALLITA: manca wl_data_device_manager", "");
+        return 1;
+    }
     if (uscita) wl_output_add_listener(uscita, &output_ascolto, 0);   /* arriva al prossimo dispatch */   /* le capacita' arrivano al prossimo dispatch */
 
     struct wl_surface *superficie = wl_compositor_create_surface(compositore);
@@ -720,6 +844,10 @@ int main(int quanti, char **argomenti) {
     wl_surface_damage_buffer(superficie, 0, 0, LARGHEZZA, altezza_buffer);
     wl_surface_commit(superficie);
     scrivi_riga("wayland", "finestra mostrata: Prova Wayland", "");
+    if (copia) {
+        wl_display_roundtrip(display);
+        appunti_copia(TESTO_COPIA);
+    }
 
     unsigned long long prossimo_registro = ms_ora() + 1000;
     while (anima && !chiusa) {

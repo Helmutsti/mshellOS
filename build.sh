@@ -844,6 +844,15 @@ mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI
 echo "$B/disco_wayland_sotto.img pronto: con il programma wayland_sotto in /data/tests"
 rm -f "$(vero /data/tests)"/wayland_sotto
 
+# IL DISCO DELLA PROVA DEGLI APPUNTI: come disco_wayland.img, ma con due client, wayland_copia (mette
+# una selezione di testo) e wayland_incolla (si apre dopo e la riceve). Lo usa test/prove/wayland_appunti.py.
+cp "$B/disco_app.img" "$B/disco_wayland_appunti.img"
+metti_file "$P/bin/prove/wayland" "/data/tests/wayland_copia" 755 >/dev/null
+metti_file "$P/bin/prove/wayland" "/data/tests/wayland_incolla" 755 >/dev/null
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$ALBERO_DATI"     "$B/disco_wayland_appunti.img" $((MISURA_DATI * MB / 4096))
+echo "$B/disco_wayland_appunti.img pronto: con wayland_copia e wayland_incolla in /data/tests"
+rm -f "$(vero /data/tests)"/wayland_copia "$(vero /data/tests)"/wayland_incolla
+
 # IL DISCO DELLA PROVA DELLE FINESTRE MOLTE: come disco_app.img, con in /data/tests otto copie del
 # client Wayland di prova (wayland_1 ... wayland_8, tutte "Prova Wayland"): init le fa partire, e
 # test/prove/finestre_molte.py ci aggiunge le app della userbar per superare le 16 finestre.

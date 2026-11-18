@@ -18,6 +18,7 @@
  *            "wayland_anima" (lo stesso client con il nome wayland_anima: anima, per il ritmo) o
  *            "wayland_molte" (otto copie del client, wayland_1 ... wayland_8: finestre_molte) o
  *            "wayland_csd" (lo stesso client con il nome wayland_csd: si disegna la barra del titolo) o
+ *            "wayland_appunti" (due copie, wayland_copia e wayland_incolla: gli appunti) o
  *            "wayland_sotto" (lo stesso client con il nome wayland_sotto: crea le sottosuperfici)
  *
  * LE DATE DELLA CASA. In QEMU l'orologio e' fermo al 1/1/2026 e i file della casa sono del
@@ -95,14 +96,18 @@ int main(int quanti, char **argomenti) {
 
     if (!strcmp(prove, "riempitivi") || !strcmp(prove, "pacchetti") || !strcmp(prove, "messaggi") ||
         !strcmp(prove, "catalog") || !strcmp(prove, "wayland") || !strcmp(prove, "wayland_anima") ||
-        !strcmp(prove, "wayland_molte") || !strcmp(prove, "wayland_csd") || !strcmp(prove, "wayland_sotto")) {
+        !strcmp(prove, "wayland_molte") || !strcmp(prove, "wayland_csd") || !strcmp(prove, "wayland_sotto") ||
+        !strcmp(prove, "wayland_appunti")) {
         mkdir("/data/tests", 0755);
         chmod("/data/tests", 0755);
         if (!strcmp(prove, "riempitivi"))
             for (char nome[] = "riempitivo-1"; nome[11] <= '6'; nome[11]++) metti_prova("riempitivo", nome);
         else if (!strcmp(prove, "wayland_molte"))
             for (char nome[] = "wayland_1"; nome[8] <= '8'; nome[8]++) metti_prova("wayland", nome);
-        else if (!strcmp(prove, "wayland_anima"))
+        else if (!strcmp(prove, "wayland_appunti")) {
+            metti_prova("wayland", "wayland_copia");   /* lo stesso client: copia, cioe' mette una selezione */
+            metti_prova("wayland", "wayland_incolla"); /* e lo stesso che la riceve (si apre dopo 3 secondi) */
+        } else if (!strcmp(prove, "wayland_anima"))
             metti_prova("wayland", "wayland_anima");   /* lo stesso client: il nome lo fa animare */
         else if (!strcmp(prove, "wayland_csd"))
             metti_prova("wayland", "wayland_csd");     /* lo stesso client: il nome gli fa disegnare la barra */
