@@ -103,10 +103,33 @@ rm -rf "$D" "$RADICE/var/cache/apt" "$RADICE/var/log/"*.log
 cp "$RADICE/boot/vmlinuz-$KVER" "$B/vmlinuz"
 rm -rf "$RADICE/boot/"* "$RADICE/vmlinuz" "$RADICE/vmlinuz.old" "$RADICE/initrd.img" "$RADICE/initrd.img.old"
 
+# --- 4b. SISTEMA IN SOLA LETTURA, DATI A PARTE (decisione della persona, strada 1) ---
+# La partizione "system" (/) e' montata in sola lettura. Quello che deve cambiare sta nella
+# partizione "data", montata in /data e agganciata ai percorsi standard: /data/var su /var
+# (registro, stato dei servizi, Flatpak) e /data/home su /home (le persone). /var nasce dal
+# /var del sistema appena costruito, che si sposta nell'albero dei dati.
+DATI=/tmp/dati
+rm -rf "$DATI"
+mkdir -p "$DATI"
+mv "$RADICE/var" "$DATI/var"
+mkdir -p "$DATI/home" "$RADICE/var" "$RADICE/data"
+cat > "$RADICE/etc/fstab" <<'FINE'
+# fatto da costruisci.sh: il sistema in sola lettura, i dati a parte
+PARTLABEL=system  /      ext4  ro                0 1
+PARTLABEL=data    /data  ext4  defaults,nodev    0 2
+/data/var         /var   none  bind              0 0
+/data/home        /home  none  bind              0 0
+FINE
+# Quello che systemd scriverebbe in /etc al primo avvio si fa qui, perche' /etc non si scrive:
+# il numero fisso del computer (machine-id: uno per ogni costruzione) e gli utenti di sistema.
+od -An -N16 -tx1 /dev/urandom | tr -d ' \n' > "$RADICE/etc/machine-id"
+echo >> "$RADICE/etc/machine-id"
+systemd-sysusers --root="$RADICE" >/dev/null
+
 # --- 5. il kernel tutto-in-uno ---
 echo "5. UKI"
 ukify build --linux "$B/vmlinuz" --initrd "$B/initrd.img" \
-    --cmdline "root=PARTLABEL=system rw console=tty1 console=ttyS0 $RIGA_KERNEL" \
+    --cmdline "root=PARTLABEL=system ro console=tty1 console=ttyS0 $RIGA_KERNEL" \
     --output "$B/BOOTX64.EFI" >/dev/null
 
 # --- 6. il disco ---
@@ -115,14 +138,17 @@ SETTORI_MB=2048
 MISURA_AVVIO=64
 MISURA_SISTEMA=$(( $(du -sm "$RADICE" | cut -f1) * 13 / 10 + 64 ))
 INIZIO_SISTEMA=$((1 + MISURA_AVVIO))
-TOTALE=$((INIZIO_SISTEMA + MISURA_SISTEMA + 1))
-echo "6. disco: avvio $MISURA_AVVIO MB, system $MISURA_SISTEMA MB"
+MISURA_DATI=1024                  # i dati: per ora 1 GB (il file del disco e' "sparso")
+INIZIO_DATI=$((INIZIO_SISTEMA + MISURA_SISTEMA))
+TOTALE=$((INIZIO_DATI + MISURA_DATI + 1))
+echo "6. disco: avvio $MISURA_AVVIO MB, system $MISURA_SISTEMA MB, data $MISURA_DATI MB"
 rm -f "$B/disco-$MACCHINA.img"
 truncate -s ${TOTALE}M "$B/disco-$MACCHINA.img"
 sfdisk -q "$B/disco-$MACCHINA.img" <<FINE
 label: gpt
 start=$SETTORI_MB, size=$((MISURA_AVVIO * SETTORI_MB)), type=U, name="avvio"
 start=$((INIZIO_SISTEMA * SETTORI_MB)), size=$((MISURA_SISTEMA * SETTORI_MB)), type=L, name="system"
+start=$((INIZIO_DATI * SETTORI_MB)), size=$((MISURA_DATI * SETTORI_MB)), type=L, name="data"
 FINE
 AVVIO="$B/disco-$MACCHINA.img@@$MB"
 mformat -i "$AVVIO" -F -T $((MISURA_AVVIO * SETTORI_MB)) -v AVVIO ::
@@ -130,4 +156,6 @@ mmd -i "$AVVIO" ::/EFI ::/EFI/BOOT
 mcopy -i "$AVVIO" "$B/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
 mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$RADICE" \
     "$B/disco-$MACCHINA.img" $((MISURA_SISTEMA * MB / 4096))
+mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$DATI" \
+    "$B/disco-$MACCHINA.img" $((MISURA_DATI * MB / 4096))
 echo "pronto: build/disco-$MACCHINA.img ($(wc -l < "$B/pacchetti-sistema.txt") pacchetti nel sistema, $(du -sm "$RADICE" | cut -f1) MB)"
