@@ -126,6 +126,8 @@ void avviso_annulla(struct avviso *v, const char *testo) {
     copia_testo(v->annulla.testo, testo, MAX_TESTO_WIDGET);
 }
 
+void avviso_esc(struct avviso *v, int scelta) { v->risposta_esc = scelta; }
+
 void avviso_alternativa(struct avviso *v, const char *testo, int tipo) {
     if (!v->tre) {
         pulsante_prepara(&v->alternativa, testo, NESSUNA_ICONA, avviso_al_alternativa, v);

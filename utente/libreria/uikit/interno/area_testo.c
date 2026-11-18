@@ -237,6 +237,12 @@ static void testo_cambiato(struct area_testo *a) {
     cambiato(a);
 }
 
+/* La persona ha cambiato il testo scrivendo o cancellando: lo dice all'app (area_testo_al_cambiato).
+ * area_testo_imposta non passa di qui: il testo messo dall'app non e' un cambiamento "della persona". */
+static void avvisa_cambiato(struct area_testo *a) {
+    if (a->al_cambiato) a->al_cambiato(a, a->dati_cambiato);
+}
+
 /* Il cursore va a 'off'. Senza 'estendi' anche il capo fermo (nessuna selezione). 'riga' e' la riga in
  * cui lo si e' portato (-1 se non conta): se 'off' e' la fine di una riga a capo automatico, il
  * cursore resta in fondo a quella e non salta all'inizio della prossima. */
@@ -355,6 +361,7 @@ static void sostituisci(struct area_testo *a, const char *src, int n) {
     a->voluta = -1;
     a->a_fine_riga = 0;
     testo_cambiato(a);
+    avvisa_cambiato(a);
 }
 
 static void cancella_indietro(struct area_testo *a) {
@@ -408,6 +415,7 @@ static void rientra(struct area_testo *a, int indietro) {
     a->voluta = -1;
     a->a_fine_riga = 0;
     testo_cambiato(a);
+    avvisa_cambiato(a);
 }
 
 /* --- il widget --- */
@@ -662,6 +670,11 @@ void area_testo_imposta(struct area_testo *a, const char *utf8) {
     a->a_fine_riga = 0;
     a->barra.scorrimento.posizione = 0;
     testo_cambiato(a);
+}
+
+void area_testo_al_cambiato(struct area_testo *a, al_cambiato_area_testo f, void *dati) {
+    a->al_cambiato = f;
+    a->dati_cambiato = dati;
 }
 
 int area_testo_lunghezza(const struct area_testo *a) { return lung(a); }

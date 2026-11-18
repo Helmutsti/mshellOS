@@ -99,7 +99,8 @@ def quanti_grigi(foto, zona=PANNELLO):
 
 
 BLU_TENUE = {(0xDB, 0xEA, 0xFE), (0x17, 0x25, 0x54)}           # informazione/tenue, chiaro e scuro
-GRIGIO_SELEZIONE = {(0xD8, 0xD8, 0xDA), (0x2F, 0x2F, 0x33)}    # controllo/sfondo-premuto
+GRIGIO_SELEZIONE = {(0xD8, 0xD8, 0xDA), (0x2F, 0x2F, 0x33),    # controllo/sfondo-premuto
+                    (0xAD, 0xAD, 0xAE)}                        # lo stesso sotto il velo dell'avviso (tema chiaro)
 
 
 def esegui(p):
@@ -248,10 +249,10 @@ def esegui(p):
     doppio = scatta("doppio_clic")
     p.controlla(quanti_blu(doppio) > 500, "il doppio clic non ha selezionato la parola")
 
-    # 10. senza il fuoco: un clic su un pulsante della barra, e la selezione diventa grigia
-    m.clic(164, 194)                              # il pulsante Nuovo (non fa niente, ma prende il clic)
+    # 10. senza il fuoco: Nuovo con modifiche non salvate (l'avviso prende la tastiera), e la selezione diventa grigia
+    m.clic(164, 194)                              # Nuovo, con modifiche: compare l'avviso "Salvare le modifiche?" (blocconote_modifiche) e l'area perde il fuoco
     m.muovi(1270, 790)
     senza_fuoco = scatta("senza_fuoco")
-    p.controlla(quanti_grigi(senza_fuoco) > 300, "senza fuoco la selezione non e' grigia")
+    p.controlla(quanti_grigi(senza_fuoco) > 100, "senza fuoco la selezione non e' grigia")
     p.controlla(quanti_blu(senza_fuoco) < 50, "senza fuoco la selezione e' ancora blu")
     p.nota("foto del Blocco note in " + str(p.cartella))

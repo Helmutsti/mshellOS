@@ -95,6 +95,7 @@
     X(keyboard, "icons/lucide/keyboard.icon") \
     X(shield, "icons/lucide/shield.icon") \
     X(wifi, "icons/lucide/wifi.icon") \
+    X(file_pen, "icons/lucide/file-pen.icon") \
 
 #define ICONA_MISURE 8   /* quante misure al massimo: 12, 14, 16, 18, 20, 24, 32, 48 */
 #define ICONA_SAVE 0
@@ -151,6 +152,7 @@
 #define ICONA_KEYBOARD 51
 #define ICONA_SHIELD 52
 #define ICONA_WIFI 53
+#define ICONA_FILE_PEN 54
 
 /* Le immagini a colori: X(nome, file). */
 #define MATERIALI_IMMAGINI(X) \

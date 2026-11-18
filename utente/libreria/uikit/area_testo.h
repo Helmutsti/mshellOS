@@ -71,6 +71,9 @@
  * ogni lettera si disegna da sola al suo posto. */
 #define AREA_TESTO_CASELLA_X(k) (((k) * 39 + 2) / 5)
 
+struct area_testo;
+typedef void (*al_cambiato_area_testo)(struct area_testo *a, void *dati);
+
 struct riga_area_testo {
     int ini, fine;                     /* i byte del testo: da 'ini' a 'fine' (esclusa; senza il '\n') */
     int segno;                         /* 1: la riga finisce in mezzo a una parola, e l'ultima casella mostra "_" */
@@ -93,6 +96,8 @@ struct area_testo {
     int premuto;                       /* il pulsante del mouse e' giu' qui (si sta trascinando) */
     unsigned int clic_prima;           /* tempo() dell'ultimo clic, e dove, per il doppio clic */
     int clic_su;
+    al_cambiato_area_testo al_cambiato;   /* chi avvisare quando la persona cambia il testo (o 0) */
+    void *dati_cambiato;
 };
 
 /* Prepara un'area di testo vuota, elastica e larga (con la misura del disegno, 480 x 240, se nessuno
@@ -106,6 +111,12 @@ void area_testo_segnaposto(struct area_testo *a, const char *testo);
 /* Sostituisce tutto il testo con 'utf8' (uno 0 alla fine): il cursore va all'inizio, niente
  * selezione. I '\r' si saltano e gli altri controlli (tranne '\n' e '\t') si tolgono. */
 void area_testo_imposta(struct area_testo *a, const char *utf8);
+
+/* Chiede di essere avvisata ogni volta che LA PERSONA cambia il testo (scrive, cancella, rientra con
+ * Tab): serve per sapere se un documento ha modifiche non salvate. Non scatta per area_testo_imposta
+ * (il testo messo dall'app) ne' per i movimenti del cursore. Chiamata dentro il ciclo degli eventi:
+ * 'f' deve fare poco (per esempio mettere un asterisco nel titolo). 0: nessun avviso. */
+void area_testo_al_cambiato(struct area_testo *a, al_cambiato_area_testo f, void *dati);
 
 /* Quanti byte ha il testo. */
 int area_testo_lunghezza(const struct area_testo *a);

@@ -46,7 +46,9 @@ ICONE = ['save', 'check', 'minus', 'plus', 'x', 'user', 'triangle-alert', 'layou
          # barra laterale (Desktop, Testi, Programmi)
          'chevron-up', 'chevron-down', 'monitor', 'file-text', 'app-window',
          # Impostazioni: la barra laterale (Aspetto, Tastiera e mouse, App e sicurezza, Rete)
-         'palette', 'keyboard', 'shield', 'wifi']
+         'palette', 'keyboard', 'shield', 'wifi',
+         # Blocco note: Salva con nome
+         'file-pen']
 LATI = [12, 14, 16, 18, 20, 24, 32, 48]   # in ordine: disegna_icona() prende la piu' grande che ci sta (48: lo stato vuoto)
 
 # Le immagini a colori della scelta singola accesa: nome C, SVG di figma/

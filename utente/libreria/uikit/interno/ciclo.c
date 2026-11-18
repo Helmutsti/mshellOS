@@ -148,7 +148,7 @@ static void uikit_tasto_fisico(struct finestra_tk *f, unsigned int codice, int p
     }
     if (!premuto) return;
     struct avviso *v = codice == TASTO_ESC && !f->modificatori ? uikit_avviso_tastiera(f) : 0;
-    if (v) { avviso_rispondi(v, AVVISO_ANNULLA); return; }
+    if (v) { avviso_rispondi(v, v->risposta_esc); return; }
     if (finestra_tk_bloccata(f)) return;
     /* prima il widget che ha il fuoco (un'area di testo: le frecce, Home, Canc), poi le scorciatoie dell'app */
     struct widget *fuoco = f->con_fuoco;

@@ -544,6 +544,7 @@ struct avviso {
     struct pulsante annulla, conferma;
     struct pulsante alternativa;       /* il terzo pulsante (avviso_alternativa), se 'tre' */
     int tre;
+    int risposta_esc;                  /* la scelta che dà il tasto Esc (avviso_esc; di solito AVVISO_ANNULLA) */
     al_risposta_avviso al_risposta;
     void *dati;
 };
@@ -560,6 +561,11 @@ void avviso_annulla(struct avviso *v, const char *testo);
 /* Aggiunge il terzo pulsante, tra Annulla e la conferma (di solito SECONDARIO): la risposta
  * sara' AVVISO_ALTERNATIVA. Prima di avviso_apri. */
 void avviso_alternativa(struct avviso *v, const char *testo, int tipo);
+
+/* Cambia la scelta che da' il tasto Esc (di solito AVVISO_ANNULLA, il pulsante piu' a sinistra).
+ * Serve quando quel pulsante non e' "annulla": nell'avviso a tre scelte "Salvare le modifiche?" il
+ * primo e' "Non salvare" e Esc deve dare AVVISO_ALTERNATIVA ("Annulla"), non perdere il lavoro. */
+void avviso_esc(struct avviso *v, int scelta);
 
 /* Apre l'avviso della finestra (finestra_tk_avviso), al centro, e gli da' la tastiera
  * (Invio, Esc). Si chiude da solo quando si risponde. */

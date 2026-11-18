@@ -208,12 +208,12 @@ Tutte partono dal launcher come persona (uid 1000, `UID_APPLICAZIONI`), cioè se
 - **Poteri**: super sì (uid 0), e dà una shell uid 0 a chi la usa. Manifesto: nessun permesso. Senza recinto, come le altre app oggi.
 
 ### Blocco note (`applicazioni/BloccoNote/blocconote.c`)
-- **Cosa fa**: l'editor di testo grafico. Per ora (primo passo, `PIANO_EDITOR.md`) è una finestra con l'area di testo di UIKit (`uikit/area_testo.h`) e un documento nuovo, vuoto; la barra degli strumenti ha Nuovo, Apri e Salva come nel disegno, ma per ora non fanno niente (niente file, annulla, copia e incolla).
+- **Cosa fa**: l'editor di testo grafico. Una finestra con l'area di testo di UIKit (`uikit/area_testo.h`) e quattro pulsanti nella barra: Nuovo (documento vuoto), Apri e Salva con nome (la finestra Apri/Salva del picker, `corekit/picker.h`), Salva (su un documento nuovo è Salva con nome; su uno aperto con Apri ANCORA NON FA NIENTE, in attesa della decisione su come darle la scrittura). Dopo la prima modifica il titolo ha l'asterisco ("nome* – Blocco note"); Nuovo o Apri con modifiche non salvate chiedono "Salvare le modifiche?" (avviso UIKit a tre scelte: Non salvare, Annulla, Salva). Chiudere la finestra non chiede niente. Niente annulla, copia e incolla.
 - **Tipo**: app.
 - **Lanciato da**: launcher (userbar e vassoio).
 - **Lancia**: nessuno.
 - **Gira come**: persona (uid 1000).
-- **Poteri**: no. Manifesto: nessun permesso (`[]`): i file gli arriveranno dal picker.
+- **Poteri**: no. Manifesto: nessun permesso (`[]`): i file le arrivano dal picker (chiama `picker_apri` e `picker_salva`, porta 7 di base). Apri le dà il file in sola lettura, Salva con nome in scrittura.
 
 ### Doom (`applicazioni/Doom/`, adattamento `doomgeneric_mshell.c`)
 - **Cosa fa**: il gioco Doom (shareware, doomgeneric), disegnato con solo GKit.

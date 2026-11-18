@@ -79,7 +79,7 @@ tocca. Le regole sono in APPLICAZIONI.md (sezioni 5 e 9) e SISTEMA.md (sezioni 1
   l'installazione da file dello Store, punto rimandato dalla persona). La sandbox Docker non può
   costruire recinti: la persona vuole ragionare su un collaudo delle app con Docker (più
   contenitori, docker compose, il recinto come impostazione di Docker). Da decidere.
-- **L'editor di testo**: fatto il primo passo (l'area di testo di UIKit e l'app Blocco note, senza file né annulla né appunti); il resto è in `PIANO_EDITOR.md`.
+- **L'editor di testo**: fatti il primo passo (l'area di testo di UIKit e l'app Blocco note) e il terzo (Nuovo, Apri, Salva con nome, asterisco e "Salvare le modifiche?"; Salva su un file aperto aspetta una decisione: il picker dà Apri in sola lettura); mancano annulla e appunti; il resto è in `PIANO_EDITOR.md`.
 - Fatti il 17/11/2026 e in main: Terminale su libvterm, vim (tiny, /system/bin/vim), UTF-8 in
   tutto il sistema, ripetizione di tutti i tasti, puntatore a 24, disco finito come uscita
   (`crea_disco_*`), copia installata in `Desktop\mshellOS-prod` (aggiornata solo quando lo

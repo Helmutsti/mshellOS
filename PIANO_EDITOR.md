@@ -40,6 +40,22 @@ sandbox in `disegni/BloccoNote/codice/`; la prova è `test/prove/bloccotesto.py`
   Ctrl+Home/Fine, Maiusc per selezionare, Ctrl+A; mouse: clic, trascinamento, doppio clic sulla parola;
   scorrimento con la rotella e seguendo il cursore.
 
+## Fatto: il passo 3, i pulsanti (18/11/2026)
+Il Blocco note ha quattro pulsanti nella barra (`applicazioni/BloccoNote/blocconote.c`): Nuovo, Apri,
+Salva, Salva con nome (quarto, icona `file-pen`, `ICONA_FILE_PEN`). L'app non ha permessi: i file le
+arrivano dal picker (Apri in lettura, Salva con nome in scrittura).
+**Deciso dalla persona:** l'asterisco delle modifiche non salvate sta subito dopo il nome
+("nome* – Blocco note", anche "Senza titolo*"); Salva con nome è il quarto pulsante, dopo Salva; la
+domanda "Salvare le modifiche?" con Non salvare, Annulla, Salva (Salva principale) si fa premendo Nuovo o Apri
+con modifiche non salvate.
+**Fatto dall'agente (da confermare):** l'avviso "cambiato" dell'area di testo (`area_testo_al_cambiato`);
+la domanda usa l'avviso a tre scelte di UIKit (nessuna copia dal picker); `avviso_esc` fa dare a Esc
+"Annulla" (il pulsante di mezzo) invece di "Non salvare"; dopo Nuovo e Apri il fuoco torna all'area di testo.
+**Aperto:** Salva su un documento aperto con Apri non fa ancora niente: il picker dà il file di Apri in sola
+lettura. Chiudere la finestra con modifiche non salvate non chiede niente (non richiesto): si perdono.
+Prove: `blocconote_modifiche` (sandbox: asterisco e avviso) e `blocconote_file` (solo QEMU, `disco_app.img`:
+Salva con nome, Nuovo, Apri, avviso con Salva e Annulla).
+
 ## I pezzi, in ordine (1, 2 e 3 sono indipendenti)
 1. **Tastiera** (FATTO il 17/11/2026: ripetizione, tastierino con Bloc Num e spia, tasti multimediali fermati dal compositore e scritti nel registro; l'idea di partenza era): il servizio eventi ripete tutti i tasti, compresi quelli fisici (oggi frecce,
    Home, F1–F12... non si ripetono); tastierino numerico; tasti multimediali al sistema (un
