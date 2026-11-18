@@ -8,6 +8,7 @@
 #   3. le impostazioni: il nome del computer, l'accesso automatico (greetd sullo schermo,
 #      l'amministratore sulla seriale);
 #      poi si compilano i programmi di mshell (utente/) e si mettono in /usr/bin;
+#      lo sfondo e il puntatore (risorse/) si preparano in /usr/share;
 #   4. si tolgono i pacchetti "da terminale" e quelli "per installare" (decisione della persona):
 #      si cancellano i loro file, poi il registro dei pacchetti;
 #   5. il kernel tutto-in-uno (UKI): kernel + initramfs + riga di comando in un solo file .EFI;
@@ -80,6 +81,9 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # Il pacchetto stesso abilita greetd come display-manager.service (lo vuole graphical.target).
 # Il comando e' con "env" davanti perche' greetd lo lancia come "exec <comando>", e exec non
 # accetta l'assegnazione WLR_RENDERER=pixman (disegno solo con il processore) prima del programma.
+# XKB_DEFAULT_LAYOUT=it: LA TASTIERA ITALIANA (decisione della persona). Il compositore chiede a
+# xkbcommon la mappa dei tasti senza dire quale: xkbcommon allora la prende da queste variabili
+# (e i file da xkb-data).
 cat > "$RADICE/etc/greetd/config.toml" <<'FINE'
 # fatto da costruisci.sh
 [terminal]
@@ -90,7 +94,7 @@ command = "/usr/sbin/agreety --cmd /bin/sh"
 user = "_greetd"
 
 [initial_session]
-command = "env WLR_RENDERER=pixman mshell-compositore -s mshell-prova-wayland"
+command = "env WLR_RENDERER=pixman XKB_DEFAULT_LAYOUT=it mshell-compositore -s mshell-prova-wayland"
 user = "utente1"
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"
@@ -128,6 +132,52 @@ gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 way
     $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova-wayland" \
     utente/prove/wayland.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
+
+# --- 3c. lo sfondo e il puntatore (risorse/), preparati qui con gli attrezzi ---
+# LO SFONDO: la foto di risorse/sfondi/ portata alla misura dello schermo della macchina
+# (SCHERMO_LARGHEZZA x SCHERMO_ALTEZZA, in macchine/<nome>.conf), in pixel pronti: il formato
+# e' descritto in strumenti/sfondo.py. Il compositore lo legge all'avvio da
+# /usr/share/mshell/sfondo (i dati fissi dei programmi stanno in /usr/share/<programma>).
+echo "3c. sfondo ${SCHERMO_LARGHEZZA}x${SCHERMO_ALTEZZA} e puntatore"
+mkdir -p "$RADICE/usr/share/mshell"
+python3 strumenti/sfondo.py risorse/sfondi/samurai.jpg "$SCHERMO_LARGHEZZA" "$SCHERMO_ALTEZZA"     "$RADICE/usr/share/mshell/sfondo"
+# IL PUNTATORE: le immagini disegnate in Figma (risorse/puntatore/, 32x32 con l'ombra; il
+# puntatore e' 24x24 dentro, quindi misura nominale 24) diventano il tema Xcursor "mshell" con
+# xcursorgen. Ogni riga della descrizione: misura nominale, punto caldo x e y, immagine e, per
+# l'attesa animata, i millesimi di secondo di ogni fotogramma (12 fotogrammi, un giro al
+# secondo). I punti caldi vengono dal vecchio disegni/Puntatore/descrizione.md. I file hanno i
+# nomi standard dei temi Xcursor; gli altri nomi dello stesso puntatore sono collegamenti.
+# Il tema "default" (quello che chiedono il compositore e i programmi se nessuno dice altro)
+# eredita da "mshell": cosi' vale per tutti senza variabili d'ambiente.
+P=/tmp/puntatore
+rm -rf "$P"
+mkdir -p "$P" "$RADICE/usr/share/icons/mshell/cursors" "$RADICE/usr/share/icons/default"
+echo "24 6 3 risorse/puntatore/normale.png" > "$P/default"
+echo "24 14 12 risorse/puntatore/testo.png" > "$P/text"
+echo "24 11 4 risorse/puntatore/collegamento.png" > "$P/pointer"
+echo "24 6 3 risorse/puntatore/divieto.png" > "$P/not-allowed"
+for i in 00 01 02 03 04 05 06 07 08 09 10 11; do
+    echo "24 14 12 risorse/puntatore/attesa-$i.png 83"
+done > "$P/wait"
+for nome in default text pointer not-allowed wait; do
+    xcursorgen "$P/$nome" "$RADICE/usr/share/icons/mshell/cursors/$nome"
+done
+cd "$RADICE/usr/share/icons/mshell/cursors"
+ln -s default left_ptr
+ln -s text xterm
+ln -s pointer hand2
+ln -s wait watch
+ln -s wait progress
+cd /w
+cat > "$RADICE/usr/share/icons/mshell/index.theme" <<'FINE'
+[Icon Theme]
+Name=mshell
+Comment=Il puntatore di mshell
+FINE
+cat > "$RADICE/usr/share/icons/default/index.theme" <<'FINE'
+[Icon Theme]
+Inherits=mshell
+FINE
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
 DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"

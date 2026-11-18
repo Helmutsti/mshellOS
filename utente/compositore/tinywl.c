@@ -1,10 +1,15 @@
 /* mshell-compositore: il compositore Wayland di mshell.
  *
- * DA DOVE VIENE: e' tinywl, l'esempio ufficiale di wlroots, copiato SENZA MODIFICHE dal
- * pacchetto dei sorgenti di wlroots 0.18.2 (la stessa versione del pacchetto Debian 13
- * libwlroots-0.18 0.18.2-3), file tinywl/tinywl.c:
+ * DA DOVE VIENE: e' tinywl, l'esempio ufficiale di wlroots, copiato dal pacchetto dei sorgenti
+ * di wlroots 0.18.2 (la stessa versione del pacchetto Debian 13 libwlroots-0.18 0.18.2-3), file
+ * tinywl/tinywl.c:
  *   https://gitlab.freedesktop.org/wlroots/wlroots/-/releases/0.18.2/downloads/wlroots-0.18.2.tar.gz
- * Tutto quello che c'e' sotto questo commento e' il file originale.
+ * NON E' PIU' TINYWL PURO: le aggiunte di mshell sono segnate con "MSHELL:" (sono solo queste):
+ *   - LO SFONDO: all'avvio legge /usr/share/mshell/sfondo (pixel pronti, preparati durante la
+ *     costruzione da strumenti/sfondo.py, che ne descrive il formato) e lo mette sotto tutte le
+ *     finestre. Se il file manca o non va, lo sfondo resta nero come in tinywl.
+ * Tutto il resto e' il file originale. La tastiera italiana e il puntatore di mshell non
+ * cambiano il codice: vengono da XKB_DEFAULT_LAYOUT e dal tema Xcursor "default" (costruisci.sh).
  *
  * LA LICENZA: MIT, quella di wlroots (file LICENSE del pacchetto dei sorgenti):
  *   Copyright (c) 2017, 2018 Drew DeVault
@@ -36,6 +41,8 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
+#include <wlr/interfaces/wlr_buffer.h>  /* MSHELL: per lo sfondo */
+#include <drm_fourcc.h>                 /* MSHELL: per lo sfondo */
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_cursor.h>
@@ -907,6 +914,77 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
 }
 
+/* MSHELL: LO SFONDO. Un wlr_buffer fatto a mano: i pixel stanno in memoria (letti dal file) e
+ * wlroots li legge con l'"accesso diretto ai dati" (begin/end_data_ptr_access), che e' quello
+ * che usa il disegno con il processore (pixman). */
+struct mshell_sfondo {
+	struct wlr_buffer base;
+	void *pixel;
+	size_t passo;  /* byte per riga */
+};
+
+static void mshell_sfondo_destroy(struct wlr_buffer *buffer) {
+	struct mshell_sfondo *sfondo = wl_container_of(buffer, sfondo, base);
+	free(sfondo->pixel);
+	free(sfondo);
+}
+
+static bool mshell_sfondo_begin(struct wlr_buffer *buffer, uint32_t flags,
+		void **data, uint32_t *format, size_t *stride) {
+	struct mshell_sfondo *sfondo = wl_container_of(buffer, sfondo, base);
+	if (flags & WLR_BUFFER_DATA_PTR_ACCESS_WRITE) {
+		return false;  /* lo sfondo si legge e basta */
+	}
+	*data = sfondo->pixel;
+	*format = DRM_FORMAT_XRGB8888;
+	*stride = sfondo->passo;
+	return true;
+}
+
+static void mshell_sfondo_end(struct wlr_buffer *buffer) {
+}
+
+static const struct wlr_buffer_impl mshell_sfondo_impl = {
+	.destroy = mshell_sfondo_destroy,
+	.begin_data_ptr_access = mshell_sfondo_begin,
+	.end_data_ptr_access = mshell_sfondo_end,
+};
+
+/* Legge il file (larghezza e altezza a 32 bit little-endian, come il processore, poi i pixel
+ * XRGB8888) e mette l'immagine nell'albero dato, in alto a sinistra. */
+static void mshell_sfondo_carica(struct wlr_scene_tree *albero, const char *percorso) {
+	FILE *f = fopen(percorso, "rb");
+	if (!f) {
+		wlr_log(WLR_INFO, "nessuno sfondo (%s): resta nero", percorso);
+		return;
+	}
+	uint32_t misura[2];
+	struct mshell_sfondo *sfondo = NULL;
+	if (fread(misura, sizeof(misura), 1, f) != 1 || misura[0] == 0 || misura[1] == 0 ||
+			misura[0] > 16384 || misura[1] > 16384) {
+		goto male;
+	}
+	sfondo = calloc(1, sizeof(*sfondo));
+	sfondo->passo = (size_t)misura[0] * 4;
+	sfondo->pixel = malloc(sfondo->passo * misura[1]);
+	if (!sfondo->pixel || fread(sfondo->pixel, sfondo->passo, misura[1], f) != misura[1]) {
+		goto male;
+	}
+	fclose(f);
+	wlr_buffer_init(&sfondo->base, &mshell_sfondo_impl, misura[0], misura[1]);
+	wlr_scene_buffer_create(albero, &sfondo->base);
+	wlr_buffer_drop(&sfondo->base);  /* ora lo tiene la scena */
+	wlr_log(WLR_INFO, "sfondo %ux%u da %s", misura[0], misura[1], percorso);
+	return;
+male:
+	wlr_log(WLR_ERROR, "sfondo %s non valido: resta nero", percorso);
+	if (sfondo) {
+		free(sfondo->pixel);
+		free(sfondo);
+	}
+	fclose(f);
+}
+
 int main(int argc, char *argv[]) {
 	wlr_log_init(WLR_DEBUG, NULL);
 	char *startup_cmd = NULL;
@@ -993,6 +1071,12 @@ int main(int argc, char *argv[]) {
 	 */
 	server.scene = wlr_scene_create();
 	server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
+
+	/* MSHELL: lo sfondo, in un albero tutto suo creato per primo: le finestre, aggiunte dopo
+	 * alla scena, stanno tutte sopra. Non e' una superficie, quindi i clic lo attraversano
+	 * (desktop_toplevel_at non trova finestre) e il puntatore resta quello normale. */
+	struct wlr_scene_tree *mshell_fondo = wlr_scene_tree_create(&server.scene->tree);
+	mshell_sfondo_carica(mshell_fondo, "/usr/share/mshell/sfondo");
 
 	/* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
 	 * used for application windows. For more detail on shells, refer to
