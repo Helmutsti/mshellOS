@@ -354,6 +354,7 @@ static int avvia_app_linux(const struct descrizione *d, unsigned int uid, const 
     } while (0)
     VARIABILE("FONTCONFIG_FILE", pacchetto, "/linux/etc/fonts/fonts.conf");
     VARIABILE("XDG_DATA_DIRS", pacchetto, "/linux/usr/share");
+    VARIABILE("TERMINFO", pacchetto, "/linux/usr/share/terminfo");   /* le descrizioni dei terminali */
     VARIABILE("XDG_CONFIG_HOME", dati, "/config");
     VARIABILE("XDG_CACHE_HOME", dati, "/cache");
     VARIABILE("XDG_DATA_HOME", dati, "/data");
