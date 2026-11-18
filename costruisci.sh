@@ -114,7 +114,7 @@ rm -rf "$RADICE/boot/"* "$RADICE/vmlinuz" "$RADICE/vmlinuz.old" "$RADICE/initrd.
 # --- 5. il kernel tutto-in-uno ---
 echo "5. UKI"
 ukify build --linux "$B/vmlinuz" --initrd "$B/initrd.img" \
-    --cmdline "root=PARTLABEL=system rw console=tty1 console=ttyS0" \
+    --cmdline "root=PARTLABEL=system rw console=tty1 console=ttyS0 $RIGA_KERNEL" \
     --output "$B/BOOTX64.EFI" >/dev/null
 
 # --- 6. il disco ---

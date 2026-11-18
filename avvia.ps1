@@ -14,7 +14,7 @@ docker run --rm --privileged -v "${qui}:/w" $attrezzi sh /w/costruisci.sh qemu-p
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 # il firmware UEFI (OVMF, che viene con QEMU) trova \EFI\BOOT\BOOTX64.EFI nella partizione "avvio"
-& "C:\Program Files\qemu\qemu-system-x86_64.exe" -machine pc -nodefaults -m 2048 `
+& "C:\Program Files\qemu\qemu-system-x86_64.exe" -machine q35 -nodefaults -m 2048 `
     -drive "if=pflash,format=raw,readonly=on,file=C:\Program Files\qemu\share\edk2-x86_64-code.fd" `
     -drive "if=none,id=disco,file=$qui\build\disco-qemu-pc.img,format=raw" `
     -device "virtio-blk-pci,drive=disco,bootindex=1" `
