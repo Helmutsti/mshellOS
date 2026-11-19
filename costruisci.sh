@@ -8,7 +8,7 @@
 #   3. le impostazioni: il nome del computer, l'accesso automatico (greetd sullo schermo,
 #      l'amministratore sulla seriale);
 #      poi si compilano i programmi di mshell (utente/) e si mettono in /usr/bin;
-#      lo sfondo e il puntatore (risorse/) si preparano in /usr/share;
+#      lo sfondo, il puntatore e il carattere (risorse/) si preparano in /usr/share;
 #   4. si tolgono i pacchetti "da terminale" e quelli "per installare" (decisione della persona):
 #      si cancellano i loro file, poi il registro dei pacchetti;
 #   5. il kernel tutto-in-uno (UKI): kernel + initramfs + riga di comando in un solo file .EFI;
@@ -84,6 +84,7 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # XKB_DEFAULT_LAYOUT=it: LA TASTIERA ITALIANA (decisione della persona). Il compositore chiede a
 # xkbcommon la mappa dei tasti senza dire quale: xkbcommon allora la prende da queste variabili
 # (e i file da xkb-data).
+# "-s mshell-barra": il compositore, appena pronto, fa partire la barra di stato.
 cat > "$RADICE/etc/greetd/config.toml" <<'FINE'
 # fatto da costruisci.sh
 [terminal]
@@ -94,7 +95,7 @@ command = "/usr/sbin/agreety --cmd /bin/sh"
 user = "_greetd"
 
 [initial_session]
-command = "env WLR_RENDERER=pixman XKB_DEFAULT_LAYOUT=it mshell-compositore"
+command = "env WLR_RENDERER=pixman XKB_DEFAULT_LAYOUT=it mshell-compositore -s mshell-barra"
 user = "utente1"
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"
@@ -120,12 +121,22 @@ done
 #   mshell-compositore    il compositore Wayland (tinywl di wlroots, utente/compositore/)
 #   mshell-prova          l'app di prova: una finestra scura (utente/prove/app-scura.c); si apre
 #                         con Super+spazio finche' non c'e' il cassetto delle app
-echo "3b. compositore e app di prova"
+#   mshell-barra          la barra di stato e i suoi menu (utente/barra/, GTK 4); il suo foglio di
+#                         stile va in /usr/share/mshell/barra/
+# I protocolli dei livelli e dell'elenco delle app non stanno nei pacchetti di Debian: le loro
+# descrizioni sono copiate dai sorgenti di wlroots 0.18.2 in utente/compositore/protocolli/.
+echo "3b. compositore, app di prova e barra"
 C=/tmp/compila
 rm -rf "$C"
 mkdir -p "$C"
 PROTOCOLLI=$(pkg-config --variable=pkgdatadir wayland-protocols)
+MIEI=utente/compositore/protocolli
 wayland-scanner server-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.h"
+wayland-scanner server-header "$MIEI/wlr-layer-shell-unstable-v1.xml" "$C/wlr-layer-shell-unstable-v1-protocol.h"
+wayland-scanner client-header "$MIEI/wlr-foreign-toplevel-management-unstable-v1.xml" \
+    "$C/wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
+wayland-scanner private-code "$MIEI/wlr-foreign-toplevel-management-unstable-v1.xml" \
+    "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c"
 wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
 wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
 gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 wayland-server xkbcommon) \
@@ -133,6 +144,13 @@ gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 way
     $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
     utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
+# gtk4-layer-shell va prima di wayland-client (lo chiede la sua documentazione)
+gcc -O2 -Wall -Werror -I"$C" $(pkg-config --cflags gtk4-layer-shell-0 gtk4 wayland-client) \
+    -o "$RADICE/usr/bin/mshell-barra" utente/barra/*.c \
+    "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c" \
+    $(pkg-config --libs gtk4-layer-shell-0 gtk4 wayland-client)
+mkdir -p "$RADICE/usr/share/mshell/barra"
+cp utente/barra/stile.css "$RADICE/usr/share/mshell/barra/stile.css"
 
 # --- 3c. lo sfondo e il puntatore (risorse/), preparati qui con gli attrezzi ---
 # LO SFONDO: la foto di risorse/sfondi/ portata alla misura dello schermo della macchina
@@ -179,6 +197,14 @@ cat > "$RADICE/usr/share/icons/default/index.theme" <<'FINE'
 [Icon Theme]
 Inherits=mshell
 FINE
+# IL CARATTERE: IBM Plex Sans (decisione della persona), nei pesi che usa il disegno (Regular,
+# Medium, SemiBold), con la sua licenza (OFL), nella cartella standard dei caratteri. fontconfig
+# (arriva con GTK) li trova da solo; il suo indice (la cache) si fa qui una volta, con fc-cache
+# del sistema stesso, invece che a ogni avvio.
+echo "3c. carattere IBM Plex Sans"
+mkdir -p "$RADICE/usr/share/fonts/truetype/ibm-plex-sans"
+cp risorse/caratteri/ibm-plex-sans/* "$RADICE/usr/share/fonts/truetype/ibm-plex-sans/"
+chroot "$RADICE" /usr/bin/fc-cache -f
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
 DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"

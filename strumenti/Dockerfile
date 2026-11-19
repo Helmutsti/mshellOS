@@ -10,7 +10,9 @@
 #   libwlroots-0.18-dev, libwayland-dev, libwayland-bin (wayland-scanner), wayland-protocols,
 #   libxkbcommon-dev, libpixman-1-dev  quello che serve a compilare il compositore (wlroots) e i
 #                               programmi Wayland: le intestazioni e le descrizioni dei protocolli
-#   python3-pil                 Python con Pillow: porta la foto dello sfondo alla misura dello
+#   libgtk-4-dev, libgtk4-layer-shell-dev  le intestazioni di GTK 4 e di gtk4-layer-shell: servono
+#                               a compilare la barra di stato e i suoi menu (mshell-barra, utente/barra/)
+#   python3-pil                Python con Pillow: porta la foto dello sfondo alla misura dello
 #                               schermo, in pixel pronti (strumenti/sfondo.py)
 #   x11-apps                    per xcursorgen (in Debian 13 sta in questo pacchetto): fa il tema
 #                               del puntatore (Xcursor) dalle immagini di risorse/puntatore/
@@ -19,5 +21,5 @@ RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq 
         mmdebstrap dracut-core systemd systemd-sysv systemd-ukify systemd-boot-efi \
         fdisk mtools dosfstools e2fsprogs ca-certificates \
         gcc libc6-dev pkg-config libwlroots-0.18-dev libwayland-dev libwayland-bin wayland-protocols \
-        libxkbcommon-dev libpixman-1-dev python3-pil x11-apps >/dev/null && \
+        libxkbcommon-dev libpixman-1-dev libgtk-4-dev libgtk4-layer-shell-dev python3-pil x11-apps >/dev/null && \
     rm -rf /var/lib/apt/lists/*
