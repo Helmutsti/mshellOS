@@ -50,7 +50,11 @@ for i, x in enumerate(sys.argv):
 PROVA = QUI / "build" / f"prova-{POSTO}"
 RADICE = PROVA / "radice"
 FOTO = PROVA / "foto"
+# Il disco della costruzione completa: nella cartella del progetto; gli agenti lavorano in una copia
+# (.claude/worktrees/<nome>) dove non c'e', e usano quello della cartella principale.
 DISCO_BASE = QUI / "build" / "disco-qemu-pc.img"
+if not DISCO_BASE.exists() and ".claude" in QUI.parts:
+    DISCO_BASE = Path(*QUI.parts[:QUI.parts.index(".claude")]) / "build" / "disco-qemu-pc.img"
 DISCO = PROVA / "disco.img"
 QEMU = r"C:\Program Files\qemu\qemu-system-x86_64.exe"
 FIRMWARE = r"C:\Program Files\qemu\share\edk2-x86_64-code.fd"
