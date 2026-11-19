@@ -47,7 +47,7 @@
 #define MSHELL_VETRO_RAGGIO 4
 
 /* I nomi delle superfici dei livelli che hanno il vetro dietro (vedi in cima). */
-static const char *const mshell_vetro_nomi[] = { "mshell-barra", NULL };
+static const char *const mshell_vetro_nomi[] = { "mshell-barra", "mshell-barra-cassetto", NULL };
 /* I nomi delle superfici dei livelli i cui menu a comparsa sono pannelli (vedi in cima). */
 static const char *const mshell_menu_nomi[] = { "mshell-barra", NULL };
 
@@ -77,11 +77,14 @@ static const struct mshell_ombra mshell_ombre_sovrapposto[MSHELL_STRATI_SOVRAPPO
 /* il pannello delle disposizioni (selettori.c) per ora ne usa uno strato solo, il piu' largo */
 #define mshell_ombra_sovrapposto (mshell_ombre_sovrapposto[2])
 
-/* All'avvio, dopo la scena: i valori della sfocatura del vetro (uguali per tutto). */
-static void mshell_effetti_avvia(struct wlr_scene *scena) {
+/* La sfocatura del vetro (uguale per tutto), a "forza" da 0 a 1: all'avvio 1; la comparsa del
+ * cassetto la fa crescere insieme alla sua opacita' (livelli.c), perche' la sfocatura non segue
+ * l'opacita' delle immagini e comparirebbe di colpo. */
+static void mshell_effetti_vetro_forza(struct wlr_scene *scena, float forza) {
+	int raggio = (int)(MSHELL_VETRO_RAGGIO * forza + 0.5f);
 	struct blur_data vetro = {
-		.num_passes = MSHELL_VETRO_PASSATE,
-		.radius = MSHELL_VETRO_RAGGIO,
+		.num_passes = raggio > 0 ? MSHELL_VETRO_PASSATE : 0,
+		.radius = raggio,
 		.noise = 0.0f,
 		.brightness = 1.0f,
 		.contrast = 1.0f,
@@ -89,6 +92,12 @@ static void mshell_effetti_avvia(struct wlr_scene *scena) {
 	};
 	wlr_scene_set_blur_data(scena, vetro);
 }
+
+/* All'avvio, dopo la scena: i valori della sfocatura del vetro (uguali per tutto). */
+static void mshell_effetti_avvia(struct wlr_scene *scena) {
+	mshell_effetti_vetro_forza(scena, 1.0f);
+}
+
 
 /* Mette lo strato d'ombra "ombra" sotto il riquadro r (coordinate del padre dell'ombra), con gli
  * angoli di raggio "raggio" come il riquadro. Sotto il riquadro l'ombra non si disegna (come in
@@ -176,7 +185,9 @@ static bool mshell_effetti_nome_fra(const char *nome, const char *const *nomi) {
  * alle sue immagini (e a quelle dei suoi menu a comparsa) si sfoca. Si chiama a ogni invio. */
 static void mshell_effetti_vetro_una(struct wlr_scene_buffer *b, int sx, int sy, void *data) {
 	wlr_scene_buffer_set_backdrop_blur(b, true);
-	wlr_scene_buffer_set_backdrop_blur_optimized(b, false);  /* vero: sfoca anche le app sotto */
+	/* la sfocatura conservata (il nodo "sfocato" di tinywl.c): sfondo e app sotto, sfocati una
+	 * volta sola; prima si rifaceva in ogni pezzo ridisegnato e si vedevano dei quadratini */
+	wlr_scene_buffer_set_backdrop_blur_optimized(b, true);
 	wlr_scene_buffer_set_backdrop_blur_ignore_transparent(b, true);
 }
 

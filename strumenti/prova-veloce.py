@@ -276,6 +276,12 @@ def esegui(copione, ser):
             Image.open(ppm).save(FOTO / f"{resto}.png")
             ppm.unlink()
             scrivi(f"foto: {FOTO / (resto + '.png')}")
+        elif cosa == "muovi":
+            # sposta il puntatore sul pixel x, y (schermo 1280x800), senza clic
+            x, y = (int(v) for v in resto.split())
+            qmp.invia({"execute": "input-send-event", "arguments": {"events": [
+                {"type": "abs", "data": {"axis": "x", "value": x * 32767 // 1279}},
+                {"type": "abs", "data": {"axis": "y", "value": y * 32767 // 799}}]}})
         elif cosa == "clic":
             # la misura dello schermo serve per le coordinate assolute: si legge da una foto
             ppm = FOTO / "_misura.ppm"

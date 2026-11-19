@@ -42,6 +42,7 @@ struct mshell_livelli {
 	struct tinywl_server *server;
 	struct wlr_layer_shell_v1 *shell;
 	struct wl_listener nuova_superficie;
+	struct wl_event_source *dissolvenza;  /* il timer della comparsa del cassetto */
 	struct wlr_scene_tree *albero[MSHELL_LIVELLI];  /* un albero della scena per livello */
 	struct wl_list superfici;                       /* mshell_livello.link */
 	struct wlr_layer_surface_v1 *tastiera;          /* l'ultima che ha preso la tastiera */
@@ -59,6 +60,8 @@ struct mshell_livello {
 	struct wl_listener unmap;
 	struct wl_listener destroy;
 	struct wl_listener nuovo_popup;
+	bool visto;          /* gia' comparsa (dall'ultimo map): la dissolvenza e' partita */
+	int64_t appare_da;   /* quando e' cominciata la dissolvenza (0: nessuna) */
 };
 
 /* Un popup che ha per genitore una superficie di un livello. */
@@ -150,6 +153,63 @@ static void mshell_livello_disponi(struct mshell_livello *s) {
 	wlr_scene_layer_surface_v1_configure(s->scena, &tutto, &libero);
 }
 
+/* LA COMPARSA DEL CASSETTO (la persona, 19/11/2026: "deve comparire con un ease-in e non
+ * improvvisamente"): quando la superficie del cassetto compare, la sua opacita' va da 0 a 1 in
+ * MSHELL_DURATA_BREVE (150 ms; la persona: "un po' piu' veloce") con la curva ease-in (parte piano e accelera). Il vetro dietro di lui
+ * (effetti.c) segue la stessa opacita'. Con MSHELL_MENO_MOVIMENTO=1 compare subito. */
+#define MSHELL_CASSETTO "mshell-barra-cassetto"
+
+static void mshell_livello_opacita_una(struct wlr_scene_buffer *b, int sx, int sy, void *data) {
+	wlr_scene_buffer_set_opacity(b, *(float *)data);
+}
+
+/* L'opacita' di adesso (1 se la dissolvenza e' finita) e la mette su tutte le sue immagini. */
+static bool mshell_livello_dissolvi(struct mshell_livello *s, int64_t ora) {
+	float o = 1.0f;
+	if (s->appare_da != 0) {
+		double p = (double)(ora - s->appare_da) / MSHELL_DURATA_BREVE;
+		if (p >= 1) {
+			s->appare_da = 0;
+		} else {
+			o = (float)(p * p * p);  /* ease-in cubica */
+		}
+	}
+	wlr_scene_node_for_each_buffer(&s->scena->tree->node, mshell_livello_opacita_una, &o);
+	mshell_effetti_vetro_forza(s->livelli->server->scene, o);  /* il vetro cresce con lui */
+	return s->appare_da != 0;
+}
+
+static int mshell_livelli_dissolvenza(void *data) {
+	struct mshell_livelli *l = data;
+	int64_t ora = mshell_anim_adesso();
+	bool ancora = false;
+	struct mshell_livello *s;
+	wl_list_for_each(s, &l->superfici, link) {
+		if (s->appare_da != 0) {
+			ancora = mshell_livello_dissolvi(s, ora) || ancora;
+		}
+	}
+	if (ancora) {
+		wl_event_source_timer_update(l->dissolvenza, MSHELL_ANIM_PASSO_MS);
+	}
+	return 0;
+}
+
+/* Vero se si vede un vetro grande: il cassetto aperto o un menu della barra aperto (la presa). */
+static bool mshell_livelli_vetro_aperto(struct tinywl_server *server) {
+	if (mshell_livelli_presa(server)) {
+		return true;
+	}
+	struct mshell_livello *s;
+	wl_list_for_each(s, &server->livelli->superfici, link) {
+		const char *nome = s->superficie->namespace;
+		if (nome != NULL && strcmp(nome, MSHELL_CASSETTO) == 0 && s->superficie->surface->mapped) {
+			return true;
+		}
+	}
+	return false;
+}
+
 static void mshell_livello_commit(struct wl_listener *listener, void *data) {
 	struct mshell_livello *s = wl_container_of(listener, s, commit);
 	struct wlr_layer_surface_v1 *ls = s->superficie;
@@ -166,11 +226,29 @@ static void mshell_livello_commit(struct wl_listener *listener, void *data) {
 		mshell_livello_disponi(s);
 	}
 	mshell_effetti_livello(s->scena->tree, ls->namespace);  /* il vetro, se e' fra i suoi (effetti.c) */
+	if (ls->surface->mapped && !s->visto && ls->namespace != NULL &&
+			strcmp(ls->namespace, MSHELL_CASSETTO) == 0) {
+		s->visto = true;  /* il cassetto e' appena comparso: parte la dissolvenza */
+		wlr_scene_optimized_blur_mark_dirty(l->server->sfocato);  /* sotto, com'e' adesso */
+		if (!mshell_anim_spenta()) {
+			s->appare_da = mshell_anim_adesso();
+			wl_event_source_timer_update(l->dissolvenza, MSHELL_ANIM_PASSO_MS);
+		}
+	}
+	if (s->appare_da != 0) {
+		/* le immagini nuove arrivate con questo invio prendono l'opacita' di adesso */
+		mshell_livello_dissolvi(s, mshell_anim_adesso());
+	}
 	mshell_livelli_tastiera(l, NULL);
 }
 
 static void mshell_livello_unmap(struct wl_listener *listener, void *data) {
 	struct mshell_livello *s = wl_container_of(listener, s, unmap);
+	s->visto = false;  /* la prossima volta che compare, di nuovo la dissolvenza */
+	if (s->appare_da != 0) {
+		s->appare_da = 0;  /* chiuso a meta' comparsa: il vetro torna pieno per gli altri */
+		mshell_effetti_vetro_forza(s->livelli->server->scene, 1.0f);
+	}
 	mshell_livelli_tastiera(s->livelli, s->superficie);
 }
 
@@ -226,6 +304,8 @@ static void mshell_livello_nuovo_popup(struct wl_listener *listener, void *data)
 	struct mshell_livello *s = wl_container_of(listener, s, nuovo_popup);
 	struct wlr_xdg_popup *popup = data;
 	popup->base->data = wlr_scene_xdg_surface_create(s->scena->tree, popup->base);
+	/* un menu che si apre: la sfocatura conservata riparte da com'e' lo schermo adesso */
+	wlr_scene_optimized_blur_mark_dirty(s->livelli->server->sfocato);
 	struct mshell_popup_livello *p = calloc(1, sizeof(*p));
 	p->popup = popup;
 	p->genitore = s;
@@ -395,6 +475,8 @@ static void mshell_livelli_crea(struct tinywl_server *server) {
 	server->livelli = l;
 	l->server = server;
 	wl_list_init(&l->superfici);
+	l->dissolvenza = wl_event_loop_add_timer(wl_display_get_event_loop(server->wl_display),
+		mshell_livelli_dissolvenza, l);
 	for (int i = 0; i < MSHELL_LIVELLI; i++) {
 		l->albero[i] = wlr_scene_tree_create(&server->scene->tree);
 	}

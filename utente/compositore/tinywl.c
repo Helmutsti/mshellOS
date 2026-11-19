@@ -56,6 +56,8 @@
 #include <signal.h>    /* MSHELL: kill (Super+spazio alla barra, livelli.c) */
 #include <time.h>
 #include <unistd.h>
+#include <execinfo.h>  /* MSHELL: backtrace, il registro delle cadute */
+#include <fcntl.h>     /* MSHELL: open, il registro */
 #include <wayland-server-core.h>
 /* MSHELL: la scena e il disegno di SceneFX (effetti.c). La scena va prima di tutto: ha lo
  * stesso nome e la stessa protezione di quella di wlroots, che cosi' non entra piu'. */
@@ -196,6 +198,12 @@ struct tinywl_server {
 	bool alt_usato;   /* con Alt giu' si e' usata una combinazione (Super+Alt+numero) */
 	bool alt_tenuto;  /* Alt tenuto oltre MSHELL_TENUTO_MS: si vede il navigatore dei desktop */
 	struct mshell_livelli *livelli;  /* MSHELL: i livelli e l'elenco delle app (livelli.c) */
+	/* MSHELL: LA SFOCATURA CONSERVATA (effetti.c): un nodo della scena sopra i desktop e sotto
+	 * i livelli in alto; quando e' "sporco" sfoca una volta sola quello che c'e' sotto di lui
+	 * (sfondo e app) e lo conserva. Il vetro del cassetto e dei menu usa quell'immagine: il
+	 * puntatore o un'icona che cambiano ridisegnano solo il loro pezzo, senza rifare la
+	 * sfocatura (niente quadratini, poca fatica). */
+	struct wlr_scene_optimized_blur *sfocato;
 };
 
 struct tinywl_output {
@@ -327,6 +335,7 @@ static void mshell_selettori_alt(struct tinywl_server *server, bool premuto);
 static void mshell_selettori_lampo(struct tinywl_server *server);
 static bool mshell_selettori_disposizioni_aperta(void);
 static void mshell_selettori_chiudi(struct tinywl_server *server);
+static bool mshell_livelli_vetro_aperto(struct tinywl_server *server);
 static void mshell_selettori_puntini(struct tinywl_server *server);
 
 /* MSHELL: I DESKTOP, le funzioni (le regole sono in cima, "MSHELL: I DESKTOP"). */
@@ -1329,6 +1338,8 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 	/* Atomically applies the new output state. */
 	wlr_output_commit_state(wlr_output, &state);
 	wlr_output_state_finish(&state);
+	/* MSHELL: la sfocatura conservata e' grande come lo schermo */
+	wlr_scene_optimized_blur_set_size(server->sfocato, wlr_output->width, wlr_output->height);
 
 	/* Allocates and configures our state for this output */
 	struct tinywl_output *output = calloc(1, sizeof(*output));
@@ -1432,6 +1443,10 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 		mshell_effetti_app(toplevel->scene_tree, toplevel->xdg_toplevel->base);
 	}
 	mshell_anim_dopo_invio(toplevel);  /* MSHELL: l'opacita' se sta comparendo (animazioni.c) */
+	if (mshell_livelli_vetro_aperto(toplevel->server)) {
+		/* MSHELL: l'app sotto il vetro e' cambiata: la sfocatura conservata va rifatta */
+		wlr_scene_optimized_blur_mark_dirty(toplevel->server->sfocato);
+	}
 }
 
 static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
@@ -1706,7 +1721,37 @@ male:
 	fclose(f);
 }
 
+/* MSHELL: IL REGISTRO DEL COMPOSITORE. I suoi messaggi (stderr) vanno in
+ * /var/tmp/mshell-compositore.log (la partizione dei dati: resta anche dopo una caduta o un
+ * riavvio; il registro di prima si tiene in .prima). Se il compositore cade (memoria sbagliata,
+ * abort), scrive li' l'elenco delle funzioni in cui si trovava, per capire dove. */
+#define MSHELL_REGISTRO "/var/tmp/mshell-compositore.log"
+static void mshell_registro_caduta(int segnale) {
+	void *dove[64];
+	int n = backtrace(dove, 64);
+	const char testa[] = "\nMSHELL: CADUTA, le funzioni in cui si trovava:\n";
+	ssize_t w = write(STDERR_FILENO, testa, sizeof(testa) - 1);
+	(void)w;
+	backtrace_symbols_fd(dove, n, STDERR_FILENO);
+	fsync(STDERR_FILENO);  /* sul disco subito: se poi la macchina si spegne di colpo, resta */
+	signal(segnale, SIG_DFL);
+	raise(segnale);
+}
+
+static void mshell_registro_avvia(void) {
+	rename(MSHELL_REGISTRO, MSHELL_REGISTRO ".prima");
+	int fd = open(MSHELL_REGISTRO, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (fd >= 0) {
+		dup2(fd, STDERR_FILENO);
+		close(fd);
+	}
+	signal(SIGSEGV, mshell_registro_caduta);
+	signal(SIGABRT, mshell_registro_caduta);
+	signal(SIGBUS, mshell_registro_caduta);
+}
+
 int main(int argc, char *argv[]) {
+	mshell_registro_avvia();  /* MSHELL: messaggi e cadute in /var/tmp/mshell-compositore.log */
 	wlr_log_init(WLR_DEBUG, NULL);
 	char *startup_cmd = NULL;
 
@@ -1807,10 +1852,15 @@ int main(int argc, char *argv[]) {
 	if (!wl_list_empty(&mshell_fondo->children)) {
 		struct wlr_scene_node *n = wl_container_of(mshell_fondo->children.next, n, link);
 		if (n->type == WLR_SCENE_NODE_BUFFER) {
-			server.sfondo = wlr_scene_buffer_from_node(n)->buffer;
+			/* la si tiene (lock): i desktop si creano e si tolgono, e se l'ultima copia nella
+			 * scena se ne va l'immagine verrebbe buttata; senza, creare un desktop dopo averne
+			 * tolti faceva cadere il compositore (la persona, 19/11/2026) */
+			server.sfondo = wlr_buffer_lock(wlr_scene_buffer_from_node(n)->buffer);
 		}
 	}
 	server.albero_desktop = wlr_scene_tree_create(&server.scene->tree);
+	server.sfocato = wlr_scene_optimized_blur_create(&server.scene->tree, 0, 0);
+	wlr_scene_node_place_above(&server.sfocato->node, &server.albero_desktop->node);
 	server.attuale = mshell_nuovo_desktop(&server);
 	wlr_scene_node_set_enabled(&server.desktop[server.attuale].albero->node, true);
 	/* MSHELL: il livello della cornice e dei selettori, sopra i desktop (selettori.c) */

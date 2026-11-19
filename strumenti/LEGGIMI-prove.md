@@ -24,6 +24,7 @@ Una istruzione per riga o separate da `;`; `#` per i commenti.
 | `tasti meta_l-tab` | preme e lascia una combinazione (nomi di QEMU: `meta_l` = Start, `spc`, `ret`, `esc`, `up`, `left`...) |
 | `tieni meta_l` / `lascia meta_l` | tiene premuto un tasto e lo lascia (es. per la cornice del focus) |
 | `scrivi prova` | scrive lettere, cifre e spazi |
+| `muovi 640 400` | sposta il puntatore sul pixel x y (schermo 1280x800), senza clic |
 | `aspetta 300` | aspetta i millisecondi |
 | `clic 1200 16` | clic con il tasto sinistro sul pixel x, y dello schermo |
 | `foto nome` | foto dello schermo in `build/prova-<posto>/foto/nome.png` |
