@@ -5,8 +5,10 @@
 
 /* LE ICONE (icone.c): disegnate con cairo dai tracciati delle icone Lucide, nel colore del
  * testo del widget (la proprieta' CSS "color"). */
-enum mshell_icona { ICONA_CAMPANELLA, ICONA_MENU, ICONA_FRECCIA_SINISTRA, ICONA_FRECCIA_DESTRA };
-GtkWidget *mshell_icona_nuova(enum mshell_icona quale);
+enum mshell_icona { ICONA_CAMPANELLA, ICONA_MENU, ICONA_FRECCIA_SINISTRA, ICONA_FRECCIA_DESTRA,
+	ICONA_CERCA };
+GtkWidget *mshell_icona_nuova(enum mshell_icona quale);                      /* 16 px */
+GtkWidget *mshell_icona_nuova_misura(enum mshell_icona quale, int misura);
 
 /* I NOMI ITALIANI di giorni e mesi (calendario.c): fatti a mano, perche' le traduzioni del
  * sistema (locale) potrebbero non esserci. */
@@ -26,3 +28,11 @@ GtkWidget *mshell_comandi_nuovi(void);
 /* L'ELENCO DELLE APP (elenco-app.c): chiama "cambiato" con il titolo dell'app col focus ("" se
  * nessuna) ogni volta che cambia. */
 void mshell_elenco_app_avvia(void (*cambiato)(const char *titolo));
+/* Se c'e' gia' un'app aperta con uno di questi nomi (app_id; l'elenco finisce con NULL), chiede
+ * al compositore di attivarla e da' vero. */
+gboolean mshell_elenco_app_attiva(const char *const *nomi);
+
+/* IL CASSETTO DELLE APP (cassetto.c). "cambiato" si chiama quando si apre (TRUE) o si chiude. */
+void mshell_cassetto_crea(const char *tema, void (*cambiato)(gboolean aperto));
+void mshell_cassetto_apri_chiudi(void);
+void mshell_cassetto_minuto(GDateTime *adesso);  /* l'orologio grande */

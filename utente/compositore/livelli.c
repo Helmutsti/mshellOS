@@ -25,7 +25,14 @@
  * agli altri programmi quali app ci sono, con titolo e nome, e quale ha il focus: la barra ci
  * legge il titolo da mostrare a sinistra. Una voce nasce quando l'app compare, sparisce con lei,
  * e il titolo si aggiorna quando l'app lo cambia. "Ha il focus" vuol dire: e' l'app col focus
- * del desktop che si vede, anche mentre un menu della barra tiene la tastiera. */
+ * del desktop che si vede, anche mentre un menu della barra tiene la tastiera.
+ * Chi legge l'elenco puo' anche chiedere di ATTIVARE un'app: il cassetto delle app lo fa quando
+ * si sceglie un'app gia' aperta. Il compositore passa al desktop che la ospita e le da' il focus.
+ *
+ * IL CASSETTO DELLE APP lo disegna la barra (mshell-barra, utente/barra/cassetto.c). Super+spazio
+ * lo prende il compositore, che lo dice alla barra con il segnale SIGUSR1 ("apri o chiudi"): la
+ * barra e' il programma che ha le superfici con il nome "mshell-barra..." (il namespace dei
+ * livelli), e il suo numero di processo lo sa la connessione Wayland. */
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 
@@ -262,6 +269,25 @@ static void mshell_elenco_titolo(struct wl_listener *listener, void *data) {
 	wlr_foreign_toplevel_handle_v1_set_title(t->voce, titolo ? titolo : "");
 }
 
+/* Qualcuno (il cassetto) chiede di attivare l'app t: si passa al suo desktop, scorrendo verso
+ * di lui, e lei prende il focus. Se la tastiera e' del cassetto, l'app la prende quando il
+ * cassetto si chiude (mshell_livelli_tastiera). */
+static void mshell_elenco_richiesta_attiva(struct wl_listener *listener, void *data) {
+	struct tinywl_toplevel *t = wl_container_of(listener, t, attiva);
+	struct tinywl_server *server = t->server;
+	if (t->desktop < 0) {
+		return;
+	}
+	struct mshell_desktop *d = &server->desktop[t->desktop];
+	for (int i = 0; i < d->n; i++) {
+		if (d->app[i] == t) {
+			d->focus = i;
+		}
+	}
+	int verso = t->desktop == server->attuale ? 0 : (t->desktop > server->attuale ? 1 : -1);
+	mshell_mostra_verso(server, t->desktop, verso);
+}
+
 static void mshell_elenco_compare(struct tinywl_toplevel *t) {
 	t->voce = wlr_foreign_toplevel_handle_v1_create(t->server->livelli->elenco);
 	if (t->xdg_toplevel->app_id != NULL) {
@@ -270,6 +296,8 @@ static void mshell_elenco_compare(struct tinywl_toplevel *t) {
 	t->titolo.notify = mshell_elenco_titolo;
 	wl_signal_add(&t->xdg_toplevel->events.set_title, &t->titolo);
 	mshell_elenco_titolo(&t->titolo, NULL);
+	t->attiva.notify = mshell_elenco_richiesta_attiva;
+	wl_signal_add(&t->voce->events.request_activate, &t->attiva);
 }
 
 /* L'app t sparisce: anche la sua voce. */
@@ -278,6 +306,7 @@ static void mshell_elenco_sparisce(struct tinywl_toplevel *t) {
 		return;
 	}
 	wl_list_remove(&t->titolo.link);
+	wl_list_remove(&t->attiva.link);
 	wlr_foreign_toplevel_handle_v1_destroy(t->voce);
 	t->voce = NULL;
 }
@@ -296,6 +325,22 @@ static void mshell_elenco_attiva(struct tinywl_server *server, struct tinywl_top
 			wlr_foreign_toplevel_handle_v1_set_activated(x->voce, attiva);
 		}
 	}
+}
+
+/* Super+spazio: dice alla barra di aprire o chiudere il cassetto (SIGUSR1, vedi in cima). */
+static void mshell_livelli_cassetto(struct tinywl_server *server) {
+	struct mshell_livello *s;
+	wl_list_for_each(s, &server->livelli->superfici, link) {
+		const char *nome = s->superficie->namespace;
+		if (nome != NULL && strncmp(nome, "mshell-barra", strlen("mshell-barra")) == 0) {
+			pid_t pid;
+			wl_client_get_credentials(wl_resource_get_client(s->superficie->resource), &pid,
+				NULL, NULL);
+			kill(pid, SIGUSR1);
+			return;
+		}
+	}
+	wlr_log(WLR_ERROR, "mshell: niente cassetto, la barra non c'e'");
 }
 
 /* Prepara tutto, all'avvio, dopo l'albero dei desktop: gli alberi dei livelli sotto e sopra i

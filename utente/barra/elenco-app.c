@@ -3,7 +3,10 @@
  * Di ogni app arrivano titolo e stato a pezzi, chiusi da "done"; alla fine la barra mostra il
  * titolo dell'app "attiva", cioe' quella col focus.
  * La connessione al compositore e' quella di GTK: i messaggi di questo protocollo arrivano nello
- * stesso giro di GTK, senza un filo a parte. */
+ * stesso giro di GTK, senza un filo a parte.
+ * Lo usa anche il cassetto delle app (cassetto.c): di ogni app si tiene il nome (app_id), e se
+ * l'app che si vuole lanciare e' gia' aperta il cassetto chiede al compositore di attivarla
+ * (mshell_elenco_app_attiva): il compositore passa al desktop che la ospita. */
 #include <string.h>
 #include <gdk/wayland/gdkwayland.h>
 #include "barra.h"
@@ -13,11 +16,13 @@ struct app {
 	struct zwlr_foreign_toplevel_handle_v1 *voce;
 	char *titolo;          /* quello confermato da "done" */
 	char *titolo_nuovo;    /* arrivato, in attesa di "done" */
+	char *nome;            /* l'app_id, per esempio "mshell-prova" (NULL se non lo dice) */
 	gboolean attiva, attiva_nuova;
 };
 
 static GList *app;  /* struct app */
 static void (*avvisa)(const char *titolo);
+static struct wl_seat *posto;  /* il "posto" (seat) di GTK: serve per chiedere l'attivazione */
 
 static void ricalcola(void) {
 	const char *titolo = "";
@@ -37,6 +42,9 @@ static void v_titolo(void *dati, struct zwlr_foreign_toplevel_handle_v1 *v, cons
 }
 
 static void v_app_id(void *dati, struct zwlr_foreign_toplevel_handle_v1 *v, const char *id) {
+	struct app *a = dati;
+	g_free(a->nome);
+	a->nome = g_strdup(id);
 }
 
 static void v_schermo_entra(void *dati, struct zwlr_foreign_toplevel_handle_v1 *v,
@@ -75,8 +83,25 @@ static void v_chiusa(void *dati, struct zwlr_foreign_toplevel_handle_v1 *v) {
 	zwlr_foreign_toplevel_handle_v1_destroy(a->voce);
 	g_free(a->titolo);
 	g_free(a->titolo_nuovo);
+	g_free(a->nome);
 	g_free(a);
 	ricalcola();
+}
+
+gboolean mshell_elenco_app_attiva(const char *const *nomi) {
+	if (posto == NULL) {
+		return FALSE;
+	}
+	for (GList *i = app; i; i = i->next) {
+		struct app *a = i->data;
+		for (int n = 0; a->nome != NULL && nomi[n] != NULL; n++) {
+			if (strcmp(a->nome, nomi[n]) == 0) {
+				zwlr_foreign_toplevel_handle_v1_activate(a->voce, posto);
+				return TRUE;
+			}
+		}
+	}
+	return FALSE;
 }
 
 static void v_genitore(void *dati, struct zwlr_foreign_toplevel_handle_v1 *v,
@@ -134,6 +159,7 @@ void mshell_elenco_app_avvia(void (*cambiato)(const char *titolo)) {
 		g_warning("non e' Wayland: niente titolo dell'app");
 		return;
 	}
+	posto = gdk_wayland_seat_get_wl_seat(gdk_display_get_default_seat(schermo));
 	struct wl_display *d = gdk_wayland_display_get_wl_display(GDK_WAYLAND_DISPLAY(schermo));
 	struct wl_registry *r = wl_display_get_registry(d);
 	wl_registry_add_listener(r, &ascolta_registro, NULL);

@@ -22,6 +22,8 @@
 	--controllo-selezione-vetro: rgba(255, 255, 255, 0.12);
 	--azione-sfondo: #c4c4c7;
 	--azione-testo: #242427;
+	--superficie-incassata: #242427;
+	--bordo-focus: #e3e3e5;
 }
 
 .chiaro {
@@ -34,6 +36,8 @@
 	--controllo-selezione-vetro: rgba(0, 0, 0, 0.08);
 	--azione-sfondo: #4c4c52;
 	--azione-testo: #fafafa;
+	--superficie-incassata: #f2f2f3;
+	--bordo-focus: #4c4c52;
 }
 
 window {
@@ -41,10 +45,16 @@ window {
 	--spazio-8: 8px;
 	--spazio-12: 12px;
 	--spazio-16: 16px;
+	--spazio-20: 20px;
+	--spazio-24: 24px;
 	--spazio-32: 32px;
 	--raggio-6: 6px;
+	--raggio-pannello: 10px;
 	--raggio-12: 12px;
 	--raggio-pillola: 16px;
+	--raggio-icona: 22px;  /* le icone delle app da 96 */
+	/* ombra/incassato: un'ombra dentro in alto e una riga chiara sotto */
+	--ombra-incassato: inset 0 1px 2px rgba(20, 20, 26, 0.07), 0 1px 0 rgba(20, 20, 26, 0.04);
 	/* ombra/sovrapposto: tre ombre, dalla piu' vicina alla piu' larga */
 	--ombra-sovrapposto: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 16px rgba(0, 0, 0, 0.08),
 		0 20px 40px rgba(0, 0, 0, 0.14);
@@ -144,4 +154,104 @@ window {
 	padding: var(--spazio-12);
 	border-radius: var(--raggio-6);
 	background-color: var(--controllo-sfondo);
+}
+
+/* 6. IL CASSETTO DELLE APP (cassetto.c; misure dal disegno "Cassetto app – Chiaro/Scuro").
+ * Tutto lo schermo e' di vetro (per ora senza sfocatura); dentro, a 24 px dai bordi, la colonna
+ * delle app e quella laterale da 320, a 24 px l'una dall'altra. */
+.cassetto {
+	background-color: var(--superficie-vetro);
+}
+
+.contenuto-cassetto {
+	padding: var(--spazio-24);
+	border-spacing: var(--spazio-24);
+}
+
+.colonna-cassetto {
+	border-spacing: var(--spazio-32);
+}
+
+/* la ricerca: una pillola incassata alta 48 (testo/pulsante-l) */
+.ricerca {
+	min-height: 48px;
+	padding: 0 var(--spazio-20);
+	border-spacing: var(--spazio-8);
+	border-radius: 24px;
+	background-color: var(--superficie-incassata);
+	box-shadow: var(--ombra-incassato);
+}
+
+.testo-ricerca {
+	font-weight: 500;
+	font-size: 16px;
+	line-height: 24px;
+	color: var(--testo-primario);
+	caret-color: var(--testo-primario);
+}
+
+.testo-ricerca > placeholder {
+	color: var(--testo-secondario);
+}
+
+.testo-ricerca > selection {
+	background-color: var(--controllo-selezione-vetro);
+}
+
+/* la griglia delle app: 32 px fra le colonne, 24 fra le righe. Il posto ha 4 px intorno per la
+ * cornice dell'app scelta, ripresi in alto dal margine della parte che scorre */
+.scorri-app {
+	margin-top: -4px;
+}
+
+.posto-griglia {
+	padding: 4px;
+}
+
+.griglia-app {
+	border-spacing: var(--spazio-32) var(--spazio-24);  /* in orizzontale, in verticale */
+}
+
+.colonna-app {
+	border-spacing: var(--spazio-8);
+}
+
+.riquadro {
+	border-radius: var(--raggio-icona);
+}
+
+/* senza icona: il riquadro con l'iniziale del nome */
+.riquadro.senza-icona {
+	background-color: var(--controllo-sfondo);
+}
+
+.iniziale {
+	font-weight: 600;
+	font-size: 40px;
+	color: var(--testo-secondario);
+}
+
+.nome-app {
+	letter-spacing: 0.24px;  /* testo/etichetta: spaziatura 2% */
+}
+
+/* l'app scelta con le frecce (quella che parte con Invio): la cornice del focus */
+.app.scelta .riquadro {
+	outline: 2px solid var(--bordo-focus);
+	outline-offset: 2px;
+}
+
+/* la colonna laterale: gli stessi pannelli dei menu, ma appoggiati sul vetro (niente ombra) */
+.colonna-laterale {
+	border-spacing: var(--spazio-16);
+}
+
+.cassetto .pannello {
+	min-width: 0;
+	border-radius: var(--raggio-pannello);
+	box-shadow: none;
+}
+
+.ora-grande {
+	letter-spacing: -0.24px;  /* testo/titolo: spaziatura -1% */
 }

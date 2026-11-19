@@ -1,0 +1,9 @@
+# L'app di prova (mshell-prova, app-scura.c) nel cassetto delle app: il file .desktop standard
+# (freedesktop), installato da costruisci.sh in /usr/share/applications. Senza icona: il cassetto
+# mostra un riquadro con l'iniziale.
+[Desktop Entry]
+Type=Application
+Name=Prova
+Comment=L'app di prova di mshell: una finestra scura
+Exec=mshell-prova
+Terminal=false
