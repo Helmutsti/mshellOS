@@ -118,15 +118,21 @@ done
 # --- 3b. i programmi di mshell (utente/), compilati qui con le librerie degli attrezzi, che
 # sono le stesse del sistema (Debian 13) ---
 #   mshell-compositore    il compositore Wayland (tinywl di wlroots, utente/compositore/)
-echo "3b. compositore"
+#   mshell-prova          l'app di prova: una finestra scura (utente/prove/app-scura.c); si apre
+#                         con Super+spazio finche' non c'e' il cassetto delle app
+echo "3b. compositore e app di prova"
 C=/tmp/compila
 rm -rf "$C"
 mkdir -p "$C"
 PROTOCOLLI=$(pkg-config --variable=pkgdatadir wayland-protocols)
 wayland-scanner server-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.h"
+wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
+wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
 gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 wayland-server xkbcommon) \
     -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c \
     $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
+gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
+    utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
 
 # --- 3c. lo sfondo e il puntatore (risorse/), preparati qui con gli attrezzi ---
 # LO SFONDO: la foto di risorse/sfondi/ portata alla misura dello schermo della macchina
