@@ -26,8 +26,9 @@
  * poche decine di rettangoli e costa poco, e cosi' le miniature non possono restare indietro
  * rispetto ai desktop. Le due immagini (lo sfondo rimpicciolito e la sfumatura) invece si
  * calcolano una volta sola, e di nuovo solo se cambia la misura dello schermo.
- * Il disegno con il processore (pixman) non fa angoli arrotondati ne' sfocatura: il vetro qui e'
- * un colore semitrasparente; il resto arrivera' con scenefx. */
+ * GLI EFFETTI (SceneFX, effetti.c): la cornice, i contorni, le miniature e le app dentro di loro
+ * hanno gli angoli arrotondati; le miniature dei desktop e il pannello delle disposizioni hanno la
+ * loro ombra. Il vetro dei selettori resta un colore semitrasparente: nel disegno non e' sfocato. */
 
 #define MSHELL_TENUTO_MS 400       /* proposta, da confermare: oltre, Super giu' da solo apre il
                                     * selettore dei desktop */
@@ -128,23 +129,39 @@ static struct {
 
 /* Un rettangolo pieno. I colori si scrivono "dritti" (come nel disegno), ma wlroots li vuole con
  * il rosso, il verde e il blu gia' moltiplicati per l'opacita': lo si fa qui. */
-static void mshell_sel_rett(struct wlr_scene_tree *padre, int x, int y, int l, int a,
-		float r, float g, float b, float alfa) {
+/* "raggio" e' quello degli angoli (0: dritti). */
+static struct wlr_scene_rect *mshell_sel_rett(struct wlr_scene_tree *padre, int x, int y, int l,
+		int a, int raggio, float r, float g, float b, float alfa) {
 	if (l <= 0 || a <= 0) {
-		return;
+		return NULL;
 	}
 	const float colore[4] = { r * alfa, g * alfa, b * alfa, alfa };
 	struct wlr_scene_rect *rett = wlr_scene_rect_create(padre, l, a, colore);
 	wlr_scene_node_set_position(&rett->node, x, y);
+	if (raggio > 0) {
+		wlr_scene_rect_set_corner_radius(rett, raggio, CORNER_LOCATION_ALL);
+	}
+	return rett;
 }
 
-/* Il contorno di spessore MSHELL_INDICATORE tutto FUORI dal riquadro (che resta intero). */
-static void mshell_sel_contorno(struct wlr_scene_tree *padre, struct wlr_box r) {
+/* Il contorno tutto FUORI dal riquadro r (che resta intero), arrotondato in tutti gli angoli:
+ * MSHELL_INDICATORE a sinistra, a destra e sotto, "sopra" in alto (la cornice del focus ci ha la
+ * sua fascia). E' un rettangolo solo, con un buco grande come il riquadro e con i suoi angoli di
+ * raggio "raggio"; fuori gli angoli hanno il raggio piu' lo spessore, cosi' il contorno gira
+ * intorno all'angolo con lo stesso spessore. */
+static void mshell_sel_contorno(struct wlr_scene_tree *padre, struct wlr_box r, int sopra,
+		int raggio) {
 	int s = MSHELL_INDICATORE;
-	mshell_sel_rett(padre, r.x - s, r.y - s, r.width + 2 * s, s, MSHELL_COLORE_FOCUS);
-	mshell_sel_rett(padre, r.x - s, r.y + r.height, r.width + 2 * s, s, MSHELL_COLORE_FOCUS);
-	mshell_sel_rett(padre, r.x - s, r.y, s, r.height, MSHELL_COLORE_FOCUS);
-	mshell_sel_rett(padre, r.x + r.width, r.y, s, r.height, MSHELL_COLORE_FOCUS);
+	struct wlr_scene_rect *rett = mshell_sel_rett(padre, r.x - s, r.y - sopra,
+		r.width + 2 * s, r.height + sopra + s, raggio + s, MSHELL_COLORE_FOCUS);
+	if (rett == NULL) {
+		return;
+	}
+	wlr_scene_rect_set_clipped_region(rett, (struct clipped_region){
+		.area = { s, sopra, r.width, r.height },
+		.corner_radius = raggio,
+		.corners = CORNER_LOCATION_ALL,
+	});
 }
 
 /* Il pixel dello sfondo che sta sotto il punto (x, y) dello schermo: nero fuori dall'immagine,
@@ -270,9 +287,10 @@ static void mshell_sel_miniatura(struct wlr_scene_tree *padre, int x, int y,
 	wlr_scene_node_set_position(&albero->node, x, y);
 	struct mshell_pixel *sfondo = mshell_sel_mini_sfondo(schermo, ml, ma);
 	if (sfondo != NULL) {
-		wlr_scene_buffer_create(albero, &sfondo->base);
+		struct wlr_scene_buffer *b = wlr_scene_buffer_create(albero, &sfondo->base);
+		wlr_scene_buffer_set_corner_radius(b, MSHELL_RAGGIO_CONTROLLO, CORNER_LOCATION_ALL);
 	} else {
-		mshell_sel_rett(albero, 0, 0, ml, ma, 0.0f, 0.0f, 0.0f, 1.0f);
+		mshell_sel_rett(albero, 0, 0, ml, ma, MSHELL_RAGGIO_CONTROLLO, 0.0f, 0.0f, 0.0f, 1.0f);
 	}
 	if (n <= 0) {
 		return;
@@ -280,6 +298,8 @@ static void mshell_sel_miniatura(struct wlr_scene_tree *padre, int x, int y,
 	if (scelta >= mshell_quante_scelte[n]) {
 		scelta = 0;  /* come in mshell_disponi */
 	}
+	/* le app hanno gli angoli delle finestre, in scala (12 diventa 2) */
+	int raggio = mshell_sel_scala(MSHELL_RAGGIO_FINESTRA, ml, schermo.width);
 	struct wlr_box area = {
 		.x = MSHELL_BORDO, .y = MSHELL_BORDO,
 		.width = schermo.width - 2 * MSHELL_BORDO, .height = schermo.height - 2 * MSHELL_BORDO,
@@ -290,7 +310,7 @@ static void mshell_sel_miniatura(struct wlr_scene_tree *padre, int x, int y,
 		int y0 = mshell_sel_scala(p.y, ma, schermo.height);
 		int x1 = mshell_sel_scala(p.x + p.width, ml, schermo.width);
 		int y1 = mshell_sel_scala(p.y + p.height, ma, schermo.height);
-		mshell_sel_rett(albero, x0, y0, x1 - x0, y1 - y0, MSHELL_COLORE_VETRO);
+		mshell_sel_rett(albero, x0, y0, x1 - x0, y1 - y0, raggio, MSHELL_COLORE_VETRO);
 		/* QUI andra' l'icona dell'app, al centro del suo rettangolo: le icone delle app ancora
 		 * non ci sono. */
 	}
@@ -305,11 +325,9 @@ static void mshell_sel_cornice(struct tinywl_server *server) {
 	/* il punto dove si vede l'app adesso: se sta scorrendo (animazioni.c), la cornice la segue */
 	struct wlr_box p = d->app[d->focus]->posto;
 	mshell_anim_dove(d->app[d->focus], &p.x, &p.y);
-	mshell_sel_contorno(mshell_sel.livello, p);
-	/* la fascia: attaccata sopra l'app, larga quanto l'app piu' i due contorni; copre anche il
-	 * contorno di sopra, che e' dello stesso colore */
-	mshell_sel_rett(mshell_sel.livello, p.x - MSHELL_INDICATORE, p.y - MSHELL_FASCIA,
-		p.width + 2 * MSHELL_INDICATORE, MSHELL_FASCIA, MSHELL_COLORE_FOCUS);
+	/* il contorno con, in alto, la fascia: attaccata sopra l'app, larga quanto l'app piu' i due
+	 * contorni; gira intorno agli angoli arrotondati dell'app */
+	mshell_sel_contorno(mshell_sel.livello, p, MSHELL_FASCIA, MSHELL_RAGGIO_FINESTRA);
 	/* QUI andranno, nella fascia, il titolo dell'app e il pulsante X per chiuderla. Per
 	 * scrivere il titolo serve una libreria di caratteri, e quale usare lo decide la persona. */
 }
@@ -334,9 +352,10 @@ static void mshell_sel_desktop(struct tinywl_server *server, struct wlr_box sche
 			.width = ml, .height = ma,
 		};
 		struct mshell_desktop *d = &server->desktop[i];
+		mshell_effetti_ombra(mshell_sel.livello, m, MSHELL_RAGGIO_CONTROLLO, &mshell_ombra_sollevato);
 		mshell_sel_miniatura(mshell_sel.livello, m.x, m.y, schermo, ml, ma, d->n, d->scelta);
 		if (i == server->attuale) {
-			mshell_sel_contorno(mshell_sel.livello, m);
+			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_RAGGIO_CONTROLLO);
 		}
 	}
 }
@@ -355,7 +374,10 @@ static void mshell_sel_disposizioni(struct tinywl_server *server, struct wlr_box
 	int a = 2 * MSHELL_SEL_SPAZIO_24 + ma;
 	int x = schermo.x + (schermo.width - l) / 2;
 	int y = schermo.y + (schermo.height - a) / 2;
-	mshell_sel_rett(mshell_sel.livello, x, y, l, a, MSHELL_COLORE_VETRO);
+	struct wlr_box pannello = { x, y, l, a };
+	mshell_effetti_ombra(mshell_sel.livello, pannello, MSHELL_RAGGIO_FINESTRA,
+		&mshell_ombra_sovrapposto);
+	mshell_sel_rett(mshell_sel.livello, x, y, l, a, MSHELL_RAGGIO_FINESTRA, MSHELL_COLORE_VETRO);
 	for (int i = 0; i < quante; i++) {
 		struct wlr_box m = {
 			.x = x + MSHELL_SEL_SPAZIO_24 + i * (ml + MSHELL_SEL_SPAZIO_16),
@@ -364,7 +386,7 @@ static void mshell_sel_disposizioni(struct tinywl_server *server, struct wlr_box
 		};
 		mshell_sel_miniatura(mshell_sel.livello, m.x, m.y, schermo, ml, ma, d->n, i);
 		if (i == scelta) {
-			mshell_sel_contorno(mshell_sel.livello, m);
+			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_RAGGIO_CONTROLLO);
 		}
 	}
 }

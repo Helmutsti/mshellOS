@@ -19,6 +19,9 @@
  *   - I LIVELLI E L'ELENCO DELLE APP (per la barra di stato): i protocolli layer-shell e
  *     wlr-foreign-toplevel-management. Il codice e' in livelli.c (spiegato in testa a quel
  *     file), incluso piu' sotto; qui ci sono solo gli agganci, segnati "MSHELL:".
+ *   - GLI EFFETTI CON SCENEFX: la scena e il disegno (OpenGL ES 2) sono quelli di SceneFX invece
+ *     di quelli di wlroots, per gli angoli arrotondati, il vetro sfocato e le ombre. Il codice e'
+ *     in effetti.c (incluso da questo file, spiegato in testa); qui ci sono le chiamate.
  * Tutto il resto e' il file originale. La tastiera italiana e il puntatore di mshell non
  * cambiano il codice: vengono da XKB_DEFAULT_LAYOUT e dal tema Xcursor "default" (costruisci.sh).
  *
@@ -40,8 +43,8 @@
  *   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  *   DEALINGS IN THE SOFTWARE.
  *
- * COME SI USA: mshell-compositore [-s comando]. Disegna solo con il processore se si avvia
- * con WLR_RENDERER=pixman; "-s" fa partire un programma gia' collegato (WAYLAND_DISPLAY).
+ * COME SI USA: mshell-compositore [-s comando]. Disegna sempre con OpenGL ES 2 (SceneFX); senza
+ * scheda video vera ci vuole WLR_RENDERER_ALLOW_SOFTWARE=1 (effetti.c); "-s" fa partire un programma gia' collegato (WAYLAND_DISPLAY).
  * Alt+Esc chiude il compositore; i tasti della scrivania sono nel blocco "MSHELL: I DESKTOP".
  * Si compila in costruisci.sh. */
 #include <assert.h>
@@ -54,6 +57,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
+/* MSHELL: la scena e il disegno di SceneFX (effetti.c). La scena va prima di tutto: ha lo
+ * stesso nome e la stessa protezione di quella di wlroots, che cosi' non entra piu'. */
+#include <scenefx/types/wlr_scene.h>
+#include <scenefx/render/fx_renderer/fx_renderer.h>
 #include <wlr/backend.h>
 #include <wlr/interfaces/wlr_buffer.h>  /* MSHELL: per lo sfondo */
 #include <drm_fourcc.h>                 /* MSHELL: per lo sfondo */
@@ -67,7 +74,6 @@
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
-#include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -590,6 +596,7 @@ static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t qu
 	}
 }
 
+#include "effetti.c"  /* MSHELL: angoli arrotondati, vetro sfocato e ombre (SceneFX) */
 #include "animazioni.c"  /* MSHELL: le animazioni (cambio di desktop, posti, comparire, chiudere) */
 #include "selettori.c"  /* MSHELL: la cornice del focus e i selettori */
 #include "livelli.c"  /* MSHELL: i livelli e l'elenco delle app */
@@ -1188,6 +1195,8 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 	} else if (toplevel->desktop >= 0) {
 		/* MSHELL: la geometria dell'app puo' cambiare a ogni invio: si rimette al posto */
 		mshell_metti_al_posto(toplevel);
+		/* MSHELL: gli angoli arrotondati, sulla finestra vera dell'app (effetti.c) */
+		mshell_effetti_app(toplevel->scene_tree, toplevel->xdg_toplevel->base);
 	}
 	mshell_anim_dopo_invio(toplevel);  /* MSHELL: l'opacita' se sta comparendo (animazioni.c) */
 }
@@ -1501,8 +1510,10 @@ int main(int argc, char *argv[]) {
 	/* Autocreates a renderer, either Pixman, GLES2 or Vulkan for us. The user
 	 * can also specify a renderer using the WLR_RENDERER env var.
 	 * The renderer is responsible for defining the various pixel formats it
-	 * supports for shared memory, this configures that for clients. */
-	server.renderer = wlr_renderer_autocreate(server.backend);
+	 * supports for shared memory, this configures that for clients.
+	 * MSHELL: non si sceglie: e' sempre quello di SceneFX (OpenGL ES 2), l'unico che sa fare
+	 * gli effetti (effetti.c). WLR_RENDERER non conta piu'. */
+	server.renderer = fx_renderer_create(server.backend);
 	if (server.renderer == NULL) {
 		wlr_log(WLR_ERROR, "failed to create wlr_renderer");
 		return 1;
@@ -1550,6 +1561,7 @@ int main(int argc, char *argv[]) {
 	 */
 	server.scene = wlr_scene_create();
 	server.scene_layout = wlr_scene_attach_output_layout(server.scene, server.output_layout);
+	mshell_effetti_avvia(server.scene);  /* MSHELL: la sfocatura del vetro (effetti.c) */
 
 	/* MSHELL: lo sfondo, in un albero tutto suo creato per primo: le finestre, aggiunte dopo
 	 * alla scena, stanno tutte sopra. Non e' una superficie, quindi i clic lo attraversano

@@ -2,7 +2,7 @@
 # in QEMU, sul PC Windows. La finestra di QEMU mostra lo schermo (tty1).
 #
 # IL COMPOSITORE PARTE DA SOLO: all'accensione greetd (il gestore dell'accesso) apre la sessione
-# di utente1 senza chiedere niente e lancia mshell-compositore (disegno solo con il processore)
+# di utente1 senza chiedere niente e lancia mshell-compositore (disegno con OpenGL; in QEMU lo fa Mesa con il processore)
 # (per ora senza app: solo lo sfondo e il puntatore). Sullo schermo, Alt+Esc
 # chiude il compositore; allora greetd mostra l'accesso testuale (agreety). La shell
 # dell'amministratore, gia' aperta, sta sulla seriale.

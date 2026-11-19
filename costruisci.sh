@@ -80,7 +80,15 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # collegamento in getty.target) e, come nel greetd originale, i due si escludono.
 # Il pacchetto stesso abilita greetd come display-manager.service (lo vuole graphical.target).
 # Il comando e' con "env" davanti perche' greetd lo lancia come "exec <comando>", e exec non
-# accetta l'assegnazione WLR_RENDERER=pixman (disegno solo con il processore) prima del programma.
+# accetta assegnazioni di variabili prima del programma.
+# WLR_RENDERER_ALLOW_SOFTWARE=1: il compositore disegna con OpenGL ES 2 (SceneFX, per gli effetti:
+# utente/compositore/effetti.c); dove non c'e' una scheda video vera (QEMU) OpenGL lo fa Mesa con
+# il processore (llvmpipe), e senza questa variabile il compositore si rifiuterebbe di partire.
+# LP_NUM_THREADS=0: llvmpipe disegna tutto il fotogramma prima di restituirlo al compositore,
+# invece che in suoi thread a parte. Serve perche' SceneFX 0.2 non dice a nessuno quando il
+# disegno e' finito (non fa le "fence" di wlroots): con una scheda video vera ci pensa il driver,
+# con llvmpipe no, e la scheda video di QEMU mostrava fotogrammi a meta' o vecchi (un menu che
+# non compare finche' non si muove qualcos'altro). Con una scheda video vera non conta.
 # XKB_DEFAULT_LAYOUT=it: LA TASTIERA ITALIANA (decisione della persona). Il compositore chiede a
 # xkbcommon la mappa dei tasti senza dire quale: xkbcommon allora la prende da queste variabili
 # (e i file da xkb-data).
@@ -95,7 +103,7 @@ command = "/usr/sbin/agreety --cmd /bin/sh"
 user = "_greetd"
 
 [initial_session]
-command = "env WLR_RENDERER=pixman XKB_DEFAULT_LAYOUT=it mshell-compositore -s mshell-barra"
+command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it mshell-compositore -s mshell-barra"
 user = "utente1"
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"
@@ -139,9 +147,16 @@ wayland-scanner private-code "$MIEI/wlr-foreign-toplevel-management-unstable-v1.
     "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c"
 wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
 wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
-gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 wayland-server xkbcommon) \
-    -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c \
-    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
+# Il compositore si porta dentro SceneFX (la libreria statica compilata negli attrezzi,
+# strumenti/Dockerfile) e usa le librerie di OpenGL del sistema (EGL, GLES 2, GBM, DRM).
+# --export-dynamic: le funzioni della scena di SceneFX si vedono anche da wlroots, che le chiama
+# per le superfici delle app e dei livelli (spiegato in utente/compositore/effetti.c).
+SCENEFX=$(pkg-config --variable=libdir scenefx-0.2)/libscenefx-0.2.a
+gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" \
+    $(pkg-config --cflags scenefx-0.2 wlroots-0.18 wayland-server xkbcommon) \
+    -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c "$SCENEFX" \
+    -Wl,--export-dynamic \
+    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon egl glesv2 gbm libdrm pixman-1) -lm
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
     utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
 mkdir -p "$RADICE/usr/share/applications"
