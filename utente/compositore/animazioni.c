@@ -217,6 +217,7 @@ static void mshell_anim_desktop(struct tinywl_server *server, int prima, int qua
 	if (prima == quale) {
 		return;  /* lo stesso desktop: quello che si vede non cambia */
 	}
+	mshell_selettori_puntini(server);  /* i puntini sul bordo destro (selettori.c) */
 	mshell_anim_conosci(server);
 	struct wlr_box schermo;
 	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);

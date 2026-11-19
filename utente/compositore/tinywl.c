@@ -173,6 +173,7 @@ struct tinywl_server {
 	struct mshell_desktop desktop[MSHELL_DESKTOP_MAX];
 	int n_desktop;
 	int attuale;          /* il desktop che si vede */
+	struct wlr_buffer *sfondo;  /* l'immagine dello sfondo: ogni desktop ne ha una copia sua */
 	bool super_giu;       /* Super e' tenuto premuto */
 	bool super_usato;     /* mentre era giu' si e' usata una combinazione: non e' un tocco */
 	uint32_t super_tocco; /* quando e' finito l'ultimo tocco di Super da solo (0: nessuno) */
@@ -282,6 +283,7 @@ static void mshell_selettori_aggiorna(struct tinywl_server *server);
 static void mshell_selettori_super(struct tinywl_server *server, bool premuto);
 static void mshell_selettori_desktop(struct tinywl_server *server);
 static void mshell_selettori_disposizioni(struct tinywl_server *server);
+static void mshell_selettori_puntini(struct tinywl_server *server);
 
 /* MSHELL: I DESKTOP, le funzioni (le regole sono in cima, "MSHELL: I DESKTOP"). */
 
@@ -414,6 +416,11 @@ static int mshell_nuovo_desktop(struct tinywl_server *server) {
 	struct mshell_desktop *d = &server->desktop[server->n_desktop];
 	memset(d, 0, sizeof(*d));
 	d->albero = wlr_scene_tree_create(server->albero_desktop);
+	/* lo sfondo sta dentro il desktop, sotto le sue app: quando il desktop scorre, scorre anche
+	 * lui, e il cambio si vede anche se il desktop e' vuoto (decisione della persona) */
+	if (server->sfondo != NULL) {
+		wlr_scene_buffer_create(d->albero, server->sfondo);
+	}
 	wlr_scene_node_set_enabled(&d->albero->node, false);
 	return server->n_desktop++;
 }
@@ -1529,6 +1536,13 @@ int main(int argc, char *argv[]) {
 	mshell_sfondo_carica(mshell_fondo, "/usr/share/mshell/sfondo");
 
 	/* MSHELL: i desktop, sopra lo sfondo. Si parte con un desktop vuoto, quello che si vede. */
+	/* l'immagine dello sfondo appena caricata (se c'e'): i desktop ne fanno una copia ciascuno */
+	if (!wl_list_empty(&mshell_fondo->children)) {
+		struct wlr_scene_node *n = wl_container_of(mshell_fondo->children.next, n, link);
+		if (n->type == WLR_SCENE_NODE_BUFFER) {
+			server.sfondo = wlr_scene_buffer_from_node(n)->buffer;
+		}
+	}
 	server.albero_desktop = wlr_scene_tree_create(&server.scene->tree);
 	server.attuale = mshell_nuovo_desktop(&server);
 	wlr_scene_node_set_enabled(&server.desktop[server.attuale].albero->node, true);

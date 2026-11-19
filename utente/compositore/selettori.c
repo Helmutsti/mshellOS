@@ -46,6 +46,13 @@
 #define MSHELL_SFUMATURA_0 0.80f
 #define MSHELL_SFUMATURA_25 0.55f
 #define MSHELL_SFUMATURA_100 0.20f
+/* I PUNTINI DEI DESKTOP (decisione della persona: "puntini sul bordo"): sul bordo destro, uno
+ * per desktop, dall'alto in basso; quello che si vede e' acceso. Si vedono durante il cambio di
+ * desktop e per un attimo dopo. Misure, colori e tempo sono proposte, da confermare. */
+#define MSHELL_PUNTINO 6           /* il diametro */
+#define MSHELL_PUNTINO_SPAZIO 8    /* fra un puntino e l'altro */
+#define MSHELL_PUNTINO_SPENTO 1.0f, 1.0f, 1.0f, 0.45f  /* gli altri desktop */
+#define MSHELL_PUNTINI_MS 1000     /* quanto restano dopo il cambio (lo scorrimento e' 250) */
 
 /* Un'immagine fatta a mano, sul modello dello sfondo (mshell_sfondo, piu' sotto in tinywl.c):
  * i pixel stanno in memoria e wlroots li legge con l'accesso diretto ai dati. */
@@ -114,6 +121,9 @@ static struct {
 	int mini_l, mini_a;
 	struct mshell_pixel *sfumatura;
 	int sfum_l, sfum_a;
+	bool puntini;                      /* i puntini dei desktop si vedono */
+	struct wl_event_source *puntini_via; /* il timer che li toglie */
+	struct mshell_pixel *pallino[2];   /* il puntino spento [0] e acceso [1] */
 } mshell_sel;
 
 /* Un rettangolo pieno. I colori si scrivono "dritti" (come nel disegno), ma wlroots li vuole con
@@ -361,15 +371,84 @@ static void mshell_sel_disposizioni(struct tinywl_server *server, struct wlr_box
 
 /* Svuota il livello e lo rifa' con lo stato di adesso. Gira come "idle": dopo che l'evento che
  * l'ha chiesto (un tasto, un'app nuova...) ha finito di sistemare i desktop. */
+/* Un puntino tondo di diametro MSHELL_PUNTINO, del colore dato, con il bordo sfumato (i pixel
+ * del bordo sono coperti solo in parte). Colori gia' moltiplicati per l'opacita', come vuole wlroots. */
+static struct mshell_pixel *mshell_sel_pallino(float r, float g, float b, float alfa) {
+	int d = MSHELL_PUNTINO;
+	struct mshell_pixel *p = mshell_pixel_nuovo(d, d, DRM_FORMAT_ARGB8888);
+	if (p == NULL) {
+		return NULL;
+	}
+	double c = d / 2.0;
+	for (int y = 0; y < d; y++) {
+		for (int x = 0; x < d; x++) {
+			/* quanto del pixel sta nel cerchio: 4x4 punti di prova per pixel */
+			int dentro = 0;
+			for (int sy = 0; sy < 4; sy++) {
+				for (int sx = 0; sx < 4; sx++) {
+					double px = x + (sx + 0.5) / 4 - c, py = y + (sy + 0.5) / 4 - c;
+					dentro += px * px + py * py <= c * c;
+				}
+			}
+			double a = alfa * dentro / 16.0;
+			p->pixel[y * d + x] = (uint32_t)(a * 255 + 0.5) << 24 | (uint32_t)(r * a * 255 + 0.5) << 16 |
+				(uint32_t)(g * a * 255 + 0.5) << 8 | (uint32_t)(b * a * 255 + 0.5);
+		}
+	}
+	return p;
+}
+
+static void mshell_sel_pallino_metti(float *rgba, int quale) {
+	if (mshell_sel.pallino[quale] == NULL) {
+		mshell_sel.pallino[quale] = mshell_sel_pallino(rgba[0], rgba[1], rgba[2], rgba[3]);
+	}
+}
+
+/* I puntini: in colonna, centrati in altezza e nel bordo libero destro (MSHELL_BORDO). */
+static void mshell_sel_puntini(struct tinywl_server *server, struct wlr_box schermo) {
+	float spento[4] = { MSHELL_PUNTINO_SPENTO }, acceso[4] = { MSHELL_COLORE_FOCUS };
+	mshell_sel_pallino_metti(spento, 0);
+	mshell_sel_pallino_metti(acceso, 1);
+	int n = server->n_desktop;
+	int alto = n * MSHELL_PUNTINO + (n - 1) * MSHELL_PUNTINO_SPAZIO;
+	int x = schermo.x + schermo.width - (MSHELL_BORDO + MSHELL_PUNTINO) / 2;
+	int y = schermo.y + (schermo.height - alto) / 2;
+	for (int i = 0; i < n; i++) {
+		struct mshell_pixel *p = mshell_sel.pallino[i == server->attuale];
+		if (p != NULL) {
+			struct wlr_scene_buffer *b = wlr_scene_buffer_create(mshell_sel.livello, &p->base);
+			wlr_scene_node_set_position(&b->node, x, y + i * (MSHELL_PUNTINO + MSHELL_PUNTINO_SPAZIO));
+		}
+	}
+}
+
+static void mshell_sel_rifai(void *data);
+static void mshell_selettori_aggiorna(struct tinywl_server *server);
+
+/* Il timer: passato il tempo, i puntini se ne vanno. */
+static int mshell_sel_puntini_via(void *data) {
+	mshell_sel.puntini = false;
+	mshell_selettori_aggiorna(mshell_sel.server);
+	return 0;
+}
+
+/* Usata da mshell_anim_desktop a ogni cambio di desktop: i puntini si vedono per un po'. */
+static void mshell_selettori_puntini(struct tinywl_server *server) {
+	if (mshell_sel.puntini_via == NULL) {
+		mshell_sel.puntini_via = wl_event_loop_add_timer(
+			wl_display_get_event_loop(server->wl_display), mshell_sel_puntini_via, NULL);
+	}
+	mshell_sel.puntini = true;
+	wl_event_source_timer_update(mshell_sel.puntini_via, MSHELL_PUNTINI_MS);
+	mshell_selettori_aggiorna(server);
+}
+
 static void mshell_sel_rifai(void *data) {
 	struct tinywl_server *server = mshell_sel.server;
 	mshell_sel.rifai = NULL;
 	struct wlr_scene_node *nodo, *dopo;
 	wl_list_for_each_safe(nodo, dopo, &mshell_sel.livello->children, link) {
 		wlr_scene_node_destroy(nodo);
-	}
-	if (!server->super_giu) {
-		return;
 	}
 	struct wlr_box schermo;
 	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);
@@ -378,6 +457,12 @@ static void mshell_sel_rifai(void *data) {
 	}
 	/* il livello resta sopra a tutto, anche ad alberi aggiunti alla scena dopo di lui */
 	wlr_scene_node_raise_to_top(&mshell_sel.livello->node);
+	if (mshell_sel.puntini) {
+		mshell_sel_puntini(server, schermo);
+	}
+	if (!server->super_giu) {
+		return;
+	}
 	int ml = schermo.width * MSHELL_MINI_NUM / MSHELL_MINI_DEN;
 	int ma = schermo.height * MSHELL_MINI_NUM / MSHELL_MINI_DEN;
 	/* l'ordine e' quello dal basso in alto: la sfumatura scurisce anche la cornice */
