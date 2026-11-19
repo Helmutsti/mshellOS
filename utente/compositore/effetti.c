@@ -69,10 +69,11 @@ static const struct mshell_ombra mshell_ombra_sollevato = {
 #define MSHELL_STRATI_SOVRAPPOSTO 3
 static const struct mshell_ombra mshell_ombre_sovrapposto[MSHELL_STRATI_SOVRAPPOSTO] = {
 	/* intensita' alzate (la persona, 19/11/2026: "manca ancora l'ombra"; con i valori di Figma,
-	 * 5-14%, sullo sfondo scuro non si vedeva): 10%, 20%, 40%. Da riportare in Figma. */
+	 * 5-14%, sullo sfondo scuro non si vedeva); poi alleggerite (la persona): 10%, 25%, 40% di nero.
+	 * Da riportare in Figma. */
 	{ { MSHELL_GRIGIO_OMBRA, 0x1a / 255.0f }, 1, 2, 0 },
-	{ { 0.0f, 0.0f, 0.0f, 0.45f }, 8, 16, 0 },
-	{ { 0.0f, 0.0f, 0.0f, 0.70f }, 16, 40, 0 },
+	{ { 0.0f, 0.0f, 0.0f, 0.25f }, 8, 16, 0 },
+	{ { 0.0f, 0.0f, 0.0f, 0.40f }, 16, 40, 0 },
 };
 /* il pannello delle disposizioni (selettori.c) per ora ne usa uno strato solo, il piu' largo */
 #define mshell_ombra_sovrapposto (mshell_ombre_sovrapposto[2])
