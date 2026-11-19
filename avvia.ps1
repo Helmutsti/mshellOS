@@ -24,4 +24,5 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     -drive "if=none,id=disco,file=$qui\build\disco-qemu-pc.img,format=raw" `
     -device "virtio-blk-pci,drive=disco,bootindex=1" `
     -vga none -device "virtio-vga,xres=1280,yres=800" `
-    -device qemu-xhci -device usb-tablet  # il mouse (con virtio-tablet il compositore non lo riceve)
+    -device qemu-xhci -device usb-tablet `
+    -accel whpx -smp 4  # usb-tablet: il mouse (con virtio-tablet il compositore non lo riceve); whpx e 4 processori: il disegno con OpenGL imitato (SceneFX) arriva a circa 16 immagini al secondo (accettato dalla persona, 19/11/2026)

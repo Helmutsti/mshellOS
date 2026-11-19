@@ -124,51 +124,9 @@ for u in ldconfig.service systemd-journal-catalog-update.service systemd-update-
     ln -sf /dev/null "$S/$u"
 done
 
-# --- 3b. i programmi di mshell (utente/), compilati qui con le librerie degli attrezzi, che
-# sono le stesse del sistema (Debian 13) ---
-#   mshell-compositore    il compositore Wayland (tinywl di wlroots, utente/compositore/)
-#   mshell-prova          l'app di prova: una finestra scura (utente/prove/app-scura.c); nel
-#                         cassetto delle app come "Prova" (il suo .desktop in /usr/share/applications)
-#   mshell-barra          la barra di stato, i suoi menu e il cassetto delle app (utente/barra/,
-#                         GTK 4); il suo foglio di stile va in /usr/share/mshell/barra/
-# I protocolli dei livelli e dell'elenco delle app non stanno nei pacchetti di Debian: le loro
-# descrizioni sono copiate dai sorgenti di wlroots 0.18.2 in utente/compositore/protocolli/.
-echo "3b. compositore, app di prova e barra"
-C=/tmp/compila
-rm -rf "$C"
-mkdir -p "$C"
-PROTOCOLLI=$(pkg-config --variable=pkgdatadir wayland-protocols)
-MIEI=utente/compositore/protocolli
-wayland-scanner server-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.h"
-wayland-scanner server-header "$MIEI/wlr-layer-shell-unstable-v1.xml" "$C/wlr-layer-shell-unstable-v1-protocol.h"
-wayland-scanner client-header "$MIEI/wlr-foreign-toplevel-management-unstable-v1.xml" \
-    "$C/wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
-wayland-scanner private-code "$MIEI/wlr-foreign-toplevel-management-unstable-v1.xml" \
-    "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c"
-wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
-wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
-# Il compositore si porta dentro SceneFX (la libreria statica compilata negli attrezzi,
-# strumenti/Dockerfile) e usa le librerie di OpenGL del sistema (EGL, GLES 2, GBM, DRM).
-# --export-dynamic: le funzioni della scena di SceneFX si vedono anche da wlroots, che le chiama
-# per le superfici delle app e dei livelli (spiegato in utente/compositore/effetti.c).
-SCENEFX=$(pkg-config --variable=libdir scenefx-0.2)/libscenefx-0.2.a
-gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" \
-    $(pkg-config --cflags scenefx-0.2 wlroots-0.18 wayland-server xkbcommon) \
-    -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c "$SCENEFX" \
-    -Wl,--export-dynamic \
-    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon egl glesv2 gbm libdrm pixman-1) -lm
-gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
-    utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
-mkdir -p "$RADICE/usr/share/applications"
-cp utente/prove/mshell-prova.desktop "$RADICE/usr/share/applications/mshell-prova.desktop"
-# gtk4-layer-shell va prima di wayland-client (lo chiede la sua documentazione)
-# (gio-unix: i file .desktop delle app, per il cassetto)
-gcc -O2 -Wall -Werror -I"$C" $(pkg-config --cflags gtk4-layer-shell-0 gtk4 gio-unix-2.0 wayland-client) \
-    -o "$RADICE/usr/bin/mshell-barra" utente/barra/*.c \
-    "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c" \
-    $(pkg-config --libs gtk4-layer-shell-0 gtk4 gio-unix-2.0 wayland-client)
-mkdir -p "$RADICE/usr/share/mshell/barra"
-cp utente/barra/stile.css "$RADICE/usr/share/mshell/barra/stile.css"
+# --- 3b. i programmi di mshell (utente/): li compila strumenti/compila.sh (dice quali sono), lo
+# stesso script delle prove veloci (strumenti/LEGGIMI-prove.md) ---
+sh strumenti/compila.sh "$RADICE"
 
 # --- 3c. lo sfondo e il puntatore (risorse/), preparati qui con gli attrezzi ---
 # LO SFONDO: la foto di risorse/sfondi/ portata alla misura dello schermo della macchina
