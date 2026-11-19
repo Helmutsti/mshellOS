@@ -160,6 +160,12 @@ cp utente/barra/stile.css "$RADICE/usr/share/mshell/barra/stile.css"
 echo "3c. sfondo ${SCHERMO_LARGHEZZA}x${SCHERMO_ALTEZZA} e puntatore"
 mkdir -p "$RADICE/usr/share/mshell"
 python3 strumenti/sfondo.py risorse/sfondi/samurai.jpg "$SCHERMO_LARGHEZZA" "$SCHERMO_ALTEZZA"     "$RADICE/usr/share/mshell/sfondo"
+# IL FUSO ORARIO: Roma (deciso dalla persona il 19/11/2026). Si copia solo la regola di Roma
+# dagli attrezzi in /etc/localtime (2,6 KB), senza il pacchetto tzdata con tutti i fusi del
+# mondo: la leggono systemd e GLib (l'orologio della barra). Ora legale compresa.
+rm -f "$RADICE/etc/localtime"
+cp /usr/share/zoneinfo/Europe/Rome "$RADICE/etc/localtime"
+echo "Europe/Rome" > "$RADICE/etc/timezone"
 # IL PUNTATORE: le immagini disegnate in Figma (risorse/puntatore/, 32x32 con l'ombra; il
 # puntatore e' 24x24 dentro, quindi misura nominale 24) diventano il tema Xcursor "mshell" con
 # xcursorgen. Ogni riga della descrizione: misura nominale, punto caldo x e y, immagine e, per
