@@ -1,0 +1,147 @@
+/* L'ASPETTO DELLA BARRA DI STATO E DEI SUOI MENU (mshell-barra).
+ * E' un foglio di stile nostro, che parte da zero (decisione della persona): non usa il tema di
+ * GTK (Adwaita), anzi lo azzera. I nomi dei valori sono quelli del disegno in Figma, con "-" al
+ * posto di "/": "testo/primario" diventa --testo-primario.
+ * Il programma lo carica sopra il tema di GTK, quindi queste regole vincono sempre. */
+
+/* 1. TUTTO DA ZERO: nessun colore, bordo, spazio, ombra o carattere del tema di GTK */
+* {
+	all: unset;
+}
+
+/* 2. I VALORI DEL DISEGNO. I colori cambiano con il tema: la classe "scuro" o "chiaro" sta sulla
+ * finestra, e i valori passano a tutto quello che c'e' dentro. La barra e' sempre "scuro" (sta
+ * sopra la foto dello sfondo); i menu seguono il tema del sistema. */
+.scuro {
+	--testo-primario: #ebebec;
+	--testo-secondario: #b8b8bb;
+	--testo-disabilitato: #89898d;
+	--superficie-vetro: rgba(65, 65, 70, 0.72);       /* #414146 a 0.72 */
+	--superficie-elevata: #2b2b2e;
+	--controllo-sfondo: #37373b;
+	--controllo-selezione-vetro: rgba(255, 255, 255, 0.12);
+	--azione-sfondo: #c4c4c7;
+	--azione-testo: #242427;
+}
+
+.chiaro {
+	--testo-primario: #414146;
+	--testo-secondario: #77777b;
+	--testo-disabilitato: #b8b8bb;
+	--superficie-vetro: rgba(255, 255, 255, 0.72);    /* #ffffff a 0.72 */
+	--superficie-elevata: #fafafa;
+	--controllo-sfondo: #ebebec;
+	--controllo-selezione-vetro: rgba(0, 0, 0, 0.08);
+	--azione-sfondo: #4c4c52;
+	--azione-testo: #fafafa;
+}
+
+window {
+	--spazio-4: 4px;
+	--spazio-8: 8px;
+	--spazio-12: 12px;
+	--spazio-16: 16px;
+	--spazio-32: 32px;
+	--raggio-6: 6px;
+	--raggio-12: 12px;
+	--raggio-pillola: 16px;
+	/* ombra/sovrapposto: tre ombre, dalla piu' vicina alla piu' larga */
+	--ombra-sovrapposto: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 16px rgba(0, 0, 0, 0.08),
+		0 20px 40px rgba(0, 0, 0, 0.14);
+	font-family: "IBM Plex Sans";
+	color: var(--testo-primario);
+}
+
+/* 3. I TESTI (carattere IBM Plex Sans: peso / misura / interlinea) */
+.titolo      { font-weight: 600; font-size: 24px; line-height: 32px; }  /* testo/titolo */
+.sezione     { font-weight: 600; font-size: 15px; line-height: 20px; }  /* testo/sezione */
+.corpo       { font-weight: 400; font-size: 14px; line-height: 20px; }  /* testo/corpo */
+.corpo-medio { font-weight: 500; font-size: 14px; line-height: 20px; }  /* testo/corpo-medio */
+.etichetta   { font-weight: 500; font-size: 12px; line-height: 16px; }  /* testo/etichetta */
+.piccolo     { font-weight: 400; font-size: 12px; line-height: 16px; }  /* testo/piccolo */
+
+.primario    { color: var(--testo-primario); }
+.secondario  { color: var(--testo-secondario); }
+
+/* 4. LA BARRA: 32 px; i pulsanti (alti 24) stanno a 4 px dai bordi e a 4 px l'uno dall'altro,
+ * quindi il loro contenuto sta a 8 px dal bordo dello schermo */
+.riga-barra {
+	padding: var(--spazio-4);
+	border-spacing: var(--spazio-4);
+}
+
+.pulsante {
+	padding: var(--spazio-4);
+	border-radius: var(--raggio-6);
+}
+
+/* il pulsante che ha il suo menu aperto */
+.pulsante.aperto {
+	background-color: var(--controllo-selezione-vetro);
+}
+
+/* 5. I MENU: il pannello sta sotto la barra, con il bordo destro su quello delle app */
+.posto-menu {
+	margin-top: var(--spazio-32);
+	margin-right: var(--spazio-32);
+}
+
+.pannello {
+	min-width: 288px;  /* 320 meno il padding */
+	padding: var(--spazio-16);
+	border-spacing: var(--spazio-12);
+	border-radius: var(--raggio-12);
+	background-color: var(--superficie-vetro);
+	box-shadow: var(--ombra-sovrapposto);
+}
+
+/* il calendario (le misure di questo blocco vengono dalla schermata del disegno) */
+.tempo {
+	border-spacing: var(--spazio-4);
+}
+
+.riga-mese {
+	min-height: 28px;
+	margin-right: -4px;  /* le frecce: l'icona (non il pulsante) sta sul bordo del contenuto */
+}
+
+.griglia-giorni {
+	border-spacing: 0 var(--spazio-4);
+}
+
+.cella {
+	min-height: 32px;
+}
+
+.giorno {
+	color: var(--testo-primario);
+}
+
+.giorno.fuori {
+	color: var(--testo-disabilitato);
+}
+
+.giorno.oggi {
+	background-color: var(--azione-sfondo);
+	color: var(--azione-testo);
+	border-radius: var(--raggio-pillola);
+}
+
+/* le notifiche */
+.scheda {
+	padding: var(--spazio-12);
+	border-spacing: var(--spazio-4);
+	border-radius: var(--raggio-6);
+	background-color: var(--superficie-elevata);
+}
+
+/* i comandi rapidi */
+.griglia-comandi {
+	border-spacing: var(--spazio-8);
+}
+
+.blocco {
+	padding: var(--spazio-12);
+	border-radius: var(--raggio-6);
+	background-color: var(--controllo-sfondo);
+}

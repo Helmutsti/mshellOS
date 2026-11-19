@@ -12,6 +12,9 @@
  *     mai, stanno in desktop da 4 app al massimo e si comandano con il tasto Super. Tutto e'
  *     spiegato nel blocco "MSHELL: I DESKTOP" piu' sotto. Per questo le richieste delle app di
  *     spostarsi o ridimensionarsi col mouse non fanno piu' niente, e Alt+F1 non c'e' piu'.
+ *   - I LIVELLI E L'ELENCO DELLE APP (per la barra di stato): i protocolli layer-shell e
+ *     wlr-foreign-toplevel-management. Il codice e' in livelli.c (spiegato in testa a quel
+ *     file), incluso piu' sotto; qui ci sono solo gli agganci, segnati "MSHELL:".
  * Tutto il resto e' il file originale. La tastiera italiana e il puntatore di mshell non
  * cambiano il codice: vengono da XKB_DEFAULT_LAYOUT e dal tema Xcursor "default" (costruisci.sh).
  *
@@ -171,6 +174,7 @@ struct tinywl_server {
 	bool super_giu;       /* Super e' tenuto premuto */
 	bool super_usato;     /* mentre era giu' si e' usata una combinazione: non e' un tocco */
 	uint32_t super_tocco; /* quando e' finito l'ultimo tocco di Super da solo (0: nessuno) */
+	struct mshell_livelli *livelli;  /* MSHELL: i livelli e l'elenco delle app (livelli.c) */
 };
 
 struct tinywl_output {
@@ -197,6 +201,8 @@ struct tinywl_toplevel {
 	struct wl_listener request_fullscreen;
 	int desktop;           /* MSHELL: in quale desktop sta (-1: in nessuno) */
 	struct wlr_box posto;  /* MSHELL: il suo posto sullo schermo */
+	struct wlr_foreign_toplevel_handle_v1 *voce;  /* MSHELL: la sua voce nell'elenco delle app */
+	struct wl_listener titolo;                    /* MSHELL: (livelli.c) */
 };
 
 struct tinywl_popup {
@@ -215,6 +221,10 @@ struct tinywl_keyboard {
 	struct wl_listener destroy;
 };
 
+/* MSHELL: dai livelli e dall'elenco delle app (livelli.c, incluso piu' sotto) */
+static bool mshell_livelli_tiene_tastiera(struct tinywl_server *server);
+static void mshell_elenco_attiva(struct tinywl_server *server, struct tinywl_toplevel *t);
+
 static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface *surface) {
 	/* Note: this function only deals with keyboard focus. */
 	if (toplevel == NULL) {
@@ -230,6 +240,12 @@ static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface 
 				d->focus = i;
 			}
 		}
+	}
+	/* MSHELL: e' l'app col focus (lo sanno l'elenco e le app); se pero' la tastiera e' di un
+	 * menu della barra, la prendera' quando il menu si chiude (livelli.c) */
+	mshell_elenco_attiva(server, toplevel);
+	if (mshell_livelli_tiene_tastiera(server)) {
+		return;
 	}
 	struct wlr_surface *prev_surface = seat->keyboard_state.focused_surface;
 	if (prev_surface == surface) {
@@ -366,7 +382,11 @@ static void mshell_mostra(struct tinywl_server *server, int quale) {
 	}
 	struct mshell_desktop *d = &server->desktop[quale];
 	if (d->n == 0) {
-		wlr_seat_keyboard_notify_clear_focus(server->seat);
+		/* MSHELL: nessuna app col focus; la tastiera di un menu della barra resta (livelli.c) */
+		mshell_elenco_attiva(server, NULL);
+		if (!mshell_livelli_tiene_tastiera(server)) {
+			wlr_seat_keyboard_notify_clear_focus(server->seat);
+		}
 		return;
 	}
 	if (d->focus >= d->n) {
@@ -548,6 +568,8 @@ static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t qu
 		server->super_tocco = quando ? quando : 1;
 	}
 }
+
+#include "livelli.c"  /* MSHELL: i livelli e l'elenco delle app */
 
 static void keyboard_handle_modifiers(
 		struct wl_listener *listener, void *data) {
@@ -776,6 +798,10 @@ static struct tinywl_toplevel *desktop_toplevel_at(
 	while (tree != NULL && tree->node.data == NULL) {
 		tree = tree->node.parent;
 	}
+	/* MSHELL: una superficie dei livelli (livelli.c) non sta sotto un'app */
+	if (tree == NULL) {
+		return NULL;
+	}
 	return tree->node.data;
 }
 
@@ -861,7 +887,9 @@ static void process_cursor_motion(struct tinywl_server *server, uint32_t time) {
 	struct wlr_surface *surface = NULL;
 	struct tinywl_toplevel *toplevel = desktop_toplevel_at(server,
 			server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-	if (!toplevel) {
+	/* MSHELL: "!surface" invece di "!toplevel": sopra una superficie dei livelli (la barra) il
+	 * puntatore lo sceglie lei, come le app */
+	if (!surface) {
 		/* If there's no toplevel under the cursor, set the cursor image to a
 		 * default. This is what makes the cursor image appear when you move it
 		 * around the screen, not over any toplevels. */
@@ -938,6 +966,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 		reset_cursor_mode(server);
 	} else {
 		/* Focus that client if the button was _pressed_ */
+		mshell_livelli_clic(server, surface);  /* MSHELL: o la superficie dei livelli (livelli.c) */
 		focus_toplevel(toplevel, surface);
 	}
 }
@@ -1074,6 +1103,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	/* Called when the surface is mapped, or ready to display on-screen. */
 	struct tinywl_toplevel *toplevel = wl_container_of(listener, toplevel, map);
 
+	mshell_elenco_compare(toplevel);  /* MSHELL: la sua voce nell'elenco delle app (livelli.c) */
 	wl_list_insert(&toplevel->server->toplevels, &toplevel->link);
 
 	/* MSHELL: l'app ha gia' il suo desktop (preso al primo invio, xdg_toplevel_commit); se
@@ -1099,6 +1129,7 @@ static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
 	}
 
 	wl_list_remove(&toplevel->link);
+	mshell_elenco_sparisce(toplevel);  /* MSHELL: via la sua voce dall'elenco (livelli.c) */
 
 	/* MSHELL: l'app sparita lascia il posto alle altre del desktop; se era quello che si
 	 * vede, la tastiera passa a un'altra sua app. */
@@ -1300,6 +1331,11 @@ static void xdg_popup_destroy(struct wl_listener *listener, void *data) {
 static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
 	/* This event is raised when a client creates a new popup. */
 	struct wlr_xdg_popup *xdg_popup = data;
+	/* MSHELL: un popup che nasce senza genitore e' di una superficie dei livelli: il genitore
+	 * glielo da' dopo il protocollo dei livelli, e lo segue livelli.c */
+	if (xdg_popup->parent == NULL) {
+		return;
+	}
 
 	struct tinywl_popup *popup = calloc(1, sizeof(*popup));
 	popup->xdg_popup = xdg_popup;
@@ -1489,6 +1525,9 @@ int main(int argc, char *argv[]) {
 	server.albero_desktop = wlr_scene_tree_create(&server.scene->tree);
 	server.attuale = mshell_nuovo_desktop(&server);
 	wlr_scene_node_set_enabled(&server.desktop[server.attuale].albero->node, true);
+
+	/* MSHELL: i livelli (sotto e sopra i desktop) e l'elenco delle app: livelli.c */
+	mshell_livelli_crea(&server);
 
 	/* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
 	 * used for application windows. For more detail on shells, refer to
