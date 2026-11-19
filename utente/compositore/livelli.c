@@ -45,6 +45,7 @@ struct mshell_livelli {
 	struct wlr_scene_tree *albero[MSHELL_LIVELLI];  /* un albero della scena per livello */
 	struct wl_list superfici;                       /* mshell_livello.link */
 	struct wlr_layer_surface_v1 *tastiera;          /* l'ultima che ha preso la tastiera */
+	struct wl_listener fine_presa;                  /* finita la presa di un menu a comparsa */
 	struct wlr_foreign_toplevel_manager_v1 *elenco;
 };
 
@@ -54,7 +55,6 @@ struct mshell_livello {
 	struct mshell_livelli *livelli;
 	struct wlr_layer_surface_v1 *superficie;
 	struct wlr_scene_layer_surface_v1 *scena;
-	struct mshell_ombre_livello ombre;  /* l'ombra, se e' un pannello (effetti.c) */
 	struct wl_listener commit;
 	struct wl_listener unmap;
 	struct wl_listener destroy;
@@ -65,9 +65,18 @@ struct mshell_livello {
 struct mshell_popup_livello {
 	struct wlr_xdg_popup *popup;
 	struct mshell_livello *genitore;
+	struct mshell_ombre_menu ombre;  /* l'ombra, se e' un menu della barra (effetti.c) */
 	struct wl_listener commit;
 	struct wl_listener destroy;
 };
+
+/* Vero se un menu a comparsa ha la presa (vedi mshell_livello_nuovo_popup): un clic allora e' solo
+ * suo (o lo chiude), il compositore non da' il focus a quello che sta sotto e la tastiera resta
+ * dov'e' finche' la presa non finisce. */
+static bool mshell_livelli_presa(struct tinywl_server *server) {
+	return server->seat->pointer_state.grab != server->seat->pointer_state.default_grab ||
+		server->seat->keyboard_state.grab != server->seat->keyboard_state.default_grab;
+}
 
 /* Vero se la tastiera e' di una superficie che la vuole in modo esclusivo: le app aspettano. */
 static bool mshell_livelli_tiene_tastiera(struct tinywl_server *server) {
@@ -115,8 +124,12 @@ static void mshell_livelli_tastiera(struct mshell_livelli *l, struct wlr_layer_s
 		return;
 	}
 	/* nessuna la vuole in esclusiva: se ce l'aveva una che sparisce o non la vuole piu', la
-	 * tastiera torna all'app col focus del desktop che si vede */
+	 * tastiera torna all'app col focus del desktop che si vede (ma non mentre un menu a comparsa
+	 * ha la presa: la tastiera e' sua finche' non si chiude) */
 	struct wlr_layer_surface_v1 *ls = l->tastiera;
+	if (ls != NULL && ls != tranne && ls->surface->mapped && mshell_livelli_presa(l->server)) {
+		return;
+	}
 	if (ls != NULL && (ls == tranne || !ls->surface->mapped ||
 			ls->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)) {
 		l->tastiera = NULL;
@@ -152,8 +165,7 @@ static void mshell_livello_commit(struct wl_listener *listener, void *data) {
 	if (ls->current.committed != 0) {
 		mshell_livello_disponi(s);
 	}
-	/* il vetro, gli angoli e l'ombra, se e' fra le superfici che li hanno (effetti.c) */
-	mshell_effetti_livello(s->scena->tree, ls, &s->ombre);
+	mshell_effetti_livello(s->scena->tree, ls->namespace);  /* il vetro, se e' fra i suoi (effetti.c) */
 	mshell_livelli_tastiera(l, NULL);
 }
 
@@ -180,9 +192,11 @@ static void mshell_livello_destroy(struct wl_listener *listener, void *data) {
 static void mshell_popup_livello_commit(struct wl_listener *listener, void *data) {
 	struct mshell_popup_livello *p = wl_container_of(listener, p, commit);
 	if (!p->popup->base->initial_commit) {
-		/* il vetro come la superficie genitore (effetti.c) */
-		mshell_effetti_livello(p->genitore->scena->tree, p->genitore->superficie,
-			&p->genitore->ombre);
+		/* il vetro come la superficie genitore; gli angoli e l'ombra se e' un menu della barra
+		 * (effetti.c) */
+		const char *nome = p->genitore->superficie->namespace;
+		mshell_effetti_livello(p->genitore->scena->tree, nome);
+		mshell_effetti_menu(p->popup->base->data, p->popup->base, nome, &p->ombre);
 		return;
 	}
 	/* il popup resta dentro lo schermo: il riquadro e' quello dello schermo, nelle coordinate
@@ -219,6 +233,31 @@ static void mshell_livello_nuovo_popup(struct wl_listener *listener, void *data)
 	wl_signal_add(&popup->base->surface->events.commit, &p->commit);
 	p->destroy.notify = mshell_popup_livello_destroy;
 	wl_signal_add(&popup->events.destroy, &p->destroy);
+	/* LA TASTIERA DEI MENU. Un menu a comparsa che vuole il clic fuori per chiudersi chiede la
+	 * "presa" (xdg_popup.grab): da li' wlroots gli manda puntatore e tastiera finche' non si chiude,
+	 * e un clic su un altro programma (o dove non c'e' nessuno) lo chiude (popup_done). Durante la
+	 * presa wlroots non sposta la tastiera, quindi la superficie del menu la deve avere prima: si
+	 * da' qui, appena il programma chiede il menu (la presa arriva dopo), se non la tiene in
+	 * esclusiva un'altra. Quando la presa finisce torna all'app (mshell_livelli_fine_presa). */
+	if (!mshell_livelli_tiene_tastiera(s->livelli->server) &&
+			s->livelli->server->seat->keyboard_state.focused_surface != s->superficie->surface) {
+		mshell_livelli_dai_tastiera(s->livelli, s->superficie);
+	}
+}
+
+/* La presa di un menu a comparsa e' finita (il menu si e' chiuso): se la tastiera era di una
+ * superficie dei livelli che non la vuole per se' (la barra), torna all'app (o alla superficie
+ * che la vuole in esclusiva). */
+static void mshell_livelli_fine_presa(struct wl_listener *listener, void *data) {
+	struct mshell_livelli *l = wl_container_of(listener, l, fine_presa);
+	mshell_livelli_tastiera(l, NULL);
+}
+
+/* All'avvio, dopo la tastiera e il puntatore (il "seat"): ascolta la fine delle prese. */
+static void mshell_livelli_seat(struct tinywl_server *server) {
+	struct mshell_livelli *l = server->livelli;
+	l->fine_presa.notify = mshell_livelli_fine_presa;
+	wl_signal_add(&server->seat->events.keyboard_grab_end, &l->fine_presa);
 }
 
 static void mshell_livelli_nuova_superficie(struct wl_listener *listener, void *data) {

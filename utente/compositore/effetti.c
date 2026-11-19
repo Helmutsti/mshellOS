@@ -20,20 +20,20 @@
  *   il vetro: sfocatura dello sfondo 14 (BACKGROUND_BLUR di Figma)
  *   ombra/sollevato      le miniature dei desktop; ombra/sovrapposto: il pannello delle disposizioni
  *
- * I PANNELLI DEI LIVELLI (decisione della persona, 19/11/2026: le decorazioni le disegna il
- * compositore, non il singolo programma: ombre, angoli arrotondati, vetro). Un programma che vuole
- * un pannello decorato (i menu della barra) lo mette in una superficie dei livelli (layer-shell)
- * sua, grande come il pannello, e la presenta con uno dei nomi (namespace) qui sotto, senza
- * protocolli nuovi:
- *   mshell_vetro_nomi     dietro si sfoca (il vetro)
- *   mshell_pannelli_nomi  in piu' gli angoli arrotondati (raggio/finestra) e l'ombra/sovrapposto
- * Il programma disegna solo il riempimento (superficie/vetro) su tutta la superficie: niente
- * ombra e niente angoli suoi. Un'ombra disegnata dal programma starebbe dentro la superficie,
- * quindi sopra il vetro: dietro di lei si sfocherebbe anche, e l'alone coprirebbe la barra.
- * Si sfoca solo dietro i pixel non del tutto trasparenti, con gli angoli del pannello.
- * La barra di stato e' fra i nomi del vetro ma non ha un fondo: si sfoca solo dietro le sue
- * scritte e icone, e non si vede. */
-#include <wlr/types/wlr_layer_shell_v1.h>
+ * IL VETRO DEI LIVELLI. Il compositore sfoca quello che sta dietro le superfici dei livelli
+ * (layer-shell) che si presentano con uno dei nomi (namespace) di mshell_vetro_nomi, e dietro i
+ * loro menu a comparsa. Il programma il vetro lo chiede cosi', con il suo nome, senza protocolli
+ * nuovi. Si sfoca solo dietro i pixel non del tutto trasparenti. La barra di stato non ha un fondo:
+ * dietro di lei si sfoca solo sotto le scritte e le icone, e non si vede.
+ *
+ * I MENU DEI LIVELLI (decisione della persona, 19/11/2026: le decorazioni le disegna il
+ * compositore, non il singolo programma: ombre, angoli arrotondati, vetro). I menu a comparsa
+ * (xdg_popup) delle superfici con uno dei nomi di mshell_menu_nomi (i menu della barra: calendario,
+ * notifiche, comandi rapidi) sono pannelli: il compositore da' loro gli angoli (raggio/finestra) e
+ * l'ombra/sovrapposto, oltre al vetro. Il programma disegna solo il riempimento (superficie/vetro):
+ * niente ombra e niente angoli suoi. Un'ombra disegnata dal programma starebbe dentro la
+ * superficie, quindi sopra il vetro: dietro di lei si sfocherebbe anche, e l'alone coprirebbe la
+ * barra. */
 #include <scenefx/types/fx/corner_location.h>
 #include <scenefx/types/fx/clipped_region.h>
 
@@ -47,9 +47,9 @@
 #define MSHELL_VETRO_RAGGIO 4
 
 /* I nomi delle superfici dei livelli che hanno il vetro dietro (vedi in cima). */
-static const char *const mshell_vetro_nomi[] = { "mshell-barra", "mshell-barra-menu", NULL };
-/* I nomi delle superfici dei livelli che sono pannelli: angoli e ombra (vedi in cima). */
-static const char *const mshell_pannelli_nomi[] = { "mshell-barra-menu", NULL };
+static const char *const mshell_vetro_nomi[] = { "mshell-barra", NULL };
+/* I nomi delle superfici dei livelli i cui menu a comparsa sono pannelli (vedi in cima). */
+static const char *const mshell_menu_nomi[] = { "mshell-barra", NULL };
 
 /* Uno strato di un'ombra del disegno, come lo scrive Figma (DROP_SHADOW): colore (dritto, non
  * moltiplicato per l'opacita'), spostamento in giu', sfocatura ("radius" di Figma) e allargamento
@@ -146,24 +146,20 @@ static void mshell_effetti_angolo_una(struct wlr_scene_buffer *b, int sx, int sy
 	}
 }
 
-static void mshell_effetti_app(struct wlr_scene_tree *albero, struct wlr_xdg_surface *xdg) {
-	if (wl_list_empty(&albero->children)) {
-		return;
-	}
-	struct wlr_scene_node *superficie = wl_container_of(albero->children.next, superficie, link);
+static void mshell_effetti_angoli(struct wlr_scene_node *superficie, struct wlr_xdg_surface *xdg) {
 	struct wlr_box geo;
 	wlr_xdg_surface_get_geometry(xdg, &geo);
 	wlr_scene_subsurface_tree_set_clip(superficie, &geo);
 	wlr_scene_node_for_each_buffer(superficie, mshell_effetti_angolo_una, xdg->surface);
 }
 
-/* I PANNELLI E IL VETRO DEI LIVELLI (vedi in cima). Si chiama a ogni invio della superficie e dei
- * suoi menu a comparsa. Gli strati dell'ombra nascono qui la prima volta, nell'albero della
- * superficie e sotto di lei: cosi' la seguono quando si sposta, si nascondono con lei e se ne
- * vanno quando la superficie si distrugge (con il suo albero). */
-struct mshell_ombre_livello {
-	struct wlr_scene_shadow *strato[MSHELL_STRATI_SOVRAPPOSTO];
-};
+static void mshell_effetti_app(struct wlr_scene_tree *albero, struct wlr_xdg_surface *xdg) {
+	if (wl_list_empty(&albero->children)) {
+		return;
+	}
+	struct wlr_scene_node *superficie = wl_container_of(albero->children.next, superficie, link);
+	mshell_effetti_angoli(superficie, xdg);
+}
 
 static bool mshell_effetti_nome_fra(const char *nome, const char *const *nomi) {
 	for (int i = 0; nome != NULL && nomi[i] != NULL; i++) {
@@ -174,25 +170,52 @@ static bool mshell_effetti_nome_fra(const char *nome, const char *const *nomi) {
 	return false;
 }
 
-/* il vetro dietro ogni immagine della superficie e dei suoi menu a comparsa */
+/* IL VETRO DEI LIVELLI (vedi in cima): se il nome della superficie e' fra quelli col vetro, dietro
+ * alle sue immagini (e a quelle dei suoi menu a comparsa) si sfoca. Si chiama a ogni invio. */
 static void mshell_effetti_vetro_una(struct wlr_scene_buffer *b, int sx, int sy, void *data) {
 	wlr_scene_buffer_set_backdrop_blur(b, true);
 	wlr_scene_buffer_set_backdrop_blur_optimized(b, false);  /* vero: sfoca anche le app sotto */
 	wlr_scene_buffer_set_backdrop_blur_ignore_transparent(b, true);
 }
 
-static void mshell_effetti_livello(struct wlr_scene_tree *albero, struct wlr_layer_surface_v1 *ls,
-		struct mshell_ombre_livello *ombre) {
-	if (mshell_effetti_nome_fra(ls->namespace, mshell_vetro_nomi)) {
+static void mshell_effetti_livello(struct wlr_scene_tree *albero, const char *nome) {
+	if (mshell_effetti_nome_fra(nome, mshell_vetro_nomi)) {
 		wlr_scene_node_for_each_buffer(&albero->node, mshell_effetti_vetro_una, NULL);
 	}
-	if (!mshell_effetti_nome_fra(ls->namespace, mshell_pannelli_nomi)) {
+}
+
+/* I MENU DEI LIVELLI (vedi in cima): se la superficie genitore ha uno dei nomi di
+ * mshell_menu_nomi, il menu a comparsa "xdg" (albero: il suo albero della scena) prende gli angoli
+ * e l'ombra/sovrapposto. Si chiama a ogni invio del menu. Gli strati dell'ombra ("ombre", del
+ * menu) nascono qui la prima volta, nell'albero del menu e sotto di lui: cosi' lo seguono, si
+ * nascondono con lui e se ne vanno quando si distrugge (con il suo albero). */
+struct mshell_ombre_menu {
+	struct wlr_scene_shadow *strato[MSHELL_STRATI_SOVRAPPOSTO];
+};
+
+static void mshell_effetti_menu(struct wlr_scene_tree *albero, struct wlr_xdg_surface *xdg,
+		const char *nome_genitore, struct mshell_ombre_menu *ombre) {
+	if (!mshell_effetti_nome_fra(nome_genitore, mshell_menu_nomi)) {
 		return;
 	}
-	/* gli angoli: solo all'immagine del pannello, non ai suoi menu a comparsa (come le app) */
-	wlr_scene_node_for_each_buffer(&albero->node, mshell_effetti_angolo_una, ls->surface);
-	/* l'ombra: tre strati sotto la superficie, il piu' largo in fondo */
-	struct wlr_box r = { 0, 0, ls->surface->current.width, ls->surface->current.height };
+	/* gli angoli, sulla "geometria" del menu, come le app. La superficie e' il primo figlio
+	 * dell'albero che non e' uno strato dell'ombra (gli strati stanno sotto di lei). */
+	struct wlr_scene_node *n;
+	wl_list_for_each(n, &albero->children, link) {
+		bool ombra = false;
+		for (int i = 0; i < MSHELL_STRATI_SOVRAPPOSTO; i++) {
+			ombra = ombra || (ombre->strato[i] != NULL && n == &ombre->strato[i]->node);
+		}
+		if (!ombra) {
+			mshell_effetti_angoli(n, xdg);
+			break;
+		}
+	}
+	/* l'ombra: tre strati sotto il menu, il piu' largo in fondo. Nell'albero del menu la sua
+	 * geometria comincia in 0, 0. */
+	struct wlr_box geo;
+	wlr_xdg_surface_get_geometry(xdg, &geo);
+	struct wlr_box r = { 0, 0, geo.width, geo.height };
 	for (int i = 0; i < MSHELL_STRATI_SOVRAPPOSTO; i++) {
 		const struct mshell_ombra *o = &mshell_ombre_sovrapposto[i];
 		if (ombre->strato[i] == NULL) {

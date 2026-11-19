@@ -87,7 +87,7 @@ window {
 	background-color: var(--controllo-selezione-vetro);
 }
 
-/* 5. I MENU: ogni pannello riempie la sua superficie (il posto lo dice barra.c). Qui solo il
+/* 5. I MENU: ogni pannello riempie il suo menu a comparsa (il posto lo dice barra.c). Qui solo il
  * riempimento: gli angoli arrotondati, l'ombra/sovrapposto e la sfocatura dietro il vetro li
  * disegna il compositore (decisione della persona: le decorazioni sono del compositore). */
 .pannello {

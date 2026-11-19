@@ -32,6 +32,7 @@
 # (--posto 1: 4460-4462). Cartella: build/prova-<posto>. Non tocca altri QEMU.
 import argparse
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -163,6 +164,13 @@ class Seriale:
 def copia_dentro(ser):
     """I file nuovi in /run/prova, sovrapposti a quelli del sistema (il sistema e' in sola lettura)."""
     nuovi = [p for p in RADICE.rglob("*") if p.is_file()]
+    # prima si spegne la scrivania: i programmi della prova di prima (compositore, barra) sono
+    # ancora accesi dai file sovrapposti, e un file in uso non si riscrive (ETXTBSY) e non si
+    # smonta (EBUSY): il sistema sarebbe rimasto con i programmi vecchi, senza errori visibili
+    ser.comando("systemctl stop greetd; i=0; c=1; while [ $c = 1 ] && [ $i -lt 50 ]; do c=0; "
+                "for f in /proc/[0-9]*/comm; do read n < $f 2>/dev/null; case $n in mshell-*) c=1;; esac; "
+                "done; sleep 0.1; i=$((i+1)); done")
+    sbagliati = []
     for p in nuovi:
         dove = "/" + p.relative_to(RADICE).as_posix()
         if "ESISTE" not in ser.comando(f"[ -e {dove} ] && echo ESI''STE"):
@@ -170,8 +178,13 @@ def copia_dentro(ser):
             continue
         righe = base64.encodebytes(p.read_bytes()).decode()
         ser.comando(f"mkdir -p /run/prova$(dirname {dove}) && base64 -d > /run/prova{dove} <<'FINE'\n{righe}FINE\n"
-                    f"chmod --reference={dove} /run/prova{dove}; umount {dove} 2>/dev/null; "
+                    f"chmod --reference={dove} /run/prova{dove}; while umount {dove} 2>/dev/null; do :; done; "
                     f"mount --bind /run/prova{dove} {dove}", attesa=60)
+        # il controllo: dentro c'e' davvero il file nuovo?
+        if hashlib.md5(p.read_bytes()).hexdigest() not in ser.comando(f"md5sum {dove}"):
+            sbagliati.append(dove)
+    if sbagliati:
+        sys.exit(f"FALLITA: nel QEMU di prova sono rimasti i file vecchi: {' '.join(sbagliati)}")
     scrivi(f"copiati {len(nuovi)} file nel QEMU di prova")
 
 
