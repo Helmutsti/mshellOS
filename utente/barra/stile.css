@@ -55,9 +55,6 @@ window {
 	--raggio-icona: 22px;  /* le icone delle app da 96 */
 	/* ombra/incassato: un'ombra dentro in alto e una riga chiara sotto */
 	--ombra-incassato: inset 0 1px 2px rgba(20, 20, 26, 0.07), 0 1px 0 rgba(20, 20, 26, 0.04);
-	/* ombra/sovrapposto: tre ombre, dalla piu' vicina alla piu' larga */
-	--ombra-sovrapposto: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 16px rgba(0, 0, 0, 0.08),
-		0 20px 40px rgba(0, 0, 0, 0.14);
 	font-family: "IBM Plex Sans";
 	color: var(--testo-primario);
 }
@@ -90,19 +87,14 @@ window {
 	background-color: var(--controllo-selezione-vetro);
 }
 
-/* 5. I MENU: il pannello sta sotto la barra, con il bordo destro su quello delle app */
-.posto-menu {
-	margin-top: var(--spazio-32);
-	margin-right: var(--spazio-32);
-}
-
+/* 5. I MENU: ogni pannello riempie la sua superficie (il posto lo dice barra.c). Qui solo il
+ * riempimento: gli angoli arrotondati, l'ombra/sovrapposto e la sfocatura dietro il vetro li
+ * disegna il compositore (decisione della persona: le decorazioni sono del compositore). */
 .pannello {
 	min-width: 288px;  /* 320 meno il padding */
 	padding: var(--spazio-16);
 	border-spacing: var(--spazio-12);
-	border-radius: var(--raggio-12);
 	background-color: var(--superficie-vetro);
-	box-shadow: var(--ombra-sovrapposto);
 }
 
 /* il calendario (le misure di questo blocco vengono dalla schermata del disegno) */

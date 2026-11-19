@@ -24,6 +24,7 @@
 #   scrivi <testo>         scrive lettere, cifre e spazi, un tasto alla volta
 #   aspetta <ms>           aspetta i millisecondi indicati
 #   foto <nome>            fotografa lo schermo in build/prova-<posto>/foto/<nome>.png
+#   clic <x> <y>           clic con il tasto sinistro sul pixel x, y dello schermo
 #   app                    apre l'app di prova (come utente1, nel desktop attuale)
 #   seriale <comando>      esegue un comando nella shell dell'amministratore e ne stampa l'uscita
 #
@@ -221,6 +222,18 @@ class Qmp:
         self.invia({"execute": "input-send-event", "arguments": {"events": [
             {"type": "key", "data": {"down": giu, "key": {"type": "qcode", "data": nome}}}]}})
 
+    def clic(self, x, y, larghezza, altezza):
+        """Porta il puntatore (la tavoletta usb-tablet, a coordinate assolute 0..32767) sul pixel
+        x, y dello schermo e fa clic con il tasto sinistro."""
+        self.invia({"execute": "input-send-event", "arguments": {"events": [
+            {"type": "abs", "data": {"axis": "x", "value": x * 32767 // (larghezza - 1)}},
+            {"type": "abs", "data": {"axis": "y", "value": y * 32767 // (altezza - 1)}}]}})
+        time.sleep(0.05)
+        for giu in (True, False):
+            self.invia({"execute": "input-send-event", "arguments": {"events": [
+                {"type": "btn", "data": {"down": giu, "button": "left"}}]}})
+            time.sleep(0.05)
+
 
 def esegui(copione, ser):
     mon, qmp = Monitor(), Qmp()
@@ -246,6 +259,16 @@ def esegui(copione, ser):
             Image.open(ppm).save(FOTO / f"{resto}.png")
             ppm.unlink()
             scrivi(f"foto: {FOTO / (resto + '.png')}")
+        elif cosa == "clic":
+            # la misura dello schermo serve per le coordinate assolute: si legge da una foto
+            ppm = FOTO / "_misura.ppm"
+            mon.comando(f"screendump {ppm.as_posix()}")
+            from PIL import Image
+            with Image.open(ppm) as im:
+                larghezza, altezza = im.size
+            ppm.unlink()
+            x, y = (int(v) for v in resto.split())
+            qmp.clic(x, y, larghezza, altezza)
         elif cosa == "app":
             ser.comando("(runuser -u utente1 -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 "
                         "mshell-prova >/dev/null 2>&1 &)")

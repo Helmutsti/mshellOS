@@ -54,6 +54,7 @@ struct mshell_livello {
 	struct mshell_livelli *livelli;
 	struct wlr_layer_surface_v1 *superficie;
 	struct wlr_scene_layer_surface_v1 *scena;
+	struct mshell_ombre_livello ombre;  /* l'ombra, se e' un pannello (effetti.c) */
 	struct wl_listener commit;
 	struct wl_listener unmap;
 	struct wl_listener destroy;
@@ -151,7 +152,8 @@ static void mshell_livello_commit(struct wl_listener *listener, void *data) {
 	if (ls->current.committed != 0) {
 		mshell_livello_disponi(s);
 	}
-	mshell_effetti_livello(s->scena->tree, ls->namespace);  /* il vetro, se e' fra i suoi (effetti.c) */
+	/* il vetro, gli angoli e l'ombra, se e' fra le superfici che li hanno (effetti.c) */
+	mshell_effetti_livello(s->scena->tree, ls, &s->ombre);
 	mshell_livelli_tastiera(l, NULL);
 }
 
@@ -179,7 +181,8 @@ static void mshell_popup_livello_commit(struct wl_listener *listener, void *data
 	struct mshell_popup_livello *p = wl_container_of(listener, p, commit);
 	if (!p->popup->base->initial_commit) {
 		/* il vetro come la superficie genitore (effetti.c) */
-		mshell_effetti_livello(p->genitore->scena->tree, p->genitore->superficie->namespace);
+		mshell_effetti_livello(p->genitore->scena->tree, p->genitore->superficie,
+			&p->genitore->ombre);
 		return;
 	}
 	/* il popup resta dentro lo schermo: il riquadro e' quello dello schermo, nelle coordinate

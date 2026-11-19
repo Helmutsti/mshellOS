@@ -7,17 +7,21 @@
  * (lo dice il compositore, elenco-app.c); a destra giorno e ora, la campanella e il menu: sono
  * pulsanti, e ognuno apre il suo menu a tendina (calendario, notifiche, comandi rapidi).
  *
- * I MENU stanno in una seconda superficie, nel livello "overlay", grande come lo schermo e
- * trasparente, che c'e' solo mentre un menu e' aperto. Il pannello del menu e' disegnato dentro,
- * sotto la barra e allineato a destra con le app. Cosi':
- *   - un clic fuori dal pannello cade su questa superficie e chiude il menu (senza arrivare
- *     all'app sotto);
- *   - la fascia della barra (i 32 px in alto) e' esclusa dalla superficie dei clic: un clic li'
+ * I MENU: ogni pannello (calendario, notifiche, comandi rapidi) e' una superficie a parte, nel
+ * livello "overlay", grande come il pannello, sotto la barra e allineata a destra con le app.
+ * GTK ci disegna solo il contenuto su fondo di vetro: gli angoli arrotondati, la sfocatura dietro
+ * e l'ombra li mette il compositore (decisione della persona: le decorazioni sono del
+ * compositore), che le riconosce dal nome "mshell-barra-menu" (utente/compositore/effetti.c).
+ * La superficie del pannello chiede la tastiera in esclusiva, quindi riceve Esc (che chiude il
+ * menu); quando sparisce il compositore ridà la tastiera all'app.
+ * PER CHIUDERE CON UN CLIC FUORI, mentre un menu e' aperto c'e' anche una superficie "dei clic":
+ * trasparente, grande come lo schermo, nello stesso livello ma sotto il pannello (compare prima
+ * di lui, e il compositore mette sopra l'ultima arrivata). Non disegna niente e il compositore non
+ * la decora. Cosi':
+ *   - un clic fuori dal pannello cade su di lei e chiude il menu (senza arrivare all'app sotto);
+ *   - la fascia della barra (i 32 px in alto) e' esclusa dalla sua zona dei clic: un clic li'
  *     arriva alla barra, quindi un clic su un altro pulsante passa all'altro menu e un clic sullo
- *     stesso pulsante lo chiude;
- *   - la superficie chiede la tastiera in esclusiva, quindi riceve Esc (che chiude il menu);
- *     quando sparisce il compositore ridà la tastiera all'app.
- *   - l'ombra del pannello ha tutto lo spazio che vuole intorno.
+ *     stesso pulsante lo chiude.
  *
  * L'ASPETTO viene solo da stile.css (in /usr/share/mshell/barra/), un foglio di stile nostro che
  * parte da zero: prima azzera tutto quello che darebbe il tema di GTK, poi mette le nostre regole
@@ -41,7 +45,8 @@
 
 enum menu { NESSUNO = -1, CALENDARIO, NOTIFICHE, COMANDI, MENU_QUANTI };
 
-static GtkWidget *finestra_menu;          /* la superficie dei menu */
+static GtkWidget *finestra_clic;          /* la superficie dei clic fuori dal menu */
+static GtkWidget *finestra_menu[MENU_QUANTI];  /* le superfici dei menu, una per pannello */
 static GtkWidget *pulsante[MENU_QUANTI];  /* i pulsanti della barra, uno per menu */
 static GtkWidget *pannello[MENU_QUANTI];  /* i pannelli dei menu */
 static enum menu aperto = NESSUNO;
@@ -53,11 +58,11 @@ static GtkWidget *barra;                  /* la superficie della barra */
 static void apri(enum menu quale) {
 	if (aperto != NESSUNO) {
 		gtk_widget_remove_css_class(pulsante[aperto], "aperto");
-		gtk_widget_set_visible(pannello[aperto], FALSE);
+		gtk_widget_set_visible(finestra_menu[aperto], FALSE);
 	}
 	aperto = quale;
 	if (quale == NESSUNO) {
-		gtk_widget_set_visible(finestra_menu, FALSE);
+		gtk_widget_set_visible(finestra_clic, FALSE);
 		return;
 	}
 	if (quale == CALENDARIO) {
@@ -67,8 +72,9 @@ static void apri(enum menu quale) {
 		g_date_time_unref(adesso);
 	}
 	gtk_widget_add_css_class(pulsante[quale], "aperto");
-	gtk_widget_set_visible(pannello[quale], TRUE);
-	gtk_widget_set_visible(finestra_menu, TRUE);
+	/* prima la superficie dei clic (se non c'e' gia'), poi il pannello, che cosi' le sta sopra */
+	gtk_widget_set_visible(finestra_clic, TRUE);
+	gtk_widget_set_visible(finestra_menu[quale], TRUE);
 }
 
 static void pulsante_premuto(GtkButton *b, gpointer dati) {
@@ -85,17 +91,9 @@ static void clic_barra(GtkGestureClick *g, int n, double x, double y, gpointer d
 	}
 }
 
-/* Un clic sulla superficie dei menu fuori dal pannello chiude il menu. */
-static void clic_menu(GtkGestureClick *g, int n, double x, double y, gpointer dati) {
-	if (aperto == NESSUNO) {
-		return;
-	}
-	graphene_rect_t r;
-	graphene_point_t p = GRAPHENE_POINT_INIT(x, y);
-	if (!gtk_widget_compute_bounds(pannello[aperto], finestra_menu, &r) ||
-			!graphene_rect_contains_point(&r, &p)) {
-		apri(NESSUNO);
-	}
+/* Un clic sulla superficie dei clic (cioe' fuori dal pannello) chiude il menu. */
+static void clic_fuori(GtkGestureClick *g, int n, double x, double y, gpointer dati) {
+	apri(NESSUNO);
 }
 
 static gboolean tasto_menu(GtkEventControllerKey *k, guint tasto, guint codice,
@@ -107,9 +105,9 @@ static gboolean tasto_menu(GtkEventControllerKey *k, guint tasto, guint codice,
 	return FALSE;
 }
 
-/* La fascia della barra non e' della superficie dei menu: i clic li' vanno alla barra.
+/* La fascia della barra non e' della superficie dei clic: i clic li' vanno alla barra.
  * (La zona dei clic si da' al compositore ogni volta che la superficie compare.) */
-static void menu_compare(GtkWidget *w, gpointer dati) {
+static void clic_compare(GtkWidget *w, gpointer dati) {
 	cairo_rectangle_int_t sotto_la_barra = { 0, 32, G_MAXINT16, G_MAXINT16 };
 	cairo_region_t *zona = cairo_region_create_rectangle(&sotto_la_barra);
 	gdk_surface_set_input_region(gtk_native_get_surface(GTK_NATIVE(w)), zona);
@@ -217,43 +215,57 @@ static GtkWidget *crea_barra(void) {
 	return w;
 }
 
-static GtkWidget *crea_finestra_menu(const char *tema) {
+/* Una superficie dei livelli sopra le app, "overlay", che non chiede spazio alle app: i suoi
+ * bordi si contano da quelli dello schermo, barra compresa. */
+static GtkWidget *nuova_superficie(const char *nome, GtkLayerShellKeyboardMode tastiera) {
 	GtkWidget *w = gtk_window_new();
 	gtk_window_set_decorated(GTK_WINDOW(w), FALSE);
-	gtk_widget_add_css_class(w, "menu");
-	gtk_widget_add_css_class(w, tema);
 	gtk_layer_init_for_window(GTK_WINDOW(w));
-	gtk_layer_set_namespace(GTK_WINDOW(w), "mshell-barra-menu");
+	gtk_layer_set_namespace(GTK_WINDOW(w), nome);
 	gtk_layer_set_layer(GTK_WINDOW(w), GTK_LAYER_SHELL_LAYER_OVERLAY);
+	gtk_layer_set_exclusive_zone(GTK_WINDOW(w), -1);
+	gtk_layer_set_keyboard_mode(GTK_WINDOW(w), tastiera);
+	return w;
+}
+
+/* La superficie dei clic: tutto lo schermo, trasparente (vedi in cima). */
+static GtkWidget *crea_finestra_clic(void) {
+	GtkWidget *w = nuova_superficie("mshell-barra-clic", GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
 	for (int e = 0; e < GTK_LAYER_SHELL_EDGE_ENTRY_NUMBER; e++) {
 		gtk_layer_set_anchor(GTK_WINDOW(w), e, TRUE);
 	}
-	gtk_layer_set_exclusive_zone(GTK_WINDOW(w), -1);  /* tutto lo schermo, barra compresa */
-	gtk_layer_set_keyboard_mode(GTK_WINDOW(w), GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+	GtkGesture *clic = gtk_gesture_click_new();
+	g_signal_connect(clic, "pressed", G_CALLBACK(clic_fuori), NULL);
+	gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(clic));
+	g_signal_connect(w, "map", G_CALLBACK(clic_compare), NULL);
+	return w;
+}
 
-	/* i pannelli, uno visibile alla volta, in alto a destra (le distanze sono in stile.css) */
-	GtkWidget *posto = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_add_css_class(posto, "posto-menu");
-	gtk_widget_set_halign(posto, GTK_ALIGN_END);
-	gtk_widget_set_valign(posto, GTK_ALIGN_START);
+/* La superficie di un menu: grande come il suo pannello, in alto a destra, sotto la barra (32 px)
+ * e con il bordo destro su quello delle app (32 px dal bordo dello schermo). */
+static GtkWidget *crea_finestra_menu(const char *tema, GtkWidget *contenuto) {
+	GtkWidget *w = nuova_superficie("mshell-barra-menu", GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+	gtk_widget_add_css_class(w, "menu");
+	gtk_widget_add_css_class(w, tema);
+	gtk_layer_set_anchor(GTK_WINDOW(w), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+	gtk_layer_set_anchor(GTK_WINDOW(w), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+	gtk_layer_set_margin(GTK_WINDOW(w), GTK_LAYER_SHELL_EDGE_TOP, 32);
+	gtk_layer_set_margin(GTK_WINDOW(w), GTK_LAYER_SHELL_EDGE_RIGHT, 32);
+	gtk_window_set_child(GTK_WINDOW(w), contenuto);
+	GtkEventController *tasti = gtk_event_controller_key_new();
+	g_signal_connect(tasti, "key-pressed", G_CALLBACK(tasto_menu), NULL);
+	gtk_widget_add_controller(w, tasti);
+	return w;
+}
+
+static void crea_menu(const char *tema) {
+	finestra_clic = crea_finestra_clic();
 	pannello[CALENDARIO] = mshell_calendario_nuovo();
 	pannello[NOTIFICHE] = mshell_notifiche_nuove();
 	pannello[COMANDI] = mshell_comandi_nuovi();
 	for (int i = 0; i < MENU_QUANTI; i++) {
-		gtk_widget_set_visible(pannello[i], FALSE);
-		gtk_box_append(GTK_BOX(posto), pannello[i]);
+		finestra_menu[i] = crea_finestra_menu(tema, pannello[i]);
 	}
-	gtk_window_set_child(GTK_WINDOW(w), posto);
-
-	GtkGesture *clic = gtk_gesture_click_new();
-	gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(clic), GTK_PHASE_CAPTURE);
-	g_signal_connect(clic, "pressed", G_CALLBACK(clic_menu), NULL);
-	gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(clic));
-	GtkEventController *tasti = gtk_event_controller_key_new();
-	g_signal_connect(tasti, "key-pressed", G_CALLBACK(tasto_menu), NULL);
-	gtk_widget_add_controller(w, tasti);
-	g_signal_connect(w, "map", G_CALLBACK(menu_compare), NULL);
-	return w;
 }
 
 int main(int argc, char *argv[]) {
@@ -276,7 +288,7 @@ int main(int argc, char *argv[]) {
 		"gtk-xft-rgba", "none", "gtk-hint-font-metrics", FALSE, NULL);
 
 	const char *tema = g_strcmp0(g_getenv("MSHELL_TEMA"), "chiaro") == 0 ? "chiaro" : "scuro";
-	finestra_menu = crea_finestra_menu(tema);
+	crea_menu(tema);
 	barra = crea_barra();
 	mshell_cassetto_crea(tema, cassetto_cambiato);
 	g_unix_signal_add(SIGUSR1, segnale_cassetto, NULL);
