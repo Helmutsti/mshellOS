@@ -12,6 +12,8 @@
  *     mai, stanno in desktop da 4 app al massimo e si comandano con il tasto Super. Tutto e'
  *     spiegato nel blocco "MSHELL: I DESKTOP" piu' sotto. Per questo le richieste delle app di
  *     spostarsi o ridimensionarsi col mouse non fanno piu' niente, e Alt+F1 non c'e' piu'.
+ *   - LE ANIMAZIONI: il cambio di desktop, le app che cambiano posto, che compaiono e che si
+ *     chiudono. Il codice e' in animazioni.c (incluso da questo file), qui ci sono le chiamate.
  * Tutto il resto e' il file originale. La tastiera italiana e il puntatore di mshell non
  * cambiano il codice: vengono da XKB_DEFAULT_LAYOUT e dal tema Xcursor "default" (costruisci.sh).
  *
@@ -95,7 +97,7 @@
  *   Super+spazio                  PER ORA apre l'app di prova (mshell-prova): sara' il cassetto
  * Super da solo, premuto e lasciato, non fa niente. Le combinazioni che non sono qui passano
  * all'app. Arrivano nelle tappe dopo: la cornice del focus, i selettori, la barra di stato, il
- * cassetto, le animazioni e il vetro. */
+ * cassetto e il vetro. Le animazioni sono in animazioni.c. */
 #define MSHELL_APP_MAX 4
 #define MSHELL_DESKTOP_MAX 16
 #define MSHELL_BORDO 32   /* spazio/32: dal bordo dello schermo alle app */
@@ -197,6 +199,7 @@ struct tinywl_toplevel {
 	struct wl_listener request_fullscreen;
 	int desktop;           /* MSHELL: in quale desktop sta (-1: in nessuno) */
 	struct wlr_box posto;  /* MSHELL: il suo posto sullo schermo */
+	struct mshell_anim_app *anim;  /* MSHELL: le sue animazioni (animazioni.c) */
 };
 
 struct tinywl_popup {
@@ -266,6 +269,11 @@ static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface 
 	}
 }
 
+/* MSHELL: le animazioni sono in animazioni.c, incluso piu' sotto; queste servono prima. */
+static void mshell_anim_dove(struct tinywl_toplevel *t, int *x, int *y);
+static void mshell_anim_sposta(struct tinywl_toplevel *t);
+static void mshell_anim_desktop(struct tinywl_server *server, int prima, int quale, int verso);
+
 /* MSHELL: I DESKTOP, le funzioni (le regole sono in cima, "MSHELL: I DESKTOP"). */
 
 /* La parte i-esima di "quante" parti uguali dell'area, in colonne o in righe, con lo spazio fra
@@ -327,7 +335,9 @@ static struct wlr_box mshell_posto(enum mshell_disposizione d, int i, struct wlr
 static void mshell_metti_al_posto(struct tinywl_toplevel *t) {
 	struct wlr_box geo;
 	wlr_xdg_surface_get_geometry(t->xdg_toplevel->base, &geo);
-	wlr_scene_node_set_position(&t->scene_tree->node, t->posto.x - geo.x, t->posto.y - geo.y);
+	int x, y;
+	mshell_anim_dove(t, &x, &y);  /* il posto, o il punto a meta' strada se sta scorrendo */
+	wlr_scene_node_set_position(&t->scene_tree->node, x - geo.x, y - geo.y);
 }
 
 /* Calcola i posti delle app del desktop e chiede a ogni app di prendere la misura del suo. */
@@ -354,16 +364,16 @@ static void mshell_disponi(struct tinywl_server *server, struct mshell_desktop *
 		if (t->xdg_toplevel->base->initialized) {
 			wlr_xdg_toplevel_set_size(t->xdg_toplevel, t->posto.width, t->posto.height);
 		}
-		mshell_metti_al_posto(t);
+		mshell_anim_sposta(t);  /* ci va scorrendo, se si vede (animazioni.c) */
 	}
 }
 
-/* Fa vedere il desktop "quale" (spegne gli altri) e da' la tastiera alla sua app col focus. */
-static void mshell_mostra(struct tinywl_server *server, int quale) {
+/* Fa vedere il desktop "quale" (spegne gli altri) e da' la tastiera alla sua app col focus.
+ * Il cambio scorre in verticale: "verso" e' la direzione del tasto (-1 su, 1 giu', 0 nessuna). */
+static void mshell_mostra_verso(struct tinywl_server *server, int quale, int verso) {
+	int prima = server->attuale;
 	server->attuale = quale;
-	for (int i = 0; i < server->n_desktop; i++) {
-		wlr_scene_node_set_enabled(&server->desktop[i].albero->node, i == quale);
-	}
+	mshell_anim_desktop(server, prima, quale, verso);  /* accende e spegne (animazioni.c) */
 	struct mshell_desktop *d = &server->desktop[quale];
 	if (d->n == 0) {
 		wlr_seat_keyboard_notify_clear_focus(server->seat);
@@ -374,6 +384,10 @@ static void mshell_mostra(struct tinywl_server *server, int quale) {
 	}
 	struct tinywl_toplevel *t = d->app[d->focus];
 	focus_toplevel(t, t->xdg_toplevel->base->surface);
+}
+
+static void mshell_mostra(struct tinywl_server *server, int quale) {
+	mshell_mostra_verso(server, quale, 0);
 }
 
 /* Il primo desktop vuoto, o uno nuovo in fondo (spento). -1 se sono gia' tutti usati. */
@@ -481,7 +495,7 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 			mshell_togli(server, t);
 			mshell_aggiungi(server, t, dove);
 		}
-		mshell_mostra(server, dove);
+		mshell_mostra_verso(server, dove, passo);
 		return true;
 	}
 	case XKB_KEY_Left:
@@ -548,6 +562,8 @@ static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t qu
 		server->super_tocco = quando ? quando : 1;
 	}
 }
+
+#include "animazioni.c"  /* MSHELL: le animazioni (cambio di desktop, posti, comparire, chiudere) */
 
 static void keyboard_handle_modifiers(
 		struct wl_listener *listener, void *data) {
@@ -776,7 +792,13 @@ static struct tinywl_toplevel *desktop_toplevel_at(
 	while (tree != NULL && tree->node.data == NULL) {
 		tree = tree->node.parent;
 	}
-	return tree->node.data;
+	/* MSHELL: il desktop che sta uscendo (si vede ancora mentre scorre) non prende il puntatore */
+	struct tinywl_toplevel *toplevel = tree->node.data;
+	if (toplevel->desktop != server->attuale) {
+		*surface = NULL;
+		return NULL;
+	}
+	return toplevel;
 }
 
 static void reset_cursor_mode(struct tinywl_server *server) {
@@ -1087,6 +1109,7 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
 	}
 
 	focus_toplevel(toplevel, toplevel->xdg_toplevel->base->surface);
+	mshell_anim_compare(toplevel);  /* MSHELL: compare con una dissolvenza (animazioni.c) */
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -1127,6 +1150,7 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 		/* MSHELL: la geometria dell'app puo' cambiare a ogni invio: si rimette al posto */
 		mshell_metti_al_posto(toplevel);
 	}
+	mshell_anim_dopo_invio(toplevel);  /* MSHELL: l'opacita' se sta comparendo (animazioni.c) */
 }
 
 static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
@@ -1135,6 +1159,7 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 
 	/* MSHELL: un'app chiusa prima di comparire sta gia' in un desktop: si toglie */
 	mshell_togli(toplevel->server, toplevel);
+	mshell_anim_dimentica(toplevel);  /* MSHELL: animazioni.c */
 
 	wl_list_remove(&toplevel->map.link);
 	wl_list_remove(&toplevel->unmap.link);
@@ -1246,6 +1271,9 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	toplevel->server = server;
 	toplevel->xdg_toplevel = xdg_toplevel;
 	toplevel->desktop = -1;  /* MSHELL: il desktop lo prende al primo invio */
+	/* MSHELL: prima del nodo della scena, perche' l'istantanea per la dissolvenza in uscita va
+	 * fatta prima che la scena spenga le immagini dell'app (animazioni.c) */
+	mshell_anim_nuova(server, toplevel);
 	toplevel->scene_tree =
 		wlr_scene_xdg_surface_create(&toplevel->server->scene->tree, xdg_toplevel->base);
 	toplevel->scene_tree->node.data = toplevel;
