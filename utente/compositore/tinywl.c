@@ -12,6 +12,8 @@
  *     mai, stanno in desktop da 4 app al massimo e si comandano con il tasto Super. Tutto e'
  *     spiegato nel blocco "MSHELL: I DESKTOP" piu' sotto. Per questo le richieste delle app di
  *     spostarsi o ridimensionarsi col mouse non fanno piu' niente, e Alt+F1 non c'e' piu'.
+ *   - LA CORNICE DEL FOCUS E I SELETTORI (seconda tappa): si vedono solo con Super tenuto
+ *     premuto. Il codice e' in selettori.c, incluso qui dopo le funzioni dei desktop.
  * Tutto il resto e' il file originale. La tastiera italiana e il puntatore di mshell non
  * cambiano il codice: vengono da XKB_DEFAULT_LAYOUT e dal tema Xcursor "default" (costruisci.sh).
  *
@@ -94,8 +96,8 @@
  *                                 uno nuovo in fondo
  *   Super+spazio                  PER ORA apre l'app di prova (mshell-prova): sara' il cassetto
  * Super da solo, premuto e lasciato, non fa niente. Le combinazioni che non sono qui passano
- * all'app. Arrivano nelle tappe dopo: la cornice del focus, i selettori, la barra di stato, il
- * cassetto, le animazioni e il vetro. */
+ * all'app. Mentre Super e' giu' si vedono la cornice del focus e i selettori (selettori.c).
+ * Arrivano nelle tappe dopo: la barra di stato, il cassetto, le animazioni e il vetro. */
 #define MSHELL_APP_MAX 4
 #define MSHELL_DESKTOP_MAX 16
 #define MSHELL_BORDO 32   /* spazio/32: dal bordo dello schermo alle app */
@@ -266,6 +268,13 @@ static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface 
 	}
 }
 
+/* MSHELL: la cornice del focus e i selettori (selettori.c, incluso dopo le funzioni dei
+ * desktop): le funzioni dei desktop le chiamano, quindi si annunciano qui. */
+static void mshell_selettori_aggiorna(struct tinywl_server *server);
+static void mshell_selettori_super(struct tinywl_server *server, bool premuto);
+static void mshell_selettori_desktop(struct tinywl_server *server);
+static void mshell_selettori_disposizioni(struct tinywl_server *server);
+
 /* MSHELL: I DESKTOP, le funzioni (le regole sono in cima, "MSHELL: I DESKTOP"). */
 
 /* La parte i-esima di "quante" parti uguali dell'area, in colonne o in righe, con lo spazio fra
@@ -332,6 +341,7 @@ static void mshell_metti_al_posto(struct tinywl_toplevel *t) {
 
 /* Calcola i posti delle app del desktop e chiede a ogni app di prendere la misura del suo. */
 static void mshell_disponi(struct tinywl_server *server, struct mshell_desktop *d) {
+	mshell_selettori_aggiorna(server);  /* MSHELL: le miniature seguono app e disposizioni */
 	if (d->n == 0) {
 		return;
 	}
@@ -361,6 +371,7 @@ static void mshell_disponi(struct tinywl_server *server, struct mshell_desktop *
 /* Fa vedere il desktop "quale" (spegne gli altri) e da' la tastiera alla sua app col focus. */
 static void mshell_mostra(struct tinywl_server *server, int quale) {
 	server->attuale = quale;
+	mshell_selettori_aggiorna(server);  /* MSHELL: la cornice e i selettori seguono */
 	for (int i = 0; i < server->n_desktop; i++) {
 		wlr_scene_node_set_enabled(&server->desktop[i].albero->node, i == quale);
 	}
@@ -469,6 +480,7 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 	switch (sym) {
 	case XKB_KEY_Up:
 	case XKB_KEY_Down: {
+		mshell_selettori_desktop(server);  /* MSHELL: si apre subito il selettore dei desktop */
 		int passo = sym == XKB_KEY_Up ? -1 : 1;
 		int dove = (server->attuale + passo + server->n_desktop) % server->n_desktop;
 		if (dove == server->attuale) {
@@ -509,6 +521,7 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 		return true;
 	case XKB_KEY_Tab:
 	case XKB_KEY_ISO_Left_Tab:
+		mshell_selettori_disposizioni(server);  /* MSHELL: la fila delle disposizioni */
 		if (d->n > 0) {
 			d->scelta = (d->scelta + 1) % mshell_quante_scelte[d->n];
 			mshell_disponi(server, d);
@@ -525,6 +538,7 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 /* Il tasto Super stesso: non va alle app. Lasciato senza aver usato combinazioni e' un "tocco";
  * due tocchi di fila portano al primo desktop vuoto (o a uno nuovo). */
 static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t quando) {
+	mshell_selettori_super(server, premuto);  /* MSHELL: la cornice, il timer di Super tenuto */
 	if (premuto) {
 		server->super_giu = true;
 		server->super_usato = false;
@@ -548,6 +562,8 @@ static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t qu
 		server->super_tocco = quando ? quando : 1;
 	}
 }
+
+#include "selettori.c"  /* MSHELL: la cornice del focus e i selettori */
 
 static void keyboard_handle_modifiers(
 		struct wl_listener *listener, void *data) {
@@ -1489,6 +1505,8 @@ int main(int argc, char *argv[]) {
 	server.albero_desktop = wlr_scene_tree_create(&server.scene->tree);
 	server.attuale = mshell_nuovo_desktop(&server);
 	wlr_scene_node_set_enabled(&server.desktop[server.attuale].albero->node, true);
+	/* MSHELL: il livello della cornice e dei selettori, sopra i desktop (selettori.c) */
+	mshell_selettori_avvia(&server, mshell_fondo);
 
 	/* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
 	 * used for application windows. For more detail on shells, refer to
