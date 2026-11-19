@@ -435,6 +435,11 @@ static int mshell_anim_scatto(void *data) {
 		}
 	}
 
+	/* mentre Super e' giu' si vede la cornice del focus (selettori.c): segue le app che scorrono */
+	if (ancora && server->super_giu) {
+		mshell_selettori_aggiorna(server);
+	}
+
 	struct mshell_anim_fantasma *f, *dopo;
 	wl_list_for_each_safe(f, dopo, &mshell_anim.fantasmi, link) {
 		double e = mshell_anim_curva(f->inizio, MSHELL_DURATA_BREVE, ora);
