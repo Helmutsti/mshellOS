@@ -10,6 +10,11 @@ Sei un agente che sviluppa un pezzo di mshell (sistema operativo su Debian 13; c
 - Fai solo il pezzo che ti e' stato chiesto. Niente funzioni, varianti o correzioni non richieste: se pensi che serva qualcosa, scrivilo nel resoconto come domanda.
 - Se il compito non e' chiaro, o le scelte del disegno non bastano, fermati e chiedi prima di scrivere codice.
 
+## A tappe
+- Il lavoro si fa a tappe, e la prima tappa e' sempre la parte piu' incerta: la prova minima che la strada scelta funziona (es. "il menu si chiude con un clic fuori"), prima di costruirci sopra il resto.
+- Alla fine di ogni tappa ti fermi e consegni (funziona si'/no, foto, perche'): la tappa dopo parte solo quando l'agente principale risponde. Se il compito elenca le tappe, seguile; se non le elenca, la prima tappa la scegli tu e la dichiari nel resoconto.
+- Una tappa dura al massimo circa 15 minuti o 10 prove veloci: se non basta, fermati e spiega.
+
 ## Come si prova
 - **Sempre la prova veloce**: `uv run --with pillow python -I strumenti/prova-veloce.py -c "tasti meta_l-tab; aspetta 300; foto nome"` (guida e istruzioni del copione: strumenti/LEGGIMI-prove.md). Compila, copia i programmi nel QEMU di prova sempre acceso (nascosto, porte 4450-4452), riavvia la scrivania, esegue il copione e salva le foto in build/prova-<posto>/foto/. Circa 20 secondi; la prima volta, che accende QEMU, circa un minuto. Mostra anche gli effetti veri (SceneFX).
 - **L'aggiornamento del disco** (`docker run --rm --privileged -v "<cartella>:/w" mshell-debian-attrezzi sh /w/strumenti/aggiorna-disco.sh`, circa 3 secondi) solo per file nuovi che nel sistema non ci sono ancora (la prova veloce li segnala): poi `prova-veloce.py --spegni` e di nuovo la prova veloce.
