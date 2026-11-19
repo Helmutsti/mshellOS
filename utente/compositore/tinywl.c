@@ -50,7 +50,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>    /* MSHELL: memset (i desktop) */
-#include <sys/wait.h>  /* MSHELL: waitpid (lanciare l'app di prova) */
+#include <signal.h>    /* MSHELL: kill (Super+spazio alla barra, livelli.c) */
 #include <time.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
@@ -99,11 +99,11 @@
  *   Super+Tab                     disposizione successiva
  *   Super premuto due volte di fila (entro MSHELL_DOPPIO_TOCCO_MS): il primo desktop vuoto, o
  *                                 uno nuovo in fondo
- *   Super+spazio                  PER ORA apre l'app di prova (mshell-prova): sara' il cassetto
+ *   Super+spazio                  apre o chiude il cassetto delle app (lo disegna la barra,
+ *                                 mshell-barra: il compositore glielo dice, livelli.c)
  * Super da solo, premuto e lasciato, non fa niente. Le combinazioni che non sono qui passano
  * all'app. Mentre Super e' giu' si vedono la cornice del focus e i selettori (selettori.c).
- * Le animazioni sono in animazioni.c. Arrivano nelle tappe dopo: la barra di stato, il
- * cassetto e il vetro. */
+ * Le animazioni sono in animazioni.c. Arriva in una tappa dopo: il vetro (la sfocatura). */
 #define MSHELL_APP_MAX 4
 #define MSHELL_DESKTOP_MAX 16
 #define MSHELL_BORDO 32   /* spazio/32: dal bordo dello schermo alle app */
@@ -210,6 +210,7 @@ struct tinywl_toplevel {
 	struct mshell_anim_app *anim;  /* MSHELL: le sue animazioni (animazioni.c) */
 	struct wlr_foreign_toplevel_handle_v1 *voce;  /* MSHELL: la sua voce nell'elenco delle app */
 	struct wl_listener titolo;                    /* MSHELL: (livelli.c) */
+	struct wl_listener attiva;                    /* MSHELL: (livelli.c) */
 };
 
 struct tinywl_popup {
@@ -231,6 +232,7 @@ struct tinywl_keyboard {
 /* MSHELL: dai livelli e dall'elenco delle app (livelli.c, incluso piu' sotto) */
 static bool mshell_livelli_tiene_tastiera(struct tinywl_server *server);
 static void mshell_elenco_attiva(struct tinywl_server *server, struct tinywl_toplevel *t);
+static void mshell_livelli_cassetto(struct tinywl_server *server);
 
 static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface *surface) {
 	/* Note: this function only deals with keyboard focus. */
@@ -498,22 +500,6 @@ static void mshell_assegna(struct tinywl_server *server, struct tinywl_toplevel 
 	mshell_aggiungi(server, t, quale);
 }
 
-/* Lancia un comando staccato dal compositore (doppio fork: nessun processo "zombie"). */
-static void mshell_lancia(const char *comando) {
-	pid_t figlio = fork();
-	if (figlio == 0) {
-		if (fork() == 0) {
-			setsid();
-			execl("/bin/sh", "/bin/sh", "-c", comando, (void *)NULL);
-			_exit(127);
-		}
-		_exit(0);
-	}
-	if (figlio > 0) {
-		waitpid(figlio, NULL, 0);
-	}
-}
-
 /* Un tasto premuto mentre Super e' giu'. Vero se e' una combinazione della scrivania. */
 static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool alt) {
 	struct mshell_desktop *d = &server->desktop[server->attuale];
@@ -569,7 +555,7 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 		}
 		return true;
 	case XKB_KEY_space:
-		mshell_lancia("mshell-prova");  /* PER ORA: sara' il cassetto delle app */
+		mshell_livelli_cassetto(server);  /* MSHELL: apre o chiude il cassetto (livelli.c) */
 		return true;
 	default:
 		return false;

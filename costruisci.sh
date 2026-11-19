@@ -119,10 +119,10 @@ done
 # --- 3b. i programmi di mshell (utente/), compilati qui con le librerie degli attrezzi, che
 # sono le stesse del sistema (Debian 13) ---
 #   mshell-compositore    il compositore Wayland (tinywl di wlroots, utente/compositore/)
-#   mshell-prova          l'app di prova: una finestra scura (utente/prove/app-scura.c); si apre
-#                         con Super+spazio finche' non c'e' il cassetto delle app
-#   mshell-barra          la barra di stato e i suoi menu (utente/barra/, GTK 4); il suo foglio di
-#                         stile va in /usr/share/mshell/barra/
+#   mshell-prova          l'app di prova: una finestra scura (utente/prove/app-scura.c); nel
+#                         cassetto delle app come "Prova" (il suo .desktop in /usr/share/applications)
+#   mshell-barra          la barra di stato, i suoi menu e il cassetto delle app (utente/barra/,
+#                         GTK 4); il suo foglio di stile va in /usr/share/mshell/barra/
 # I protocolli dei livelli e dell'elenco delle app non stanno nei pacchetti di Debian: le loro
 # descrizioni sono copiate dai sorgenti di wlroots 0.18.2 in utente/compositore/protocolli/.
 echo "3b. compositore, app di prova e barra"
@@ -144,11 +144,14 @@ gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" $(pkg-config --cflags wlroots-0.18 way
     $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon)
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
     utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
+mkdir -p "$RADICE/usr/share/applications"
+cp utente/prove/mshell-prova.desktop "$RADICE/usr/share/applications/mshell-prova.desktop"
 # gtk4-layer-shell va prima di wayland-client (lo chiede la sua documentazione)
-gcc -O2 -Wall -Werror -I"$C" $(pkg-config --cflags gtk4-layer-shell-0 gtk4 wayland-client) \
+# (gio-unix: i file .desktop delle app, per il cassetto)
+gcc -O2 -Wall -Werror -I"$C" $(pkg-config --cflags gtk4-layer-shell-0 gtk4 gio-unix-2.0 wayland-client) \
     -o "$RADICE/usr/bin/mshell-barra" utente/barra/*.c \
     "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c" \
-    $(pkg-config --libs gtk4-layer-shell-0 gtk4 wayland-client)
+    $(pkg-config --libs gtk4-layer-shell-0 gtk4 gio-unix-2.0 wayland-client)
 mkdir -p "$RADICE/usr/share/mshell/barra"
 cp utente/barra/stile.css "$RADICE/usr/share/mshell/barra/stile.css"
 

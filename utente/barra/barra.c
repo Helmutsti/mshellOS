@@ -23,7 +23,17 @@
  * parte da zero: prima azzera tutto quello che darebbe il tema di GTK, poi mette le nostre regole
  * con i nomi dei valori del disegno. I menu seguono il tema del sistema (per ora la variabile
  * d'ambiente MSHELL_TEMA=chiaro|scuro, se manca scuro); la barra sta sopra la foto dello sfondo e
- * usa sempre i colori scuri. */
+ * usa sempre i colori scuri.
+ *
+ * IL CASSETTO DELLE APP (cassetto.c) sta in questo stesso programma, in una terza superficie:
+ * cosi' usa lo stesso stile, gli stessi pannelli e la stessa connessione al compositore (l'elenco
+ * delle app, per attivare quelle gia' aperte). Super+spazio lo prende il compositore, che lo dice
+ * a questo programma con il segnale SIGUSR1 ("apri o chiudi il cassetto"): e' il modo piu'
+ * semplice, perche' il compositore sa gia' quale programma e' la barra (quello delle superfici
+ * "mshell-barra...") e non serve un canale apposta. Mentre il cassetto e' aperto la barra non si
+ * vede (nel disegno non c'e': l'ora grande, i comandi rapidi e le notifiche sono nel cassetto). */
+#include <glib-unix.h>
+#include <signal.h>
 #include <gtk4-layer-shell.h>
 #include "barra.h"
 
@@ -37,6 +47,7 @@ static GtkWidget *pannello[MENU_QUANTI];  /* i pannelli dei menu */
 static enum menu aperto = NESSUNO;
 static GtkWidget *titolo_app;             /* il pulsante col titolo dell'app col focus */
 static GtkWidget *orologio;               /* la scritta con giorno e ora */
+static GtkWidget *barra;                  /* la superficie della barra */
 
 /* Apre il menu "quale" (NESSUNO: chiude). */
 static void apri(enum menu quale) {
@@ -116,12 +127,27 @@ static gboolean scocca_minuto(gpointer dati) {
 		g_date_time_get_hour(adesso), g_date_time_get_minute(adesso));
 	gtk_label_set_text(GTK_LABEL(orologio), testo);
 	mshell_calendario_aggiorna(pannello[CALENDARIO], adesso, FALSE);
+	mshell_cassetto_minuto(adesso);
 	/* il prossimo giro allo scoccare del minuto dopo (+ un attimo, per non arrivare prima) */
 	int ms = (60 - g_date_time_get_second(adesso)) * 1000 -
 		g_date_time_get_microsecond(adesso) / 1000 + 50;
 	g_date_time_unref(adesso);
 	g_timeout_add(ms, scocca_minuto, NULL);
 	return G_SOURCE_REMOVE;
+}
+
+/* Il cassetto si apre (la barra e un menu aperto spariscono) o si chiude (la barra torna). */
+static void cassetto_cambiato(gboolean aperto) {
+	if (aperto) {
+		apri(NESSUNO);
+	}
+	gtk_widget_set_visible(barra, !aperto);
+}
+
+/* Super+spazio, detto dal compositore. */
+static gboolean segnale_cassetto(gpointer dati) {
+	mshell_cassetto_apri_chiudi();
+	return G_SOURCE_CONTINUE;
 }
 
 static void titolo_cambiato(const char *titolo) {
@@ -251,7 +277,9 @@ int main(int argc, char *argv[]) {
 
 	const char *tema = g_strcmp0(g_getenv("MSHELL_TEMA"), "chiaro") == 0 ? "chiaro" : "scuro";
 	finestra_menu = crea_finestra_menu(tema);
-	GtkWidget *barra = crea_barra();
+	barra = crea_barra();
+	mshell_cassetto_crea(tema, cassetto_cambiato);
+	g_unix_signal_add(SIGUSR1, segnale_cassetto, NULL);
 	scocca_minuto(NULL);
 	mshell_elenco_app_avvia(titolo_cambiato);
 	gtk_window_present(GTK_WINDOW(barra));

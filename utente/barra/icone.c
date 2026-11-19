@@ -1,7 +1,8 @@
 /* LE ICONE della barra e dei menu, disegnate con cairo (niente librsvg, decisione della persona).
  * I tracciati sono copiati dalle icone Lucide (https://lucide.dev, licenza ISC): sono pensati su
  * una griglia di 24 con un tratto di 2, a capi e angoli tondi; qui si disegnano alla misura di
- * 16 px, quindi tutto (tratto compreso) si scala di 16/24. Il colore e' quello del testo del
+ * 16 px (la lente della ricerca del cassetto a 20), quindi tutto (tratto compreso) si scala di
+ * 16/24 (o 20/24). Il colore e' quello del testo del
  * widget (CSS "color"), cosi' le icone seguono il tema come le scritte. */
 #include "barra.h"
 
@@ -61,15 +62,26 @@ static void disegna(GtkDrawingArea *area, cairo_t *cr, int larghezza, int altezz
 		cairo_line_to(cr, 15, 12);
 		cairo_line_to(cr, 9, 6);
 		break;
+	case ICONA_CERCA:
+		/* lucide "search": m21 21-4.34-4.34, cerchio di centro 11,11 e raggio 8 */
+		cairo_move_to(cr, 21, 21);
+		cairo_line_to(cr, 16.66, 16.66);
+		cairo_new_sub_path(cr);
+		cairo_arc(cr, 11, 11, 8, 0, 2 * G_PI);
+		break;
 	}
 	cairo_stroke(cr);
 }
 
-GtkWidget *mshell_icona_nuova(enum mshell_icona quale) {
+GtkWidget *mshell_icona_nuova_misura(enum mshell_icona quale, int misura) {
 	GtkWidget *area = gtk_drawing_area_new();
-	gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(area), MISURA);
-	gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(area), MISURA);
+	gtk_drawing_area_set_content_width(GTK_DRAWING_AREA(area), misura);
+	gtk_drawing_area_set_content_height(GTK_DRAWING_AREA(area), misura);
 	gtk_drawing_area_set_draw_func(GTK_DRAWING_AREA(area), disegna, GINT_TO_POINTER(quale), NULL);
 	gtk_widget_add_css_class(area, "icona");
 	return area;
+}
+
+GtkWidget *mshell_icona_nuova(enum mshell_icona quale) {
+	return mshell_icona_nuova_misura(quale, MISURA);
 }
