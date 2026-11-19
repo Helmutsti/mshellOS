@@ -25,6 +25,47 @@
 #define COLORE 0xFF242426u   /* lo scuro della finestra */
 #define LARGHEZZA_DA_SOLA 640 /* se il compositore lascia scegliere (misura 0) */
 #define ALTEZZA_DA_SOLA   400
+#define COLORE_PAROLA 0xFFE4E4E7u  /* la parola al centro */
+
+/* LA PAROLA AL CENTRO (prova, la persona 19/11/2026: "app vuote che mostrano una parola al
+ * centro"). "mshell-prova Uno" apre la finestra "Uno" con UNO scritto in grande al centro.
+ * Le lettere sono 5x7 punti, disegnate qui a mano (solo quelle che servono alle parole delle
+ * app di prova), ingrandite: niente librerie di caratteri. */
+static const char *parola = "Prova";
+static const struct { char c; uint8_t r[7]; } lettere[] = {
+    {'A', {0x0E,0x11,0x11,0x1F,0x11,0x11,0x11}}, {'C', {0x0E,0x11,0x10,0x10,0x10,0x11,0x0E}},
+    {'D', {0x1E,0x11,0x11,0x11,0x11,0x11,0x1E}}, {'E', {0x1F,0x10,0x10,0x1E,0x10,0x10,0x1F}},
+    {'I', {0x0E,0x04,0x04,0x04,0x04,0x04,0x0E}}, {'N', {0x11,0x19,0x15,0x13,0x11,0x11,0x11}},
+    {'O', {0x0E,0x11,0x11,0x11,0x11,0x11,0x0E}}, {'P', {0x1E,0x11,0x11,0x1E,0x10,0x10,0x10}},
+    {'Q', {0x0E,0x11,0x11,0x11,0x15,0x12,0x0D}}, {'R', {0x1E,0x11,0x11,0x1E,0x14,0x12,0x11}},
+    {'S', {0x0F,0x10,0x10,0x0E,0x01,0x01,0x1E}}, {'T', {0x1F,0x04,0x04,0x04,0x04,0x04,0x04}},
+    {'U', {0x11,0x11,0x11,0x11,0x11,0x11,0x0E}}, {'V', {0x11,0x11,0x11,0x11,0x11,0x0A,0x04}},
+};
+
+static const uint8_t *lettera(char c) {
+    if (c >= 'a' && c <= 'z') c = (char)(c - 'a' + 'A');
+    for (size_t i = 0; i < sizeof(lettere) / sizeof(lettere[0]); i++)
+        if (lettere[i].c == c) return lettere[i].r;
+    return 0;   /* lettera che non c'e': resta uno spazio */
+}
+
+/* La parola al centro del foglio l x a, grande quanto entra (al massimo punti da 12 pixel). */
+static void scrivi_parola(uint32_t *pixel, int l, int a) {
+    int n = (int)strlen(parola);
+    if (n == 0) return;
+    int punto = (l * 2 / 3) / (n * 6);          /* ogni lettera 5 punti piu' 1 di spazio */
+    if (punto > 12) punto = 12;
+    if (punto < 1) return;
+    int x0 = (l - (n * 6 - 1) * punto) / 2, y0 = (a - 7 * punto) / 2;
+    for (int k = 0; k < n; k++) {
+        const uint8_t *r = lettera(parola[k]);
+        if (!r) continue;
+        for (int y = 0; y < 7 * punto; y++)
+            for (int x = 0; x < 5 * punto; x++)
+                if (r[y / punto] & (0x10 >> (x / punto)))
+                    pixel[(y0 + y) * l + x0 + k * 6 * punto + x] = COLORE_PAROLA;
+    }
+}
 
 static struct wl_compositor *compositore;
 static struct wl_shm *shm;
@@ -88,6 +129,7 @@ static struct wl_buffer *crea_buffer(int l, int a) {
     uint32_t *pixel = mmap(0, (size_t)byte, PROT_READ | PROT_WRITE, MAP_SHARED, foglio, 0);
     if (pixel == MAP_FAILED) return 0;
     for (int i = 0; i < l * a; i++) pixel[i] = COLORE;
+    scrivi_parola(pixel, l, a);
     munmap(pixel, (size_t)byte);
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, foglio, byte);
     struct wl_buffer *b = wl_shm_pool_create_buffer(pool, 0, l, a, l * 4, WL_SHM_FORMAT_XRGB8888);
@@ -109,7 +151,8 @@ static int disegna(struct wl_surface *superficie) {
     return 1;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+    if (argc > 1) parola = argv[1];   /* la parola, che e' anche il titolo della finestra */
     struct wl_display *display = wl_display_connect(NULL);   /* il compositore di WAYLAND_DISPLAY */
     if (!display) {
         riga("FALLITA: non trovo il compositore (WAYLAND_DISPLAY, XDG_RUNTIME_DIR)");
@@ -129,8 +172,14 @@ int main(void) {
     xdg_surface_add_listener(xdg, &xdg_ascolto, 0);
     struct xdg_toplevel *finestra = xdg_surface_get_toplevel(xdg);
     xdg_toplevel_add_listener(finestra, &toplevel_ascolto, 0);
-    xdg_toplevel_set_title(finestra, "Prova");
-    xdg_toplevel_set_app_id(finestra, "mshell-prova");
+    xdg_toplevel_set_title(finestra, parola);
+    /* il nome dell'app: "mshell-prova", o "mshell-prova-uno" per la parola Uno (come il suo .desktop) */
+    char nome[64] = "mshell-prova";
+    if (argc > 1) {
+        snprintf(nome, sizeof(nome), "mshell-prova-%s", parola);
+        for (char *c = nome; *c; c++) if (*c >= 'A' && *c <= 'Z') *c = (char)(*c - 'A' + 'a');
+    }
+    xdg_toplevel_set_app_id(finestra, nome);
     wl_surface_commit(superficie);     /* senza contenuto: il compositore risponde con il configure */
 
     while (!chiusa) {

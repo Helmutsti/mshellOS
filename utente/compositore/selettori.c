@@ -6,7 +6,7 @@
  * Tutto si vede SOLO mentre Super e' tenuto premuto, e sparisce quando Super si lascia:
  *  - LA CORNICE DEL FOCUS: intorno all'app che ha la tastiera, un contorno fuori dall'app (l'app
  *    non si rimpicciolisce) e una fascia attaccata sotto, nello spazio libero sotto l'app (cosi'
- *    non copre la barra in alto, che resta visibile).
+ *    non copre la barra in alto, che resta visibile). Compare solo con Super+sinistra/destra.
  *    Super+sinistra/destra la sposta sull'app scelta.
  *  - IL SELETTORE DELLE DISPOSIZIONI: si apre con Super+Tab. Una fila al centro dello schermo con
  *    una miniatura per ogni disposizione possibile con le app del desktop; quella in uso ha il
@@ -14,10 +14,11 @@
  *    c'e' una disposizione sola, e la fila mostra quella; con 0 app non c'e' niente da disporre e
  *    la fila non compare.
  *  - IL SELETTORE DEI DESKTOP: compare quando Super resta giu' da solo oltre MSHELL_TENUTO_MS,
- *    oppure subito con Super+su/giu'. Lo schermo si scurisce da sinistra (la sfumatura) e a
+ *    e subito con Super+su/giu';
+ *    Super+sinistra/destra lo chiude e passa alla cornice. Lo schermo si scurisce da sinistra (la sfumatura) e a
  *    sinistra c'e' una colonna con una miniatura per desktop, nell'ordine dei desktop; quello che
- *    si vede ha il contorno. Se i desktop non entrano in altezza, la colonna scorre quel tanto che
- *    basta perche' quello attuale si veda. Tenere Super oltre MSHELL_TENUTO_MS non e' un "tocco".
+ *    si vede ha il contorno e sta sempre a sinistra al centro (in altezza); gli altri stanno
+ *    sopra e sotto e scorrono quando si cambia desktop. Tenere Super oltre MSHELL_TENUTO_MS non e' un "tocco".
  * Ogni miniatura e' lo sfondo rimpicciolito con sopra le app come rettangoli di vetro, ai loro
  * posti in scala (bordo e spazio compresi).
  *
@@ -31,15 +32,16 @@
  * hanno gli angoli arrotondati; le miniature dei desktop e il pannello delle disposizioni hanno la
  * loro ombra. Il vetro dei selettori resta un colore semitrasparente: nel disegno non e' sfocato. */
 
+#define MSHELL_LAMPO_MS 500        /* quanto resta la cornice dopo un tocco di Super */
 #define MSHELL_TENUTO_MS 400       /* proposta, da confermare: oltre, Super giu' da solo apre il
                                     * selettore dei desktop */
 #define MSHELL_SEL_SPAZIO_24 24    /* spazio/24: margine dei selettori */
 #define MSHELL_SEL_SPAZIO_16 16    /* spazio/16: fra una miniatura e l'altra */
 #define MSHELL_INDICATORE 2        /* indicatore/spessore: il contorno del focus e della scelta */
 #define MSHELL_FASCIA 24           /* l'altezza della fascia sotto l'app col focus */
-/* Le miniature sono 0.14375 (= 23/160) dello schermo: 184x115 sullo schermo 1280x800. */
-#define MSHELL_MINI_NUM 23
-#define MSHELL_MINI_DEN 160
+/* Le miniature sono un decimo dello schermo: 128x80 sullo schermo 1280x800 (la persona, 19/11/2026). */
+#define MSHELL_MINI_NUM 1
+#define MSHELL_MINI_DEN 10
 /* bordo/focus scuro: la cornice del focus e i contorni della scelta (pieno) */
 #define MSHELL_COLORE_FOCUS 0.89f, 0.89f, 0.90f, 1.0f
 /* superficie/vetro scuro: il pannello delle disposizioni e le app nelle miniature */
@@ -48,7 +50,7 @@
 #define MSHELL_SFUMATURA_0 0.80f
 #define MSHELL_SFUMATURA_25 0.55f
 #define MSHELL_SFUMATURA_100 0.20f
-/* I PUNTINI DEI DESKTOP (decisione della persona: "puntini sul bordo"): sul bordo destro, uno
+/* I PUNTINI DEI DESKTOP (decisione della persona: "puntini sul bordo"): sul bordo sinistro, uno
  * per desktop, dall'alto in basso; quello che si vede e' acceso. Si vedono durante il cambio di
  * desktop e per un attimo dopo. Misure, colori e tempo sono proposte, da confermare. */
 #define MSHELL_PUNTINO 6           /* il diametro */
@@ -117,7 +119,10 @@ static struct {
 	struct wl_event_source *tenuto;  /* il timer di Super tenuto giu' da solo */
 	struct wl_event_source *rifai;   /* il rifacimento del livello in attesa (NULL: nessuno) */
 	bool disposizioni;  /* la fila delle disposizioni e' aperta */
+	bool app;           /* il focus e' sulle app (Super+sinistra/destra): si vede la cornice */
 	bool desktop;       /* la colonna dei desktop e' aperta */
+	bool lampo;         /* dopo un tocco di Super la cornice si vede ancora un attimo */
+	struct wl_event_source *lampo_via;  /* il timer che la toglie */
 	/* le immagini calcolate una volta, con la misura per cui sono state fatte */
 	struct mshell_pixel *mini_sfondo;
 	int mini_l, mini_a;
@@ -334,6 +339,33 @@ static void mshell_sel_cornice(struct tinywl_server *server) {
 	 * scrivere il titolo serve una libreria di caratteri, e quale usare lo decide la persona. */
 }
 
+/* IL SEGNAPOSTO dell'app trascinata (la persona, 19/11/2026, ispirato a DashAI): l'app non si
+ * vede e al suo posto, dove finira', c'e' un riquadro con il bordo tratteggiato e un velo del
+ * colore del focus al 12%. Il tratteggio sono tanti trattini (rettangoli) sui lati dritti. */
+#define MSHELL_TRATTO 10   /* lunghezza di un trattino */
+#define MSHELL_VUOTO 6     /* spazio fra due trattini */
+static void mshell_sel_segnaposto(struct tinywl_server *server) {
+	struct tinywl_toplevel *t = server->portata;
+	if (t == NULL || t->desktop != server->attuale) {
+		return;
+	}
+	struct wlr_box p = t->posto;
+	mshell_anim_dove(t, &p.x, &p.y);
+	int s = MSHELL_INDICATORE, r = MSHELL_RAGGIO_FINESTRA;
+	mshell_sel_rett(mshell_sel.livello, p.x, p.y, p.width, p.height, r,
+		0.89f, 0.89f, 0.90f, 0.12f);
+	for (int x = p.x + r; x < p.x + p.width - r; x += MSHELL_TRATTO + MSHELL_VUOTO) {
+		int l = x + MSHELL_TRATTO > p.x + p.width - r ? p.x + p.width - r - x : MSHELL_TRATTO;
+		mshell_sel_rett(mshell_sel.livello, x, p.y, l, s, 0, MSHELL_COLORE_FOCUS);
+		mshell_sel_rett(mshell_sel.livello, x, p.y + p.height - s, l, s, 0, MSHELL_COLORE_FOCUS);
+	}
+	for (int y = p.y + r; y < p.y + p.height - r; y += MSHELL_TRATTO + MSHELL_VUOTO) {
+		int a = y + MSHELL_TRATTO > p.y + p.height - r ? p.y + p.height - r - y : MSHELL_TRATTO;
+		mshell_sel_rett(mshell_sel.livello, p.x, y, s, a, 0, MSHELL_COLORE_FOCUS);
+		mshell_sel_rett(mshell_sel.livello, p.x + p.width - s, y, s, a, 0, MSHELL_COLORE_FOCUS);
+	}
+}
+
 /* Il selettore dei desktop: la sfumatura su tutto lo schermo e la colonna delle miniature. */
 static void mshell_sel_desktop(struct tinywl_server *server, struct wlr_box schermo,
 		int ml, int ma) {
@@ -343,23 +375,37 @@ static void mshell_sel_desktop(struct tinywl_server *server, struct wlr_box sche
 		wlr_scene_node_set_position(&b->node, schermo.x, schermo.y);
 	}
 	int passo = ma + MSHELL_SEL_SPAZIO_16;
-	/* la colonna scorre verso l'alto solo se il desktop attuale finirebbe sotto lo schermo:
-	 * allora sta in fondo, con lo stesso margine che c'e' in cima */
-	int fondo_attuale = MSHELL_SEL_SPAZIO_24 + server->attuale * passo + ma + MSHELL_SEL_SPAZIO_24;
-	int scorre = fondo_attuale > schermo.height ? schermo.height - fondo_attuale : 0;
-	for (int i = 0; i < server->n_desktop; i++) {
+	/* il desktop attuale sta sempre a sinistra al centro dello schermo (in altezza), gli altri
+	 * sopra e sotto nel loro ordine: cambiando desktop la colonna scorre */
+	/* durante il trascinamento al centro c'e' la meta, e in fondo il desktop nuovo proposto
+	 * (vuoto); il quadrato colorato sull'angolo della meta dice "stai portando un'app" */
+	bool trascina = server->portata != NULL;
+	int scelto = trascina ? server->meta : server->attuale;
+	int quanti = trascina && server->giri > server->n_desktop ? server->giri : server->n_desktop;
+	int centro = schermo.y + (schermo.height - ma) / 2;
+	for (int i = 0; i < quanti; i++) {
 		struct wlr_box m = {
 			.x = schermo.x + MSHELL_SEL_SPAZIO_24,
-			.y = schermo.y + MSHELL_SEL_SPAZIO_24 + i * passo + scorre,
+			.y = centro + (i - scelto) * passo,
 			.width = ml, .height = ma,
 		};
-		struct mshell_desktop *d = &server->desktop[i];
+		bool proposto = i == server->n_desktop;
+		int n = proposto ? 0 : server->desktop[i].n;
+		int disp = proposto ? 0 : server->desktop[i].scelta;
 		mshell_effetti_ombra(mshell_sel.livello, m, MSHELL_RAGGIO_CONTROLLO, &mshell_ombra_sollevato);
-		mshell_sel_miniatura(mshell_sel.livello, m.x, m.y, schermo, ml, ma, d->n, d->scelta);
-		if (i == server->attuale) {
+		mshell_sel_miniatura(mshell_sel.livello, m.x, m.y, schermo, ml, ma, n, disp);
+		if (i == scelto) {
 			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_INDICATORE,
 				MSHELL_RAGGIO_CONTROLLO);
 		}
+	}
+	if (trascina) {
+		/* L'ANTEPRIMA DELL'APP PORTATA, in alto a sinistra (la persona, 19/11/2026).
+		 * PROVVISORIO: un rettangolo colorato grande come una miniatura, al posto
+		 * dell'anteprima vera (l'icona o l'app rimpicciolita, da fare) */
+		mshell_sel_rett(mshell_sel.livello, schermo.x + MSHELL_SEL_SPAZIO_24,
+			schermo.y + MSHELL_SEL_SPAZIO_24 + 16, ml, ma,
+			MSHELL_RAGGIO_CONTROLLO, 0.35f, 0.55f, 1.0f, 1.0f);
 	}
 }
 
@@ -430,14 +476,15 @@ static void mshell_sel_pallino_metti(float *rgba, int quale) {
 	}
 }
 
-/* I puntini: in colonna, centrati in altezza e nel bordo libero destro (MSHELL_BORDO). */
+/* I puntini: in colonna, centrati in altezza e nel bordo libero SINISTRO (MSHELL_BORDO; la
+ * persona, 19/11/2026: "metti i puntini a sx"). */
 static void mshell_sel_puntini(struct tinywl_server *server, struct wlr_box schermo) {
 	float spento[4] = { MSHELL_PUNTINO_SPENTO }, acceso[4] = { MSHELL_COLORE_FOCUS };
 	mshell_sel_pallino_metti(spento, 0);
 	mshell_sel_pallino_metti(acceso, 1);
 	int n = server->n_desktop;
 	int alto = n * MSHELL_PUNTINO + (n - 1) * MSHELL_PUNTINO_SPAZIO;
-	int x = schermo.x + schermo.width - (MSHELL_BORDO + MSHELL_PUNTINO) / 2;
+	int x = schermo.x + (MSHELL_BORDO - MSHELL_PUNTINO) / 2;
 	int y = schermo.y + (schermo.height - alto) / 2;
 	for (int i = 0; i < n; i++) {
 		struct mshell_pixel *p = mshell_sel.pallino[i == server->attuale];
@@ -483,19 +530,22 @@ static void mshell_sel_rifai(void *data) {
 	}
 	/* il livello resta sopra a tutto, anche ad alberi aggiunti alla scena dopo di lui */
 	wlr_scene_node_raise_to_top(&mshell_sel.livello->node);
-	if (mshell_sel.puntini) {
+	if (mshell_sel.puntini || server->portata != NULL) {  /* anche per tutto il trascinamento */
 		mshell_sel_puntini(server, schermo);
 	}
-	if (!server->super_giu) {
+	if (!server->super_giu && !mshell_sel.lampo) {
 		return;
 	}
 	int ml = schermo.width * MSHELL_MINI_NUM / MSHELL_MINI_DEN;
 	int ma = schermo.height * MSHELL_MINI_NUM / MSHELL_MINI_DEN;
-	/* l'ordine e' quello dal basso in alto: la sfumatura scurisce anche la cornice */
-	mshell_sel_cornice(server);
+	/* la cornice del focus solo quando il focus e' sulle app, mai col selettore dei desktop */
+	if (mshell_sel.app && !mshell_sel.desktop) {
+		mshell_sel_cornice(server);
+	}
 	if (mshell_sel.desktop) {
 		mshell_sel_desktop(server, schermo, ml, ma);
 	}
+	mshell_sel_segnaposto(server);
 	if (mshell_sel.disposizioni) {
 		mshell_sel_disposizioni(server, schermo, ml, ma);
 	}
@@ -511,29 +561,80 @@ static void mshell_selettori_aggiorna(struct tinywl_server *server) {
 		mshell_sel_rifai, NULL);
 }
 
-/* Super tenuto giu' da solo per MSHELL_TENUTO_MS: si apre il selettore dei desktop. Se nel
- * frattempo si e' usata una combinazione, Super non era "da solo" e non si apre niente. Da qui
- * in poi lasciare Super non e' piu' un tocco (super_usato). */
+/* Il timer di "tenuto" (MSHELL_TENUTO_MS). Super tenuto da solo: compare la cornice del focus
+ * (prima si aspetta, perche' potrebbe arrivare un altro tasto, es. spazio). Alt tenuto con
+ * Super: si apre il navigatore dei desktop. */
 static int mshell_sel_tenuto(void *data) {
 	struct tinywl_server *server = mshell_sel.server;
-	if (server->super_giu && !server->super_usato) {
-		server->super_usato = true;
+	if (server->super_giu && server->alt_giu && !server->alt_usato) {
+		server->alt_tenuto = true;
 		mshell_sel.desktop = true;
+		mshell_selettori_aggiorna(server);
+	} else if (server->super_giu && !server->super_usato &&
+			!mshell_livelli_tiene_tastiera(server)) {  /* col cassetto aperto niente cornice */
+		mshell_sel.app = true;
 		mshell_selettori_aggiorna(server);
 	}
 	return 0;
 }
 
-/* Super premuto o lasciato: premuto mostra la cornice e fa partire il timer; lasciato chiude
- * tutto. In tutti e due i casi i selettori ripartono chiusi. */
+/* Super premuto o lasciato (la persona, 19/11/2026): premuto, la cornice del focus compare dopo
+ * MSHELL_TENUTO_MS se Super e' ancora giu' da solo (il timer); lasciato chiude tutto. */
 static void mshell_selettori_super(struct tinywl_server *server, bool premuto) {
 	if (mshell_sel.livello == NULL) {
 		return;
 	}
 	mshell_sel.disposizioni = false;
 	mshell_sel.desktop = false;
+	mshell_sel.app = false;
+	mshell_sel.lampo = false;
 	wl_event_source_timer_update(mshell_sel.tenuto, premuto ? MSHELL_TENUTO_MS : 0);
 	mshell_selettori_aggiorna(server);
+}
+
+/* Alt premuto con Super: parte il timer del navigatore; lasciato: il timer si ferma. */
+static void mshell_selettori_alt(struct tinywl_server *server, bool premuto) {
+	(void)server;
+	if (mshell_sel.livello == NULL) {
+		return;
+	}
+	wl_event_source_timer_update(mshell_sel.tenuto, premuto ? MSHELL_TENUTO_MS : 0);
+}
+
+static int mshell_sel_lampo_via(void *data) {
+	(void)data;
+	mshell_sel.lampo = false;
+	mshell_selettori_aggiorna(mshell_sel.server);
+	return 0;
+}
+
+/* Dopo un tocco di Super: la cornice si vede ancora un attimo sull'app che ha preso il focus. */
+static void mshell_selettori_lampo(struct tinywl_server *server) {
+	if (mshell_sel.livello == NULL) {
+		return;
+	}
+	mshell_sel.lampo = true;
+	mshell_sel.app = true;
+	wl_event_source_timer_update(mshell_sel.lampo_via, MSHELL_LAMPO_MS);
+	mshell_selettori_aggiorna(server);
+}
+
+/* Tutto chiuso subito (cornice, selettori, timer), anche se Super e' ancora giu': si apre il
+ * cassetto, che non deve avere niente sopra. */
+static void mshell_selettori_chiudi(struct tinywl_server *server) {
+	if (mshell_sel.livello == NULL) {
+		return;
+	}
+	mshell_sel.disposizioni = false;
+	mshell_sel.desktop = false;
+	mshell_sel.app = false;
+	mshell_sel.lampo = false;
+	wl_event_source_timer_update(mshell_sel.tenuto, 0);
+	mshell_selettori_aggiorna(server);
+}
+
+static bool mshell_selettori_disposizioni_aperta(void) {
+	return mshell_sel.disposizioni;
 }
 
 /* Super+su/giu': il selettore dei desktop si apre subito. */
@@ -542,6 +643,19 @@ static void mshell_selettori_desktop(struct tinywl_server *server) {
 		return;
 	}
 	mshell_sel.desktop = true;
+	mshell_sel.app = false;
+	wl_event_source_timer_update(mshell_sel.tenuto, 0);
+	mshell_selettori_aggiorna(server);
+}
+
+/* Super+sinistra/destra: il focus passa alle app; il selettore dei desktop si chiude e si vede
+ * la cornice del focus. */
+static void mshell_selettori_app(struct tinywl_server *server) {
+	if (mshell_sel.livello == NULL) {
+		return;
+	}
+	mshell_sel.desktop = false;
+	mshell_sel.app = true;
 	wl_event_source_timer_update(mshell_sel.tenuto, 0);
 	mshell_selettori_aggiorna(server);
 }
@@ -562,4 +676,6 @@ static void mshell_selettori_avvia(struct tinywl_server *server, struct wlr_scen
 	mshell_sel.livello = wlr_scene_tree_create(&server->scene->tree);
 	mshell_sel.tenuto = wl_event_loop_add_timer(wl_display_get_event_loop(server->wl_display),
 		mshell_sel_tenuto, NULL);
+	mshell_sel.lampo_via = wl_event_loop_add_timer(wl_display_get_event_loop(server->wl_display),
+		mshell_sel_lampo_via, NULL);
 }

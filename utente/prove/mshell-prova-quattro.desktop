@@ -1,0 +1,7 @@
+# App di prova "Quattro" (mshell-prova con la parola Quattro al centro): per provare disposizioni e desktop.
+[Desktop Entry]
+Type=Application
+Name=Quattro
+Comment=App di prova di mshell: la parola Quattro al centro
+Exec=mshell-prova Quattro
+Terminal=false

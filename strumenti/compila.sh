@@ -45,7 +45,7 @@ gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" \
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
     utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
 mkdir -p "$RADICE/usr/share/applications"
-cp utente/prove/mshell-prova.desktop "$RADICE/usr/share/applications/mshell-prova.desktop"
+cp utente/prove/mshell-prova*.desktop "$RADICE/usr/share/applications/"  # Prova e Uno..Sei
 # gtk4-layer-shell va prima di wayland-client (lo chiede la sua documentazione)
 # (gio-unix: i file .desktop delle app, per il cassetto)
 gcc -O2 -Wall -Werror -I"$C" $(pkg-config --cflags gtk4-layer-shell-0 gtk4 gio-unix-2.0 wayland-client) \

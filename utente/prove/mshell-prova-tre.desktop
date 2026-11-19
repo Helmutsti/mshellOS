@@ -1,0 +1,7 @@
+# App di prova "Tre" (mshell-prova con la parola Tre al centro): per provare disposizioni e desktop.
+[Desktop Entry]
+Type=Application
+Name=Tre
+Comment=App di prova di mshell: la parola Tre al centro
+Exec=mshell-prova Tre
+Terminal=false

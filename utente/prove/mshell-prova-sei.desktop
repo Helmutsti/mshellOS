@@ -1,0 +1,7 @@
+# App di prova "Sei" (mshell-prova con la parola Sei al centro): per provare disposizioni e desktop.
+[Desktop Entry]
+Type=Application
+Name=Sei
+Comment=App di prova di mshell: la parola Sei al centro
+Exec=mshell-prova Sei
+Terminal=false

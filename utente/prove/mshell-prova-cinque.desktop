@@ -1,0 +1,7 @@
+# App di prova "Cinque" (mshell-prova con la parola Cinque al centro): per provare disposizioni e desktop.
+[Desktop Entry]
+Type=Application
+Name=Cinque
+Comment=App di prova di mshell: la parola Cinque al centro
+Exec=mshell-prova Cinque
+Terminal=false

@@ -100,7 +100,8 @@
  *   Super+freccia su/giu'         desktop sopra / sotto (in tondo: dopo l'ultimo, il primo)
  *   Super+freccia sinistra/destra app precedente / successiva del desktop (in tondo)
  *   Super+Alt+sinistra/destra     scambia l'app con la precedente / successiva
- *   Super+Alt+su/giu'             porta l'app nel desktop sopra / sotto (se ha posto) e la segue
+ *   Super+Alt+su/giu'             porta l'app nel desktop sopra / sotto (se ha posto) e la segue;
+ *                                 oltre il primo o l'ultimo crea un desktop nuovo
  *   Super+X                       chiude l'app
  *   Super+Tab                     disposizione successiva
  *   Super premuto due volte di fila (entro MSHELL_DOPPIO_TOCCO_MS): il primo desktop vuoto, o
@@ -114,7 +115,7 @@
 #define MSHELL_DESKTOP_MAX 16
 #define MSHELL_BORDO 32   /* spazio/32: dal bordo dello schermo alle app */
 #define MSHELL_SPAZIO 32  /* spazio/32: fra un'app e l'altra */
-#define MSHELL_DOPPIO_TOCCO_MS 400
+#define MSHELL_TOCCO_MS 400  /* Super lasciato prima di cosi' e' un tocco: l'app dopo */
 
 enum mshell_disposizione { D_UNA, D_1_1, D_1_2, D_2_1, D_2, D_1_1_1, D_2_2, D_1_1_1_1 };
 static const enum mshell_disposizione mshell_scelte[MSHELL_APP_MAX + 1][4] = {
@@ -186,6 +187,14 @@ struct tinywl_server {
 	bool super_giu;       /* Super e' tenuto premuto */
 	bool super_usato;     /* mentre era giu' si e' usata una combinazione: non e' un tocco */
 	uint32_t super_tocco; /* quando e' finito l'ultimo tocco di Super da solo (0: nessuno) */
+	/* il TRASCINAMENTO (Super+Alt+su/giu'): l'app "portata" si posa quando si lascia Super, nel
+	 * desktop "meta"; meta == n_desktop e' il desktop nuovo proposto (si crea solo se la si posa li') */
+	struct tinywl_toplevel *portata;
+	int meta;
+	int giri;  /* i posti del giro, fissati all'inizio del trascinamento: i desktop + quello nuovo */
+	bool alt_giu;     /* Alt tenuto mentre Super e' giu' */
+	bool alt_usato;   /* con Alt giu' si e' usata una combinazione (Super+Alt+numero) */
+	bool alt_tenuto;  /* Alt tenuto oltre MSHELL_TENUTO_MS: si vede il navigatore dei desktop */
 	struct mshell_livelli *livelli;  /* MSHELL: i livelli e l'elenco delle app (livelli.c) */
 };
 
@@ -256,6 +265,12 @@ static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface 
 			}
 		}
 	}
+	/* MSHELL: un'app gia' nel desktop (dal primo invio, mshell_assegna) ma non ancora comparsa
+	 * (map) non e' nell'elenco delle finestre: il focus lo prende quando compare. Senza questo
+	 * controllo, Super premuto mentre un'app si apre faceva cadere il compositore. */
+	if (!toplevel->xdg_toplevel->base->surface->mapped) {
+		return;
+	}
 	/* MSHELL: e' l'app col focus (lo sanno l'elenco e le app); se pero' la tastiera e' di un
 	 * menu della barra, la prendera' quando il menu si chiude (livelli.c) */
 	mshell_elenco_attiva(server, toplevel);
@@ -307,6 +322,11 @@ static void mshell_selettori_aggiorna(struct tinywl_server *server);
 static void mshell_selettori_super(struct tinywl_server *server, bool premuto);
 static void mshell_selettori_desktop(struct tinywl_server *server);
 static void mshell_selettori_disposizioni(struct tinywl_server *server);
+static void mshell_selettori_app(struct tinywl_server *server);
+static void mshell_selettori_alt(struct tinywl_server *server, bool premuto);
+static void mshell_selettori_lampo(struct tinywl_server *server);
+static bool mshell_selettori_disposizioni_aperta(void);
+static void mshell_selettori_chiudi(struct tinywl_server *server);
 static void mshell_selettori_puntini(struct tinywl_server *server);
 
 /* MSHELL: I DESKTOP, le funzioni (le regole sono in cima, "MSHELL: I DESKTOP"). */
@@ -431,6 +451,9 @@ static void mshell_mostra(struct tinywl_server *server, int quale) {
 	mshell_mostra_verso(server, quale, 0);
 }
 
+static int mshell_crea_desktop(struct tinywl_server *server);
+static int mshell_desktop_in_cima(struct tinywl_server *server);
+
 /* Il primo desktop vuoto, o uno nuovo in fondo (spento). -1 se sono gia' tutti usati. */
 static int mshell_nuovo_desktop(struct tinywl_server *server) {
 	for (int i = 0; i < server->n_desktop; i++) {
@@ -438,6 +461,11 @@ static int mshell_nuovo_desktop(struct tinywl_server *server) {
 			return i;
 		}
 	}
+	return mshell_crea_desktop(server);
+}
+
+/* Un desktop nuovo in fondo (spento), anche se ce ne sono di vuoti. -1 se non ce n'e' posto. */
+static int mshell_crea_desktop(struct tinywl_server *server) {
 	if (server->n_desktop == MSHELL_DESKTOP_MAX) {
 		return -1;
 	}
@@ -467,6 +495,9 @@ static void mshell_aggiungi(struct tinywl_server *server, struct tinywl_toplevel
 
 /* Toglie l'app dal suo desktop e ridispone le altre. */
 static void mshell_togli(struct tinywl_server *server, struct tinywl_toplevel *t) {
+	if (server->portata == t) {
+		server->portata = NULL;  /* l'app trascinata si e' chiusa: il trascinamento finisce */
+	}
 	if (t->desktop < 0) {
 		return;
 	}
@@ -507,42 +538,106 @@ static void mshell_assegna(struct tinywl_server *server, struct tinywl_toplevel 
 }
 
 /* Un tasto premuto mentre Super e' giu'. Vero se e' una combinazione della scrivania. */
+static void mshell_posa(struct tinywl_server *server);
+
+/* I TASTI CON SUPER (la persona, 19/11/2026). Super tenuto mostra la cornice del focus.
+ *   Super (tocco)          l'app dopo, in tondo (in mshell_super)
+ *   Super+Alt (tocco Alt)  il desktop dopo, in tondo; Alt tenuto: il navigatore (mshell_alt)
+ *   Super+sinistra/destra  sposta l'app col focus nella disposizione (scambio col vicino)
+ *   Super+su/giu'          trascina l'app fra i desktop: la meta gira in tondo, dopo l'ultimo c'e'
+ *                          il desktop nuovo proposto; lasciando Super l'app si posa; con
+ *                          sinistra/destra si posa subito e si continua a spostarla li' dentro
+ *   Super+Tab              la prima volta mostra la disposizione attuale, poi la cambia
+ *   Super+1..4             l'app numero 1..4 dello schermo
+ *   Super+Alt+1..9         il desktop numero 1..9
+ *   Super+X                chiude l'app; Super+spazio il cassetto
+ * Non si creano desktop a mano (la persona, 19/11/2026): nascono dal trascinamento e quando la
+ * quinta app non entra nello schermo. */
 static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool alt) {
+	/* IL CASSETTO (o un menu della barra) APERTO tiene la tastiera tutta per se' (la persona,
+	 * 19/11/2026): le combinazioni con Super non spostano niente sotto e non arrivano neanche a
+	 * lui; vale solo Super+spazio, che lo chiude. */
+	if (mshell_livelli_tiene_tastiera(server) && sym != XKB_KEY_space) {
+		return true;
+	}
 	struct mshell_desktop *d = &server->desktop[server->attuale];
 	struct tinywl_toplevel *t = d->n > 0 ? d->app[d->focus] : NULL;
+	if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9) {
+		int k = (int)(sym - XKB_KEY_1);
+		if (alt) {
+			server->alt_usato = true;
+			if (k < server->n_desktop && k != server->attuale) {
+				mshell_mostra_verso(server, k, k > server->attuale ? 1 : -1);
+			}
+		} else if (k < d->n) {
+			d->focus = k;
+			mshell_selettori_app(server);
+			mshell_mostra(server, server->attuale);
+		}
+		return true;
+	}
 	switch (sym) {
 	case XKB_KEY_Up:
 	case XKB_KEY_Down: {
-		mshell_selettori_desktop(server);  /* MSHELL: si apre subito il selettore dei desktop */
+		/* IL TRASCINAMENTO DAL VIVO (la persona, 19/11/2026): a ogni freccia l'app passa davvero
+		 * nel desktop dopo, e lo schermo la segue. Il giro e' fissato all'inizio: i desktop di
+		 * allora e uno nuovo, creato la prima volta che ci si arriva; i desktop pieni si
+		 * saltano. Quelli rimasti vuoti spariscono alla prossima pressione di Super. */
 		int passo = sym == XKB_KEY_Up ? -1 : 1;
-		int dove = (server->attuale + passo + server->n_desktop) % server->n_desktop;
-		if (dove == server->attuale) {
+		if (t == NULL && server->portata == NULL) {
 			return true;
 		}
-		if (alt) {
-			if (t == NULL || server->desktop[dove].n == MSHELL_APP_MAX) {
-				return true;
-			}
-			mshell_togli(server, t);
-			mshell_aggiungi(server, t, dove);
+		if (server->portata == NULL) {
+			server->portata = t;
+			server->giri = server->n_desktop + (server->n_desktop < MSHELL_DESKTOP_MAX ? 1 : 0);
 		}
-		mshell_mostra_verso(server, dove, passo);
+		struct tinywl_toplevel *p = server->portata;
+		int da = p->desktop, dove = da;
+		for (int k = 0; k < server->giri; k++) {
+			dove = (dove + passo + server->giri) % server->giri;
+			if (dove == da) {
+				break;
+			}
+			if (dove >= server->n_desktop && mshell_crea_desktop(server) < 0) {
+				continue;
+			}
+			if (server->desktop[dove].n < MSHELL_APP_MAX) {
+				break;
+			}
+		}
+		if (dove != da) {
+			mshell_togli(server, p);   /* (togli ferma il trascinamento: si riprende subito) */
+			server->portata = p;
+			mshell_aggiungi(server, p, dove);
+			mshell_mostra_verso(server, dove, passo);
+		}
+		/* l'app trascinata non si vede: al suo posto il segnaposto tratteggiato (selettori.c),
+		 * che dice dove finira' */
+		wlr_scene_node_set_enabled(&p->scene_tree->node, false);
+		server->meta = dove;
+		/* niente navigatore mentre si sposta l'app (la persona, 19/11/2026): solo i puntini dei
+		 * desktop sul bordo destro, finche' dura il trascinamento (selettori.c) */
+		mshell_selettori_chiudi(server);
 		return true;
 	}
 	case XKB_KEY_Left:
 	case XKB_KEY_Right: {
+		if (server->portata != NULL) {
+			/* durante il trascinamento: l'app e' gia' nel desktop che si vede; il
+			 * trascinamento finisce e si continua a spostarla qui dentro */
+			mshell_posa(server);
+		}
+		mshell_selettori_app(server);
 		if (d->n < 2) {
 			return true;
 		}
 		int passo = sym == XKB_KEY_Left ? -1 : 1;
 		int altro = (d->focus + passo + d->n) % d->n;
-		if (alt) {
-			struct tinywl_toplevel *x = d->app[altro];
-			d->app[altro] = d->app[d->focus];
-			d->app[d->focus] = x;
-			mshell_disponi(server, d);
-		}
+		struct tinywl_toplevel *x = d->app[altro];
+		d->app[altro] = d->app[d->focus];
+		d->app[d->focus] = x;
 		d->focus = altro;
+		mshell_disponi(server, d);
 		mshell_mostra(server, server->attuale);
 		return true;
 	}
@@ -554,13 +649,15 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 		return true;
 	case XKB_KEY_Tab:
 	case XKB_KEY_ISO_Left_Tab:
-		mshell_selettori_disposizioni(server);  /* MSHELL: la fila delle disposizioni */
-		if (d->n > 0) {
+		/* la prima volta si mostra solo la disposizione attuale, per non spiazzare */
+		if (mshell_selettori_disposizioni_aperta() && d->n > 0) {
 			d->scelta = (d->scelta + 1) % mshell_quante_scelte[d->n];
 			mshell_disponi(server, d);
 		}
+		mshell_selettori_disposizioni(server);
 		return true;
 	case XKB_KEY_space:
+		mshell_selettori_chiudi(server);  /* niente cornice ne' selettori sopra il cassetto */
 		mshell_livelli_cassetto(server);  /* MSHELL: apre o chiude il cassetto (livelli.c) */
 		return true;
 	default:
@@ -568,31 +665,68 @@ static bool mshell_tasto(struct tinywl_server *server, xkb_keysym_t sym, bool al
 	}
 }
 
+/* Alt premuto o lasciato mentre Super e' giu'. Lasciato dopo un tocco (non tenuto, senza
+ * numeri): il desktop dopo, in tondo. Tenuto: il navigatore dei desktop (selettori.c). */
+static void mshell_alt(struct tinywl_server *server, bool premuto) {
+	if (mshell_livelli_tiene_tastiera(server)) {
+		server->alt_giu = false;  /* col cassetto aperto Super+Alt non fa niente */
+		return;
+	}
+	if (premuto) {
+		if (!server->alt_giu) {
+			server->alt_giu = true;
+			server->alt_usato = false;
+			server->alt_tenuto = false;
+			mshell_selettori_alt(server, true);
+		}
+		return;
+	}
+	if (!server->alt_giu) {
+		return;
+	}
+	server->alt_giu = false;
+	mshell_selettori_alt(server, false);
+	if (server->alt_usato || server->alt_tenuto || server->n_desktop < 2) {
+		return;
+	}
+	int dove = (server->attuale + 1) % server->n_desktop;
+	mshell_mostra_verso(server, dove, 1);
+}
+
 /* Il tasto Super stesso: non va alle app. Lasciato senza aver usato combinazioni e' un "tocco";
  * due tocchi di fila portano al primo desktop vuoto (o a uno nuovo). */
+static void mshell_togli_vuoti(struct tinywl_server *server);
+
 static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t quando) {
+	if (!premuto) {
+		mshell_posa(server);  /* MSHELL: il trascinamento finisce: l'app si posa nella meta */
+	} else {
+		mshell_togli_vuoti(server);  /* MSHELL: i desktop rimasti vuoti spariscono */
+	}
 	mshell_selettori_super(server, premuto);  /* MSHELL: la cornice, il timer di Super tenuto */
 	if (premuto) {
 		server->super_giu = true;
 		server->super_usato = false;
+		server->super_tocco = quando;  /* quando e' stato premuto: serve a riconoscere il tocco */
 		return;
 	}
 	if (!server->super_giu) {
 		return;
 	}
 	server->super_giu = false;
+	server->alt_giu = false;
 	if (server->super_usato) {
-		server->super_tocco = 0;
 		return;
 	}
-	if (server->super_tocco != 0 && quando - server->super_tocco < MSHELL_DOPPIO_TOCCO_MS) {
-		server->super_tocco = 0;
-		int nuovo = mshell_nuovo_desktop(server);
-		if (nuovo >= 0) {
-			mshell_mostra(server, nuovo);
+	/* un tocco di Super (lasciato presto, senza combinazioni): l'app dopo, in tondo; la cornice
+	 * si vede ancora un attimo sull'app nuova (il "lampo") */
+	if (quando - server->super_tocco < MSHELL_TOCCO_MS && !mshell_livelli_tiene_tastiera(server)) {
+		struct mshell_desktop *d = &server->desktop[server->attuale];
+		if (d->n > 1) {
+			d->focus = (d->focus + 1) % d->n;
+			mshell_mostra(server, server->attuale);
+			mshell_selettori_lampo(server);
 		}
-	} else {
-		server->super_tocco = quando ? quando : 1;
 	}
 }
 
@@ -600,6 +734,73 @@ static void mshell_super(struct tinywl_server *server, bool premuto, uint32_t qu
 #include "animazioni.c"  /* MSHELL: le animazioni (cambio di desktop, posti, comparire, chiudere) */
 #include "selettori.c"  /* MSHELL: la cornice del focus e i selettori */
 #include "livelli.c"  /* MSHELL: i livelli e l'elenco delle app */
+
+/* Lasciato Super (o premuto sinistra/destra): il trascinamento finisce. L'app e' gia' nel
+ * desktop dove la si e' portata (trascinamento dal vivo). */
+static void mshell_posa(struct tinywl_server *server) {
+	if (server->portata != NULL) {
+		wlr_scene_node_set_enabled(&server->portata->scene_tree->node, true);
+	}
+	server->portata = NULL;
+	mshell_selettori_aggiorna(server);
+}
+
+/* I desktop vuoti spariscono (la persona, 19/11/2026: niente desktop vuoti), tranne quello che
+ * si vede. Si fa quando si preme Super, prima di ogni scelta; se un'app sta ancora sparendo
+ * (animazione di chiusura, un "fantasma" dentro l'albero del suo desktop) si rimanda. */
+static void mshell_togli_vuoti(struct tinywl_server *server) {
+	mshell_anim_conosci(server);  /* l'elenco dei fantasmi esiste solo dopo la prima animazione */
+	if (!wl_list_empty(&mshell_anim.fantasmi)) {
+		return;
+	}
+	for (int i = 0; i < server->n_desktop; i++) {
+		if (mshell_anim.desktop[i].corre) {
+			return;  /* un desktop sta ancora scorrendo: il suo albero non si puo' togliere */
+		}
+	}
+	for (int i = server->n_desktop - 1; i >= 0 && server->n_desktop > 1; i--) {
+		if (server->desktop[i].n != 0 || i == server->attuale) {
+			continue;
+		}
+		wlr_scene_node_destroy(&server->desktop[i].albero->node);
+		int dopo = server->n_desktop - 1 - i;
+		memmove(&server->desktop[i], &server->desktop[i + 1], (size_t)dopo * sizeof(server->desktop[0]));
+		memmove(&mshell_anim.desktop[i], &mshell_anim.desktop[i + 1], (size_t)dopo * sizeof(mshell_anim.desktop[0]));
+		server->n_desktop--;
+		if (server->attuale > i) {
+			server->attuale--;
+		}
+	}
+	for (int i = 0; i < server->n_desktop; i++) {
+		for (int k = 0; k < server->desktop[i].n; k++) {
+			server->desktop[i].app[k]->desktop = i;
+		}
+	}
+	mshell_selettori_puntini(server);
+}
+
+/* Un desktop nuovo in CIMA (indice 0): si crea in fondo e si fa ruotare in cima; gli altri
+ * scalano di uno, con il desktop che si vede, le app (t->desktop) e lo stato delle animazioni.
+ * Restituisce 0, o -1 se non c'e' posto. */
+static int mshell_desktop_in_cima(struct tinywl_server *server) {
+	int n = mshell_crea_desktop(server);
+	if (n < 0) {
+		return -1;
+	}
+	struct mshell_desktop nuovo = server->desktop[n];
+	struct mshell_anim_desktop anim = mshell_anim.desktop[n];
+	memmove(&server->desktop[1], &server->desktop[0], (size_t)n * sizeof(server->desktop[0]));
+	memmove(&mshell_anim.desktop[1], &mshell_anim.desktop[0], (size_t)n * sizeof(mshell_anim.desktop[0]));
+	server->desktop[0] = nuovo;
+	mshell_anim.desktop[0] = anim;
+	for (int i = 0; i < server->n_desktop; i++) {
+		for (int k = 0; k < server->desktop[i].n; k++) {
+			server->desktop[i].app[k]->desktop = i;
+		}
+	}
+	server->attuale++;
+	return 0;
+}
 
 static void keyboard_handle_modifiers(
 		struct wl_listener *listener, void *data) {
@@ -656,11 +857,36 @@ static void keyboard_handle_key(
 
 	bool handled = false;
 	uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
+	/* MSHELL, STRUMENTO DI PROVA: ogni tasto (premuto "+" o lasciato "-") si aggiunge in fondo al
+	 * file $XDG_RUNTIME_DIR/mshell-tasti; la barra mostra gli ultimi accanto all'orologio. */
+	{
+		const char *dir = getenv("XDG_RUNTIME_DIR");
+		char percorso[256], nome[64] = "?";
+		if (dir != NULL && snprintf(percorso, sizeof(percorso), "%s/mshell-tasti", dir)
+				< (int)sizeof(percorso)) {
+			if (nsyms > 0) {
+				xkb_keysym_get_name(syms[0], nome, sizeof(nome));
+			}
+			FILE *f = fopen(percorso, "a");
+			if (f != NULL) {
+				fprintf(f, "%s%s\n", event->state == WL_KEYBOARD_KEY_STATE_PRESSED ? "+" : "-",
+					nome);
+				fclose(f);
+			}
+		}
+	}
 	/* MSHELL: il tasto Super e le combinazioni della scrivania (vedi "MSHELL: I DESKTOP") */
 	bool premuto = event->state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	for (int i = 0; i < nsyms; i++) {
 		if (syms[i] == XKB_KEY_Super_L || syms[i] == XKB_KEY_Super_R) {
 			mshell_super(server, premuto, event->time_msec);
+			handled = true;
+		}
+	}
+	for (int i = 0; i < nsyms && server->super_giu; i++) {
+		if (syms[i] == XKB_KEY_Alt_L || syms[i] == XKB_KEY_Alt_R) {
+			mshell_alt(server, premuto);  /* MSHELL: Super+Alt, il desktop dopo o il navigatore */
+			server->super_usato = true;
 			handled = true;
 		}
 	}

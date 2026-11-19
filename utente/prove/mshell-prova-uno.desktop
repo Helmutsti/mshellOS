@@ -1,0 +1,7 @@
+# App di prova "Uno" (mshell-prova con la parola Uno al centro): per provare disposizioni e desktop.
+[Desktop Entry]
+Type=Application
+Name=Uno
+Comment=App di prova di mshell: la parola Uno al centro
+Exec=mshell-prova Uno
+Terminal=false

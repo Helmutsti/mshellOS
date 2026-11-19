@@ -1,0 +1,7 @@
+# App di prova "Due" (mshell-prova con la parola Due al centro): per provare disposizioni e desktop.
+[Desktop Entry]
+Type=Application
+Name=Due
+Comment=App di prova di mshell: la parola Due al centro
+Exec=mshell-prova Due
+Terminal=false
