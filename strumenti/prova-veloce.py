@@ -31,6 +31,7 @@
 # (--posto 1: 4460-4462). Cartella: build/prova-<posto>. Non tocca altri QEMU.
 import argparse
 import base64
+import hashlib
 import json
 import os
 import shutil
@@ -168,9 +169,19 @@ def copia_dentro(ser):
             scrivi(f"ATTENZIONE: {dove} non c'e' nel sistema: serve l'aggiornamento del disco")
             continue
         righe = base64.encodebytes(p.read_bytes()).decode()
-        ser.comando(f"mkdir -p /run/prova$(dirname {dove}) && base64 -d > /run/prova{dove} <<'FINE'\n{righe}FINE\n"
-                    f"chmod --reference={dove} /run/prova{dove}; umount {dove} 2>/dev/null; "
+        ser.comando(f"mkdir -p /run/prova$(dirname {dove}) && base64 -d > /run/prova{dove}.nuovo <<'FINE'\n{righe}FINE\n"
+                    # si scrive accanto e si sostituisce solo dopo aver tolto la sovrapposizione:
+                    # finche' il file e' sovrapposto non si puo' ne' riscrivere (se e' un programma
+                    # acceso) ne' sostituire, e la prova userebbe in silenzio quello vecchio
+                    # (si sganciano TUTTI gli strati, anche quelli lasciati dalle prove prima)
+                    f"while umount -l {dove} 2>/dev/null; do :; done; "
+                    f"while umount -l /run/prova{dove} 2>/dev/null; do :; done; mv -f /run/prova{dove}.nuovo /run/prova{dove}; "
+                    f"chmod --reference={dove} /run/prova{dove}; "
                     f"mount --bind /run/prova{dove} {dove}", attesa=60)
+        # il controllo: il file che il sistema vede deve essere proprio quello appena compilato
+        atteso = hashlib.md5(p.read_bytes()).hexdigest()
+        if atteso not in ser.comando(f"md5sum {dove}"):
+            sys.exit(f"FALLITA: {dove} nel QEMU di prova non e' quello appena compilato")
     scrivi(f"copiati {len(nuovi)} file nel QEMU di prova")
 
 

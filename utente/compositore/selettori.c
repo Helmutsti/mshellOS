@@ -5,7 +5,8 @@
  *
  * Tutto si vede SOLO mentre Super e' tenuto premuto, e sparisce quando Super si lascia:
  *  - LA CORNICE DEL FOCUS: intorno all'app che ha la tastiera, un contorno fuori dall'app (l'app
- *    non si rimpicciolisce) e una fascia attaccata sopra, nello spazio libero sopra l'app.
+ *    non si rimpicciolisce) e una fascia attaccata sotto, nello spazio libero sotto l'app (cosi'
+ *    non copre la barra in alto, che resta visibile).
  *    Super+sinistra/destra la sposta sull'app scelta.
  *  - IL SELETTORE DELLE DISPOSIZIONI: si apre con Super+Tab. Una fila al centro dello schermo con
  *    una miniatura per ogni disposizione possibile con le app del desktop; quella in uso ha il
@@ -35,7 +36,7 @@
 #define MSHELL_SEL_SPAZIO_24 24    /* spazio/24: margine dei selettori */
 #define MSHELL_SEL_SPAZIO_16 16    /* spazio/16: fra una miniatura e l'altra */
 #define MSHELL_INDICATORE 2        /* indicatore/spessore: il contorno del focus e della scelta */
-#define MSHELL_FASCIA 24           /* l'altezza della fascia sopra l'app col focus */
+#define MSHELL_FASCIA 24           /* l'altezza della fascia sotto l'app col focus */
 /* Le miniature sono 0.14375 (= 23/160) dello schermo: 184x115 sullo schermo 1280x800. */
 #define MSHELL_MINI_NUM 23
 #define MSHELL_MINI_DEN 160
@@ -145,15 +146,15 @@ static struct wlr_scene_rect *mshell_sel_rett(struct wlr_scene_tree *padre, int 
 }
 
 /* Il contorno tutto FUORI dal riquadro r (che resta intero), arrotondato in tutti gli angoli:
- * MSHELL_INDICATORE a sinistra, a destra e sotto, "sopra" in alto (la cornice del focus ci ha la
+ * "sopra" in alto, "sotto" in basso, MSHELL_INDICATORE ai lati (la cornice del focus ha in basso la
  * sua fascia). E' un rettangolo solo, con un buco grande come il riquadro e con i suoi angoli di
  * raggio "raggio"; fuori gli angoli hanno il raggio piu' lo spessore, cosi' il contorno gira
  * intorno all'angolo con lo stesso spessore. */
-static void mshell_sel_contorno(struct wlr_scene_tree *padre, struct wlr_box r, int sopra,
+static void mshell_sel_contorno(struct wlr_scene_tree *padre, struct wlr_box r, int sopra, int sotto,
 		int raggio) {
 	int s = MSHELL_INDICATORE;
 	struct wlr_scene_rect *rett = mshell_sel_rett(padre, r.x - s, r.y - sopra,
-		r.width + 2 * s, r.height + sopra + s, raggio + s, MSHELL_COLORE_FOCUS);
+		r.width + 2 * s, r.height + sopra + sotto, raggio + s, MSHELL_COLORE_FOCUS);
 	if (rett == NULL) {
 		return;
 	}
@@ -325,9 +326,10 @@ static void mshell_sel_cornice(struct tinywl_server *server) {
 	/* il punto dove si vede l'app adesso: se sta scorrendo (animazioni.c), la cornice la segue */
 	struct wlr_box p = d->app[d->focus]->posto;
 	mshell_anim_dove(d->app[d->focus], &p.x, &p.y);
-	/* il contorno con, in alto, la fascia: attaccata sopra l'app, larga quanto l'app piu' i due
+	/* il contorno con, in basso, la fascia: attaccata sotto l'app, larga quanto l'app piu' i due
 	 * contorni; gira intorno agli angoli arrotondati dell'app */
-	mshell_sel_contorno(mshell_sel.livello, p, MSHELL_FASCIA, MSHELL_RAGGIO_FINESTRA);
+	mshell_sel_contorno(mshell_sel.livello, p, MSHELL_INDICATORE, MSHELL_FASCIA,
+		MSHELL_RAGGIO_FINESTRA);
 	/* QUI andranno, nella fascia, il titolo dell'app e il pulsante X per chiuderla. Per
 	 * scrivere il titolo serve una libreria di caratteri, e quale usare lo decide la persona. */
 }
@@ -355,7 +357,8 @@ static void mshell_sel_desktop(struct tinywl_server *server, struct wlr_box sche
 		mshell_effetti_ombra(mshell_sel.livello, m, MSHELL_RAGGIO_CONTROLLO, &mshell_ombra_sollevato);
 		mshell_sel_miniatura(mshell_sel.livello, m.x, m.y, schermo, ml, ma, d->n, d->scelta);
 		if (i == server->attuale) {
-			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_RAGGIO_CONTROLLO);
+			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_INDICATORE,
+				MSHELL_RAGGIO_CONTROLLO);
 		}
 	}
 }
@@ -386,7 +389,8 @@ static void mshell_sel_disposizioni(struct tinywl_server *server, struct wlr_box
 		};
 		mshell_sel_miniatura(mshell_sel.livello, m.x, m.y, schermo, ml, ma, d->n, i);
 		if (i == scelta) {
-			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_RAGGIO_CONTROLLO);
+			mshell_sel_contorno(mshell_sel.livello, m, MSHELL_INDICATORE, MSHELL_INDICATORE,
+				MSHELL_RAGGIO_CONTROLLO);
 		}
 	}
 }
