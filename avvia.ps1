@@ -23,4 +23,5 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     -drive "if=pflash,format=raw,readonly=on,file=C:\Program Files\qemu\share\edk2-x86_64-code.fd" `
     -drive "if=none,id=disco,file=$qui\build\disco-qemu-pc.img,format=raw" `
     -device "virtio-blk-pci,drive=disco,bootindex=1" `
-    -vga none -device "virtio-vga,xres=1280,yres=800"
+    -vga none -device "virtio-vga,xres=1280,yres=800" `
+    -device qemu-xhci -device usb-tablet  # il mouse (con virtio-tablet il compositore non lo riceve)
