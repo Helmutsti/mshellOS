@@ -144,6 +144,7 @@ static void mshell_livello_commit(struct wl_listener *listener, void *data) {
 	if (ls->current.committed != 0) {
 		mshell_livello_disponi(s);
 	}
+	mshell_effetti_livello(s->scena->tree, ls->namespace);  /* il vetro, se e' fra i suoi (effetti.c) */
 	mshell_livelli_tastiera(l, NULL);
 }
 
@@ -170,6 +171,8 @@ static void mshell_livello_destroy(struct wl_listener *listener, void *data) {
 static void mshell_popup_livello_commit(struct wl_listener *listener, void *data) {
 	struct mshell_popup_livello *p = wl_container_of(listener, p, commit);
 	if (!p->popup->base->initial_commit) {
+		/* il vetro come la superficie genitore (effetti.c) */
+		mshell_effetti_livello(p->genitore->scena->tree, p->genitore->superficie->namespace);
 		return;
 	}
 	/* il popup resta dentro lo schermo: il riquadro e' quello dello schermo, nelle coordinate

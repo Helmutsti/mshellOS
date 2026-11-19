@@ -32,6 +32,8 @@
  *   sta sotto le altre app del desktop, che intanto scorrono nel posto lasciato libero, non
  *   prende clic, e sparisce a fine dissolvenza (lascia il riferimento alla memoria).
  *
+ *   L'istantanea copia anche gli angoli arrotondati dell'app (effetti.c).
+ *
  * IL TEMPO. Un timer del ciclo degli eventi ogni MSHELL_ANIM_PASSO_MS: a ogni scatto si guarda
  * l'orologio e si mette ogni cosa dove deve essere in quel momento. Se il disegno e' lento (in
  * QEMU disegna il processore) si vedono meno passaggi, ma le animazioni finiscono in orario.
@@ -322,6 +324,7 @@ static void mshell_anim_copia(struct wlr_scene_buffer *b, int sx, int sy, void *
 	wlr_scene_buffer_set_source_box(copia, &b->src_box);
 	wlr_scene_buffer_set_dest_size(copia, b->dst_width, b->dst_height);
 	wlr_scene_buffer_set_transform(copia, b->transform);
+	wlr_scene_buffer_set_corner_radius(copia, b->corner_radius, b->corners);  /* gli angoli (effetti.c) */
 	copia->point_accepts_input = mshell_anim_niente_clic;
 }
 
