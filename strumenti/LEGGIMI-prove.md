@@ -25,6 +25,7 @@ Una istruzione per riga o separate da `;`; `#` per i commenti.
 | `tieni meta_l` / `lascia meta_l` | tiene premuto un tasto e lo lascia (es. per la cornice del focus) |
 | `scrivi prova` | scrive lettere, cifre e spazi |
 | `aspetta 300` | aspetta i millisecondi |
+| `clic 1200 16` | clic con il tasto sinistro sul pixel x, y dello schermo |
 | `foto nome` | foto dello schermo in `build/prova-<posto>/foto/nome.png` |
 | `app` | apre l'app di prova nel desktop attuale |
 | `seriale <comando>` | comando nella shell dell'amministratore, con l'uscita |

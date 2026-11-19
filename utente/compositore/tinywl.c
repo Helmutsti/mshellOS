@@ -1217,9 +1217,16 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 	struct tinywl_server *server =
 		wl_container_of(listener, server, cursor_button);
 	struct wlr_pointer_button_event *event = data;
+	/* MSHELL: se un menu a comparsa ha la presa, il clic e' solo suo: lo riceve lui o, se e' fuori,
+	 * lo chiude (lo fa wlroots); in tutti e due i casi non da' il focus a quello che sta sotto
+	 * (livelli.c). Va guardato prima, perche' la presa finisce durante l'avviso qui sotto. */
+	bool presa = mshell_livelli_presa(server);
 	/* Notify the client with pointer focus that a button press has occurred */
 	wlr_seat_pointer_notify_button(server->seat,
 			event->time_msec, event->button, event->state);
+	if (presa && event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
+		return;
+	}
 	double sx, sy;
 	struct wlr_surface *surface = NULL;
 	struct tinywl_toplevel *toplevel = desktop_toplevel_at(server,
@@ -1869,6 +1876,7 @@ int main(int argc, char *argv[]) {
 	server.new_input.notify = server_new_input;
 	wl_signal_add(&server.backend->events.new_input, &server.new_input);
 	server.seat = wlr_seat_create(server.wl_display, "seat0");
+	mshell_livelli_seat(&server);  /* MSHELL: la fine delle prese dei menu a comparsa (livelli.c) */
 	server.request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server.seat->events.request_set_cursor,
 			&server.request_cursor);

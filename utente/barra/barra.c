@@ -7,17 +7,18 @@
  * (lo dice il compositore, elenco-app.c); a destra giorno e ora, la campanella e il menu: sono
  * pulsanti, e ognuno apre il suo menu a tendina (calendario, notifiche, comandi rapidi).
  *
- * I MENU stanno in una seconda superficie, nel livello "overlay", grande come lo schermo e
- * trasparente, che c'e' solo mentre un menu e' aperto. Il pannello del menu e' disegnato dentro,
- * sotto la barra e allineato a destra con le app. Cosi':
- *   - un clic fuori dal pannello cade su questa superficie e chiude il menu (senza arrivare
- *     all'app sotto);
- *   - la fascia della barra (i 32 px in alto) e' esclusa dalla superficie dei clic: un clic li'
- *     arriva alla barra, quindi un clic su un altro pulsante passa all'altro menu e un clic sullo
+ * I MENU (calendario, notifiche, comandi rapidi) sono menu a comparsa di Wayland (xdg_popup):
+ * dei GtkPopover che hanno per genitore la barra (decisione della persona). Il pannello sta sotto
+ * la barra, con l'angolo in alto a destra a 32 px dall'alto e da destra (sul bordo delle app).
+ * GTK ci disegna solo il contenuto su fondo di vetro, senza freccetta, cornice, ombra o angoli:
+ * gli angoli arrotondati, la sfocatura dietro e l'ombra li mette il compositore (decisione della
+ * persona: le decorazioni sono del compositore), che riconosce i menu a comparsa della superficie
+ * "mshell-barra" (utente/compositore/effetti.c).
+ * Il menu chiede al compositore la "presa" (lo fa GTK, perche' il popover si chiude da solo):
+ *   - un clic fuori dal menu lo chiude, e quel clic non arriva all'app sotto;
+ *   - un clic su un altro pulsante della barra chiude il menu e apre l'altro; un clic sullo
  *     stesso pulsante lo chiude;
- *   - la superficie chiede la tastiera in esclusiva, quindi riceve Esc (che chiude il menu);
- *     quando sparisce il compositore ridà la tastiera all'app.
- *   - l'ombra del pannello ha tutto lo spazio che vuole intorno.
+ *   - Esc lo chiude (il compositore da' la tastiera alla barra finche' il menu e' aperto).
  *
  * L'ASPETTO viene solo da stile.css (in /usr/share/mshell/barra/), un foglio di stile nostro che
  * parte da zero: prima azzera tutto quello che darebbe il tema di GTK, poi mette le nostre regole
@@ -41,10 +42,10 @@
 
 enum menu { NESSUNO = -1, CALENDARIO, NOTIFICHE, COMANDI, MENU_QUANTI };
 
-static GtkWidget *finestra_menu;          /* la superficie dei menu */
-static GtkWidget *pulsante[MENU_QUANTI];  /* i pulsanti della barra, uno per menu */
+static GtkWidget *menu[MENU_QUANTI];      /* i menu a comparsa (GtkPopover) */
+static GtkWidget *pulsante[MENU_QUANTI];  /* i pulsanti della barra (GtkMenuButton), uno per menu */
 static GtkWidget *pannello[MENU_QUANTI];  /* i pannelli dei menu */
-static enum menu aperto = NESSUNO;
+static GtkWidget *riga;                   /* il contenuto della barra */
 static GtkWidget *titolo_app;             /* il pulsante col titolo dell'app col focus */
 static GtkWidget *orologio;               /* la scritta con giorno e ora */
 static GtkWidget *barra;                  /* la superficie della barra */
@@ -78,71 +79,100 @@ static gboolean aggiorna_tasti(gpointer dati) {
 	return G_SOURCE_CONTINUE;
 }
 
-/* Apre il menu "quale" (NESSUNO: chiude). */
-static void apri(enum menu quale) {
-	if (aperto != NESSUNO) {
-		gtk_widget_remove_css_class(pulsante[aperto], "aperto");
-		gtk_widget_set_visible(pannello[aperto], FALSE);
+/* Chiude il menu aperto, se c'e'. */
+static void chiudi_menu(void) {
+	for (int i = 0; i < MENU_QUANTI; i++) {
+		gtk_popover_popdown(GTK_POPOVER(menu[i]));
 	}
-	aperto = quale;
-	if (quale == NESSUNO) {
-		gtk_widget_set_visible(finestra_menu, FALSE);
-		return;
-	}
+}
+
+/* Un menu si apre (lo apre il suo pulsante, un GtkMenuButton: un clic lo apre, un altro clic lo
+ * chiude, e un clic su un altro pulsante passa all'altro menu). */
+static void menu_aperto(GtkWidget *p, gpointer dati) {
+	enum menu quale = GPOINTER_TO_INT(dati);
 	if (quale == CALENDARIO) {
 		/* ogni volta che si apre, il calendario riparte dal mese di oggi */
 		GDateTime *adesso = g_date_time_new_now_local();
 		mshell_calendario_aggiorna(pannello[CALENDARIO], adesso, TRUE);
 		g_date_time_unref(adesso);
 	}
-	gtk_widget_add_css_class(pulsante[quale], "aperto");
-	gtk_widget_set_visible(pannello[quale], TRUE);
-	gtk_widget_set_visible(finestra_menu, TRUE);
-}
-
-static void pulsante_premuto(GtkButton *b, gpointer dati) {
-	enum menu quale = GPOINTER_TO_INT(dati);
-	apri(aperto == quale ? NESSUNO : quale);
-}
-
-/* Un clic sulla barra fuori dai pulsanti chiude il menu aperto. */
-static void clic_barra(GtkGestureClick *g, int n, double x, double y, gpointer dati) {
-	GtkWidget *radice = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(g));
-	GtkWidget *sotto = gtk_widget_pick(radice, x, y, GTK_PICK_DEFAULT);
-	if (aperto != NESSUNO && (sotto == NULL || gtk_widget_get_ancestor(sotto, GTK_TYPE_BUTTON) == NULL)) {
-		apri(NESSUNO);
+	/* il punto a cui si attacca: il proprio pulsante (la persona, 19/11/2026: "i menu devono
+	 * aprirsi sotto il proprio tasto"), largo quanto lui e alto quanto la barra, cosi' il menu
+	 * comincia sotto la barra; il menu ci mette il suo angolo in alto a destra (halign END, in
+	 * crea_menu), cioe' il suo bordo destro e' quello del pulsante. Il rettangolo si da' nelle
+	 * coordinate del pulsante, che e' il genitore del menu; la cima si conta dalla finestra della
+	 * barra, che e' grande come la superficie. */
+	graphene_point_t in_barra = GRAPHENE_POINT_INIT(0, 0);
+	graphene_point_t nel_pulsante;
+	if (gtk_widget_compute_point(barra, pulsante[quale], &in_barra, &nel_pulsante)) {
+		GdkRectangle punto = { 0, (int)nel_pulsante.y, gtk_widget_get_width(pulsante[quale]), 32 };
+		gtk_popover_set_pointing_to(GTK_POPOVER(p), &punto);
 	}
+	gtk_widget_add_css_class(pulsante[quale], "aperto");
 }
 
-/* Un clic sulla superficie dei menu fuori dal pannello chiude il menu. */
-static void clic_menu(GtkGestureClick *g, int n, double x, double y, gpointer dati) {
-	if (aperto == NESSUNO) {
+static gboolean apri_dopo(gpointer dati);
+
+/* Il menu si e' chiuso: dal suo pulsante, con Esc, con un clic fuori o da chiudi_menu.
+ * Se si e' chiuso per un clic (tasto del mouse giu' adesso) sul pulsante di un ALTRO menu, si
+ * apre quello: un clic solo per passare da un menu all'altro (la persona, 19/11/2026). GTK quel
+ * clic lo usa solo per chiudere e non lo passa al pulsante. */
+static void menu_chiuso(GtkPopover *p, gpointer dati) {
+	int quale = GPOINTER_TO_INT(dati);
+	gtk_widget_remove_css_class(pulsante[quale], "aperto");
+	GdkSurface *sup = gtk_native_get_surface(GTK_NATIVE(barra));
+	GdkDisplay *disp = gtk_widget_get_display(barra);
+	GdkSeat *seat = disp != NULL ? gdk_display_get_default_seat(disp) : NULL;
+	GdkDevice *mouse = seat != NULL ? gdk_seat_get_pointer(seat) : NULL;
+	double x, y;
+	GdkModifierType tasti;
+	if (sup == NULL || mouse == NULL ||
+			!gdk_surface_get_device_position(sup, mouse, &x, &y, &tasti) ||
+			!(tasti & GDK_BUTTON1_MASK)) {
 		return;
 	}
-	graphene_rect_t r;
-	graphene_point_t p = GRAPHENE_POINT_INIT(x, y);
-	if (!gtk_widget_compute_bounds(pannello[aperto], finestra_menu, &r) ||
-			!graphene_rect_contains_point(&r, &p)) {
-		apri(NESSUNO);
+	graphene_point_t in_barra = GRAPHENE_POINT_INIT(x, y), in_riga;
+	if (!gtk_widget_compute_point(barra, riga, &in_barra, &in_riga)) {
+		return;
+	}
+	GtkWidget *sotto = gtk_widget_pick(riga, in_riga.x, in_riga.y, GTK_PICK_DEFAULT);
+	for (int i = 0; i < MENU_QUANTI; i++) {
+		if (i != quale && sotto != NULL &&
+				(sotto == pulsante[i] || gtk_widget_is_ancestor(sotto, pulsante[i]))) {
+			g_idle_add(apri_dopo, GINT_TO_POINTER(i));
+		}
 	}
 }
 
-static gboolean tasto_menu(GtkEventControllerKey *k, guint tasto, guint codice,
-		GdkModifierType mod, gpointer dati) {
-	if (tasto == GDK_KEY_Escape) {
-		apri(NESSUNO);
-		return TRUE;
-	}
-	return FALSE;
+/* Apre il menu del pulsante "quale" (dopo che l'altro si e' chiuso). */
+static gboolean apri_dopo(gpointer dati) {
+	gtk_menu_button_popup(GTK_MENU_BUTTON(pulsante[GPOINTER_TO_INT(dati)]));
+	return G_SOURCE_REMOVE;
 }
 
-/* La fascia della barra non e' della superficie dei menu: i clic li' vanno alla barra.
- * (La zona dei clic si da' al compositore ogni volta che la superficie compare.) */
-static void menu_compare(GtkWidget *w, gpointer dati) {
-	cairo_rectangle_int_t sotto_la_barra = { 0, 32, G_MAXINT16, G_MAXINT16 };
-	cairo_region_t *zona = cairo_region_create_rectangle(&sotto_la_barra);
-	gdk_surface_set_input_region(gtk_native_get_surface(GTK_NATIVE(w)), zona);
-	cairo_region_destroy(zona);
+/* Un clic sulla barra fuori dai pulsanti chiude il menu aperto. Un clic sul pulsante di un ALTRO
+ * menu, mentre uno e' aperto, chiude quello e apre l'altro con un clic solo (la persona,
+ * 19/11/2026): da solo GTK userebbe il primo clic solo per chiudere. */
+static void clic_barra(GtkGestureClick *g, int n, double x, double y, gpointer dati) {
+	GtkWidget *sotto = gtk_widget_pick(riga, x, y, GTK_PICK_DEFAULT);
+	if (sotto == NULL || gtk_widget_get_ancestor(sotto, GTK_TYPE_BUTTON) == NULL) {
+		chiudi_menu();
+		return;
+	}
+	int aperto = -1, cliccato = -1;
+	for (int i = 0; i < MENU_QUANTI; i++) {
+		if (gtk_widget_get_visible(menu[i])) {
+			aperto = i;
+		}
+		if (sotto == pulsante[i] || gtk_widget_is_ancestor(sotto, pulsante[i])) {
+			cliccato = i;
+		}
+	}
+	if (aperto >= 0 && cliccato >= 0 && cliccato != aperto) {
+		chiudi_menu();
+		gtk_gesture_set_state(GTK_GESTURE(g), GTK_EVENT_SEQUENCE_CLAIMED);
+		g_idle_add(apri_dopo, GINT_TO_POINTER(cliccato));
+	}
 }
 
 /* Giorno e ora nella barra (gio 19 nov  10:00) e nel calendario; si rifanno allo scoccare di
@@ -168,7 +198,7 @@ static gboolean scocca_minuto(gpointer dati) {
 /* Il cassetto si apre (la barra e un menu aperto spariscono) o si chiude (la barra torna). */
 static void cassetto_cambiato(gboolean aperto) {
 	if (aperto) {
-		apri(NESSUNO);
+		chiudi_menu();
 	}
 	gtk_widget_set_visible(barra, !aperto);
 }
@@ -186,10 +216,9 @@ static void titolo_cambiato(const char *titolo) {
 }
 
 static GtkWidget *nuovo_pulsante(GtkWidget *contenuto, enum menu quale) {
-	GtkWidget *b = gtk_button_new();
-	gtk_button_set_child(GTK_BUTTON(b), contenuto);
+	GtkWidget *b = gtk_menu_button_new();
+	gtk_menu_button_set_child(GTK_MENU_BUTTON(b), contenuto);
 	gtk_widget_add_css_class(b, "pulsante");
-	g_signal_connect(b, "clicked", G_CALLBACK(pulsante_premuto), GINT_TO_POINTER(quale));
 	pulsante[quale] = b;
 	return b;
 }
@@ -208,7 +237,7 @@ static GtkWidget *crea_barra(void) {
 	gtk_layer_set_exclusive_zone(GTK_WINDOW(w), 0);
 	gtk_layer_set_keyboard_mode(GTK_WINDOW(w), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
 
-	GtkWidget *riga = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	riga = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_widget_add_css_class(riga, "riga-barra");
 
 	/* il titolo dell'app col focus: ha l'aspetto di un pulsante, ma per ora non apre niente */
@@ -256,43 +285,26 @@ static GtkWidget *crea_barra(void) {
 	return w;
 }
 
-static GtkWidget *crea_finestra_menu(const char *tema) {
-	GtkWidget *w = gtk_window_new();
-	gtk_window_set_decorated(GTK_WINDOW(w), FALSE);
-	gtk_widget_add_css_class(w, "menu");
-	gtk_widget_add_css_class(w, tema);
-	gtk_layer_init_for_window(GTK_WINDOW(w));
-	gtk_layer_set_namespace(GTK_WINDOW(w), "mshell-barra-menu");
-	gtk_layer_set_layer(GTK_WINDOW(w), GTK_LAYER_SHELL_LAYER_OVERLAY);
-	for (int e = 0; e < GTK_LAYER_SHELL_EDGE_ENTRY_NUMBER; e++) {
-		gtk_layer_set_anchor(GTK_WINDOW(w), e, TRUE);
-	}
-	gtk_layer_set_exclusive_zone(GTK_WINDOW(w), -1);  /* tutto lo schermo, barra compresa */
-	gtk_layer_set_keyboard_mode(GTK_WINDOW(w), GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
-
-	/* i pannelli, uno visibile alla volta, in alto a destra (le distanze sono in stile.css) */
-	GtkWidget *posto = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_add_css_class(posto, "posto-menu");
-	gtk_widget_set_halign(posto, GTK_ALIGN_END);
-	gtk_widget_set_valign(posto, GTK_ALIGN_START);
+/* I menu: un popover per pannello, del suo pulsante, sotto il punto che dice menu_aperto, con il
+ * bordo destro su quello del punto. Niente freccetta; il resto dell'aspetto di GTK (cornice,
+ * ombra, angoli) lo azzera stile.css. */
+static void crea_menu(const char *tema) {
 	pannello[CALENDARIO] = mshell_calendario_nuovo();
 	pannello[NOTIFICHE] = mshell_notifiche_nuove();
 	pannello[COMANDI] = mshell_comandi_nuovi();
 	for (int i = 0; i < MENU_QUANTI; i++) {
-		gtk_widget_set_visible(pannello[i], FALSE);
-		gtk_box_append(GTK_BOX(posto), pannello[i]);
+		GtkWidget *p = gtk_popover_new();
+		gtk_widget_add_css_class(p, "menu");
+		gtk_widget_add_css_class(p, tema);
+		gtk_popover_set_has_arrow(GTK_POPOVER(p), FALSE);
+		gtk_popover_set_position(GTK_POPOVER(p), GTK_POS_BOTTOM);
+		gtk_widget_set_halign(p, GTK_ALIGN_END);
+		gtk_popover_set_child(GTK_POPOVER(p), pannello[i]);
+		gtk_menu_button_set_popover(GTK_MENU_BUTTON(pulsante[i]), p);
+		g_signal_connect(p, "show", G_CALLBACK(menu_aperto), GINT_TO_POINTER(i));
+		g_signal_connect(p, "closed", G_CALLBACK(menu_chiuso), GINT_TO_POINTER(i));
+		menu[i] = p;
 	}
-	gtk_window_set_child(GTK_WINDOW(w), posto);
-
-	GtkGesture *clic = gtk_gesture_click_new();
-	gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(clic), GTK_PHASE_CAPTURE);
-	g_signal_connect(clic, "pressed", G_CALLBACK(clic_menu), NULL);
-	gtk_widget_add_controller(w, GTK_EVENT_CONTROLLER(clic));
-	GtkEventController *tasti = gtk_event_controller_key_new();
-	g_signal_connect(tasti, "key-pressed", G_CALLBACK(tasto_menu), NULL);
-	gtk_widget_add_controller(w, tasti);
-	g_signal_connect(w, "map", G_CALLBACK(menu_compare), NULL);
-	return w;
 }
 
 int main(int argc, char *argv[]) {
@@ -315,8 +327,8 @@ int main(int argc, char *argv[]) {
 		"gtk-xft-rgba", "none", "gtk-hint-font-metrics", FALSE, NULL);
 
 	const char *tema = g_strcmp0(g_getenv("MSHELL_TEMA"), "chiaro") == 0 ? "chiaro" : "scuro";
-	finestra_menu = crea_finestra_menu(tema);
 	barra = crea_barra();
+	crea_menu(tema);
 	mshell_cassetto_crea(tema, cassetto_cambiato);
 	g_unix_signal_add(SIGUSR1, segnale_cassetto, NULL);
 	scocca_minuto(NULL);
