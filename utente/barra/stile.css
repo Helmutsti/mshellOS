@@ -9,53 +9,13 @@
 	all: unset;
 }
 
-/* 2. I VALORI DEL DISEGNO. I colori cambiano con il tema: la classe "scuro" o "chiaro" sta sulla
- * finestra, e i valori passano a tutto quello che c'e' dentro. La barra e' sempre "scuro" (sta
- * sopra la foto dello sfondo); i menu seguono il tema del sistema. */
-.scuro {
-	--testo-primario: #ebebec;
-	--testo-secondario: #b8b8bb;
-	--testo-disabilitato: #89898d;
-	--superficie-vetro: rgba(65, 65, 70, 0.72);       /* #414146 a 0.72 */
-	--superficie-elevata: #2b2b2e;
-	--controllo-sfondo: #37373b;
-	--controllo-selezione-vetro: rgba(255, 255, 255, 0.12);
-	--azione-sfondo: #c4c4c7;
-	--azione-testo: #242427;
-	--superficie-incassata: #242427;
-	--bordo-focus: #e3e3e5;
-}
-
-.chiaro {
-	--testo-primario: #414146;
-	--testo-secondario: #77777b;
-	--testo-disabilitato: #b8b8bb;
-	--superficie-vetro: rgba(255, 255, 255, 0.72);    /* #ffffff a 0.72 */
-	--superficie-elevata: #fafafa;
-	--controllo-sfondo: #ebebec;
-	--controllo-selezione-vetro: rgba(0, 0, 0, 0.08);
-	--azione-sfondo: #4c4c52;
-	--azione-testo: #fafafa;
-	--superficie-incassata: #f2f2f3;
-	--bordo-focus: #4c4c52;
-}
-
+/* 2. I VALORI DEL DISEGNO stanno in token.css (risorse/token.css nel progetto, nel sistema
+ * /usr/share/mshell/token.css), che il programma carica prima di questo foglio. I colori cambiano
+ * con il tema: la classe "scuro" o "chiaro" sta sulla finestra, e i valori passano a tutto quello
+ * che c'e' dentro. La barra e' "scuro" (sta sopra la foto dello sfondo; col pannello di ricerca
+ * aperto prende il tema del sistema); i menu e il pannello seguono il tema del sistema. */
 window {
-	--spazio-4: 4px;
-	--spazio-8: 8px;
-	--spazio-12: 12px;
-	--spazio-16: 16px;
-	--spazio-20: 20px;
-	--spazio-24: 24px;
-	--spazio-32: 32px;
-	--raggio-6: 6px;
-	--raggio-pannello: 10px;
-	--raggio-12: 12px;
-	--raggio-pillola: 16px;
-	--raggio-icona: 22px;  /* le icone delle app da 96 */
-	/* ombra/incassato: un'ombra dentro in alto e una riga chiara sotto */
-	--ombra-incassato: inset 0 1px 2px rgba(20, 20, 26, 0.07), 0 1px 0 rgba(20, 20, 26, 0.04);
-	font-family: "IBM Plex Sans";
+	font-family: var(--font-famiglia);
 	color: var(--testo-primario);
 }
 
@@ -66,6 +26,8 @@ window {
 .corpo-medio { font-weight: 500; font-size: 14px; line-height: 20px; }  /* testo/corpo-medio */
 .etichetta   { font-weight: 500; font-size: 12px; line-height: 16px; }  /* testo/etichetta */
 .piccolo     { font-weight: 400; font-size: 12px; line-height: 16px; }  /* testo/piccolo */
+
+.intestazione { font-weight: 600; font-size: 12px; line-height: 16px; }  /* i gruppi dei risultati (nel disegno non e' uno stile) */
 
 .primario    { color: var(--testo-primario); }
 .secondario  { color: var(--testo-secondario); }
@@ -79,7 +41,7 @@ window {
 
 .pulsante {
 	padding: var(--spazio-4);
-	border-radius: var(--raggio-6);
+	border-radius: var(--raggio-controllo);
 }
 
 /* il pulsante che ha il suo menu aperto */
@@ -133,7 +95,7 @@ window {
 .scheda {
 	padding: var(--spazio-12);
 	border-spacing: var(--spazio-4);
-	border-radius: var(--raggio-6);
+	border-radius: var(--raggio-controllo);
 	background-color: var(--superficie-elevata);
 }
 
@@ -144,42 +106,57 @@ window {
 
 .blocco {
 	padding: var(--spazio-12);
-	border-radius: var(--raggio-6);
+	border-radius: var(--raggio-controllo);
 	background-color: var(--controllo-sfondo);
 }
 
-/* 6. IL CASSETTO DELLE APP (cassetto.c; misure dal disegno "Cassetto app – Chiaro/Scuro").
- * Tutto lo schermo e' di vetro (la sfocatura la fa il compositore, effetti.c); dentro, a 24 px dai bordi, la colonna
- * delle app e quella laterale da 320, a 24 px l'una dall'altra. */
+/* 6. IL PANNELLO DI RICERCA (cassetto.c; misure dal disegno "Ricerca nuovo stile", pagina
+ * "Scrivania" di Figma). Tutto lo schermo e' di vetro (la sfocatura la fa il compositore,
+ * effetti.c); sopra, le pagine in alto al centro e le linguette in fondo. */
 .cassetto {
 	background-color: var(--superficie-vetro);
 }
 
-.contenuto-cassetto {
-	padding: var(--spazio-24);
-	border-spacing: var(--spazio-24);
+.pagine {
+	margin-top: 96px;  /* la barra (32) e due volte spazio/32 */
 }
 
-.colonna-cassetto {
+/* i pannelli del pannello di ricerca: vetro, angoli raggio/finestra, ombra/sovrapposto. Qui li
+ * disegna la barra: stanno dentro una superficie sola grande come lo schermo, e il compositore non
+ * sa dove sono. */
+.scheda-ricerca, .linguette {
+	border-radius: var(--raggio-finestra);
+	background-color: var(--superficie-vetro);
+	box-shadow:
+		0 var(--effetto-ombra-sovrapposto-2-y) var(--effetto-ombra-sovrapposto-2-raggio) var(--effetto-ombra-sovrapposto-2-allarga) var(--effetto-ombra-sovrapposto-2-colore),
+		0 var(--effetto-ombra-sovrapposto-3-y) var(--effetto-ombra-sovrapposto-3-raggio) var(--effetto-ombra-sovrapposto-3-allarga) var(--effetto-ombra-sovrapposto-3-colore),
+		0 var(--effetto-ombra-sovrapposto-4-y) var(--effetto-ombra-sovrapposto-4-raggio) var(--effetto-ombra-sovrapposto-4-allarga) var(--effetto-ombra-sovrapposto-4-colore);
+}
+
+/* la pagina Widget: due colonne a spazio/32, a sinistra i pannelli uno sotto l'altro a spazio/16 */
+.pagina-widget {
 	border-spacing: var(--spazio-32);
 }
 
-/* la ricerca: una pillola incassata alta 48 (testo/pulsante-l) */
-.ricerca {
-	min-height: 48px;
-	padding: 0 var(--spazio-20);
-	border-spacing: var(--spazio-8);
-	border-radius: 24px;
-	background-color: var(--superficie-incassata);
-	box-shadow: var(--ombra-incassato);
+.colonna-widget {
+	border-spacing: var(--spazio-16);
+}
+
+/* la pagina Ricerca: largo 640, padding/s intorno, spazio/16 fra il campo e i gruppi */
+.pannello-ricerca {
+	padding: var(--padding-s);
+	border-spacing: var(--spazio-16);
+}
+
+.campo-ricerca {
+	padding: 6px var(--spazio-8);
+	border-spacing: 10px;
 }
 
 .testo-ricerca {
-	font-weight: 500;
-	font-size: 16px;
-	line-height: 24px;
+	font-size: 18px;  /* nel disegno non e' uno stile: Regular 18 */
 	color: var(--testo-primario);
-	caret-color: var(--testo-primario);
+	caret-color: var(--testo-cursore);
 }
 
 .testo-ricerca > placeholder {
@@ -187,63 +164,98 @@ window {
 }
 
 .testo-ricerca > selection {
-	background-color: var(--controllo-selezione-vetro);
+	background-color: var(--testo-selezione);
 }
 
-/* la griglia delle app: 32 px fra le colonne, 24 fra le righe. Il posto ha 4 px intorno per la
- * cornice dell'app scelta, ripresi in alto dal margine della parte che scorre */
-.scorri-app {
-	margin-top: -4px;
+.gruppi {
+	border-spacing: var(--spazio-16);
 }
 
-.posto-griglia {
-	padding: 4px;
+.gruppo, .elenco {
+	border-spacing: 2px;
 }
 
+.gruppo > .intestazione {
+	padding: 0 0 var(--spazio-4) var(--spazio-8);
+}
+
+/* un risultato: alto 36, l'icona da 24, il nome e a destra che cos'e' */
+.risultato {
+	padding: 6px var(--spazio-8);
+	border-radius: var(--raggio-controllo);
+}
+
+.contenuto-risultato {
+	border-spacing: var(--spazio-12);
+}
+
+.risultato.scelta, .app.scelta {
+	background-color: var(--azione-sfondo);
+}
+
+.risultato.scelta label, .app.scelta label {
+	color: var(--azione-testo);
+}
+
+/* la pagina App: 8 app per riga, ognuna larga 102 e alta 104, a gap/m l'una dall'altra */
 .griglia-app {
-	border-spacing: var(--spazio-32) var(--spazio-24);  /* in orizzontale, in verticale */
+	border-spacing: var(--gap-m);
+}
+
+.app {
+	min-width: 102px;
+	padding: var(--spazio-12) 0;
+	border-radius: var(--raggio-controllo);
 }
 
 .colonna-app {
 	border-spacing: var(--spazio-8);
 }
 
-.riquadro {
-	border-radius: var(--raggio-icona);
+.colonna-app > label {
+	letter-spacing: 0.24px;  /* testo/etichetta: spaziatura 2% */
+	margin: 0 var(--spazio-4);
 }
 
-/* senza icona: il riquadro con l'iniziale del nome */
-.riquadro.senza-icona {
+/* senza icona: il riquadro con l'iniziale del nome (le icone vere verranno dopo) */
+.riquadro {
+	border-radius: var(--raggio-finestra);
+}
+
+.riquadro-piccolo {
+	border-radius: var(--raggio-controllo);
+}
+
+.senza-icona {
 	background-color: var(--controllo-sfondo);
 }
 
-.iniziale {
+.riquadro .iniziale {
 	font-weight: 600;
-	font-size: 40px;
+	font-size: 24px;
 	color: var(--testo-secondario);
 }
 
-.nome-app {
-	letter-spacing: 0.24px;  /* testo/etichetta: spaziatura 2% */
+.riquadro-piccolo .iniziale {
+	font-weight: 600;
+	font-size: 12px;
+	color: var(--testo-secondario);
 }
 
-/* l'app scelta con le frecce (quella che parte con Invio): la cornice del focus */
-.app.scelta .riquadro {
-	outline: 2px solid var(--bordo-focus);
-	outline-offset: 2px;
+/* le linguette in fondo: a spazio/16 dal bordo, una pillola alta 32 */
+.linguette {
+	margin-bottom: var(--spazio-16);
+	padding: var(--spazio-4);
+	border-spacing: var(--spazio-4);
 }
 
-/* la colonna laterale: gli stessi pannelli dei menu, ma appoggiati sul vetro (niente ombra) */
-.colonna-laterale {
-	border-spacing: var(--spazio-16);
+.linguetta {
+	padding: var(--spazio-4) 10px;
+	border-radius: var(--raggio-controllo);
+	color: var(--testo-secondario);
 }
 
-.cassetto .pannello {
-	min-width: 0;
-	border-radius: var(--raggio-pannello);
-	box-shadow: none;
-}
-
-.ora-grande {
-	letter-spacing: -0.24px;  /* testo/titolo: spaziatura -1% */
+.linguetta.scelta {
+	background-color: var(--azione-sfondo);
+	color: var(--azione-testo);
 }

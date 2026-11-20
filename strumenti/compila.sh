@@ -16,6 +16,8 @@ mkdir -p "$RADICE/usr/bin"
 #                         cassetto delle app come "Prova" (il suo .desktop in /usr/share/applications)
 #   mshell-barra          la barra di stato, i suoi menu e il cassetto delle app (utente/barra/,
 #                         GTK 4); il suo foglio di stile va in /usr/share/mshell/barra/
+#   token.css             i valori del disegno (risorse/), in /usr/share/mshell/: li leggono la
+#                         barra e il compositore quando partono
 # I protocolli dei livelli e dell'elenco delle app non stanno nei pacchetti di Debian: le loro
 # descrizioni sono copiate dai sorgenti di wlroots 0.18.2 in utente/compositore/protocolli/.
 echo "3b. compositore, app di prova e barra"
@@ -54,4 +56,6 @@ gcc -O2 -Wall -Werror -I"$C" $(pkg-config --cflags gtk4-layer-shell-0 gtk4 gio-u
     $(pkg-config --libs gtk4-layer-shell-0 gtk4 gio-unix-2.0 wayland-client)
 mkdir -p "$RADICE/usr/share/mshell/barra"
 cp utente/barra/stile.css "$RADICE/usr/share/mshell/barra/stile.css"
+# i valori del disegno (colori, misure, ombre): un solo elenco, che leggono la barra e il compositore
+cp risorse/token.css "$RADICE/usr/share/mshell/token.css"
 

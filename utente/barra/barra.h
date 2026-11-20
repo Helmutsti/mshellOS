@@ -32,7 +32,8 @@ void mshell_elenco_app_avvia(void (*cambiato)(const char *titolo));
  * al compositore di attivarla e da' vero. */
 gboolean mshell_elenco_app_attiva(const char *const *nomi);
 
-/* IL CASSETTO DELLE APP (cassetto.c). "cambiato" si chiama quando si apre (TRUE) o si chiude. */
+/* IL PANNELLO DI RICERCA (cassetto.c). "cambiato" si chiama quando si apre (TRUE) o si chiude. */
 void mshell_cassetto_crea(const char *tema, void (*cambiato)(gboolean aperto));
 void mshell_cassetto_apri_chiudi(void);
-void mshell_cassetto_minuto(GDateTime *adesso);  /* l'orologio grande */
+gboolean mshell_cassetto_aperto(void);
+void mshell_cassetto_minuto(GDateTime *adesso);  /* il calendario della pagina Widget */

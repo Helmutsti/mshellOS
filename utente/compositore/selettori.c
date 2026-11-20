@@ -35,17 +35,18 @@
 #define MSHELL_LAMPO_MS 500        /* quanto resta la cornice dopo un tocco di Super */
 #define MSHELL_TENUTO_MS 400       /* proposta, da confermare: oltre, Super giu' da solo apre il
                                     * selettore dei desktop */
-#define MSHELL_SEL_SPAZIO_24 24    /* spazio/24: margine dei selettori */
-#define MSHELL_SEL_SPAZIO_16 16    /* spazio/16: fra una miniatura e l'altra */
-#define MSHELL_INDICATORE 2        /* indicatore/spessore: il contorno del focus e della scelta */
+/* i valori del disegno vengono da token.c */
+#define MSHELL_SEL_SPAZIO_24 mshell_t.spazio_24  /* spazio/24: margine dei selettori */
+#define MSHELL_SEL_SPAZIO_16 mshell_t.spazio_16  /* spazio/16: fra una miniatura e l'altra */
+#define MSHELL_INDICATORE mshell_t.indicatore    /* indicatore/spessore: il contorno del focus e della scelta */
 #define MSHELL_FASCIA 24           /* l'altezza della fascia sotto l'app col focus */
 /* Le miniature sono un decimo dello schermo: 128x80 sullo schermo 1280x800 (la persona, 19/11/2026). */
 #define MSHELL_MINI_NUM 1
 #define MSHELL_MINI_DEN 10
 /* bordo/focus scuro: la cornice del focus e i contorni della scelta (pieno) */
-#define MSHELL_COLORE_FOCUS 0.89f, 0.89f, 0.90f, 1.0f
+#define MSHELL_COLORE_FOCUS mshell_t.focus[0], mshell_t.focus[1], mshell_t.focus[2], mshell_t.focus[3]
 /* superficie/vetro scuro: il pannello delle disposizioni e le app nelle miniature */
-#define MSHELL_COLORE_VETRO 0.25f, 0.25f, 0.27f, 0.72f
+#define MSHELL_COLORE_VETRO mshell_t.vetro[0], mshell_t.vetro[1], mshell_t.vetro[2], mshell_t.vetro[3]
 /* La sfumatura nera del selettore dei desktop: l'opacita' a sinistra, a un quarto, a destra. */
 #define MSHELL_SFUMATURA_0 0.80f
 #define MSHELL_SFUMATURA_25 0.55f
@@ -353,7 +354,7 @@ static void mshell_sel_segnaposto(struct tinywl_server *server) {
 	mshell_anim_dove(t, &p.x, &p.y);
 	int s = MSHELL_INDICATORE, r = MSHELL_RAGGIO_FINESTRA;
 	mshell_sel_rett(mshell_sel.livello, p.x, p.y, p.width, p.height, r,
-		0.89f, 0.89f, 0.90f, 0.12f);
+		mshell_t.focus[0], mshell_t.focus[1], mshell_t.focus[2], 0.12f);  /* bordo/focus al 12% */
 	for (int x = p.x + r; x < p.x + p.width - r; x += MSHELL_TRATTO + MSHELL_VUOTO) {
 		int l = x + MSHELL_TRATTO > p.x + p.width - r ? p.x + p.width - r - x : MSHELL_TRATTO;
 		mshell_sel_rett(mshell_sel.livello, x, p.y, l, s, 0, MSHELL_COLORE_FOCUS);

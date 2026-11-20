@@ -37,8 +37,8 @@
 #include <scenefx/types/fx/corner_location.h>
 #include <scenefx/types/fx/clipped_region.h>
 
-#define MSHELL_RAGGIO_FINESTRA 12  /* raggio/finestra */
-#define MSHELL_RAGGIO_CONTROLLO 6  /* raggio/controllo */
+#define MSHELL_RAGGIO_FINESTRA mshell_t.raggio_finestra    /* raggio/finestra (token.c) */
+#define MSHELL_RAGGIO_CONTROLLO mshell_t.raggio_controllo  /* raggio/controllo (token.c) */
 
 /* LA SFOCATURA del vetro. SceneFX sfoca a passate (Kawase doppio): con 2 passate di raggio 4
  * l'effetto e' vicino alla sfocatura 14 di Figma. Luminosita', contrasto e saturazione restano
@@ -58,23 +58,27 @@ struct mshell_ombra {
 	float colore[4];
 	int y, sfocatura, allarga;
 };
-#define MSHELL_GRIGIO_OMBRA 0x14 / 255.0f, 0x14 / 255.0f, 0x1a / 255.0f  /* #14141a */
-/* ombra/sollevato, strato 4 (il piu' largo, quello che si vede): #14141a0f, y 6, raggio 12,
- * spread -4 */
-static const struct mshell_ombra mshell_ombra_sollevato = {
-	{ MSHELL_GRIGIO_OMBRA, 0x0f / 255.0f }, 6, 12, -4 };
-/* ombra/sovrapposto, i tre strati che si vedono (il primo di Figma e' un'ombra interna del tutto
- * trasparente): #14141a0d y 1 raggio 2; #14141a14 y 8 raggio 16 spread -4; #14141a24 y 20
- * raggio 40 spread -12 */
+/* Le ombre vengono dai token (token.c), lette in mshell_effetti_avvia:
+ *   ombra/sollevato, solo lo strato 4 (il piu' largo, quello che si vede);
+ *   ombra/sovrapposto, gli strati 2, 3 e 4 (il primo di Figma e' un'ombra interna del tutto
+ *   trasparente). Sono quelle decise dalla persona (10%, 25%, 40% di nero): in token.css ci sono
+ *   anche quelle di Figma. */
+static struct mshell_ombra mshell_ombra_sollevato;
 #define MSHELL_STRATI_SOVRAPPOSTO 3
-static const struct mshell_ombra mshell_ombre_sovrapposto[MSHELL_STRATI_SOVRAPPOSTO] = {
-	/* intensita' alzate (la persona, 19/11/2026: "manca ancora l'ombra"; con i valori di Figma,
-	 * 5-14%, sullo sfondo scuro non si vedeva); poi alleggerite (la persona): 10%, 25%, 40% di nero.
-	 * Da riportare in Figma. */
-	{ { MSHELL_GRIGIO_OMBRA, 0x1a / 255.0f }, 1, 2, 0 },
-	{ { 0.0f, 0.0f, 0.0f, 0.25f }, 8, 16, 0 },
-	{ { 0.0f, 0.0f, 0.0f, 0.40f }, 16, 40, 0 },
-};
+static struct mshell_ombra mshell_ombre_sovrapposto[MSHELL_STRATI_SOVRAPPOSTO];
+
+/* Lo strato "strato" dell'ombra "nome" (per esempio "sovrapposto", 3) dai token. */
+static void mshell_effetti_ombra_leggi(const char *nome, int strato, struct mshell_ombra *o) {
+	char t[96];
+	snprintf(t, sizeof(t), "effetto-ombra-%s-%d-colore", nome, strato);
+	mshell_token_colore(t, o->colore);
+	snprintf(t, sizeof(t), "effetto-ombra-%s-%d-y", nome, strato);
+	o->y = mshell_token_numero(t);
+	snprintf(t, sizeof(t), "effetto-ombra-%s-%d-raggio", nome, strato);
+	o->sfocatura = mshell_token_numero(t);
+	snprintf(t, sizeof(t), "effetto-ombra-%s-%d-allarga", nome, strato);
+	o->allarga = mshell_token_numero(t);
+}
 /* il pannello delle disposizioni (selettori.c) per ora ne usa uno strato solo, il piu' largo */
 #define mshell_ombra_sovrapposto (mshell_ombre_sovrapposto[2])
 
@@ -96,6 +100,10 @@ static void mshell_effetti_vetro_forza(struct wlr_scene *scena, float forza) {
 
 /* All'avvio, dopo la scena: i valori della sfocatura del vetro (uguali per tutto). */
 static void mshell_effetti_avvia(struct wlr_scene *scena) {
+	mshell_effetti_ombra_leggi("sollevato", 4, &mshell_ombra_sollevato);
+	for (int i = 0; i < MSHELL_STRATI_SOVRAPPOSTO; i++) {
+		mshell_effetti_ombra_leggi("sovrapposto", 2 + i, &mshell_ombre_sovrapposto[i]);
+	}
 	mshell_effetti_vetro_forza(scena, 1.0f);
 }
 

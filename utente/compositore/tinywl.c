@@ -108,15 +108,16 @@
  *   Super+Tab                     disposizione successiva
  *   Super premuto due volte di fila (entro MSHELL_DOPPIO_TOCCO_MS): il primo desktop vuoto, o
  *                                 uno nuovo in fondo
- *   Super+spazio                  apre o chiude il cassetto delle app (lo disegna la barra,
+ *   Super+spazio                  apre o chiude il pannello di ricerca (lo disegna la barra,
  *                                 mshell-barra: il compositore glielo dice, livelli.c)
  * Super da solo, premuto e lasciato, non fa niente. Le combinazioni che non sono qui passano
  * all'app. Mentre Super e' giu' si vedono la cornice del focus e i selettori (selettori.c).
  * Le animazioni sono in animazioni.c. Arriva in una tappa dopo: il vetro (la sfocatura). */
+#include "token.c"  /* MSHELL: i valori del disegno, letti da /usr/share/mshell/token.css */
 #define MSHELL_APP_MAX 4
 #define MSHELL_DESKTOP_MAX 16
-#define MSHELL_BORDO 32   /* spazio/32: dal bordo dello schermo alle app */
-#define MSHELL_SPAZIO 32  /* spazio/32: fra un'app e l'altra */
+#define MSHELL_BORDO mshell_t.spazio_32   /* spazio/32: dal bordo dello schermo alle app */
+#define MSHELL_SPAZIO mshell_t.spazio_32  /* spazio/32: fra un'app e l'altra */
 #define MSHELL_TOCCO_MS 400  /* Super lasciato prima di cosi' e' un tocco: l'app dopo */
 
 enum mshell_disposizione { D_UNA, D_1_1, D_1_2, D_2_1, D_2, D_1_1_1, D_2_2, D_1_1_1_1 };
@@ -1735,6 +1736,7 @@ static void mshell_registro_avvia(void) {
 int main(int argc, char *argv[]) {
 	mshell_registro_avvia();  /* MSHELL: messaggi e cadute in /var/tmp/mshell-compositore.log */
 	wlr_log_init(WLR_DEBUG, NULL);
+	mshell_token_carica();  /* MSHELL: i valori del disegno (token.c) */
 	char *startup_cmd = NULL;
 
 	int c;

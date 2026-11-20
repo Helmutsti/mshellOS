@@ -20,24 +20,29 @@
  *     stesso pulsante lo chiude;
  *   - Esc lo chiude (il compositore da' la tastiera alla barra finche' il menu e' aperto).
  *
- * L'ASPETTO viene solo da stile.css (in /usr/share/mshell/barra/), un foglio di stile nostro che
- * parte da zero: prima azzera tutto quello che darebbe il tema di GTK, poi mette le nostre regole
- * con i nomi dei valori del disegno. I menu seguono il tema del sistema (per ora la variabile
+ * L'ASPETTO viene solo da due fogli di stile nostri: token.css (in /usr/share/mshell/, i valori
+ * del disegno: colori, misure, ombre; lo legge anche il compositore) e stile.css (in
+ * /usr/share/mshell/barra/), che parte da zero: prima azzera tutto quello che darebbe il tema di
+ * GTK, poi mette le nostre regole con i nomi dei valori del disegno. I menu seguono il tema del sistema (per ora la variabile
  * d'ambiente MSHELL_TEMA=chiaro|scuro, se manca scuro); la barra sta sopra la foto dello sfondo e
  * usa sempre i colori scuri.
  *
- * IL CASSETTO DELLE APP (cassetto.c) sta in questo stesso programma, in una terza superficie:
+ * IL PANNELLO DI RICERCA (cassetto.c) sta in questo stesso programma, in una terza superficie:
  * cosi' usa lo stesso stile, gli stessi pannelli e la stessa connessione al compositore (l'elenco
- * delle app, per attivare quelle gia' aperte). Super+spazio lo prende il compositore, che lo dice
- * a questo programma con il segnale SIGUSR1 ("apri o chiudi il cassetto"): e' il modo piu'
- * semplice, perche' il compositore sa gia' quale programma e' la barra (quello delle superfici
- * "mshell-barra...") e non serve un canale apposta. Mentre il cassetto e' aperto la barra non si
- * vede (nel disegno non c'e': l'ora grande, i comandi rapidi e le notifiche sono nel cassetto). */
+ * delle app, per attivare quelle gia' aperte). Si apre con il pulsante con la lente o con
+ * Super+spazio: il tasto lo prende il compositore, che lo dice a questo programma con il segnale
+ * SIGUSR1 ("apri o chiudi il pannello"): e' il modo piu' semplice, perche' il compositore sa gia'
+ * quale programma e' la barra (quello delle superfici "mshell-barra...") e non serve un canale
+ * apposta. Mentre il pannello e' aperto (come nel disegno) la barra resta sopra di lui: passa dal
+ * livello "top" a "overlay", prende i colori del tema (sta sul vetro, non piu' sulla foto), non
+ * mostra il titolo dell'app e la lente ha il fondo del pulsante aperto. Aprire un menu della barra
+ * chiude il pannello. */
 #include <glib-unix.h>
 #include <signal.h>
 #include <gtk4-layer-shell.h>
 #include "barra.h"
 
+#define TOKEN "/usr/share/mshell/token.css"
 #define STILE "/usr/share/mshell/barra/stile.css"
 
 enum menu { NESSUNO = -1, CALENDARIO, NOTIFICHE, COMANDI, MENU_QUANTI };
@@ -47,8 +52,11 @@ static GtkWidget *pulsante[MENU_QUANTI];  /* i pulsanti della barra (GtkMenuButt
 static GtkWidget *pannello[MENU_QUANTI];  /* i pannelli dei menu */
 static GtkWidget *riga;                   /* il contenuto della barra */
 static GtkWidget *titolo_app;             /* il pulsante col titolo dell'app col focus */
+static GtkWidget *riga_titolo;            /* il posto del titolo: non si vede col pannello aperto */
 static GtkWidget *orologio;               /* la scritta con giorno e ora */
 static GtkWidget *barra;                  /* la superficie della barra */
+static GtkWidget *lente;                  /* il pulsante del pannello di ricerca */
+static const char *tema;                  /* "chiaro" o "scuro": il tema del sistema */
 
 /* Chiude il menu aperto, se c'e'. */
 static void chiudi_menu(void) {
@@ -61,6 +69,9 @@ static void chiudi_menu(void) {
  * chiude, e un clic su un altro pulsante passa all'altro menu). */
 static void menu_aperto(GtkWidget *p, gpointer dati) {
 	enum menu quale = GPOINTER_TO_INT(dati);
+	if (mshell_cassetto_aperto()) {
+		mshell_cassetto_apri_chiudi();  /* un menu chiude il pannello di ricerca */
+	}
 	if (quale == CALENDARIO) {
 		/* ogni volta che si apre, il calendario riparte dal mese di oggi */
 		GDateTime *adesso = g_date_time_new_now_local();
@@ -83,6 +94,7 @@ static void menu_aperto(GtkWidget *p, gpointer dati) {
 }
 
 static gboolean apri_dopo(gpointer dati);
+static gboolean apri_cassetto_dopo(gpointer dati);
 
 /* Il menu si e' chiuso: dal suo pulsante, con Esc, con un clic fuori o da chiudi_menu.
  * Se si e' chiuso per un clic (tasto del mouse giu' adesso) sul pulsante di un ALTRO menu, si
@@ -107,6 +119,9 @@ static void menu_chiuso(GtkPopover *p, gpointer dati) {
 		return;
 	}
 	GtkWidget *sotto = gtk_widget_pick(riga, in_riga.x, in_riga.y, GTK_PICK_DEFAULT);
+	if (sotto != NULL && (sotto == lente || gtk_widget_is_ancestor(sotto, lente))) {
+		g_idle_add(apri_cassetto_dopo, NULL);  /* il clic era sulla lente */
+	}
 	for (int i = 0; i < MENU_QUANTI; i++) {
 		if (i != quale && sotto != NULL &&
 				(sotto == pulsante[i] || gtk_widget_is_ancestor(sotto, pulsante[i]))) {
@@ -118,6 +133,14 @@ static void menu_chiuso(GtkPopover *p, gpointer dati) {
 /* Apre il menu del pulsante "quale" (dopo che l'altro si e' chiuso). */
 static gboolean apri_dopo(gpointer dati) {
 	gtk_menu_button_popup(GTK_MENU_BUTTON(pulsante[GPOINTER_TO_INT(dati)]));
+	return G_SOURCE_REMOVE;
+}
+
+/* Apre il pannello di ricerca (dopo che il menu si e' chiuso). */
+static gboolean apri_cassetto_dopo(gpointer dati) {
+	if (!mshell_cassetto_aperto()) {
+		mshell_cassetto_apri_chiudi();
+	}
 	return G_SOURCE_REMOVE;
 }
 
@@ -166,12 +189,28 @@ static gboolean scocca_minuto(gpointer dati) {
 	return G_SOURCE_REMOVE;
 }
 
-/* Il cassetto si apre (la barra e un menu aperto spariscono) o si chiude (la barra torna). */
+/* Il pannello di ricerca si e' aperto o chiuso: la barra passa sopra di lui o torna com'era
+ * (vedi in cima). Si chiama quando la superficie del pannello c'e' gia', cosi' il compositore
+ * mette la barra sopra. */
 static void cassetto_cambiato(gboolean aperto) {
 	if (aperto) {
 		chiudi_menu();
 	}
-	gtk_widget_set_visible(barra, !aperto);
+	gtk_layer_set_layer(GTK_WINDOW(barra),
+		aperto ? GTK_LAYER_SHELL_LAYER_OVERLAY : GTK_LAYER_SHELL_LAYER_TOP);
+	gtk_widget_remove_css_class(barra, aperto ? "scuro" : tema);
+	gtk_widget_add_css_class(barra, aperto ? tema : "scuro");
+	gtk_widget_set_visible(riga_titolo, !aperto);
+	if (aperto) {
+		gtk_widget_add_css_class(lente, "aperto");
+	} else {
+		gtk_widget_remove_css_class(lente, "aperto");
+	}
+}
+
+/* La lente: apre o chiude il pannello di ricerca. */
+static void lente_premuta(GtkButton *b, gpointer dati) {
+	mshell_cassetto_apri_chiudi();
 }
 
 /* Super+spazio, detto dal compositore. */
@@ -221,7 +260,9 @@ static GtkWidget *crea_barra(void) {
 	gtk_box_append(GTK_BOX(titolo_app), scritta);
 	gtk_widget_set_visible(titolo_app, FALSE);
 	gtk_widget_set_valign(titolo_app, GTK_ALIGN_CENTER);
-	gtk_box_append(GTK_BOX(riga), titolo_app);
+	riga_titolo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	gtk_box_append(GTK_BOX(riga_titolo), titolo_app);
+	gtk_box_append(GTK_BOX(riga), riga_titolo);
 
 	GtkWidget *spazio = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_widget_set_hexpand(spazio, TRUE);
@@ -232,6 +273,14 @@ static GtkWidget *crea_barra(void) {
 	gtk_widget_add_css_class(orologio, "etichetta");
 	gtk_widget_add_css_class(orologio, "primario");
 	gtk_box_append(GTK_BOX(riga), nuovo_pulsante(orologio, CALENDARIO));
+	/* la lente: un pulsante semplice, apre il pannello di ricerca (non un menu) */
+	lente = gtk_button_new();
+	gtk_button_set_child(GTK_BUTTON(lente), mshell_icona_nuova(ICONA_CERCA));
+	gtk_widget_add_css_class(lente, "pulsante");
+	gtk_widget_set_focusable(lente, FALSE);
+	gtk_widget_set_valign(lente, GTK_ALIGN_CENTER);
+	g_signal_connect(lente, "clicked", G_CALLBACK(lente_premuta), NULL);
+	gtk_box_append(GTK_BOX(riga), lente);
 	gtk_box_append(GTK_BOX(riga), nuovo_pulsante(mshell_icona_nuova(ICONA_CAMPANELLA), NOTIFICHE));
 	gtk_box_append(GTK_BOX(riga), nuovo_pulsante(mshell_icona_nuova(ICONA_MENU), COMANDI));
 	for (int i = 0; i < MENU_QUANTI; i++) {
@@ -275,11 +324,15 @@ int main(int argc, char *argv[]) {
 		g_printerr("mshell-barra: il compositore non ha i livelli (layer-shell)\n");
 		return 1;
 	}
-	/* il nostro foglio di stile, sopra a quello del tema di GTK (che azzera) */
-	GtkCssProvider *stile = gtk_css_provider_new();
-	gtk_css_provider_load_from_path(stile, STILE);
-	gtk_style_context_add_provider_for_display(gdk_display_get_default(),
-		GTK_STYLE_PROVIDER(stile), GTK_STYLE_PROVIDER_PRIORITY_USER);
+	/* i valori del disegno e il nostro foglio di stile, sopra a quello del tema di GTK (che
+	 * azzera): prima i valori, poi lo stile che li usa */
+	const char *fogli[] = { TOKEN, STILE };
+	for (guint i = 0; i < G_N_ELEMENTS(fogli); i++) {
+		GtkCssProvider *stile = gtk_css_provider_new();
+		gtk_css_provider_load_from_path(stile, fogli[i]);
+		gtk_style_context_add_provider_for_display(gdk_display_get_default(),
+			GTK_STYLE_PROVIDER(stile), GTK_STYLE_PROVIDER_PRIORITY_USER + i);
+	}
 
 	/* le scritte come nel disegno: sfumate ai bordi ma senza "hinting" (l'aggiustamento delle
 	 * lettere alla griglia dei pixel), che a queste misure deforma i segni piccoli, per esempio
@@ -288,7 +341,7 @@ int main(int argc, char *argv[]) {
 		"gtk-xft-antialias", 1, "gtk-xft-hinting", 0, "gtk-xft-hintstyle", "hintnone",
 		"gtk-xft-rgba", "none", "gtk-hint-font-metrics", FALSE, NULL);
 
-	const char *tema = g_strcmp0(g_getenv("MSHELL_TEMA"), "chiaro") == 0 ? "chiaro" : "scuro";
+	tema = g_strcmp0(g_getenv("MSHELL_TEMA"), "chiaro") == 0 ? "chiaro" : "scuro";
 	barra = crea_barra();
 	crea_menu(tema);
 	mshell_cassetto_crea(tema, cassetto_cambiato);
