@@ -1,6 +1,6 @@
 #!/bin/sh
 # costruisci.sh: COSTRUISCE IL SISTEMA, da zero, nel container degli attrezzi
-# (strumenti/Dockerfile; lo chiama avvia.ps1). Il risultato e' build/disco-<macchina>.img.
+# (strumenti/Dockerfile; lo chiamano avvia.ps1 sul PC e avvia-mac.sh sul Mac). Il risultato e' build/disco-<macchina>.img.
 #
 #   1. mmdebstrap crea in RADICE un Debian 13 con SOLO i pacchetti obbligatori ("essential") e
 #      quelli di pacchetti.txt (approvati dalla persona), piu' le librerie che servono;
@@ -12,7 +12,7 @@
 #   4. si tolgono i pacchetti "da terminale" e quelli "per installare" (decisione della persona):
 #      si cancellano i loro file, poi il registro dei pacchetti;
 #   5. il kernel tutto-in-uno (UKI): kernel + initramfs + riga di comando in un solo file .EFI;
-#   6. il disco: partizione "avvio" (FAT32, con \EFI\BOOT\BOOTX64.EFI) e "system" (ext4).
+#   6. il disco: partizione "avvio" (FAT32, con \EFI\BOOT\<FILE_AVVIO>) e "system" (ext4).
 # Gira come root nel container (docker run --privileged: mmdebstrap monta /proc nella radice).
 # L'argomento e' la MACCHINA (macchine/<nome>.conf): dice cosa serve a quella macchina.
 set -e
@@ -28,8 +28,9 @@ rm -rf "$RADICE"
 # SI RIFA' SOLO SE CAMBIA L'ELENCO: il sistema appena creato si tiene in un archivio
 # (build/cache/radice-<impronta>.tar), con l'impronta di pacchetti.txt e di questo script. Se
 # l'archivio c'e', si riparte da li' (secondi) invece di riscaricare e reinstallare (minuti).
-PACCHETTI=$(sed 's/#.*//' pacchetti.txt | tr -s ' \t\n' '\n' | grep -v '^$' | paste -sd, -)
-IMPRONTA=$(cat pacchetti.txt strumenti/Dockerfile | sha256sum | cut -c1-16)
+# il kernel non e' in pacchetti.txt: dipende dal processore, lo dice la macchina (KERNEL)
+PACCHETTI=$( (sed 's/#.*//' pacchetti.txt; echo "$KERNEL") | tr -s ' \t\n' '\n' | grep -v '^$' | paste -sd, -)
+IMPRONTA=$( (cat pacchetti.txt strumenti/Dockerfile; echo "$KERNEL") | sha256sum | cut -c1-16)
 ARCHIVIO="$B/cache/radice-$IMPRONTA.tar"
 if [ ! -f "$ARCHIVIO" ]; then
     echo "1. mmdebstrap: essential + $PACCHETTI"
@@ -55,14 +56,14 @@ dracut --quiet --force --no-hostonly --kver "$KVER" --kmoddir "$RADICE/lib/modul
 echo "3. impostazioni"
 echo mshell > "$RADICE/etc/hostname"
 : > "$RADICE/etc/fstab"
-# L'ACCESSO SULLA SERIALE (ttyS0, per le prove): agetty, il programma che apre la console, con
+# L'ACCESSO SULLA SERIALE (SERIALE della macchina: ttyS0 sul PC, ttyAMA0 sul Mac; per le prove): agetty, il programma che apre la console, con
 # --autologin root: fa partire login, che passa da PAM, e PAM (pam_systemd) registra la
 # SESSIONE presso logind. Cosi' la shell e' una sessione vera: allo spegnimento si chiude bene,
 # ha la sua cartella /run/user/0. La shell di root e' /bin/sh (dash): bash non c'e'.
 # Lo schermo (tty1) e' di greetd: vedi piu' sotto, "LA SCRIVANIA".
 S="$RADICE/etc/systemd/system"
-mkdir -p "$S/serial-getty@ttyS0.service.d"
-cat > "$S/serial-getty@ttyS0.service.d/accesso-automatico.conf" <<'FINE'
+mkdir -p "$S/serial-getty@$SERIALE.service.d"
+cat > "$S/serial-getty@$SERIALE.service.d/accesso-automatico.conf" <<'FINE'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin root --keep-baud 115200,57600,38400,9600 - $TERM
@@ -241,8 +242,8 @@ chown 1000:1000 "$DATI/home/utente1"
 # --- 5. il kernel tutto-in-uno ---
 echo "5. UKI"
 ukify build --linux "$B/vmlinuz" --initrd "$B/initrd.img" \
-    --cmdline "root=PARTLABEL=system ro console=tty1 console=ttyS0 $RIGA_KERNEL" \
-    --output "$B/BOOTX64.EFI" >/dev/null
+    --cmdline "root=PARTLABEL=system ro console=tty1 console=$SERIALE $RIGA_KERNEL" \
+    --output "$B/$FILE_AVVIO" >/dev/null
 
 # --- 6. il disco ---
 MB=1048576
@@ -265,7 +266,7 @@ FINE
 AVVIO="$B/disco-$MACCHINA.img@@$MB"
 mformat -i "$AVVIO" -F -T $((MISURA_AVVIO * SETTORI_MB)) -v AVVIO ::
 mmd -i "$AVVIO" ::/EFI ::/EFI/BOOT
-mcopy -i "$AVVIO" "$B/BOOTX64.EFI" ::/EFI/BOOT/BOOTX64.EFI
+mcopy -i "$AVVIO" "$B/$FILE_AVVIO" "::/EFI/BOOT/$FILE_AVVIO"
 mkfs.ext4 -q -F -b 4096 -L system -E offset=$((INIZIO_SISTEMA * MB)) -d "$RADICE" \
     "$B/disco-$MACCHINA.img" $((MISURA_SISTEMA * MB / 4096))
 mkfs.ext4 -q -F -b 4096 -L data -E offset=$((INIZIO_DATI * MB)) -d "$DATI" \

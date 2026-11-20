@@ -6,7 +6,8 @@
 
 systemd          # il primo programma (PID 1), con journald (registro), logind (sessioni), udev (dispositivi)
 systemd-sysv     # fa di systemd il programma /sbin/init che il kernel fa partire
-linux-image-amd64  # il kernel di Debian con i suoi moduli
+# il kernel di Debian con i suoi moduli: dipende dal processore, quindi lo dice la macchina
+# (KERNEL in macchine/<nome>.conf: linux-image-amd64 sul PC, linux-image-arm64 sul Mac)
 dbus             # il "centralino" standard (D-Bus, dbus-daemon): systemctl, logind, rete, Flatpak e app parlano con i servizi
 login            # il programma che apre la sessione sul terminale (qui con l'accesso automatico)
 libpam-runtime   # PAM, il sistema che controlla gli accessi: le sue regole di base
