@@ -94,7 +94,8 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # xkbcommon la mappa dei tasti senza dire quale: xkbcommon allora la prende da queste variabili
 # (e i file da xkb-data).
 # "-s mshell-barra": il compositore, appena pronto, fa partire la barra di stato.
-cat > "$RADICE/etc/greetd/config.toml" <<'FINE'
+# VARIABILI_COMPOSITORE: quelle in piu' che chiede la macchina (macchine/<nome>.conf).
+cat > "$RADICE/etc/greetd/config.toml" <<FINE
 # fatto da costruisci.sh
 [terminal]
 vt = 1
@@ -104,7 +105,7 @@ command = "/usr/sbin/agreety --cmd /bin/sh"
 user = "_greetd"
 
 [initial_session]
-command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it mshell-compositore -s mshell-barra"
+command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it ${VARIABILI_COMPOSITORE} mshell-compositore -s mshell-barra"
 user = "utente1"
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"

@@ -1,9 +1,8 @@
 #!/bin/sh
 # avvia-mac.sh: il gemello di avvia.ps1 per il Mac (arm64). Costruisce il sistema
 # (costruisci.sh, nel container degli attrezzi: scarica Debian per ARM se l'elenco dei pacchetti
-# e' cambiato, poi ricompila i programmi di mshell e rifa' il disco) e lo accende in QEMU.
-# La finestra di QEMU mostra lo schermo (tty1); la shell dell'amministratore e' sulla seriale,
-# qui nel terminale (Ctrl+A poi X spegne QEMU).
+# e' cambiato, poi ricompila i programmi di mshell e rifa' il disco) e lo accende in UTM, nella
+# macchina "mshell" (vedi sotto). La finestra di UTM mostra lo schermo (tty1).
 #
 #   sh avvia-mac.sh            costruisce e accende
 #   sh avvia-mac.sh --scarica  riscarica Debian da capo (butta il sistema salvato), poi come sopra
@@ -27,15 +26,28 @@ if ! docker image inspect $attrezzi >/dev/null 2>&1; then
 fi
 docker run --rm --privileged -v "$qui:/w" $attrezzi sh /w/costruisci.sh qemu-mac
 
-# Il firmware UEFI per ARM (edk2, viene con QEMU di Homebrew) trova \EFI\BOOT\BOOTAA64.EFI
-# nella partizione "avvio". hvf: il processore del Mac, senza imitazione.
-# Sulle macchine ARM di QEMU non c'e' la tastiera dei PC: serve usb-kbd accanto a usb-tablet.
-# virtio-gpu-pci: la scheda video virtio (virtio-vga e' solo per i PC).
-firmware=$(brew --prefix qemu)/share/qemu/edk2-aarch64-code.fd
-exec qemu-system-aarch64 -machine virt -accel hvf -cpu host -smp 4 -m 2048 -nodefaults \
-    -drive "if=pflash,format=raw,readonly=on,file=$firmware" \
-    -drive "if=none,id=disco,file=$qui/build/disco-qemu-mac.img,format=raw" \
-    -device virtio-blk-pci,drive=disco,bootindex=1 \
-    -device virtio-gpu-pci,xres=1280,yres=800 \
-    -device qemu-xhci -device usb-kbd -device usb-tablet \
-    -display cocoa -serial mon:stdio
+# SI ACCENDE IN UTM (decisione della persona, 20/11/2026: per provare i driver della scheda video).
+# UTM con il motore QEMU e la scheda video "virtio-gpu-gl-pci": la macchina ha una scheda video
+# virtio con il 3D (VirGL), che UTM disegna con la scheda video vera del Mac (ANGLE su Metal).
+# Nel sistema la usano il driver virtio_gpu del kernel e quello virgl di Mesa. (Con il motore
+# Apple Virtualization la scheda video di Linux non ha il 3D; con QEMU di Homebrew neppure.)
+# La macchina "mshell" si crea la prima volta; poi a ogni costruzione si rimette dentro il disco
+# nuovo (UTM tiene il disco dentro il pacchetto della macchina, una sua copia).
+vm=mshell
+disco="$HOME/Library/Containers/com.utmapp.UTM/Data/Documents/$vm.utm/Data/disco-qemu-mac.img"
+utmctl=/Applications/UTM.app/Contents/MacOS/utmctl
+pgrep -xq UTM || { open -a UTM; sleep 3; }
+if [ ! -d "$(dirname "$disco")" ]; then
+    osascript <<FINE >/dev/null
+tell application "UTM"
+    make new virtual machine with properties {backend:qemu, configuration:{name:"$vm", architecture:"aarch64", machine:"virt", memory:2048, cpu cores:4, hypervisor:true, uefi:true, drives:{{interface:VirtIO, raw:true, source:(POSIX file "$qui/build/disco-qemu-mac.img")}}, displays:{{hardware:"virtio-gpu-gl-pci"}}, network interfaces:{}}}
+end tell
+FINE
+else
+    # spenta, si mette il disco nuovo al posto del vecchio (copia istantanea: clonefile di APFS)
+    $utmctl stop --kill $vm >/dev/null 2>&1 || true
+    while ! $utmctl status $vm | grep -q stopped; do sleep 1; done
+    rm -f "$disco"
+    cp -c "$qui/build/disco-qemu-mac.img" "$disco"
+fi
+$utmctl start $vm
