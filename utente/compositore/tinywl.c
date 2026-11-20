@@ -866,24 +866,6 @@ static void keyboard_handle_key(
 
 	bool handled = false;
 	uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-	/* MSHELL, STRUMENTO DI PROVA: ogni tasto (premuto "+" o lasciato "-") si aggiunge in fondo al
-	 * file $XDG_RUNTIME_DIR/mshell-tasti; la barra mostra gli ultimi accanto all'orologio. */
-	{
-		const char *dir = getenv("XDG_RUNTIME_DIR");
-		char percorso[256], nome[64] = "?";
-		if (dir != NULL && snprintf(percorso, sizeof(percorso), "%s/mshell-tasti", dir)
-				< (int)sizeof(percorso)) {
-			if (nsyms > 0) {
-				xkb_keysym_get_name(syms[0], nome, sizeof(nome));
-			}
-			FILE *f = fopen(percorso, "a");
-			if (f != NULL) {
-				fprintf(f, "%s%s\n", event->state == WL_KEYBOARD_KEY_STATE_PRESSED ? "+" : "-",
-					nome);
-				fclose(f);
-			}
-		}
-	}
 	/* MSHELL: il tasto Super e le combinazioni della scrivania (vedi "MSHELL: I DESKTOP") */
 	bool premuto = event->state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	for (int i = 0; i < nsyms; i++) {

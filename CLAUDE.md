@@ -7,7 +7,7 @@
 - PID 1: **systemd**. Avvio: **kernel tutto-in-uno (UKI)** avviato direttamente dal firmware UEFI, senza caricatore.
 - App: **solo Flatpak** (Flathub), unico modo di installare app. La base resta nuda.
 - I pacchetti obbligatori di Debian: restano solo quelli che servono al sistema acceso (libc, base-files, base-passwd, util-linux, coreutils, dash). Quelli "da terminale" (bash, grep, sed, findutils, diffutils, tar, gzip, hostname, bsdutils, ncurses-base, debianutils) NON ci sono: si mettono solo se strettamente necessari, con l'ok della persona. Quelli per installare (dpkg, init-system-helpers, perl-base, sysvinit-utils, mawk) si usano durante la costruzione e poi si tolgono dal sistema finale.
-- Il vecchio mshell fatto da zero è nell'etichetta `archivio-mshell-da-zero` (ramo `main`): disegni Figma, librerie e app si riprendono da lì quando servono.
+- Il vecchio mshell fatto da zero è nel ramo e nell'etichetta `archivio-mshell-da-zero`: disegni Figma, librerie e app si riprendono da lì quando servono. Il ramo `main` è questo sistema Debian.
 - Primo passo: niente `login`, accesso automatico all'amministratore sul terminale (finché non c'è la schermata di accesso grafica).
 - Si lavora sul processore del computer (PC x86_64, Mac arm64); Docker e QEMU nativi.
 

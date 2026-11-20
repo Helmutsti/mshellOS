@@ -49,35 +49,6 @@ static GtkWidget *riga;                   /* il contenuto della barra */
 static GtkWidget *titolo_app;             /* il pulsante col titolo dell'app col focus */
 static GtkWidget *orologio;               /* la scritta con giorno e ora */
 static GtkWidget *barra;                  /* la superficie della barra */
-static GtkWidget *tasti_visti;            /* STRUMENTO DI PROVA: gli ultimi tasti premuti */
-
-/* STRUMENTO DI PROVA: rilegge il file dei tasti del compositore e mostra le ultime 6 righe. */
-static gboolean aggiorna_tasti(gpointer dati) {
-	(void)dati;
-	char percorso[256];
-	const char *dir = g_getenv("XDG_RUNTIME_DIR");
-	if (dir == NULL) {
-		return G_SOURCE_CONTINUE;
-	}
-	g_snprintf(percorso, sizeof(percorso), "%s/mshell-tasti", dir);
-	gchar *testo = NULL;
-	if (!g_file_get_contents(percorso, &testo, NULL, NULL)) {
-		return G_SOURCE_CONTINUE;
-	}
-	gchar **righe = g_strsplit(g_strstrip(testo), "\n", -1);
-	guint n = g_strv_length(righe);
-	guint da = n > 6 ? n - 6 : 0;
-	GString *s = g_string_new("tasti: ");
-	for (guint i = da; i < n; i++) {
-		g_string_append(s, righe[i]);
-		g_string_append(s, "  ");
-	}
-	gtk_label_set_text(GTK_LABEL(tasti_visti), s->str);
-	g_string_free(s, TRUE);
-	g_strfreev(righe);
-	g_free(testo);
-	return G_SOURCE_CONTINUE;
-}
 
 /* Chiude il menu aperto, se c'e'. */
 static void chiudi_menu(void) {
@@ -256,15 +227,6 @@ static GtkWidget *crea_barra(void) {
 	gtk_widget_set_hexpand(spazio, TRUE);
 	gtk_box_append(GTK_BOX(riga), spazio);
 
-	/* STRUMENTO DI PROVA: gli ultimi tasti premuti, scritti dal compositore in
-	 * $XDG_RUNTIME_DIR/mshell-tasti (vedi tinywl.c) */
-	tasti_visti = gtk_label_new("");
-	gtk_widget_add_css_class(tasti_visti, "etichetta");
-	gtk_widget_add_css_class(tasti_visti, "primario");
-	gtk_widget_set_valign(tasti_visti, GTK_ALIGN_CENTER);
-	gtk_widget_set_margin_end(tasti_visti, 16);
-	gtk_box_append(GTK_BOX(riga), tasti_visti);
-	g_timeout_add(100, aggiorna_tasti, NULL);
 
 	orologio = gtk_label_new("");
 	gtk_widget_add_css_class(orologio, "etichetta");

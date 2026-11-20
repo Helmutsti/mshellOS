@@ -192,10 +192,14 @@ chroot "$RADICE" /usr/bin/fc-cache -f
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
 DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"
 PER_INSTALLARE="dpkg init-system-helpers perl-base sysvinit-utils mawk adduser passwd"
+# avanzi: li volevano i pacchetti "per installare" o il kernel di Debian (il suo archivio d'avvio
+# lo faremmo con initramfs-tools; noi lo facciamo con dracut degli attrezzi). Nel sistema acceso
+# non servono (la persona, 20/11/2026, dall'inventario del sistema).
+AVANZI="debconf libdebconfclient0 libsemanage2 libsemanage-common libsepol2 libdb5.3t64 logsave linux-base initramfs-tools initramfs-tools-core initramfs-tools-bin klibc-utils libklibc cpio dracut-install"
 D="$RADICE/var/lib/dpkg"
 dpkg-query --admindir="$D" -W -f '${Package} ${Installed-Size}\n' | sort > "$B/pacchetti-tutti.txt"
-echo "4. tolgo: $DA_TERMINALE $PER_INSTALLARE"
-for p in $DA_TERMINALE $PER_INSTALLARE; do
+echo "4. tolgo: $DA_TERMINALE $PER_INSTALLARE $AVANZI"
+for p in $DA_TERMINALE $PER_INSTALLARE $AVANZI; do
     elenco=$(ls "$D/info/$p.list" "$D/info/$p:"*.list 2>/dev/null | head -n 1)
     [ -n "$elenco" ] || continue
     while read -r f; do
@@ -203,7 +207,7 @@ for p in $DA_TERMINALE $PER_INSTALLARE; do
     done < "$elenco"
 done
 # quello che resta, con la misura (KB): il "cosa c'e' dentro" del sistema
-grep -v -w -E "^($(echo $DA_TERMINALE $PER_INSTALLARE | tr ' ' '|'))" "$B/pacchetti-tutti.txt" > "$B/pacchetti-sistema.txt"
+grep -v -w -E "^($(echo $DA_TERMINALE $PER_INSTALLARE $AVANZI | tr ' ' '|' | sed 's/\./\\./g'))" "$B/pacchetti-tutti.txt" > "$B/pacchetti-sistema.txt"
 rm -rf "$D" "$RADICE/var/cache/apt" "$RADICE/var/log/"*.log
 # il kernel e' nel file tutto-in-uno: nella radice non serve
 cp "$RADICE/boot/vmlinuz-$KVER" "$B/vmlinuz"
