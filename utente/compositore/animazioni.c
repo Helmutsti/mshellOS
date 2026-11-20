@@ -51,6 +51,9 @@
 /* Le durate. I nomi dei token sono una proposta, da confermare: durata/breve e durata/media. */
 #define MSHELL_DURATA_BREVE 150  /* token "durata/breve" (proposta, da confermare): dissolvenze */
 #define MSHELL_DURATA_MEDIA 250  /* token "durata/media" (proposta, da confermare): scorrimenti */
+/* il cambio di desktop, un po' piu' lento degli altri scorrimenti (la persona, 20/11/2026); la
+ * stessa durata ha lo scorrimento delle pagine del pannello di ricerca (utente/barra/cassetto.c) */
+#define MSHELL_DURATA_DESKTOP 350
 #define MSHELL_ANIM_PASSO_MS 16  /* uno scatto del timer: circa 60 al secondo */
 
 /* Definita piu' avanti in tinywl.c: ricalcola che cosa c'e' sotto il puntatore. */
@@ -106,7 +109,7 @@ static int64_t mshell_anim_adesso(void) {
 }
 
 /* Quanto manca, da 0 (inizio) a 1 (fine), con la curva ease-out cubica: parte veloce e
- * rallenta all'arrivo. */
+ * rallenta all'arrivo. (Il cambio di desktop usa invece mshell_anim_curva_dolce.) */
 static double mshell_anim_curva(int64_t inizio, int durata, int64_t ora) {
 	double p = (double)(ora - inizio) / durata;
 	if (p >= 1) {
@@ -117,6 +120,24 @@ static double mshell_anim_curva(int64_t inizio, int durata, int64_t ora) {
 	}
 	double resto = 1 - p;
 	return 1 - resto * resto * resto;
+}
+
+/* Come mshell_anim_curva, ma con la curva ease-in-out cubica: parte piano, accelera e rallenta
+ * all'arrivo (la persona, 20/11/2026: il cambio di desktop, come lo scorrimento delle pagine del
+ * pannello di ricerca nella barra). */
+static double mshell_anim_curva_dolce(int64_t inizio, int durata, int64_t ora) {
+	double p = (double)(ora - inizio) / durata;
+	if (p >= 1) {
+		return 1;
+	}
+	if (p < 0) {
+		p = 0;
+	}
+	if (p < 0.5) {
+		return 4 * p * p * p;
+	}
+	double resto = -2 * p + 2;
+	return 1 - resto * resto * resto / 2;
 }
 
 static int mshell_anim_scatto(void *data);
@@ -399,7 +420,7 @@ static int mshell_anim_scatto(void *data) {
 		struct mshell_anim_desktop *s = &mshell_anim.desktop[i];
 		struct wlr_scene_node *nodo = &server->desktop[i].albero->node;
 		if (s->corre) {
-			double e = mshell_anim_curva(s->inizio, MSHELL_DURATA_MEDIA, ora);
+			double e = mshell_anim_curva_dolce(s->inizio, MSHELL_DURATA_DESKTOP, ora);
 			wlr_scene_node_set_position(nodo, 0, (int)(s->da_y + (s->a_y - s->da_y) * e));
 			if (e >= 1) {
 				s->corre = false;

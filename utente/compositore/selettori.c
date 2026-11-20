@@ -57,7 +57,7 @@
 #define MSHELL_PUNTINO 6           /* il diametro */
 #define MSHELL_PUNTINO_SPAZIO 8    /* fra un puntino e l'altro */
 #define MSHELL_PUNTINO_SPENTO 1.0f, 1.0f, 1.0f, 0.45f  /* gli altri desktop */
-#define MSHELL_PUNTINI_MS 1000     /* quanto restano dopo il cambio (lo scorrimento e' 250) */
+#define MSHELL_PUNTINI_MS 1000     /* quanto restano dopo il cambio (lo scorrimento e' 350) */
 
 /* Un'immagine fatta a mano, sul modello dello sfondo (mshell_sfondo, piu' sotto in tinywl.c):
  * i pixel stanno in memoria e wlroots li legge con l'accesso diretto ai dati. */

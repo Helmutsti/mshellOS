@@ -112,13 +112,14 @@ window {
 
 /* 6. IL PANNELLO DI RICERCA (cassetto.c; misure dal disegno "Ricerca nuovo stile", pagina
  * "Scrivania" di Figma). Tutto lo schermo e' di vetro (la sfocatura la fa il compositore,
- * effetti.c); sopra, le pagine in alto al centro e le linguette in fondo. */
+ * effetti.c); sopra, le pagine in alto al centro (scorrono in orizzontale) e le linguette in fondo. */
 .cassetto {
 	background-color: var(--superficie-vetro);
 }
 
-.pagine {
-	margin-top: 96px;  /* la barra (32) e due volte spazio/32 */
+/* ogni pagina sta in un posto largo come lo schermo (le pagine scorrono in orizzontale) */
+.pagina {
+	padding-top: 96px;  /* la barra (32) e due volte spazio/32 */
 }
 
 /* i pannelli del pannello di ricerca: vetro, angoli raggio/finestra, ombra/sovrapposto. Qui li
@@ -142,15 +143,23 @@ window {
 	border-spacing: var(--spazio-16);
 }
 
-/* la pagina Ricerca: largo 640, padding/s intorno, spazio/16 fra il campo e i gruppi */
+/* la pagina Ricerca: larga 640; il campo e' una pillola di vetro e sotto, a spazio/12, i
+ * risultati in un riquadro di vetro (niente ombre: scelta della persona) */
 .pannello-ricerca {
-	padding: var(--padding-s);
-	border-spacing: var(--spazio-16);
+	border-spacing: var(--spazio-12);
 }
 
 .campo-ricerca {
-	padding: 6px var(--spazio-8);
+	padding: var(--spazio-12) var(--padding-l);
 	border-spacing: 10px;
+	border-radius: var(--raggio-pillola);
+	background-color: var(--superficie-vetro);
+}
+
+.risultati {
+	padding: var(--spazio-8);
+	border-radius: var(--raggio-finestra);
+	background-color: var(--superficie-vetro);
 }
 
 .testo-ricerca {
@@ -189,23 +198,25 @@ window {
 	border-spacing: var(--spazio-12);
 }
 
+/* la cosa scelta con le frecce: un fondo tenue */
 .risultato.scelta, .app.scelta {
-	background-color: var(--azione-sfondo);
+	background-color: var(--controllo-selezione-vetro);
 }
 
-.risultato.scelta label, .app.scelta label {
-	color: var(--azione-testo);
+/* la pagina App: sul vetro, senza riquadro; 8 app per riga, ognuna larga 102 e alta 104, a gap/m
+ * l'una dall'altra in orizzontale e a spazio/16 in verticale */
+.pagina-app {
+	padding: var(--spazio-16);
 }
 
-/* la pagina App: 8 app per riga, ognuna larga 102 e alta 104, a gap/m l'una dall'altra */
 .griglia-app {
-	border-spacing: var(--gap-m);
+	border-spacing: var(--gap-m) var(--spazio-16);
 }
 
 .app {
 	min-width: 102px;
 	padding: var(--spazio-12) 0;
-	border-radius: var(--raggio-controllo);
+	border-radius: var(--raggio-pannello);
 }
 
 .colonna-app {

@@ -9,12 +9,20 @@
  * pillola con i nomi delle pagine (Widget, Ricerca, App), che si possono anche cliccare:
  *   WIDGET   a sinistra i comandi rapidi e sotto le notifiche, a destra il calendario (gli stessi
  *            pannelli dei menu della barra);
- *   RICERCA  il campo di ricerca e sotto i risultati, a gruppi. Per ora c'e' solo il gruppo "App":
+ *   RICERCA  il campo di ricerca, una pillola di vetro, e sotto i risultati, a gruppi, in un
+ *            riquadro di vetro che c'e' solo quando ci sono risultati (scelta B della persona,
+ *            20/11/2026: niente ombre, tutto piu' leggero). Per ora c'e' solo il gruppo "App":
  *            file e impostazioni arriveranno con Files e con le Impostazioni; "Usate spesso" e
  *            "Recenti" (la ricerca vuota del disegno) quando qualcuno terra' il conto di cosa si usa.
  *            Per adesso, con la ricerca vuota, sotto il campo non c'e' niente;
- *   APP      tutte le app in ordine di nome, 8 per riga.
+ *   APP      tutte le app in ordine di nome, 8 per riga, direttamente sul vetro, senza riquadro
+ *            ne' titolo (scelta B della persona, 20/11/2026).
+ * La cosa scelta con le frecce (un risultato, un'app) ha un fondo tenue.
  * Si apre sulla pagina Ricerca, con il cursore nel campo.
+ * LE PAGINE SCORRONO in orizzontale, una accanto all'altra, larghe come lo schermo: passando da
+ * una all'altra scorrono in MSHELL_DURATA_DESKTOP con la curva ease-in-out (parte piano, accelera e
+ * rallenta all'arrivo), come il cambio di desktop del compositore (la persona, 20/11/2026). Con
+ * MSHELL_MENO_MOVIMENTO=1 si passa subito.
  *
  * I TASTI (dalle didascalie del disegno):
  *   Widget   -> va alla Ricerca; Esc chiude. (Su, giu' e Invio sui comandi rapidi arriveranno
@@ -40,6 +48,7 @@
 #define ICONA_APP 56         /* l'icona nella pagina App */
 #define ICONA_RIGA 24        /* l'icona in un risultato della ricerca (icona/oggetto-s) */
 #define ALTEZZA_MASSIMA 560  /* oltre, i risultati e le app scorrono */
+#define MSHELL_DURATA_DESKTOP 350  /* ms, come il cambio di desktop del compositore (animazioni.c) */
 
 enum pagina { WIDGET, RICERCA, APP, PAGINE };
 static const char *const nomi_pagine[PAGINE] = { "Widget", "Ricerca", "App" };
@@ -54,6 +63,10 @@ struct voce {
 };
 
 static GtkWidget *finestra, *pagine, *linguetta[PAGINE];
+static int larghezza;          /* la larghezza dello schermo: quella di ogni pagina */
+static double scorre_da, scorre_a;  /* lo scorrimento delle pagine: da dove a dove (in px) */
+static gint64 scorre_inizio;   /* quando e' partito (microsecondi dell'orologio dei fotogrammi) */
+static guint scorre_id;        /* il richiamo a ogni fotogramma, 0 se fermo */
 static GtkWidget *ricerca, *gruppo_app, *elenco_app, *scorri_risultati;
 static GtkWidget *griglia, *scorri_app, *calendario;
 static enum pagina pagina;
@@ -268,10 +281,71 @@ static void cambiata(GtkEditable *e, gpointer dati) {
 	filtra();
 }
 
-/* Mostra la pagina p: la sua linguetta e' quella piena. */
-static void vai(enum pagina p) {
+/* La curva ease-in-out cubica: da 0 a 1, parte piano, accelera e rallenta all'arrivo. */
+static double curva_dolce(double p) {
+	if (p < 0.5) {
+		return 4 * p * p * p;
+	}
+	double resto = -2 * p + 2;
+	return 1 - resto * resto * resto / 2;
+}
+
+/* A ogni fotogramma: le pagine al punto di adesso. */
+static gboolean scorri_passo(GtkWidget *w, GdkFrameClock *orologio, gpointer dati) {
+	double p = (double)(gdk_frame_clock_get_frame_time(orologio) - scorre_inizio) /
+		(MSHELL_DURATA_DESKTOP * 1000.0);
+	GtkAdjustment *x = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pagine));
+	if (p >= 1) {
+		gtk_adjustment_set_value(x, scorre_a);
+		scorre_id = 0;
+		return G_SOURCE_REMOVE;
+	}
+	gtk_adjustment_set_value(x, scorre_da + (scorre_a - scorre_da) * curva_dolce(MAX(p, 0)));
+	return G_SOURCE_CONTINUE;
+}
+
+/* Rimette le pagine sulla pagina giusta, se non stanno scorrendo. */
+static gboolean rimetti(gpointer dati) {
+	GtkAdjustment *x = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pagine));
+	if (scorre_id == 0) {
+		gtk_adjustment_set_value(x, scorre_a);
+	}
+	return G_SOURCE_REMOVE;
+}
+
+/* La misura delle pagine e' cambiata (per esempio la prima volta che il pannello compare: prima
+ * la striscia non e' larga e lo scorrimento si ferma a 0, cioe' sul Widget). Questo avviene
+ * mentre GTK sistema le misure, e uno spostamento chiesto adesso non verrebbe ridisegnato: le
+ * pagine si rimettono a posto subito dopo. */
+static void misura_cambiata(GtkAdjustment *x, gpointer dati) {
+	if (scorre_id == 0 && gtk_adjustment_get_value(x) != scorre_a) {
+		g_idle_add(rimetti, NULL);
+	}
+}
+
+/* Le pagine scorrono fino alla pagina p; "subito": senza scorrere. Uno scorrimento nuovo parte
+ * dal punto in cui sono adesso. */
+static void scorri_a(enum pagina p, gboolean subito) {
+	GtkAdjustment *x = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pagine));
+	if (scorre_id != 0) {
+		gtk_widget_remove_tick_callback(pagine, scorre_id);
+		scorre_id = 0;
+	}
+	scorre_a = (double)p * larghezza;
+	if (subito || g_strcmp0(g_getenv("MSHELL_MENO_MOVIMENTO"), "1") == 0 ||
+			gtk_widget_get_frame_clock(pagine) == NULL) {
+		gtk_adjustment_set_value(x, scorre_a);
+		return;
+	}
+	scorre_da = gtk_adjustment_get_value(x);
+	scorre_inizio = gdk_frame_clock_get_frame_time(gtk_widget_get_frame_clock(pagine));
+	scorre_id = gtk_widget_add_tick_callback(pagine, scorri_passo, NULL, NULL);
+}
+
+/* Mostra la pagina p (scorrendo, se "subito" e' falso): la sua linguetta e' quella piena. */
+static void vai_come(enum pagina p, gboolean subito) {
 	pagina = p;
-	gtk_stack_set_visible_child_name(GTK_STACK(pagine), nomi_pagine[p]);
+	scorri_a(p, subito);
 	for (int i = 0; i < PAGINE; i++) {
 		if (i == (int)p) {
 			gtk_widget_add_css_class(linguetta[i], "scelta");
@@ -288,6 +362,10 @@ static void vai(enum pagina p) {
 	if (p == APP) {
 		segna_app(scelta_app < voci->len ? scelta_app : 0);
 	}
+}
+
+static void vai(enum pagina p) {
+	vai_come(p, FALSE);
 }
 
 static void linguetta_premuta(GtkButton *b, gpointer dati) {
@@ -417,7 +495,7 @@ static void apri(void) {
 	mshell_calendario_aggiorna(calendario, adesso, TRUE);
 	g_date_time_unref(adesso);
 	gtk_window_present(GTK_WINDOW(finestra));
-	vai(RICERCA);
+	vai_come(RICERCA, TRUE);  /* si apre gia' sulla Ricerca, senza scorrere */
 }
 
 void mshell_cassetto_apri_chiudi(void) {
@@ -560,7 +638,6 @@ static GtkWidget *crea_ricerca(void) {
 	gtk_widget_set_halign(p, GTK_ALIGN_CENTER);
 	gtk_widget_set_valign(p, GTK_ALIGN_START);
 	gtk_widget_set_size_request(p, 640, -1);
-	scheda(p);
 
 	GtkWidget *campo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_widget_add_css_class(campo, "campo-ricerca");
@@ -588,6 +665,7 @@ static GtkWidget *crea_ricerca(void) {
 	gtk_box_append(GTK_BOX(gruppo_app), elenco_app);
 	gtk_box_append(GTK_BOX(gruppi), gruppo_app);
 	scorri_risultati = gtk_scrolled_window_new();
+	gtk_widget_add_css_class(scorri_risultati, "risultati");
 	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scorri_risultati), GTK_POLICY_NEVER,
 		GTK_POLICY_AUTOMATIC);
 	gtk_scrolled_window_set_propagate_natural_height(GTK_SCROLLED_WINDOW(scorri_risultati), TRUE);
@@ -598,14 +676,12 @@ static GtkWidget *crea_ricerca(void) {
 	return p;
 }
 
-/* La pagina App: il titolo e la griglia di tutte le app. */
+/* La pagina App: la griglia di tutte le app, sul vetro. */
 static GtkWidget *crea_app(void) {
 	GtkWidget *p = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-	gtk_widget_add_css_class(p, "pannello");
+	gtk_widget_add_css_class(p, "pagina-app");
 	gtk_widget_set_halign(p, GTK_ALIGN_CENTER);
 	gtk_widget_set_valign(p, GTK_ALIGN_START);
-	scheda(p);
-	gtk_box_append(GTK_BOX(p), scritta("App", "sezione", "primario"));
 	griglia = gtk_grid_new();
 	gtk_widget_add_css_class(griglia, "griglia-app");
 	gtk_grid_set_column_homogeneous(GTK_GRID(griglia), TRUE);
@@ -619,6 +695,11 @@ static GtkWidget *crea_app(void) {
 	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scorri_app), griglia);
 	gtk_box_append(GTK_BOX(p), scorri_app);
 	return p;
+}
+
+/* La rotella o il tappetino in orizzontale non muovono le pagine. */
+static gboolean rotella_ferma(GtkEventControllerScroll *c, double dx, double dy, gpointer dati) {
+	return dx != 0 && dy == 0;
 }
 
 /* La pillola in fondo con i nomi delle pagine. */
@@ -664,17 +745,42 @@ void mshell_cassetto_crea(const char *tema, void (*cambiato)(gboolean aperto)) {
 	gtk_layer_set_keyboard_mode(GTK_WINDOW(finestra), GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
 	g_signal_connect(finestra, "map", G_CALLBACK(comparso), NULL);
 
-	/* le pagine, in alto al centro; le linguette sopra, in fondo */
-	pagine = gtk_stack_new();
-	gtk_widget_add_css_class(pagine, "pagine");
-	gtk_stack_set_transition_type(GTK_STACK(pagine), GTK_STACK_TRANSITION_TYPE_NONE);
-	gtk_stack_set_hhomogeneous(GTK_STACK(pagine), FALSE);
-	gtk_stack_set_vhomogeneous(GTK_STACK(pagine), FALSE);
-	gtk_widget_set_halign(pagine, GTK_ALIGN_CENTER);
-	gtk_widget_set_valign(pagine, GTK_ALIGN_START);
-	gtk_stack_add_named(GTK_STACK(pagine), crea_widget(), nomi_pagine[WIDGET]);
-	gtk_stack_add_named(GTK_STACK(pagine), crea_ricerca(), nomi_pagine[RICERCA]);
-	gtk_stack_add_named(GTK_STACK(pagine), crea_app(), nomi_pagine[APP]);
+	/* LE PAGINE: una striscia di tre posti larghi come lo schermo, ognuno con la sua pagina in
+	 * alto al centro, dentro una finestra che scorre in orizzontale; lo scorrimento lo comanda
+	 * solo scorri_a (niente barra di scorrimento, e la rotella o il tappetino non la muovono).
+	 * Le linguette stanno sopra, in fondo. */
+	GListModel *schermi = gdk_display_get_monitors(gdk_display_get_default());
+	GdkMonitor *schermo = g_list_model_get_n_items(schermi) > 0 ?
+		g_list_model_get_item(schermi, 0) : NULL;
+	GdkRectangle misura = { 0, 0, 1280, 800 };
+	if (schermo != NULL) {
+		gdk_monitor_get_geometry(schermo, &misura);
+		g_object_unref(schermo);
+	}
+	larghezza = misura.width;
+	GtkWidget *striscia = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+	GtkWidget *(*crea[PAGINE])(void) = { crea_widget, crea_ricerca, crea_app };
+	for (int i = 0; i < PAGINE; i++) {
+		GtkWidget *posto = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+		gtk_widget_add_css_class(posto, "pagina");
+		gtk_widget_set_size_request(posto, larghezza, -1);
+		gtk_box_append(GTK_BOX(posto), crea[i]());
+		gtk_box_append(GTK_BOX(striscia), posto);
+	}
+	pagine = gtk_scrolled_window_new();
+	gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(pagine), GTK_POLICY_EXTERNAL,
+		GTK_POLICY_NEVER);
+	gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(pagine), striscia);
+	g_signal_connect(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pagine)), "changed",
+		G_CALLBACK(misura_cambiata), NULL);
+	/* il cursore che entra nel campo di ricerca non deve far scorrere le pagine */
+	gtk_viewport_set_scroll_to_focus(
+		GTK_VIEWPORT(gtk_scrolled_window_get_child(GTK_SCROLLED_WINDOW(pagine))), FALSE);
+	GtkEventController *rotella = gtk_event_controller_scroll_new(
+		GTK_EVENT_CONTROLLER_SCROLL_HORIZONTAL);
+	gtk_event_controller_set_propagation_phase(rotella, GTK_PHASE_CAPTURE);
+	g_signal_connect(rotella, "scroll", G_CALLBACK(rotella_ferma), NULL);
+	gtk_widget_add_controller(pagine, rotella);
 
 	GtkWidget *sopra = gtk_overlay_new();
 	gtk_widget_add_css_class(sopra, "contenuto-cassetto");
