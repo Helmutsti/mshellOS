@@ -128,6 +128,40 @@ static struct tinywl_toplevel *mshell_scelta_t;  /* (scrivania-controlli.c) */
 static int mshell_finestra_cima(struct tinywl_server *server);
 static void mshell_controlli_avvia(void);
 
+/* Il passaggio da un gruppo all'altro (scrivania-voli.c). */
+#define MSHELL_VOLI_MAX (2 * MSHELL_GRUPPO_MAX)
+struct mshell_volo {
+	struct tinywl_toplevel *t;     /* NULL: la finestra se n'e' andata durante il volo */
+	struct wlr_scene_tree *albero; /* la sua miniatura in volo */
+	struct wlr_box da, a;          /* da dove a dove (la finestra vera, sullo schermo) */
+};
+static struct {
+	struct wlr_scene_tree *albero;  /* sopra le finestre, sotto i controlli */
+	bool corre;
+	int64_t inizio;
+	struct mshell_volo volo[MSHELL_VOLI_MAX];
+	int n;
+	struct mshell_gruppo *arriva;   /* il gruppo che arriva al centro: si accende alla fine */
+	struct mshell_gruppo *atterra;  /* quello che va nella colonna: il riquadro alla fine */
+	struct mshell_gruppo *col_g[MSHELL_GRUPPI_MAX];  /* i riquadri che scorrono, */
+	int col_da[MSHELL_GRUPPI_MAX];                   /* e da dove */
+	int col_n;
+} mshell_voli;
+/* dove stavano i riquadri della colonna prima di un cambio */
+struct mshell_voli_prima {
+	struct mshell_gruppo *g[MSHELL_GRUPPI_MAX];
+	int y[MSHELL_GRUPPI_MAX];
+	int n;
+	int entra_y;  /* il riquadro del gruppo che arriva al centro (-1: non era nella colonna) */
+};
+static void mshell_voli_prima(struct tinywl_server *server, struct mshell_gruppo *entra,
+	struct mshell_voli_prima *p);
+static void mshell_voli_parti(struct tinywl_server *server, const struct mshell_voli_prima *p,
+	struct mshell_gruppo *esce, struct mshell_gruppo *entra);
+static void mshell_voli_fine(struct tinywl_server *server);
+static void mshell_voli_dimentica(struct tinywl_toplevel *t, struct mshell_gruppo *g, bool sparisce);
+static int mshell_colonna_y_vista(struct tinywl_server *server, int i);
+
 /* --- le immagini fatte a mano (icone) --- */
 
 /* Un'immagine fatta a mano, sul modello dello sfondo (mshell_sfondo, piu' sotto in tinywl.c): i
@@ -375,13 +409,18 @@ static void mshell_centro_cambiato(struct tinywl_server *server) {
  * tastiera va alla sua finestra davanti. */
 static void mshell_porta_al_centro(struct tinywl_server *server, struct mshell_gruppo *g) {
 	if (g != server->centro) {
+		struct mshell_voli_prima prima;
+		mshell_voli_prima(server, g, &prima);
+		struct mshell_gruppo *esce = server->centro;
 		mshell_colonna_togli(server, g);
 		if (server->centro != NULL) {
 			mshell_colonna_in_cima(server, server->centro);
 		}
 		server->centro = g;
+		mshell_voli_parti(server, &prima, esce, g);  /* scrivania-voli.c */
 	}
-	wlr_scene_node_set_enabled(&g->albero->node, true);
+	/* se sta arrivando in volo, le finestre vere si accendono all'arrivo */
+	wlr_scene_node_set_enabled(&g->albero->node, mshell_voli.arriva != g);
 	mshell_centro_cambiato(server);
 }
 
@@ -390,8 +429,12 @@ static void mshell_svuota_centro(struct tinywl_server *server) {
 	if (server->centro == NULL) {
 		return;
 	}
+	struct mshell_voli_prima prima;
+	mshell_voli_prima(server, NULL, &prima);
+	struct mshell_gruppo *esce = server->centro;
 	mshell_colonna_in_cima(server, server->centro);
 	server->centro = NULL;
+	mshell_voli_parti(server, &prima, esce, NULL);  /* scrivania-voli.c */
 	mshell_centro_cambiato(server);
 }
 
@@ -457,6 +500,7 @@ static void mshell_gruppo_esce(struct tinywl_server *server, struct tinywl_tople
 	if (mshell_sc.scelta_gruppo == g || mshell_scelta_t == t) {
 		mshell_scelta_chiudi();
 	}
+	mshell_voli_dimentica(t, g, g->n == 0);  /* non vola piu' (scrivania-voli.c) */
 	mshell_ridisponi(g);
 	mshell_pill_aggiorna(server);  /* le pill non restano su una finestra che non c'e' piu' */
 	if (g->n == 0) {
@@ -718,8 +762,11 @@ static int mshell_colonna_disegna(void *data) {
 	struct wlr_box schermo;
 	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);
 	for (int i = 0; i < server->n_gruppi; i++) {
+		if (server->gruppo[i] == mshell_voli.atterra) {
+			continue;  /* sta atterrando in volo: il suo riquadro si disegna all'arrivo */
+		}
 		mshell_riquadro(server, server->gruppo[i], schermo.x + MSHELL_COLONNA_X,
-			mshell_colonna_y(server, i));
+			mshell_colonna_y_vista(server, i));  /* a meta' strada, se sta scorrendo */
 	}
 	return 0;
 }
@@ -779,6 +826,7 @@ static void mshell_scrivania_avvia(struct tinywl_server *server, struct wlr_scen
 	}
 	wl_list_init(&mshell_sc.icone);
 	server->albero_gruppi = wlr_scene_tree_create(&server->scene->tree);
+	mshell_voli.albero = wlr_scene_tree_create(&server->scene->tree);  /* i voli, sopra le finestre */
 	mshell_sc.colonna = wlr_scene_tree_create(&server->scene->tree);
 	wlr_scene_node_place_below(&mshell_sc.colonna->node, &server->albero_gruppi->node);
 	mshell_sc.controlli = wlr_scene_tree_create(&server->scene->tree);
@@ -793,4 +841,5 @@ static void mshell_scrivania_avvia(struct tinywl_server *server, struct wlr_scen
 	mshell_sc.raggio_pannello = mshell_token_numero("raggio-pannello");
 }
 
+#include "scrivania-voli.c"  /* il passaggio da un gruppo all'altro */
 #include "scrivania-controlli.c"  /* i controlli sulla finestra, Disponi, il trascinamento */

@@ -44,6 +44,7 @@
 /* Le durate. I nomi dei token sono una proposta, da confermare: durata/breve e durata/media. */
 #define MSHELL_DURATA_BREVE 150  /* token "durata/breve" (proposta, da confermare): dissolvenze */
 #define MSHELL_DURATA_MEDIA 250  /* token "durata/media" (proposta, da confermare): scorrimenti */
+#define MSHELL_DURATA_GRUPPI 250  /* il passaggio da un gruppo all'altro (la persona, 23/11/2026: prima 350, poi "abbassa": 250) */
 #define MSHELL_ANIM_PASSO_MS 16  /* uno scatto del timer: circa 60 al secondo */
 
 /* Definita piu' avanti in tinywl.c: ricalcola che cosa c'e' sotto il puntatore. */
@@ -103,7 +104,26 @@ static double mshell_anim_curva(int64_t inizio, int durata, int64_t ora) {
 	return 1 - resto * resto * resto;
 }
 
+/* La curva ease-in-out cubica (il passaggio fra i gruppi): parte piano, accelera e rallenta
+ * all'arrivo. */
+static double mshell_anim_curva_dolce(int64_t inizio, int durata, int64_t ora) {
+	double p = (double)(ora - inizio) / durata;
+	if (p >= 1) {
+		return 1;
+	}
+	if (p < 0) {
+		p = 0;
+	}
+	if (p < 0.5) {
+		return 4 * p * p * p;
+	}
+	double r = -2 * p + 2;
+	return 1 - r * r * r / 2;
+}
+
 static int mshell_anim_scatto(void *data);
+/* Il passaggio fra i gruppi (scrivania-voli.c): true se continua. */
+static bool mshell_voli_scatto(struct tinywl_server *server, int64_t ora);
 
 /* Fa partire il timer, se non sta gia' andando. */
 static void mshell_anim_avvia(void) {
@@ -363,6 +383,10 @@ static int mshell_anim_scatto(void *data) {
 			mshell_anim_opacita(f->albero, f->partenza * (float)(1 - e));
 			ancora = true;
 		}
+	}
+
+	if (mshell_voli_scatto(server, ora)) {
+		ancora = true;
 	}
 
 	mshell_anim_puntatore();

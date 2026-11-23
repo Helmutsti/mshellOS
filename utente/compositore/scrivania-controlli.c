@@ -388,6 +388,9 @@ static void mshell_pill_metti(struct mshell_pill *p, struct tinywl_toplevel *t) 
 static void mshell_pill_aggiorna(struct tinywl_server *server) {
 	struct mshell_gruppo *c = mshell_al_centro(server);
 	struct tinywl_toplevel *attiva = c != NULL && c->n > 0 ? c->app[c->n - 1] : NULL;
+	if (c != NULL && c == mshell_voli.arriva) {
+		attiva = NULL;  /* sta arrivando in volo: le pill compaiono all'arrivo */
+	}
 	mshell_pill_metti(&mshell_pill[0], attiva);
 	mshell_pill_metti(&mshell_pill[1], mshell_sc.sotto != attiva ? mshell_sc.sotto : NULL);
 }
