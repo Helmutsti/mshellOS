@@ -31,7 +31,8 @@
 #define MSHELL_FONT_FORTE "IBM Plex Sans SemiBold"
 
 enum { P_DISPONI, P_RIDUCI, P_CHIUDI, P_QUANTI };
-enum mshell_disp { D_TUTTO, D_COLONNE, D_RIGHE, D_2P1, D_1P2, D_1S2, D_GRIGLIA };
+enum mshell_disp { D_TUTTO, D_COLONNE, D_RIGHE, D_2P1, D_1P2, D_1S2, D_GRIGLIA,
+	D_LIBERA };  /* LIBERA (la persona, 23/11/2026): sgancia le finestre, che tornano dove stavano */
 
 /* LE PILL (la persona, 23/11/2026): la finestra attiva (quella davanti del gruppo al centro) le
  * mostra SEMPRE; un'altra finestra le mostra quando il puntatore e' su di lei o sulla zona delle
@@ -474,6 +475,7 @@ static int mshell_disp_scelte(int n, int scelte[4]) {
 static void mshell_disp_nome(int d, int n, char *dove, size_t quanto) {
 	switch (d) {
 	case D_TUTTO: snprintf(dove, quanto, "Tutto lo schermo"); return;
+	case D_LIBERA: snprintf(dove, quanto, "Libera"); return;
 	case D_RIGHE: snprintf(dove, quanto, "1 / 1"); return;
 	case D_2P1: snprintf(dove, quanto, "2+1"); return;
 	case D_1P2: snprintf(dove, quanto, "1+2"); return;
@@ -498,8 +500,45 @@ static struct wlr_box mshell_disp_area(struct tinywl_server *server) {
 	return a;
 }
 
-/* Dispone le finestre del gruppo secondo d: scorrono ai loro posti (animazioni.c). */
+/* Le scelte del pannello "Disponi": prima "Libera", poi quelle per n finestre. */
+static int mshell_disp_scelte_pannello(int n, int scelte[5]) {
+	scelte[0] = D_LIBERA;
+	return 1 + mshell_disp_scelte(n, &scelte[1]);
+}
+
+/* Dove torna la finestra t con "Libera": dove stava prima di essere disposta (se lo era). */
+static struct wlr_box mshell_posto_libero(struct tinywl_toplevel *t) {
+	return t->gruppo != NULL && t->gruppo->disposizione >= 0 && t->libero.width > 0 ? t->libero : t->posto;
+}
+
+/* "Libera": il gruppo non e' piu' disposto e le finestre tornano scorrendo dove stavano. */
+static void mshell_sgancia(struct mshell_gruppo *g) {
+	for (int i = 0; i < g->n; i++) {
+		struct tinywl_toplevel *t = g->app[i];
+		struct wlr_box l = mshell_posto_libero(t);
+		if (l.width != t->posto.width || l.height != t->posto.height) {
+			if (t->xdg_toplevel->base->initialized) {
+				wlr_xdg_toplevel_set_size(t->xdg_toplevel, l.width, l.height);
+			}
+		}
+		t->posto = l;
+		mshell_anim_sposta(t);
+	}
+	g->disposizione = -1;
+}
+
+/* Dispone le finestre del gruppo secondo d: scorrono ai loro posti (animazioni.c). Se il gruppo
+ * era libero, prima ci si ricorda dove stavano le finestre (per "Libera"). */
 static void mshell_disponi_gruppo(struct tinywl_server *server, struct mshell_gruppo *g, int d) {
+	if (d == D_LIBERA) {
+		mshell_sgancia(g);
+		return;
+	}
+	for (int i = 0; i < g->n; i++) {
+		if (g->disposizione < 0 || g->app[i]->libero.width == 0) {
+			g->app[i]->libero = g->app[i]->posto;
+		}
+	}
 	g->disposizione = d;
 	struct wlr_box a = mshell_disp_area(server);
 	for (int i = 0; i < g->n; i++) {
@@ -553,8 +592,8 @@ static void mshell_scelta_disegna(struct tinywl_server *server, struct tinywl_to
 		wlr_scene_node_destroy(&mshell_sc.scelta->node);
 	}
 	mshell_sc.scelta = wlr_scene_tree_create(mshell_sc.controlli);
-	int scelte[4];
-	int k = mshell_disp_scelte(g->n, scelte);
+	int scelte[5];
+	int k = mshell_disp_scelte_pannello(g->n, scelte);
 	mshell_sc.n_opzioni = k;
 	int pl = 2 * MSHELL_SCELTA_BORDO + k * MSHELL_SCELTA_MINI_L + (k - 1) * MSHELL_SCELTA_SPAZIO;
 	int pa = MSHELL_SCELTA_BORDO + 20 + 16 + MSHELL_SCELTA_MINI_A + 8 + 16 + MSHELL_SCELTA_BORDO;
@@ -620,7 +659,8 @@ static void mshell_scelta_disegna(struct tinywl_server *server, struct tinywl_to
 				mshell_sc.colore_vetro, 1.0f);
 		}
 		for (int i = 0; i < g->n; i++) {
-			struct wlr_box w = mshell_disp_posto(scelte[j], g->n, i, area);
+			struct wlr_box w = scelte[j] == D_LIBERA ? mshell_posto_libero(g->app[g->n - 1 - i]) :
+				mshell_disp_posto(scelte[j], g->n, i, area);
 			int wx = x + (int)((w.x - schermo.x) * sx + 0.5), wy = y + (int)((w.y - schermo.y) * sy + 0.5);
 			int wl = (int)(w.width * sx + 0.5), wa = (int)(w.height * sy + 0.5);
 			/* le finestre di vetro (superficie/vetro), come nel disegno */
@@ -775,8 +815,9 @@ static bool mshell_scrivania_puntatore(struct tinywl_server *server) {
 		return true;
 	}
 
-	/* LA SCELTA DELLE DISPOSIZIONI aperta: si accende la miniatura sotto il puntatore */
-	if (mshell_sc.scelta != NULL) {
+	/* LA SCELTA DELLE DISPOSIZIONI aperta: si accende la miniatura sotto il puntatore (non se la
+	 * si sta scegliendo da tastiera, Super+Alt+Tab) */
+	if (mshell_sc.scelta != NULL && !mshell_ts.disp) {
 		int accesa = -1;
 		for (int j = 0; j < mshell_sc.n_opzioni; j++) {
 			if (mshell_dentro(mshell_sc.opzione[j], px, py)) {
@@ -800,9 +841,11 @@ static bool mshell_scrivania_puntatore(struct tinywl_server *server) {
 	if (!mshell_sc.sopra && x < 1 && server->n_gruppi > 0) {
 		mshell_sc.sopra = true;
 		wlr_scene_node_place_above(&mshell_sc.colonna->node, &server->albero_gruppi->node);
-	} else if (mshell_sc.sopra && x > MSHELL_COLONNA_FINE) {
+		mshell_colonna_mostra(server);
+	} else if (mshell_sc.sopra && x > MSHELL_COLONNA_FINE && !mshell_tasti_tiene_colonna()) {
 		mshell_sc.sopra = false;
 		wlr_scene_node_place_below(&mshell_sc.colonna->node, &server->albero_gruppi->node);
+		mshell_colonna_mostra(server);
 	}
 	struct mshell_gruppo *g = mshell_colonna_gruppo_a(server, px, py);
 	mshell_sc.acceso = g;  /* (niente evidenza: serve solo per il suggerimento) */
@@ -814,7 +857,10 @@ static bool mshell_scrivania_puntatore(struct tinywl_server *server) {
 			ts = mshell_pill[k].t;
 		}
 	}
-	if (g != NULL) {
+	int gi = mshell_in_colonna(server, g);
+	if (gi >= 0 && mshell_dentro(mshell_icone_box(server, gi), px, py)) {
+		mshell_suggerimento(server, "Clic: le finestre del gruppo", (int)px + 20, (int)py + 28);
+	} else if (g != NULL) {
 		mshell_suggerimento(server, "Clic: il gruppo va al centro", (int)px + 20, (int)py + 28);
 	} else if (ts != NULL && mshell_sc.scelta == NULL) {
 		struct wlr_box b = mshell_pulsante_box(ts, P_RIDUCI);
@@ -904,6 +950,10 @@ static bool mshell_scrivania_clic(struct tinywl_server *server, bool giu) {
 		if (dentro) {
 			return true;
 		}
+	}
+	/* lo spaccato di un gruppo e le icone che lo aprono (scrivania-tasti.c) */
+	if (mshell_tasti_clic(server, px, py)) {
+		return true;
 	}
 	/* le pill (prima quelle della finestra sotto il puntatore, poi quelle dell'attiva) */
 	for (int k = 1; k >= 0; k--) {

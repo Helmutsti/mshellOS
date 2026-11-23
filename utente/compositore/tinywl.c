@@ -92,17 +92,19 @@
  *   barra che disegna lei), e si sovrappongono.
  * - Un clic su un gruppo della colonna lo porta al centro; quello che c'era scende in cima alla
  *   colonna.
- * - LA COLONNA NON TOGLIE SPAZIO alle finestre (la persona, 21/11/2026): sta sotto di loro e si
- *   vede dove non la coprono; il puntatore contro il bordo sinistro la porta sopra le finestre,
- *   finche' non se ne allontana.
+ * - LA COLONNA NON TOGLIE SPAZIO alle finestre (la persona, 21/11/2026): sta sotto di loro, ed e'
+ *   nascosta quando al centro ci sono finestre (la persona, 23/11/2026); il puntatore contro il
+ *   bordo sinistro la porta sopra le finestre, finche' non se ne allontana.
  * - Niente desktop multipli (la persona, 23/11/2026): i gruppi li sostituiscono.
  * PROVVISORIO (da decidere con la persona): un'app che si apre fa un gruppo nuovo al centro (come
  * il Mac); una finestra figlia (un dialogo) va nel gruppo della sua finestra madre.
  * IL CENTRO PUO' ESSERE VUOTO (la persona, 23/11/2026): il "–" sull'ultima finestra del gruppo al
  * centro porta il gruppo nella colonna e lascia il centro vuoto (non scambia con un altro gruppo);
  * anche chiudendo l'ultima finestra il centro resta vuoto.
- * I TASTI: per ora solo mouse (la persona, 21/11/2026). Restano Super+spazio (il pannello di
- * ricerca, livelli.c) e Alt+Esc (chiude il compositore); le scorciatoie nuove si decidono dopo.
+ * I TASTI (la persona, 23/11/2026: ogni operazione col mouse e con la tastiera): Super+Tab,
+ * Super+1..9, Super+Alt, Super+Alt+1..9, Super+Alt+Tab, Super+X, Super+Z, Super+spazio e lo split
+ * di un gruppo, descritti in cima a scrivania-tasti.c. Resta Alt+Esc (chiude il
+ * compositore).
  * Il codice e' in scrivania.c, incluso piu' sotto. */
 #include "token.c"  /* MSHELL: i valori del disegno, letti da /usr/share/mshell/token.css */
 #define MSHELL_GRUPPO_MAX 8   /* finestre in un gruppo */
@@ -199,6 +201,7 @@ struct tinywl_toplevel {
 	struct wl_listener request_fullscreen;
 	struct mshell_gruppo *gruppo;  /* MSHELL: il suo gruppo (NULL: in nessuno ancora; scrivania.c) */
 	struct wlr_box posto;  /* MSHELL: dove sta la finestra vera sullo schermo (scrivania.c) */
+	struct wlr_box libero;  /* MSHELL: dove stava libera prima di essere disposta (width 0: mai) */
 	struct mshell_ombre_menu *ombre;  /* MSHELL: la sua ombra (effetti.c) */
 	struct mshell_anim_app *anim;  /* MSHELL: le sue animazioni (animazioni.c) */
 	struct wlr_foreign_toplevel_handle_v1 *voce;  /* MSHELL: la sua voce nell'elenco delle app */
@@ -226,6 +229,7 @@ struct tinywl_keyboard {
 static bool mshell_livelli_tiene_tastiera(struct tinywl_server *server);
 static void mshell_elenco_attiva(struct tinywl_server *server, struct tinywl_toplevel *t);
 static void mshell_livelli_cassetto(struct tinywl_server *server);
+static bool mshell_tasti(struct tinywl_server *server, xkb_keysym_t sym, bool premuto);  /* scrivania-tasti.c */
 static void mshell_gruppo_davanti(struct tinywl_toplevel *t);  /* MSHELL: scrivania.c */
 
 static void focus_toplevel(struct tinywl_toplevel *toplevel, struct wlr_surface *surface) {
@@ -350,18 +354,11 @@ static void keyboard_handle_key(
 
 	bool handled = false;
 	uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-	/* MSHELL: il tasto Super non va alle app; Super+spazio apre o chiude il pannello di ricerca
-	 * (livelli.c). Per ora non ci sono altre scorciatoie (vedi "MSHELL: LA SCRIVANIA"). */
+	/* MSHELL: il tasto Super e le scorciatoie della scrivania non vanno alle app (scrivania-tasti.c:
+	 * Super+Tab, Super+1..9, Super+Alt, Super+X, Super+Z, Super+spazio). */
 	bool premuto = event->state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	for (int i = 0; i < nsyms; i++) {
-		if (syms[i] == XKB_KEY_Super_L || syms[i] == XKB_KEY_Super_R) {
-			server->super_giu = premuto;
-			handled = true;
-		}
-	}
-	for (int i = 0; i < nsyms && server->super_giu && premuto; i++) {
-		if (syms[i] == XKB_KEY_space) {
-			mshell_livelli_cassetto(server);
+		if (mshell_tasti(server, syms[i], premuto)) {
 			handled = true;
 		}
 	}

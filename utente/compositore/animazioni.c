@@ -124,6 +124,8 @@ static double mshell_anim_curva_dolce(int64_t inizio, int durata, int64_t ora) {
 static int mshell_anim_scatto(void *data);
 /* Il passaggio fra i gruppi (scrivania-voli.c): true se continua. */
 static bool mshell_voli_scatto(struct tinywl_server *server, int64_t ora);
+/* Lo split di un gruppo (scrivania-tasti.c): true se si sta ancora muovendo. */
+static bool mshell_ventaglio_scatto(struct tinywl_server *server, int64_t ora);
 
 /* Fa partire il timer, se non sta gia' andando. */
 static void mshell_anim_avvia(void) {
@@ -386,6 +388,9 @@ static int mshell_anim_scatto(void *data) {
 	}
 
 	if (mshell_voli_scatto(server, ora)) {
+		ancora = true;
+	}
+	if (mshell_ventaglio_scatto(server, ora)) {
 		ancora = true;
 	}
 
