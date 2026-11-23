@@ -549,6 +549,9 @@ static void process_cursor_move(struct tinywl_server *server, uint32_t time) {
 	struct tinywl_toplevel *toplevel = server->grabbed_toplevel;
 	toplevel->posto.x = (int)(server->cursor->x - server->grab_x);
 	toplevel->posto.y = (int)(server->cursor->y - server->grab_y);
+	if (toplevel->posto.y < mshell_finestra_cima(server)) {
+		toplevel->posto.y = mshell_finestra_cima(server);  /* MSHELL: non sale oltre (scrivania-controlli.c) */
+	}
 	mshell_metti_al_posto(toplevel);
 }
 
@@ -573,6 +576,9 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 
 	if (server->resize_edges & WLR_EDGE_TOP) {
 		new_top = border_y;
+		if (new_top < mshell_finestra_cima(server)) {
+			new_top = mshell_finestra_cima(server);  /* MSHELL: non sale oltre (scrivania-controlli.c) */
+		}
 		if (new_top >= new_bottom) {
 			new_top = new_bottom - 1;
 		}

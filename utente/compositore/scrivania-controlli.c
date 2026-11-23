@@ -43,9 +43,6 @@ struct mshell_pill {
 	char *titolo;                   /* il titolo per cui sono state disegnate */
 };
 static struct mshell_pill mshell_pill[2];
-/* la fila ferma durante il trascinamento di una finestra (vedi mshell_ctrl_y) */
-static struct tinywl_toplevel *mshell_ferma_t;
-static int mshell_ferma_y, mshell_ferma_lati;
 static struct tinywl_toplevel *mshell_scelta_t;  /* la finestra da cui si e' aperta la scelta */
 
 /* Definita in tinywl.c: la finestra (del gruppo al centro) sotto il punto. */
@@ -264,22 +261,17 @@ static int mshell_ctrl_y_calcola(struct tinywl_toplevel *t, int *lati) {
 	return MSHELL_CTRL_MARGINE;
 }
 
-/* Come sopra, ma MENTRE SI TRASCINA o si ridimensiona la finestra la fila resta dove era quando
- * e' cominciato (la persona, 23/11/2026: altrimenti, portando la finestra in alto, le pill
- * saltavano sotto proprio mentre le si teneva); si sposta quando si lascia il tasto. */
 static int mshell_ctrl_y(struct tinywl_toplevel *t, int *lati) {
-	if (t == mshell_ferma_t && t->server->cursor_mode != TINYWL_CURSOR_PASSTHROUGH &&
-			t->server->grabbed_toplevel == t) {
-		*lati = mshell_ferma_lati;
-		return mshell_ferma_y;
-	}
 	return mshell_ctrl_y_calcola(t, lati);
 }
 
-/* All'inizio di uno spostamento della finestra t: la sua fila di pill si ferma li'. */
-static void mshell_ctrl_ferma(struct tinywl_toplevel *t) {
-	mshell_ferma_t = t;
-	mshell_ferma_y = mshell_ctrl_y_calcola(t, &mshell_ferma_lati);
+/* IL PIU' IN ALTO DOVE PUO' STARE UNA FINESTRA LIBERA (la persona, 23/11/2026): abbastanza in basso
+ * perche' le sue pill ci stiano sopra, sotto la barra. Spostandola (o ridimensionandola dal bordo
+ * alto) non sale oltre: cosi' le pill non saltano mai dall'altra parte. */
+static int mshell_finestra_cima(struct tinywl_server *server) {
+	struct wlr_box s;
+	wlr_output_layout_get_box(server->output_layout, NULL, &s);
+	return s.y + MSHELL_CTRL_SOTTO_BARRA + MSHELL_CTRL_ALTO + MSHELL_CTRL_STACCO;
 }
 
 /* Dove sta il pulsante "quale" della finestra t, sullo schermo. */
@@ -536,7 +528,6 @@ static void mshell_ridisponi(struct mshell_gruppo *g) {
 
 /* Spostata o ridimensionata a mano: il suo gruppo non e' piu' disposto. */
 static void mshell_libera(struct tinywl_toplevel *t) {
-	mshell_ctrl_ferma(t);  /* chiamata all'inizio di ogni spostamento: la fila di pill si ferma */
 	if (t->gruppo != NULL) {
 		t->gruppo->disposizione = -1;
 	}
@@ -726,8 +717,8 @@ static void mshell_unisci(struct tinywl_server *server, struct mshell_gruppo *g,
 		if (davanti->posto.y + davanti->posto.height > area.y + area.height) {
 			davanti->posto.y = area.y + area.height - davanti->posto.height;
 		}
-		if (davanti->posto.y < area.y) {
-			davanti->posto.y = area.y;
+		if (davanti->posto.y < mshell_finestra_cima(server)) {
+			davanti->posto.y = mshell_finestra_cima(server);
 		}
 		mshell_metti_al_posto(davanti);
 	}
@@ -764,7 +755,7 @@ static bool mshell_scrivania_puntatore(struct tinywl_server *server) {
 				fabs(py - mshell_sc.premuto_y) > MSHELL_TRASCINA_SOGLIA) && g->n > 0) {
 			mshell_sc.trascina = true;
 			mshell_sc.fantasma = wlr_scene_tree_create(mshell_sc.controlli);
-			mshell_mini_in(mshell_sc.fantasma, g->app[g->n - 1], 0, 0, MSHELL_FANTASMA_L, MSHELL_FANTASMA_A);
+			mshell_mini_in(mshell_sc.fantasma, g->app[g->n - 1], 0, 0, MSHELL_FANTASMA_L, MSHELL_FANTASMA_A, true);
 			mshell_sc.fantasma_dx = -MSHELL_FANTASMA_L / 2;
 			mshell_sc.fantasma_dy = -MSHELL_FANTASMA_A / 2;
 			mshell_colonna_rifai(server);  /* il gruppo nella colonna si attenua */
@@ -811,10 +802,7 @@ static bool mshell_scrivania_puntatore(struct tinywl_server *server) {
 		wlr_scene_node_place_below(&mshell_sc.colonna->node, &server->albero_gruppi->node);
 	}
 	struct mshell_gruppo *g = mshell_colonna_gruppo_a(server, px, py);
-	if (g != mshell_sc.acceso) {
-		mshell_sc.acceso = g;
-		mshell_colonna_rifai(server);
-	}
+	mshell_sc.acceso = g;  /* (niente evidenza: serve solo per il suggerimento) */
 	/* il suggerimento: sul gruppo della colonna (20 a destra e 28 sotto il puntatore), sul
 	 * pulsante "–" (sopra il pulsante); altrimenti niente */
 	struct tinywl_toplevel *ts = NULL;

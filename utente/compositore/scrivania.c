@@ -17,8 +17,8 @@
  * non la coprono. Il puntatore contro il bordo sinistro la porta SOPRA le finestre; quando si
  * allontana oltre la colonna torna sotto. Ogni gruppo mostra le sue finestre in miniatura, una
  * dietro l'altra (fino a 3), e sotto a sinistra le icone delle sue app (una per app, fino a 3,
- * quella davanti sopra). Al passaggio del puntatore il gruppo si illumina; un clic lo porta al
- * centro.
+ * quella davanti sopra). Ogni gruppo occupa lo spazio che serve alle sue miniature (che hanno la
+ * forma delle finestre). Un clic lo porta al centro.
  * LE MINIATURE sono "dal vivo" ma non costano: sono altri nodi della scena che puntano alla stessa
  * memoria dei pixel delle finestre (come l'istantanea delle animazioni), rimpiccioliti. Le finestre
  * dei gruppi in colonna non si vedono, quindi non ridisegnano: le miniature si rifanno solo quando
@@ -60,12 +60,8 @@
 /* Le misure del disegno (schermata "1 · Al lavoro") */
 #define MSHELL_COLONNA_X 16          /* la colonna dal bordo sinistro */
 #define MSHELL_RIQUADRO_L 184        /* il riquadro di un gruppo */
-#define MSHELL_RIQUADRO_A 128
 #define MSHELL_RIQUADRO_SPAZIO 20    /* fra un riquadro e l'altro */
-#define MSHELL_RIQUADRO_RAGGIO 16    /* gli angoli dell'evidenza al passaggio del puntatore */
-#define MSHELL_EVIDENZA 0.28f        /* l'evidenza: bianco al 28% */
 #define MSHELL_MINI_X 22             /* la miniatura davanti, nel riquadro */
-#define MSHELL_MINI_Y 16
 #define MSHELL_MINI_L 150            /* la sua misura massima */
 #define MSHELL_MINI_A 100
 #define MSHELL_MINI_PASSO_X 14       /* le miniature dietro: piu' a destra, */
@@ -74,7 +70,6 @@
 #define MSHELL_MINI_QUANTE 3
 #define MSHELL_ICONA 36              /* l'icona dell'app, in basso a sinistra nel riquadro */
 #define MSHELL_ICONA_X 8
-#define MSHELL_ICONA_Y 88
 #define MSHELL_ICONA_PASSO 30        /* le icone delle altre app del gruppo, a destra e sotto */
 #define MSHELL_ICONE_QUANTE 3
 #define MSHELL_SOTTO_BARRA 40        /* le finestre e la colonna stanno sotto la barra */
@@ -130,6 +125,7 @@ static void mshell_controlli_metti(struct tinywl_server *server, struct tinywl_t
 static void mshell_scelta_chiudi(void);
 static void mshell_pill_aggiorna(struct tinywl_server *server);
 static struct tinywl_toplevel *mshell_scelta_t;  /* (scrivania-controlli.c) */
+static int mshell_finestra_cima(struct tinywl_server *server);
 static void mshell_controlli_avvia(void);
 
 /* --- le immagini fatte a mano (icone) --- */
@@ -502,9 +498,8 @@ static void mshell_assegna(struct tinywl_server *server, struct tinywl_toplevel 
 	t->posto.height = geo.height;
 	t->posto.x = a.x + (a.width - geo.width) / 2;
 	t->posto.y = a.y + (a.height - geo.height) / 2;
-	struct wlr_box area = mshell_area(server);
-	if (t->posto.y < area.y) {
-		t->posto.y = area.y;
+	if (t->posto.y < mshell_finestra_cima(server)) {
+		t->posto.y = mshell_finestra_cima(server);  /* le pill devono starci sopra */
 	}
 	mshell_gruppo_entra(g, t);
 	mshell_metti_al_posto(t);
@@ -567,19 +562,36 @@ static void mshell_mini_una(struct wlr_scene_buffer *b, int sx, int sy, void *da
 	c->point_accepts_input = mshell_niente_clic;  /* il clic lo prende il riquadro del gruppo */
 }
 
-/* La miniatura della finestra t, grande al massimo lmax x amax, con l'angolo in (x, y) e
- * centrata in altezza in amax. */
-static void mshell_mini_in(struct wlr_scene_tree *padre, struct tinywl_toplevel *t, int x, int y,
-		double lmax, double amax) {
+/* La misura della miniatura della finestra t, grande al massimo lmax x amax (con la forma della
+ * finestra); 0 se la finestra non ha ancora una misura. */
+static double mshell_mini_misura(struct tinywl_toplevel *t, double lmax, double amax, int *l, int *a) {
 	struct wlr_box geo;
 	wlr_xdg_surface_get_geometry(t->xdg_toplevel->base, &geo);
+	*l = *a = 0;
 	if (geo.width <= 0 || geo.height <= 0) {
-		return;
+		return 0;
 	}
 	double sl = lmax / geo.width, sa = amax / geo.height;
 	double scala = sl < sa ? sl : sa;
-	int l = (int)(geo.width * scala + 0.5), a = (int)(geo.height * scala + 0.5);
-	y += (int)((amax - a) / 2);
+	*l = (int)(geo.width * scala + 0.5);
+	*a = (int)(geo.height * scala + 0.5);
+	return scala;
+}
+
+/* La miniatura della finestra t, grande al massimo lmax x amax, con l'angolo in (x, y); se
+ * "centra", centrata in altezza in amax. */
+static void mshell_mini_in(struct wlr_scene_tree *padre, struct tinywl_toplevel *t, int x, int y,
+		double lmax, double amax, bool centra) {
+	struct wlr_box geo;
+	wlr_xdg_surface_get_geometry(t->xdg_toplevel->base, &geo);
+	int l, a;
+	double scala = mshell_mini_misura(t, lmax, amax, &l, &a);
+	if (scala <= 0) {
+		return;
+	}
+	if (centra) {
+		y += (int)((amax - a) / 2);
+	}
 	struct wlr_scene_tree *albero = wlr_scene_tree_create(padre);
 	/* l'ombra/finestra rimpicciolita come la finestra (in Figma le miniature sono la finestra in
 	 * scala, ombra compresa); lo strato piu' largo sta in fondo */
@@ -599,11 +611,36 @@ static void mshell_mini_in(struct wlr_scene_tree *padre, struct tinywl_toplevel 
 	wlr_scene_node_for_each_buffer(&t->scene_tree->node, mshell_mini_una, &m);
 }
 
-/* La miniatura della finestra t, la k-esima da davanti, nel riquadro di un gruppo. */
-static void mshell_mini(struct wlr_scene_tree *riquadro, struct tinywl_toplevel *t, int k) {
+/* LO SPAZIO DI UN GRUPPO NELLA COLONNA si adatta alle sue finestre (la persona, 23/11/2026: niente
+ * spazio fisso): le miniature hanno la forma delle finestre (al massimo MSHELL_MINI_L x
+ * MSHELL_MINI_A), quelle dietro sporgono in alto di MSHELL_MINI_PASSO_Y ciascuna, e le icone
+ * stanno sull'angolo in basso a sinistra di quella davanti (sporgono sotto di 8, come nel disegno).
+ * "cima": dove comincia la miniatura davanti, nel riquadro. */
+#define MSHELL_ICONA_SPORGE 8
+static int mshell_riquadro_cima(struct mshell_gruppo *g) {
+	int quante = g->n < MSHELL_MINI_QUANTE ? g->n : MSHELL_MINI_QUANTE;
+	return MSHELL_MINI_PASSO_Y * (quante > 0 ? quante - 1 : 0);
+}
+
+/* L'altezza della miniatura davanti del gruppo (almeno quella dell'icona). */
+static int mshell_riquadro_davanti(struct mshell_gruppo *g) {
+	int l, a = 0;
+	if (g->n > 0) {
+		mshell_mini_misura(g->app[g->n - 1], MSHELL_MINI_L, MSHELL_MINI_A, &l, &a);
+	}
+	return a > MSHELL_ICONA ? a : MSHELL_ICONA;
+}
+
+static int mshell_riquadro_alto(struct mshell_gruppo *g) {
+	return mshell_riquadro_cima(g) + mshell_riquadro_davanti(g) + MSHELL_ICONA_SPORGE;
+}
+
+/* La miniatura della finestra t, la k-esima da davanti, nel riquadro di un gruppo: in alto
+ * allineata con quella davanti, piu' su di MSHELL_MINI_PASSO_Y per ognuna. */
+static void mshell_mini(struct wlr_scene_tree *riquadro, struct tinywl_toplevel *t, int k, int cima) {
 	double riduci = 1 - MSHELL_MINI_RIDUCI * k;
 	mshell_mini_in(riquadro, t, MSHELL_MINI_X + MSHELL_MINI_PASSO_X * k,
-		MSHELL_MINI_Y - MSHELL_MINI_PASSO_Y * k, MSHELL_MINI_L * riduci, MSHELL_MINI_A * riduci);
+		cima - MSHELL_MINI_PASSO_Y * k, MSHELL_MINI_L * riduci, MSHELL_MINI_A * riduci, false);
 }
 
 static void mshell_opacita_una(struct wlr_scene_buffer *b, int sx, int sy, void *data) {
@@ -614,17 +651,17 @@ static void mshell_opacita_una(struct wlr_scene_buffer *b, int sx, int sy, void 
 static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *g, int x, int y) {
 	struct wlr_scene_tree *r = wlr_scene_tree_create(mshell_sc.colonna);
 	wlr_scene_node_set_position(&r->node, x, y);
-	/* il fondo del riquadro: prende i clic (anche dove non c'e' una miniatura) e al passaggio del
-	 * puntatore e' l'evidenza */
-	float alfa = g == mshell_sc.acceso ? MSHELL_EVIDENZA : 0.0f;
-	const float colore[4] = { alfa, alfa, alfa, alfa };
-	struct wlr_scene_rect *fondo = wlr_scene_rect_create(r, MSHELL_RIQUADRO_L, MSHELL_RIQUADRO_A, colore);
-	wlr_scene_rect_set_corner_radius(fondo, MSHELL_RIQUADRO_RAGGIO, CORNER_LOCATION_ALL);
+	/* il fondo del riquadro, trasparente: prende i clic anche dove non c'e' una miniatura (niente
+	 * evidenza al passaggio del puntatore: tolta dalla persona, 23/11/2026) */
+	const float trasparente[4] = { 0, 0, 0, 0 };
+	wlr_scene_rect_create(r, MSHELL_RIQUADRO_L, mshell_riquadro_alto(g), trasparente);
 	/* le miniature, dalla piu' dietro (cosi' quella davanti sta sopra) */
+	int cima = mshell_riquadro_cima(g);
 	int quante = g->n < MSHELL_MINI_QUANTE ? g->n : MSHELL_MINI_QUANTE;
 	for (int k = quante - 1; k >= 0; k--) {
-		mshell_mini(r, g->app[g->n - 1 - k], k);
+		mshell_mini(r, g->app[g->n - 1 - k], k, cima);
 	}
+	int icona_y = cima + mshell_riquadro_davanti(g) + MSHELL_ICONA_SPORGE - MSHELL_ICONA;
 	/* le icone delle app, una per app, dalla finestra davanti */
 	const char *nomi[MSHELL_ICONE_QUANTE];
 	int n_nomi = 0;
@@ -645,7 +682,7 @@ static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *
 			continue;
 		}
 		struct wlr_scene_buffer *b = wlr_scene_buffer_create(r, &p->base);
-		wlr_scene_node_set_position(&b->node, MSHELL_ICONA_X + MSHELL_ICONA_PASSO * j, MSHELL_ICONA_Y);
+		wlr_scene_node_set_position(&b->node, MSHELL_ICONA_X + MSHELL_ICONA_PASSO * j, icona_y);
 		b->point_accepts_input = mshell_niente_clic;
 	}
 	/* il gruppo che si sta trascinando, nella colonna, si attenua (il disegno: 35%) */
@@ -655,12 +692,21 @@ static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *
 	}
 }
 
-/* Dove sta il riquadro i-esimo della colonna (il gruppo server->gruppo[i]). */
+/* Dove sta il riquadro i-esimo della colonna (il gruppo server->gruppo[i]): i riquadri, ognuno
+ * alto quanto serve, uno sotto l'altro a MSHELL_RIQUADRO_SPAZIO, centrati in altezza. */
 static int mshell_colonna_y(struct tinywl_server *server, int i) {
 	struct wlr_box a = mshell_area(server);
-	int quanti = server->n_gruppi;
-	int tutta = quanti * MSHELL_RIQUADRO_A + (quanti - 1) * MSHELL_RIQUADRO_SPAZIO;
-	return a.y + (a.height - tutta) / 2 + i * (MSHELL_RIQUADRO_A + MSHELL_RIQUADRO_SPAZIO);
+	int tutta = 0, prima = 0;
+	for (int k = 0; k < server->n_gruppi; k++) {
+		if (k == i) {
+			prima = tutta;
+		}
+		tutta += mshell_riquadro_alto(server->gruppo[k]) + (k > 0 ? MSHELL_RIQUADRO_SPAZIO : 0);
+		if (k == i && k > 0) {
+			prima += MSHELL_RIQUADRO_SPAZIO;
+		}
+	}
+	return a.y + (a.height - tutta) / 2 + prima;
 }
 
 static int mshell_colonna_disegna(void *data) {
@@ -705,7 +751,7 @@ static struct mshell_gruppo *mshell_colonna_gruppo_a(struct tinywl_server *serve
 	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);
 	for (int i = 0; i < server->n_gruppi; i++) {
 		struct wlr_box r = { schermo.x + MSHELL_COLONNA_X, mshell_colonna_y(server, i),
-			MSHELL_RIQUADRO_L, MSHELL_RIQUADRO_A };
+			MSHELL_RIQUADRO_L, mshell_riquadro_alto(server->gruppo[i]) };
 		if (wlr_box_contains_point(&r, lx, ly)) {
 			return server->gruppo[i];
 		}
