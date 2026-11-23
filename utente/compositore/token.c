@@ -11,10 +11,10 @@
  * numero (con o senza "px") o var(--altro), cioe' il valore di un altro token. Un nome si cerca
  * prima nel blocco del tema e poi in "window".
  *
- * IL TEMA del compositore per ora e' sempre lo scuro: la cornice del focus, i selettori e i
- * puntini stanno sopra la foto dello sfondo (come la barra). */
+ * IL TEMA e' quello del sistema, come per la barra: la variabile d'ambiente MSHELL_TEMA
+ * (chiaro o scuro; se manca, scuro). Lo seguono i controlli sulle finestre, il pannello "Disponi",
+ * i suggerimenti e le ombre (scrivania.c, effetti.c). */
 #define MSHELL_TOKEN_FILE "/usr/share/mshell/token.css"
-#define MSHELL_TOKEN_TEMA ".scuro"
 #define MSHELL_TOKEN_MAX 1024
 
 struct mshell_token {
@@ -46,7 +46,8 @@ static char *mshell_token_pulito(const char *da, const char *a) {
 /* Il valore scritto per "nome" (senza i due trattini), cercato nel blocco del tema e poi in
  * "window"; NULL se non c'e'. */
 static const char *mshell_token_scritto(const char *nome) {
-	const char *blocchi[] = { MSHELL_TOKEN_TEMA, "window" };
+	const char *tema = getenv("MSHELL_TEMA");
+	const char *blocchi[] = { tema != NULL && strcmp(tema, "chiaro") == 0 ? ".chiaro" : ".scuro", "window" };
 	for (int b = 0; b < 2; b++) {
 		for (int i = 0; i < mshell_token_quanti; i++) {
 			struct mshell_token *t = &mshell_token_elenco[i];

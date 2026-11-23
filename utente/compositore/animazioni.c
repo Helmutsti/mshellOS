@@ -1,16 +1,10 @@
 /* MSHELL: LE ANIMAZIONI del compositore. Non si compila da solo: e' incluso da tinywl.c subito
- * dopo le funzioni dei desktop ("MSHELL: I DESKTOP"), perche' usa le sue strutture e le sue
- * funzioni. Sta in un file a parte per tenere tinywl.c piccolo: la' ci sono solo le chiamate.
+ * dopo effetti.c e prima della scrivania (scrivania.c), di cui usa le strutture. Sta in un file
+ * a parte per tenere tinywl.c piccolo: la' ci sono solo le chiamate.
  *
  * COSA SI ANIMA (decisione della persona: "anticipa le animazioni"):
- * - IL CAMBIO DI DESKTOP: il vecchio esce e il nuovo entra scorrendo in verticale. Andando su
- *   (Super+freccia su) il nuovo arriva dall'alto e il vecchio esce in basso; andando giu', il
- *   contrario. I desktop stanno su un anello, quindi conta la direzione del tasto, non il numero
- *   del desktop: dal primo, "su" porta all'ultimo e il nuovo arriva comunque dall'alto. Quando
- *   non c'e' un tasto con una direzione (doppio tocco su Super, la quinta app che apre un
- *   desktop nuovo) si guarda il numero: un desktop piu' avanti arriva dal basso.
- * - IL CAMBIO DI DISPOSIZIONE O DI NUMERO DI APP: ogni app scorre dal posto vecchio a quello
- *   nuovo. LA MISURA invece cambia subito: si chiede all'app la misura nuova (set_size, come
+ * - UN'APP CHE CAMBIA POSTO (quando la scrivania la sistema, non quando la si trascina): scorre
+ *   dal posto vecchio a quello nuovo. LA MISURA invece cambia subito: si chiede all'app la misura nuova (set_size, come
  *   prima) e intanto si anima solo la posizione. L'altra strada, ingrandire o rimpicciolire
  *   l'immagine dell'app con wlr_scene_buffer_set_dest_size, non regge:
  *     1. la scena di wlroots rimette la misura vera a ogni invio dell'app (surface_reconfigure
@@ -29,8 +23,8 @@
  *   della scena, vedi mshell_anim_nuova) se ne fa un'ISTANTANEA: per ogni immagine visibile un
  *   nodo nuovo con un riferimento alla stessa memoria dei pixel (wlr_scene_buffer_create la
  *   blocca con wlr_buffer_lock: resta valida anche dopo che l'app se n'e' andata). L'istantanea
- *   sta sotto le altre app del desktop, che intanto scorrono nel posto lasciato libero, non
- *   prende clic, e sparisce a fine dissolvenza (lascia il riferimento alla memoria).
+ *   sta sotto le finestre, non prende clic, e sparisce a fine dissolvenza (lascia il
+ *   riferimento alla memoria).
  *
  *   L'istantanea copia anche gli angoli arrotondati dell'app (effetti.c).
  *
@@ -40,10 +34,9 @@
  * Un'animazione nuova sulla stessa cosa (tasti premuti in fretta) parte dal punto in cui la cosa
  * si trova in quel momento: niente salti.
  *
- * IL FOCUS E I CLIC. La tastiera passa subito all'app giusta (lo fa mshell_mostra, come prima).
- * Il desktop che sta uscendo non prende clic (desktop_toplevel_at in tinywl.c guarda solo le
- * app del desktop attuale). Mentre le cose scorrono sotto il puntatore fermo, a ogni scatto si
- * ricalcola che cosa c'e' sotto il puntatore, cosi' il clic va all'app che si vede li'.
+ * IL FOCUS E I CLIC. La tastiera passa subito all'app giusta. Mentre le cose scorrono sotto il
+ * puntatore fermo, a ogni scatto si ricalcola che cosa c'e' sotto il puntatore, cosi' il clic va
+ * all'app che si vede li'.
  *
  * MENO MOVIMENTO: con la variabile d'ambiente MSHELL_MENO_MOVIMENTO=1 niente animazioni, tutto
  * cambia subito. PER ORA e' una variabile d'ambiente: le impostazioni vere arriveranno dopo. */
@@ -51,9 +44,6 @@
 /* Le durate. I nomi dei token sono una proposta, da confermare: durata/breve e durata/media. */
 #define MSHELL_DURATA_BREVE 150  /* token "durata/breve" (proposta, da confermare): dissolvenze */
 #define MSHELL_DURATA_MEDIA 250  /* token "durata/media" (proposta, da confermare): scorrimenti */
-/* il cambio di desktop, un po' piu' lento degli altri scorrimenti (la persona, 20/11/2026); la
- * stessa durata ha lo scorrimento delle pagine del pannello di ricerca (utente/barra/cassetto.c) */
-#define MSHELL_DURATA_DESKTOP 350
 #define MSHELL_ANIM_PASSO_MS 16  /* uno scatto del timer: circa 60 al secondo */
 
 /* Definita piu' avanti in tinywl.c: ricalcola che cosa c'e' sotto il puntatore. */
@@ -70,14 +60,6 @@ struct mshell_anim_app {
 	int64_t appare_da;
 };
 
-/* Lo scorrimento di un desktop (in verticale, da da_y a a_y). */
-struct mshell_anim_desktop {
-	bool corre;
-	double da_y, a_y;
-	int64_t inizio;
-	bool spegni;  /* alla fine si spegne: e' quello che e' uscito */
-};
-
 /* L'istantanea di un'app chiusa, che svanisce. */
 struct mshell_anim_fantasma {
 	struct wl_list link;
@@ -90,7 +72,6 @@ static struct {
 	struct tinywl_server *server;
 	struct wl_event_source *timer;
 	int spenta;  /* MSHELL_MENO_MOVIMENTO: -1 non ancora letta, 0 no, 1 si' */
-	struct mshell_anim_desktop desktop[MSHELL_DESKTOP_MAX];
 	struct wl_list fantasmi;
 } mshell_anim = { .spenta = -1 };
 
@@ -109,7 +90,7 @@ static int64_t mshell_anim_adesso(void) {
 }
 
 /* Quanto manca, da 0 (inizio) a 1 (fine), con la curva ease-out cubica: parte veloce e
- * rallenta all'arrivo. (Il cambio di desktop usa invece mshell_anim_curva_dolce.) */
+ * rallenta all'arrivo. */
 static double mshell_anim_curva(int64_t inizio, int durata, int64_t ora) {
 	double p = (double)(ora - inizio) / durata;
 	if (p >= 1) {
@@ -120,24 +101,6 @@ static double mshell_anim_curva(int64_t inizio, int durata, int64_t ora) {
 	}
 	double resto = 1 - p;
 	return 1 - resto * resto * resto;
-}
-
-/* Come mshell_anim_curva, ma con la curva ease-in-out cubica: parte piano, accelera e rallenta
- * all'arrivo (la persona, 20/11/2026: il cambio di desktop, come lo scorrimento delle pagine del
- * pannello di ricerca nella barra). */
-static double mshell_anim_curva_dolce(int64_t inizio, int durata, int64_t ora) {
-	double p = (double)(ora - inizio) / durata;
-	if (p >= 1) {
-		return 1;
-	}
-	if (p < 0) {
-		p = 0;
-	}
-	if (p < 0.5) {
-		return 4 * p * p * p;
-	}
-	double resto = -2 * p + 2;
-	return 1 - resto * resto * resto / 2;
 }
 
 static int mshell_anim_scatto(void *data);
@@ -184,9 +147,9 @@ static void mshell_anim_puntatore(void) {
 	process_cursor_motion(mshell_anim.server, (uint32_t)mshell_anim_adesso());
 }
 
-/* Usata da mshell_disponi al posto di mshell_metti_al_posto: t->posto e' appena cambiato. Se
- * l'app si vede, scorre dal punto in cui si trova adesso (anche a meta' di un'altra corsa) al
- * posto nuovo; se non si vede ancora (un'app nuova, o in un desktop spento) ci va subito. */
+/* Al posto di mshell_metti_al_posto, quando la scrivania sistema una finestra: t->posto e' appena
+ * cambiato. Se l'app si vede, scorre dal punto in cui si trova adesso (anche a meta' di un'altra
+ * corsa) al posto nuovo; se non si vede (un'app nuova, o in un gruppo della colonna) ci va subito. */
 static void mshell_anim_sposta(struct tinywl_toplevel *t) {
 	struct mshell_anim_app *a = t->anim;
 	struct tinywl_server *server = t->server;
@@ -203,8 +166,8 @@ static void mshell_anim_sposta(struct tinywl_toplevel *t) {
 			x = t->scene_tree->node.x + geo.x;
 			y = t->scene_tree->node.y + geo.y;
 		}
-		bool si_vede = t->xdg_toplevel->base->surface->mapped && t->desktop >= 0 &&
-			server->desktop[t->desktop].albero->node.enabled;
+		bool si_vede = t->xdg_toplevel->base->surface->mapped && t->gruppo != NULL &&
+			t->gruppo == mshell_al_centro(server);
 		bool stessa_meta = c_era && a->a_x == t->posto.x && a->a_y == t->posto.y;
 		if (stessa_meta) {
 			/* sta gia' andando li': continua la sua corsa */
@@ -232,58 +195,6 @@ static void mshell_anim_conosci(struct tinywl_server *server) {
 		mshell_anim.server = server;
 		wl_list_init(&mshell_anim.fantasmi);
 	}
-}
-
-/* Usata da mshell_mostra: si passa dal desktop "prima" al desktop "quale". "verso" e' -1 per
- * su, 1 per giu', 0 se non c'e' un tasto con una direzione (si guarda il numero). */
-static void mshell_anim_desktop(struct tinywl_server *server, int prima, int quale, int verso) {
-	if (prima == quale) {
-		return;  /* lo stesso desktop: quello che si vede non cambia */
-	}
-	mshell_selettori_puntini(server);  /* i puntini sul bordo destro (selettori.c) */
-	mshell_anim_conosci(server);
-	struct wlr_box schermo;
-	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);
-	int alto = schermo.height;
-	if (mshell_anim_spenta() || alto <= 0) {
-		for (int i = 0; i < server->n_desktop; i++) {
-			mshell_anim.desktop[i].corre = false;
-			wlr_scene_node_set_position(&server->desktop[i].albero->node, 0, 0);
-			wlr_scene_node_set_enabled(&server->desktop[i].albero->node, i == quale);
-		}
-		mshell_anim_puntatore();
-		return;
-	}
-	if (verso == 0) {
-		verso = quale > prima ? 1 : -1;
-	}
-	/* su (-1): il nuovo entra da sopra lo schermo (y negativa), il vecchio esce sotto */
-	double entrata = verso < 0 ? -alto : alto;
-	int64_t ora = mshell_anim_adesso();
-
-	/* il nuovo: se si vede ancora (stava uscendo) parte da dove si trova */
-	struct wlr_scene_node *nuovo = &server->desktop[quale].albero->node;
-	struct mshell_anim_desktop *n = &mshell_anim.desktop[quale];
-	n->da_y = nuovo->enabled ? nuovo->y : entrata;
-	n->a_y = 0;
-	n->inizio = ora;
-	n->corre = true;
-	n->spegni = false;
-	wlr_scene_node_set_position(nuovo, 0, (int)n->da_y);
-	wlr_scene_node_set_enabled(nuovo, true);
-
-	/* il vecchio: esce dalla parte opposta, partendo da dove si trova */
-	struct wlr_scene_node *vecchio = &server->desktop[prima].albero->node;
-	struct mshell_anim_desktop *v = &mshell_anim.desktop[prima];
-	v->da_y = vecchio->y;
-	v->a_y = -entrata;
-	v->inizio = ora;
-	v->corre = true;
-	v->spegni = true;
-
-	/* gli altri che stavano ancora uscendo continuano la loro corsa e poi si spengono */
-	mshell_anim_avvia();
-	mshell_anim_puntatore();
 }
 
 /* Mette l'opacita' "o" a tutte le immagini di un albero (l'app con i suoi menu). */
@@ -355,12 +266,12 @@ static void mshell_anim_sparisce(struct wl_listener *listener, void *data) {
 	struct mshell_anim_app *a = wl_container_of(listener, a, sparisce);
 	struct tinywl_toplevel *t = a->t;
 	struct tinywl_server *server = t->server;
-	if (mshell_anim_spenta() || t->desktop < 0 || t->scene_tree == NULL ||
-			!server->desktop[t->desktop].albero->node.enabled ||
-			!t->scene_tree->node.enabled) {
+	if (mshell_anim_spenta() || t->gruppo == NULL || t->gruppo != mshell_al_centro(server) ||
+			t->scene_tree == NULL || !t->scene_tree->node.enabled) {
 		return;
 	}
-	struct wlr_scene_tree *albero = wlr_scene_tree_create(server->desktop[t->desktop].albero);
+	/* fuori dal gruppo (il gruppo puo' sparire con la sua ultima finestra), sotto le finestre */
+	struct wlr_scene_tree *albero = wlr_scene_tree_create(server->albero_gruppi);
 	if (albero == NULL) {
 		return;
 	}
@@ -416,53 +327,29 @@ static int mshell_anim_scatto(void *data) {
 	int64_t ora = mshell_anim_adesso();
 	bool ancora = false;
 
-	for (int i = 0; i < server->n_desktop; i++) {
-		struct mshell_anim_desktop *s = &mshell_anim.desktop[i];
-		struct wlr_scene_node *nodo = &server->desktop[i].albero->node;
-		if (s->corre) {
-			double e = mshell_anim_curva_dolce(s->inizio, MSHELL_DURATA_DESKTOP, ora);
-			wlr_scene_node_set_position(nodo, 0, (int)(s->da_y + (s->a_y - s->da_y) * e));
-			if (e >= 1) {
-				s->corre = false;
-				if (s->spegni) {
-					/* i desktop nascosti restano spenti, al loro posto */
-					wlr_scene_node_set_enabled(nodo, false);
-					wlr_scene_node_set_position(nodo, 0, 0);
-				}
+	struct tinywl_toplevel *t;
+	wl_list_for_each(t, &server->toplevels, link) {
+		struct mshell_anim_app *a = t->anim;
+		if (a == NULL) {
+			continue;
+		}
+		if (a->muove) {
+			if (mshell_anim_curva(a->muove_da, MSHELL_DURATA_MEDIA, ora) >= 1) {
+				a->muove = false;
+			} else {
+				ancora = true;
+			}
+			mshell_metti_al_posto(t);
+		}
+		if (a->appare) {
+			float o = mshell_anim_quanto_appare(t, ora);
+			mshell_anim_opacita(t->scene_tree, o);
+			if (o >= 1) {
+				a->appare = false;
 			} else {
 				ancora = true;
 			}
 		}
-		struct mshell_desktop *d = &server->desktop[i];
-		for (int j = 0; j < d->n; j++) {
-			struct tinywl_toplevel *t = d->app[j];
-			struct mshell_anim_app *a = t->anim;
-			if (a == NULL) {
-				continue;
-			}
-			if (a->muove) {
-				if (mshell_anim_curva(a->muove_da, MSHELL_DURATA_MEDIA, ora) >= 1) {
-					a->muove = false;
-				} else {
-					ancora = true;
-				}
-				mshell_metti_al_posto(t);
-			}
-			if (a->appare) {
-				float o = mshell_anim_quanto_appare(t, ora);
-				mshell_anim_opacita(t->scene_tree, o);
-				if (o >= 1) {
-					a->appare = false;
-				} else {
-					ancora = true;
-				}
-			}
-		}
-	}
-
-	/* mentre Super e' giu' si vede la cornice del focus (selettori.c): segue le app che scorrono */
-	if (ancora && server->super_giu) {
-		mshell_selettori_aggiorna(server);
 	}
 
 	struct mshell_anim_fantasma *f, *dopo;

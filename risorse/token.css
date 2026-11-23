@@ -194,6 +194,8 @@ window {
 	--effetto-ombra-sollevato-4-allarga: -4px;
 	--effetto-ombra-sollevato-pieno-3-allarga: -2px;
 	--effetto-ombra-sollevato-pieno-4-allarga: -6px;
+	--effetto-ombra-finestra-2-y: 2px;     /* lo strato piccolo: uguale nei due temi (Figma) */
+	--effetto-ombra-finestra-2-raggio: 4px;
 	--effetto-ombra-finestra-3-allarga: -6px;
 	--effetto-ombra-finestra-4-allarga: -16px;
 	--effetto-ombra-barra-3-allarga: -4px;

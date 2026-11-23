@@ -1,5 +1,6 @@
 # prova-veloce.py: LA PROVA VELOCE DELLA SCRIVANIA, con un QEMU sempre acceso (decisione della
-# persona, 19/11/2026). Gira su Windows, dalla cartella del progetto:
+# persona, 19/11/2026). Gira su Windows (QEMU per PC) e sul Mac (QEMU di Homebrew per ARM, con il
+# disco build/disco-qemu-mac.img), dalla cartella del progetto:
 #
 #   uv run --with pillow python -I strumenti/prova-veloce.py <copione>     (un file)
 #   uv run --with pillow python -I strumenti/prova-veloce.py -c "tasti meta_l-tab; foto disposizioni"
@@ -25,6 +26,8 @@
 #   aspetta <ms>           aspetta i millisecondi indicati
 #   foto <nome>            fotografa lo schermo in build/prova-<posto>/foto/<nome>.png
 #   clic <x> <y>           clic con il tasto sinistro sul pixel x, y dello schermo
+#   premi / rilascia       tiene giu' / lascia il tasto sinistro dove sta il puntatore (con
+#                          "muovi" in mezzo: un trascinamento)
 #   app                    apre l'app di prova (come utente1, nel desktop attuale)
 #   seriale <comando>      esegue un comando nella shell dell'amministratore e ne stampa l'uscita
 #
@@ -54,12 +57,18 @@ RADICE = PROVA / "radice"
 FOTO = PROVA / "foto"
 # Il disco della costruzione completa: nella cartella del progetto; gli agenti lavorano in una copia
 # (.claude/worktrees/<nome>) dove non c'e', e usano quello della cartella principale.
-DISCO_BASE = QUI / "build" / "disco-qemu-pc.img"
+MAC = sys.platform == "darwin"
+NOME_DISCO = "disco-qemu-mac.img" if MAC else "disco-qemu-pc.img"
+DISCO_BASE = QUI / "build" / NOME_DISCO
 if not DISCO_BASE.exists() and ".claude" in QUI.parts:
-    DISCO_BASE = Path(*QUI.parts[:QUI.parts.index(".claude")]) / "build" / "disco-qemu-pc.img"
+    DISCO_BASE = Path(*QUI.parts[:QUI.parts.index(".claude")]) / "build" / NOME_DISCO
 DISCO = PROVA / "disco.img"
-QEMU = r"C:\Program Files\qemu\qemu-system-x86_64.exe"
-FIRMWARE = r"C:\Program Files\qemu\share\edk2-x86_64-code.fd"
+if MAC:
+    QEMU = "/opt/homebrew/bin/qemu-system-aarch64"
+    FIRMWARE = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
+else:
+    QEMU = r"C:\Program Files\qemu\qemu-system-x86_64.exe"
+    FIRMWARE = r"C:\Program Files\qemu\share\edk2-x86_64-code.fd"
 P_MONITOR, P_SERIALE, P_QMP = 4450 + 10 * POSTO, 4451 + 10 * POSTO, 4452 + 10 * POSTO
 ATTREZZI = "mshell-debian-attrezzi"
 
@@ -96,21 +105,34 @@ def compila():
 
 def accendi():
     if not DISCO_BASE.exists():
-        sys.exit("FALLITA: manca build/disco-qemu-pc.img: serve una costruzione completa (agente principale)")
+        sys.exit(f"FALLITA: manca build/{NOME_DISCO}: serve una costruzione completa (agente principale)")
     if not DISCO.exists() or DISCO.stat().st_mtime < DISCO_BASE.stat().st_mtime:
         shutil.copyfile(DISCO_BASE, DISCO)
         scrivi("copiato il disco di prova")
-    argomenti = [QEMU, "-machine", "q35", "-accel", "whpx", "-smp", "4", "-nodefaults", "-m", "2048",
-                 "-drive", f"if=pflash,format=raw,readonly=on,file={FIRMWARE}",
+    if MAC:
+        # la macchina ARM di QEMU con l'accelerazione del Mac (hvf); niente tastiera di serie: una USB
+        macchina = ["-machine", "virt", "-accel", "hvf", "-cpu", "host", "-smp", "4", "-nodefaults", "-m", "2048",
+                    "-drive", f"if=pflash,format=raw,readonly=on,file={FIRMWARE}"]
+        video = ["-device", "virtio-gpu-pci,xres=1280,yres=800"]
+        usb = ["-device", "qemu-xhci", "-device", "usb-tablet", "-device", "usb-kbd"]
+    else:
+        macchina = ["-machine", "q35", "-accel", "whpx", "-smp", "4", "-nodefaults", "-m", "2048",
+                    "-drive", f"if=pflash,format=raw,readonly=on,file={FIRMWARE}"]
+        video = ["-vga", "none", "-device", "virtio-vga,xres=1280,yres=800"]
+        usb = ["-device", "qemu-xhci", "-device", "usb-tablet"]
+    argomenti = [QEMU, *macchina,
                  "-drive", f"if=none,id=disco,file={DISCO},format=raw", "-snapshot",
                  "-device", "virtio-blk-pci,drive=disco,bootindex=1",
-                 "-vga", "none", "-device", "virtio-vga,xres=1280,yres=800",
-                 "-device", "qemu-xhci", "-device", "usb-tablet", "-display", "none",
+                 *video, *usb, "-display", "none",
                  "-monitor", f"tcp:127.0.0.1:{P_MONITOR},server=on,wait=off",
                  "-serial", f"tcp:127.0.0.1:{P_SERIALE},server=on,wait=off",
                  "-qmp", f"tcp:127.0.0.1:{P_QMP},server=on,wait=off"]
-    nascosta = 0x08000000 | 0x00000008   # CREATE_NO_WINDOW | DETACHED_PROCESS: niente terminale che compare
-    q = subprocess.Popen(argomenti, creationflags=nascosta, stdin=subprocess.DEVNULL,
+    if MAC:
+        nascosta = {"start_new_session": True}  # resta acceso anche dopo la fine dello script
+    else:
+        # CREATE_NO_WINDOW | DETACHED_PROCESS: niente terminale che compare
+        nascosta = {"creationflags": 0x08000000 | 0x00000008}
+    q = subprocess.Popen(argomenti, stdin=subprocess.DEVNULL, **nascosta,
                          stdout=open(PROVA / "qemu.log", "w"), stderr=subprocess.STDOUT)
     (PROVA / "qemu.pid").write_text(str(q.pid))
     for _ in range(100):
@@ -292,6 +314,11 @@ def esegui(copione, ser):
             ppm.unlink()
             x, y = (int(v) for v in resto.split())
             qmp.clic(x, y, larghezza, altezza)
+        elif cosa in ("premi", "rilascia"):
+            # tiene giu' (o lascia) il tasto sinistro dove sta il puntatore: con "muovi" in mezzo
+            # e' un trascinamento
+            qmp.invia({"execute": "input-send-event", "arguments": {"events": [
+                {"type": "btn", "data": {"down": cosa == "premi", "button": "left"}}]}})
         elif cosa == "app":
             ser.comando("(runuser -u utente1 -- env XDG_RUNTIME_DIR=/run/user/1000 WAYLAND_DISPLAY=wayland-0 "
                         "mshell-prova >/dev/null 2>&1 &)")
@@ -322,13 +349,19 @@ def spegni():
     if pid_file.exists():
         pid = pid_file.read_text().strip()
         for _ in range(50):
-            vivo = pid in subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
-                                         capture_output=True, text=True).stdout
+            if MAC:
+                vivo = subprocess.run(["kill", "-0", pid], capture_output=True).returncode == 0
+            else:
+                vivo = pid in subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                                             capture_output=True, text=True).stdout
             if not vivo:
                 break
             time.sleep(0.1)
         else:
-            subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True)
+            if MAC:
+                subprocess.run(["kill", "-9", pid], capture_output=True)
+            else:
+                subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True)
         pid_file.unlink()
     scrivi("QEMU di prova spento")
 

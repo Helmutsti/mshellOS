@@ -1,22 +1,23 @@
 /* MSHELL: I LIVELLI E L'ELENCO DELLE APP. Questo file non si compila da solo: tinywl.c lo
  * include (#include "livelli.c") subito prima di keyboard_handle_modifiers, cosi' vede le sue
- * strutture e le funzioni dei desktop. In tinywl.c restano solo gli agganci, segnati "MSHELL:".
+ * strutture e le funzioni della scrivania (scrivania.c). In tinywl.c restano solo gli agganci, segnati "MSHELL:".
  *
  * I LIVELLI (protocollo layer-shell, wlr_layer_shell_v1). E' il modo standard con cui un
  * programma della scrivania (la barra di stato, mshell-barra) chiede al compositore una
  * superficie che non e' un'app: dice in quale livello sta, a quali bordi dello schermo si
  * attacca e se vuole la tastiera. I quattro livelli, dal basso:
  *     sfondo
- *     "background", "bottom"    sotto i desktop, sopra lo sfondo
- *     i desktop con le app
- *     "top", "overlay"          sopra i desktop (la barra e i suoi menu)
+ *     "background", "bottom"    sotto la scrivania, sopra lo sfondo
+ *     la scrivania (la colonna dei gruppi e le finestre)
+ *     "top", "overlay"          sopra la scrivania (la barra e i suoi menu)
  * - LA ZONA ESCLUSIVA (la striscia che una superficie chiede di tenere libera dalle app) qui
- *   NON sposta le app: la barra vive nei 32 px di bordo che le app lasciano comunque liberi
- *   (MSHELL_BORDO). Quindi ogni superficie si sistema rispetto a tutto lo schermo.
+ *   NON sposta le app: la barra vive nella striscia in alto dove le finestre non si mettono
+ *   (MSHELL_SOTTO_BARRA, scrivania.c). Quindi ogni superficie si sistema rispetto a tutto lo
+ *   schermo.
  * - LA TASTIERA: una superficie di "top" o "overlay" che la chiede in modo esclusivo la prende
  *   appena compare e la tiene finche' non sparisce o smette di chiederla (cosi' un menu aperto
  *   riceve Esc). Una che la chiede "a richiesta" (on_demand) la prende quando ci si fa clic.
- *   Quando la superficie la lascia, la tastiera torna all'app col focus del desktop che si vede.
+ *   Quando la superficie la lascia, la tastiera torna alla finestra davanti del gruppo al centro.
  *   Mentre la tiene una superficie esclusiva, le app non la possono riprendere (focus_toplevel).
  * - I POPUP (i menu a comparsa) delle superfici dei livelli si disegnano nell'albero della loro
  *   superficie e si tengono dentro lo schermo.
@@ -24,10 +25,10 @@
  * L'ELENCO DELLE APP (protocollo wlr-foreign-toplevel-management, l'aiuto di wlroots). Fa sapere
  * agli altri programmi quali app ci sono, con titolo e nome, e quale ha il focus: la barra ci
  * legge il titolo da mostrare a sinistra. Una voce nasce quando l'app compare, sparisce con lei,
- * e il titolo si aggiorna quando l'app lo cambia. "Ha il focus" vuol dire: e' l'app col focus
- * del desktop che si vede, anche mentre un menu della barra tiene la tastiera.
+ * e il titolo si aggiorna quando l'app lo cambia. "Ha il focus" vuol dire: e' la finestra davanti
+ * del gruppo al centro, anche mentre un menu della barra tiene la tastiera.
  * Chi legge l'elenco puo' anche chiedere di ATTIVARE un'app: il cassetto delle app lo fa quando
- * si sceglie un'app gia' aperta. Il compositore passa al desktop che la ospita e le da' il focus.
+ * si sceglie un'app gia' aperta. Il compositore porta al centro il suo gruppo e le da' il focus.
  *
  * IL CASSETTO DELLE APP lo disegna la barra (mshell-barra, utente/barra/cassetto.c). Super+spazio
  * lo prende il compositore, che lo dice alla barra con il segnale SIGUSR1 ("apri o chiudi"): la
@@ -127,8 +128,8 @@ static void mshell_livelli_tastiera(struct mshell_livelli *l, struct wlr_layer_s
 		return;
 	}
 	/* nessuna la vuole in esclusiva: se ce l'aveva una che sparisce o non la vuole piu', la
-	 * tastiera torna all'app col focus del desktop che si vede (ma non mentre un menu a comparsa
-	 * ha la presa: la tastiera e' sua finche' non si chiude) */
+	 * tastiera torna alla finestra davanti del gruppo al centro (ma non mentre un menu a
+	 * comparsa ha la presa: la tastiera e' sua finche' non si chiude) */
 	struct wlr_layer_surface_v1 *ls = l->tastiera;
 	if (ls != NULL && ls != tranne && ls->surface->mapped && mshell_livelli_presa(l->server)) {
 		return;
@@ -137,7 +138,7 @@ static void mshell_livelli_tastiera(struct mshell_livelli *l, struct wlr_layer_s
 			ls->current.keyboard_interactive == ZWLR_LAYER_SURFACE_V1_KEYBOARD_INTERACTIVITY_NONE)) {
 		l->tastiera = NULL;
 		if (seat->keyboard_state.focused_surface == ls->surface) {
-			mshell_mostra(l->server, l->server->attuale);
+			mshell_focus_centro(l->server);
 		}
 	}
 }
@@ -394,23 +395,17 @@ static void mshell_elenco_titolo(struct wl_listener *listener, void *data) {
 	wlr_foreign_toplevel_handle_v1_set_title(t->voce, titolo ? titolo : "");
 }
 
-/* Qualcuno (il cassetto) chiede di attivare l'app t: si passa al suo desktop, scorrendo verso
- * di lui, e lei prende il focus. Se la tastiera e' del cassetto, l'app la prende quando il
- * cassetto si chiude (mshell_livelli_tastiera). */
+/* Qualcuno (il cassetto) chiede di attivare l'app t: il suo gruppo va al centro e lei passa
+ * davanti, col focus. Se la tastiera e' del cassetto, l'app la prende quando il cassetto si
+ * chiude (mshell_livelli_tastiera). */
 static void mshell_elenco_richiesta_attiva(struct wl_listener *listener, void *data) {
 	struct tinywl_toplevel *t = wl_container_of(listener, t, attiva);
 	struct tinywl_server *server = t->server;
-	if (t->desktop < 0) {
+	if (t->gruppo == NULL) {
 		return;
 	}
-	struct mshell_desktop *d = &server->desktop[t->desktop];
-	for (int i = 0; i < d->n; i++) {
-		if (d->app[i] == t) {
-			d->focus = i;
-		}
-	}
-	int verso = t->desktop == server->attuale ? 0 : (t->desktop > server->attuale ? 1 : -1);
-	mshell_mostra_verso(server, t->desktop, verso);
+	mshell_gruppo_davanti(t);
+	mshell_porta_al_centro(server, t->gruppo);
 }
 
 static void mshell_elenco_compare(struct tinywl_toplevel *t) {
@@ -436,7 +431,7 @@ static void mshell_elenco_sparisce(struct tinywl_toplevel *t) {
 	t->voce = NULL;
 }
 
-/* L'app col focus e' t (NULL: nessuna, per esempio un desktop vuoto). Lo sanno l'elenco e le app
+/* L'app col focus e' t (NULL: nessuna, per esempio nessuna finestra al centro). Lo sanno l'elenco e le app
  * stesse ("attiva", che di solito cambia il loro aspetto). Si dice solo a chi cambia, perche'
  * ogni avviso all'app le fa ridisegnare la finestra. */
 static void mshell_elenco_attiva(struct tinywl_server *server, struct tinywl_toplevel *t) {
@@ -468,8 +463,8 @@ static void mshell_livelli_cassetto(struct tinywl_server *server) {
 	wlr_log(WLR_ERROR, "mshell: niente cassetto, la barra non c'e'");
 }
 
-/* Prepara tutto, all'avvio, dopo l'albero dei desktop: gli alberi dei livelli sotto e sopra i
- * desktop, il protocollo dei livelli (versione 4, quella di wlroots 0.18) e l'elenco. */
+/* Prepara tutto, all'avvio, dopo la scrivania: gli alberi dei livelli sotto e sopra la
+ * scrivania, il protocollo dei livelli (versione 4, quella di wlroots 0.18) e l'elenco. */
 static void mshell_livelli_crea(struct tinywl_server *server) {
 	struct mshell_livelli *l = calloc(1, sizeof(*l));
 	server->livelli = l;
@@ -481,9 +476,9 @@ static void mshell_livelli_crea(struct tinywl_server *server) {
 		l->albero[i] = wlr_scene_tree_create(&server->scene->tree);
 	}
 	wlr_scene_node_place_below(&l->albero[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND]->node,
-		&server->albero_desktop->node);
+		&mshell_sc.colonna->node);
 	wlr_scene_node_place_below(&l->albero[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]->node,
-		&server->albero_desktop->node);
+		&mshell_sc.colonna->node);
 	l->shell = wlr_layer_shell_v1_create(server->wl_display, 4);
 	l->nuova_superficie.notify = mshell_livelli_nuova_superficie;
 	wl_signal_add(&l->shell->events.new_surface, &l->nuova_superficie);

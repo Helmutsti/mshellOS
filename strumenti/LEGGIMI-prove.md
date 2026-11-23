@@ -5,7 +5,7 @@ della persona; qui c'e' come si usa in mshell. Tempi misurati il 19/11/2026 su q
 
 | Prova | Comando | Tempo | Chi |
 |---|---|---|---|
-| **Prova veloce** | `uv run --with pillow python -I strumenti/prova-veloce.py -c "<copione>"` | ~20 s (la prima volta ~1 min: accende QEMU) | tutti, sempre |
+| **Prova veloce** | `uv run --with pillow python -I strumenti/prova-veloce.py -c "<copione>"` | ~20 s (la prima volta ~1 min: accende QEMU) | tutti, sempre. Gira su Windows (QEMU per PC) e sul Mac (QEMU di Homebrew, disco `build/disco-qemu-mac.img`) |
 | **Aggiornamento del disco** | `docker run --rm --privileged -v "<cartella>:/w" mshell-debian-attrezzi sh /w/strumenti/aggiorna-disco.sh` | ~3 s | quando la prova veloce segnala un file nuovo |
 | **Costruzione completa** | `avvia.ps1` (o `costruisci.sh qemu-pc` nel container) | ~6 min | solo l'agente principale: un controllo automatico la blocca agli agenti (`.claude/settings.json`) |
 
@@ -27,6 +27,7 @@ Una istruzione per riga o separate da `;`; `#` per i commenti.
 | `muovi 640 400` | sposta il puntatore sul pixel x y (schermo 1280x800), senza clic |
 | `aspetta 300` | aspetta i millisecondi |
 | `clic 1200 16` | clic con il tasto sinistro sul pixel x, y dello schermo |
+| `premi` / `rilascia` | tiene giu' / lascia il tasto sinistro dove sta il puntatore (con `muovi` in mezzo: un trascinamento) |
 | `foto nome` | foto dello schermo in `build/prova-<posto>/foto/nome.png` |
 | `app` | apre l'app di prova nel desktop attuale |
 | `seriale <comando>` | comando nella shell dell'amministratore, con l'uscita |

@@ -38,12 +38,13 @@ wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xd
 # strumenti/Dockerfile) e usa le librerie di OpenGL del sistema (EGL, GLES 2, GBM, DRM).
 # --export-dynamic: le funzioni della scena di SceneFX si vedono anche da wlroots, che le chiama
 # per le superfici delle app e dei livelli (spiegato in utente/compositore/effetti.c).
+# pangocairo: il testo e le icone della scrivania (scrivania.c); nel sistema c'e' gia', lo porta GTK.
 SCENEFX=$(pkg-config --variable=libdir scenefx-0.2)/libscenefx-0.2.a
 gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" \
-    $(pkg-config --cflags scenefx-0.2 wlroots-0.18 wayland-server xkbcommon) \
+    $(pkg-config --cflags scenefx-0.2 wlroots-0.18 wayland-server xkbcommon pangocairo) \
     -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c "$SCENEFX" \
     -Wl,--export-dynamic \
-    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon egl glesv2 gbm libdrm pixman-1) -lm
+    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon egl glesv2 gbm libdrm pixman-1 pangocairo) -lm
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
     utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
 mkdir -p "$RADICE/usr/share/applications"

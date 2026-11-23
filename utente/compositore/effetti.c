@@ -1,6 +1,6 @@
 /* MSHELL: GLI EFFETTI (angoli arrotondati, vetro sfocato, ombre), con SceneFX. Questo file non si
  * compila da solo: tinywl.c lo include subito prima di animazioni.c, e lo usano le app (tinywl.c),
- * la cornice e i selettori (selettori.c) e i livelli (livelli.c).
+ * la scrivania (scrivania.c) e i livelli (livelli.c).
  *
  * SCENEFX (decisione della persona, 19/11/2026; https://github.com/wlrfx/scenefx, versione 0.2.1,
  * la serie per wlroots 0.18): prende il posto della scena di wlroots. Ha le stesse funzioni
@@ -16,9 +16,9 @@
  * LE MISURE vengono dal disegno in Figma ("mshell – interfaccia", pagina "Navigazione", sezione
  * "Navigazione – chiaro e scuro"; variabili della collezione "Misure"):
  *   raggio/finestra 12   le app, il pannello delle disposizioni, i menu della barra
- *   raggio/controllo 6   le miniature dei selettori
+ *   raggio/controllo 6   i controlli
  *   il vetro: sfocatura dello sfondo 14 (BACKGROUND_BLUR di Figma)
- *   ombra/sollevato      le miniature dei desktop; ombra/sovrapposto: il pannello delle disposizioni
+ *   ombra/sollevato      le miniature dei gruppi (scrivania.c); ombra/sovrapposto: i menu
  *
  * IL VETRO DEI LIVELLI. Il compositore sfoca quello che sta dietro le superfici dei livelli
  * (layer-shell) che si presentano con uno dei nomi (namespace) di mshell_vetro_nomi, e dietro i
@@ -66,6 +66,10 @@ struct mshell_ombra {
 static struct mshell_ombra mshell_ombra_sollevato;
 #define MSHELL_STRATI_SOVRAPPOSTO 3
 static struct mshell_ombra mshell_ombre_sovrapposto[MSHELL_STRATI_SOVRAPPOSTO];
+/* ombra/finestra (le finestre e le loro miniature, il disegno dello Stage Manager): gli strati 2, 3
+ * e 4 (il primo e' un'ombra interna quasi trasparente) */
+#define MSHELL_STRATI_FINESTRA 3
+static struct mshell_ombra mshell_ombre_finestra[MSHELL_STRATI_FINESTRA];
 
 /* Lo strato "strato" dell'ombra "nome" (per esempio "sovrapposto", 3) dai token. */
 static void mshell_effetti_ombra_leggi(const char *nome, int strato, struct mshell_ombra *o) {
@@ -79,7 +83,7 @@ static void mshell_effetti_ombra_leggi(const char *nome, int strato, struct mshe
 	snprintf(t, sizeof(t), "effetto-ombra-%s-%d-allarga", nome, strato);
 	o->allarga = mshell_token_numero(t);
 }
-/* il pannello delle disposizioni (selettori.c) per ora ne usa uno strato solo, il piu' largo */
+/* uno strato solo, il piu' largo, per chi ne vuole uno */
 #define mshell_ombra_sovrapposto (mshell_ombre_sovrapposto[2])
 
 /* La sfocatura del vetro (uguale per tutto), a "forza" da 0 a 1: all'avvio 1; la comparsa del
@@ -103,6 +107,9 @@ static void mshell_effetti_avvia(struct wlr_scene *scena) {
 	mshell_effetti_ombra_leggi("sollevato", 4, &mshell_ombra_sollevato);
 	for (int i = 0; i < MSHELL_STRATI_SOVRAPPOSTO; i++) {
 		mshell_effetti_ombra_leggi("sovrapposto", 2 + i, &mshell_ombre_sovrapposto[i]);
+	}
+	for (int i = 0; i < MSHELL_STRATI_FINESTRA; i++) {
+		mshell_effetti_ombra_leggi("finestra", 2 + i, &mshell_ombre_finestra[i]);
 	}
 	mshell_effetti_vetro_forza(scena, 1.0f);
 }
@@ -173,12 +180,65 @@ static void mshell_effetti_angoli(struct wlr_scene_node *superficie, struct wlr_
 	wlr_scene_node_for_each_buffer(superficie, mshell_effetti_angolo_una, xdg->surface);
 }
 
-static void mshell_effetti_app(struct wlr_scene_tree *albero, struct wlr_xdg_surface *xdg) {
-	if (wl_list_empty(&albero->children)) {
+/* Gli strati di un'ombra fatta di piu' nodi (le finestre, i menu dei livelli), che la seguono. */
+struct mshell_ombre_menu {
+	struct wlr_scene_shadow *strato[MSHELL_STRATI_SOVRAPPOSTO];
+};
+
+static bool mshell_effetti_e_ombra(struct wlr_scene_node *n, const struct mshell_ombre_menu *ombre) {
+	for (int i = 0; i < MSHELL_STRATI_SOVRAPPOSTO; i++) {
+		if (ombre->strato[i] != NULL && n == &ombre->strato[i]->node) {
+			return true;
+		}
+	}
+	return false;
+}
+
+/* L'ombra a strati "o" (n strati) sotto il riquadro r dell'albero, nei nodi "ombre" (fatti la
+ * prima volta, in fondo all'albero: lo seguono e se ne vanno con lui). */
+static void mshell_effetti_ombre_metti(struct wlr_scene_tree *albero, struct mshell_ombre_menu *ombre,
+		struct wlr_box r, int raggio, const struct mshell_ombra *o, int n) {
+	for (int i = 0; i < n; i++) {
+		if (ombre->strato[i] == NULL) {
+			ombre->strato[i] = mshell_effetti_ombra_nuova(albero, &o[i]);
+			if (ombre->strato[i] == NULL) {
+				continue;
+			}
+			wlr_scene_node_lower_to_bottom(&ombre->strato[i]->node);
+		}
+		wlr_scene_node_set_enabled(&ombre->strato[i]->node,
+			mshell_effetti_ombra_metti(ombre->strato[i], r, raggio, &o[i]));
+	}
+}
+
+/* Gli angoli della finestra e la sua ombra/finestra (il disegno dello Stage Manager), sotto la
+ * finestra vera (la geometria). Si rifa' a ogni invio dell'app. */
+static void mshell_effetti_app(struct wlr_scene_tree *albero, struct wlr_xdg_surface *xdg,
+		struct mshell_ombre_menu *ombre) {
+	struct wlr_scene_node *n, *superficie = NULL;
+	wl_list_for_each(n, &albero->children, link) {
+		if (!mshell_effetti_e_ombra(n, ombre)) {
+			superficie = n;  /* la superficie dell'app: il primo figlio che non e' l'ombra */
+			break;
+		}
+	}
+	if (superficie == NULL) {
 		return;
 	}
-	struct wlr_scene_node *superficie = wl_container_of(albero->children.next, superficie, link);
 	mshell_effetti_angoli(superficie, xdg);
+	struct wlr_box geo;
+	wlr_xdg_surface_get_geometry(xdg, &geo);
+	mshell_effetti_ombre_metti(albero, ombre, geo, MSHELL_RAGGIO_FINESTRA, mshell_ombre_finestra,
+		MSHELL_STRATI_FINESTRA);
+}
+
+/* Lo strato o rimpicciolito di "scala" (l'ombra delle miniature, come in Figma). */
+static struct mshell_ombra mshell_effetti_ombra_scala(const struct mshell_ombra *o, double scala) {
+	struct mshell_ombra s = *o;
+	s.y = (int)(o->y * scala + 0.5);
+	s.sfocatura = (int)(o->sfocatura * scala + 0.5);
+	s.allarga = (int)(o->allarga * scala + (o->allarga < 0 ? -0.5 : 0.5));
+	return s;
 }
 
 static bool mshell_effetti_nome_fra(const char *nome, const char *const *nomi) {
@@ -211,10 +271,6 @@ static void mshell_effetti_livello(struct wlr_scene_tree *albero, const char *no
  * e l'ombra/sovrapposto. Si chiama a ogni invio del menu. Gli strati dell'ombra ("ombre", del
  * menu) nascono qui la prima volta, nell'albero del menu e sotto di lui: cosi' lo seguono, si
  * nascondono con lui e se ne vanno quando si distrugge (con il suo albero). */
-struct mshell_ombre_menu {
-	struct wlr_scene_shadow *strato[MSHELL_STRATI_SOVRAPPOSTO];
-};
-
 static void mshell_effetti_menu(struct wlr_scene_tree *albero, struct wlr_xdg_surface *xdg,
 		const char *nome_genitore, struct mshell_ombre_menu *ombre) {
 	if (!mshell_effetti_nome_fra(nome_genitore, mshell_menu_nomi)) {
@@ -224,11 +280,7 @@ static void mshell_effetti_menu(struct wlr_scene_tree *albero, struct wlr_xdg_su
 	 * dell'albero che non e' uno strato dell'ombra (gli strati stanno sotto di lei). */
 	struct wlr_scene_node *n;
 	wl_list_for_each(n, &albero->children, link) {
-		bool ombra = false;
-		for (int i = 0; i < MSHELL_STRATI_SOVRAPPOSTO; i++) {
-			ombra = ombra || (ombre->strato[i] != NULL && n == &ombre->strato[i]->node);
-		}
-		if (!ombra) {
+		if (!mshell_effetti_e_ombra(n, ombre)) {
 			mshell_effetti_angoli(n, xdg);
 			break;
 		}
