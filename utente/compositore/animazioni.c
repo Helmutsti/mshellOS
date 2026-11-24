@@ -74,6 +74,7 @@ static struct {
 	struct wl_event_source *timer;
 	int spenta;  /* MSHELL_MENO_MOVIMENTO: -1 non ancora letta, 0 no, 1 si' */
 	struct wl_list fantasmi;
+	struct wl_list sfumature;  /* mshell_sfuma.link */
 } mshell_anim = { .spenta = -1 };
 
 static bool mshell_anim_spenta(void) {
@@ -124,8 +125,8 @@ static double mshell_anim_curva_dolce(int64_t inizio, int durata, int64_t ora) {
 static int mshell_anim_scatto(void *data);
 /* Il passaggio fra i gruppi (scrivania-voli.c): true se continua. */
 static bool mshell_voli_scatto(struct tinywl_server *server, int64_t ora);
-/* Lo split di un gruppo (scrivania-tasti.c): true se si sta ancora muovendo. */
-static bool mshell_ventaglio_scatto(struct tinywl_server *server, int64_t ora);
+/* La colonna dei gruppi (scrivania.c): true se qualcosa si muove ancora. */
+static bool mshell_colonna_scatto(struct tinywl_server *server, int64_t ora);
 
 /* Fa partire il timer, se non sta gia' andando. */
 static void mshell_anim_avvia(void) {
@@ -211,12 +212,143 @@ static void mshell_anim_sposta(struct tinywl_toplevel *t) {
 	}
 }
 
-/* La prima volta: il compositore da animare (ce n'e' uno solo) e l'elenco delle istantanee. */
+/* La prima volta: il compositore da animare (ce n'e' uno solo) e gli elenchi. */
 static void mshell_anim_conosci(struct tinywl_server *server) {
 	if (mshell_anim.server == NULL) {
 		mshell_anim.server = server;
 		wl_list_init(&mshell_anim.fantasmi);
+		wl_list_init(&mshell_anim.sfumature);
 	}
+}
+
+/* LA SFUMATURA DI UN ALBERO (le pill, i suggerimenti, il pannello "Disponi": la persona,
+ * 23/11/2026, "non voglio vedere cose scattose"): in MSHELL_DURATA_BREVE tutto quello che c'e'
+ * dentro passa da trasparente a pieno (entra) o al contrario (esce: alla fine l'albero si butta).
+ * I rettangoli e le ombre non hanno un'opacita': si moltiplica il loro colore (gia' moltiplicato
+ * per l'alfa, come vuole wlroots), partendo da quello che avevano; le immagini hanno l'opacita'.
+ * Chi butta o rifa' i nodi di un albero che sta sfumando chiama prima mshell_sfuma_ferma. */
+#define MSHELL_SFUMA_NODI 96
+struct mshell_sfuma {
+	struct wl_list link;
+	struct wlr_scene_tree *albero;
+	int n;
+	struct wlr_scene_node *nodo[MSHELL_SFUMA_NODI];
+	float colore[MSHELL_SFUMA_NODI][4];  /* il colore pieno (l'opacita' per le immagini) */
+	int64_t inizio;
+	bool esce;
+};
+
+static void mshell_sfuma_raccogli(struct mshell_sfuma *s, struct wlr_scene_tree *t) {
+	struct wlr_scene_node *n;
+	wl_list_for_each(n, &t->children, link) {
+		if (s->n >= MSHELL_SFUMA_NODI) {
+			return;
+		}
+		switch (n->type) {
+		case WLR_SCENE_NODE_TREE:
+			mshell_sfuma_raccogli(s, wlr_scene_tree_from_node(n));
+			break;
+		case WLR_SCENE_NODE_RECT:
+			memcpy(s->colore[s->n], wlr_scene_rect_from_node(n)->color, sizeof(s->colore[0]));
+			s->nodo[s->n++] = n;
+			break;
+		case WLR_SCENE_NODE_SHADOW:
+			memcpy(s->colore[s->n], wlr_scene_shadow_from_node(n)->color, sizeof(s->colore[0]));
+			s->nodo[s->n++] = n;
+			break;
+		case WLR_SCENE_NODE_BUFFER:
+			s->colore[s->n][0] = wlr_scene_buffer_from_node(n)->opacity;
+			s->nodo[s->n++] = n;
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+static void mshell_sfuma_metti(struct mshell_sfuma *s, float o) {
+	for (int i = 0; i < s->n; i++) {
+		struct wlr_scene_node *n = s->nodo[i];
+		float c[4] = { s->colore[i][0] * o, s->colore[i][1] * o, s->colore[i][2] * o, s->colore[i][3] * o };
+		if (n->type == WLR_SCENE_NODE_RECT) {
+			wlr_scene_rect_set_color(wlr_scene_rect_from_node(n), c);
+		} else if (n->type == WLR_SCENE_NODE_SHADOW) {
+			wlr_scene_shadow_set_color(wlr_scene_shadow_from_node(n), c);
+		} else if (n->type == WLR_SCENE_NODE_BUFFER) {
+			wlr_scene_buffer_set_opacity(wlr_scene_buffer_from_node(n), s->colore[i][0] * o);
+		}
+	}
+}
+
+/* Ferma la sfumatura dell'albero (se ce n'e' una): tutto torna pieno. */
+static void mshell_sfuma_ferma(struct wlr_scene_tree *albero) {
+	if (mshell_anim.server == NULL) {
+		return;
+	}
+	struct mshell_sfuma *s, *dopo;
+	wl_list_for_each_safe(s, dopo, &mshell_anim.sfumature, link) {
+		if (s->albero == albero) {
+			if (!s->esce) {
+				mshell_sfuma_metti(s, 1);
+			}
+			wl_list_remove(&s->link);
+			free(s);
+		}
+	}
+}
+
+static void mshell_sfuma_parti(struct wlr_scene_tree *albero, bool esce) {
+	struct mshell_sfuma *s = calloc(1, sizeof(*s));
+	if (s == NULL) {
+		if (esce) {
+			wlr_scene_node_destroy(&albero->node);
+		}
+		return;
+	}
+	s->albero = albero;
+	s->esce = esce;
+	s->inizio = mshell_anim_adesso();
+	mshell_sfuma_raccogli(s, albero);
+	mshell_sfuma_metti(s, esce ? 1 : 0);
+	wl_list_insert(&mshell_anim.sfumature, &s->link);
+	mshell_anim_avvia();
+}
+
+/* Quello che c'e' nell'albero compare sfumando. */
+static void mshell_sfuma_entra(struct wlr_scene_tree *albero) {
+	mshell_sfuma_ferma(albero);
+	if (mshell_anim.server == NULL || mshell_anim_spenta() || wl_list_empty(&albero->children)) {
+		return;
+	}
+	mshell_sfuma_parti(albero, false);
+}
+
+/* Quello che c'e' nell'albero se ne va sfumando: passa in un albero accanto (stesso posto), che si
+ * butta alla fine; l'albero resta vuoto, pronto per altro. */
+static void mshell_sfuma_via(struct wlr_scene_tree *albero) {
+	mshell_sfuma_ferma(albero);
+	if (wl_list_empty(&albero->children)) {
+		return;
+	}
+	if (mshell_anim.server == NULL || mshell_anim_spenta() || albero->node.parent == NULL ||
+			!albero->node.enabled) {
+		struct wlr_scene_node *n, *dopo;
+		wl_list_for_each_safe(n, dopo, &albero->children, link) {
+			wlr_scene_node_destroy(n);
+		}
+		return;
+	}
+	struct wlr_scene_tree *via = wlr_scene_tree_create(albero->node.parent);
+	if (via == NULL) {
+		return;
+	}
+	wlr_scene_node_set_position(&via->node, albero->node.x, albero->node.y);
+	wlr_scene_node_place_above(&via->node, &albero->node);
+	struct wlr_scene_node *n, *dopo;
+	wl_list_for_each_safe(n, dopo, &albero->children, link) {
+		wlr_scene_node_reparent(n, via);
+	}
+	mshell_sfuma_parti(via, true);
 }
 
 /* Mette l'opacita' "o" a tutte le immagini di un albero (l'app con i suoi menu). */
@@ -374,6 +506,21 @@ static int mshell_anim_scatto(void *data) {
 		}
 	}
 
+	struct mshell_sfuma *sf, *sf_dopo;
+	wl_list_for_each_safe(sf, sf_dopo, &mshell_anim.sfumature, link) {
+		double e = mshell_anim_curva(sf->inizio, MSHELL_DURATA_BREVE, ora);
+		mshell_sfuma_metti(sf, (float)(sf->esce ? 1 - e : e));
+		if (e >= 1) {
+			if (sf->esce) {
+				wlr_scene_node_destroy(&sf->albero->node);
+			}
+			wl_list_remove(&sf->link);
+			free(sf);
+		} else {
+			ancora = true;
+		}
+	}
+
 	struct mshell_anim_fantasma *f, *dopo;
 	wl_list_for_each_safe(f, dopo, &mshell_anim.fantasmi, link) {
 		double e = mshell_anim_curva(f->inizio, MSHELL_DURATA_BREVE, ora);
@@ -390,7 +537,7 @@ static int mshell_anim_scatto(void *data) {
 	if (mshell_voli_scatto(server, ora)) {
 		ancora = true;
 	}
-	if (mshell_ventaglio_scatto(server, ora)) {
+	if (mshell_colonna_scatto(server, ora)) {
 		ancora = true;
 	}
 

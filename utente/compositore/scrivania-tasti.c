@@ -66,14 +66,6 @@ static void mshell_fondo_scelta(struct wlr_scene_tree *padre, int x, int y, int 
 	mshell_rett(padre, x - f, y - f, l + 2 * f, a + 2 * f, raggio + f, mshell_sc.colore_selezione, 1.0f);
 }
 
-/* Usata da mshell_riquadro, prima delle miniature: il fondo, se il gruppo e' quello scelto. */
-static void mshell_tasti_riquadro(struct tinywl_server *server, struct mshell_gruppo *g,
-		struct wlr_scene_tree *r) {
-	if (g == mshell_tab_gruppo(server) && !(mshell_ts.aperto == g && mshell_ts.sel_f >= 0)) {
-		mshell_fondo_scelta(r, 0, 0, MSHELL_RIQUADRO_L, mshell_riquadro_alto(g), mshell_sc.raggio_pannello);
-	}
-}
-
 /* Le icone del riquadro i-esimo della colonna (dove un clic apre lo split). */
 static struct wlr_box mshell_icone_box(struct tinywl_server *server, int i) {
 	struct mshell_gruppo *g = server->gruppo[i];
@@ -206,20 +198,16 @@ static void mshell_spaccato_disegna(struct tinywl_server *server) {
 	mshell_ts.n_celle = e >= 1 ? g->n : 0;  /* i clic solo a split aperto */
 	/* dalla piu' in basso, cosi' (nella pila) quella davanti sta sopra */
 	for (int j = g->n - 1; j >= 0; j--) {
-		if (j == mshell_ts.sel_f) {
-			mshell_fondo_scelta(p, dove[j].x, dove[j].y, dove[j].width, dove[j].height, MSHELL_SCELTA_RAGGIO);
-		}
 		mshell_mini_in(p, g->app[g->n - 1 - j], dove[j].x, dove[j].y, dove[j].width, dove[j].height, false);
 	}
 }
 
-/* Uno scatto del timer delle animazioni (animazioni.c): true se lo split si sta ancora muovendo. */
+/* Da mshell_colonna_scatto: true se lo split si muove (la colonna va ridisegnata). */
 static bool mshell_ventaglio_scatto(struct tinywl_server *server, int64_t ora) {
 	if (mshell_ts.aperto == NULL || mshell_ts.vent_da == 0) {
 		return false;
 	}
-	bool fine = mshell_anim_curva_dolce(mshell_ts.vent_da, MSHELL_DURATA_MEDIA, ora) >= 1;
-	if (fine) {
+	if (mshell_anim_curva_dolce(mshell_ts.vent_da, MSHELL_DURATA_MEDIA, ora) >= 1) {
 		mshell_ts.vent_da = 0;
 		if (!mshell_ts.vent_apre) {
 			mshell_split_via();  /* tornato nella pila */
@@ -228,8 +216,28 @@ static bool mshell_ventaglio_scatto(struct tinywl_server *server, int64_t ora) {
 			}
 		}
 	}
-	mshell_colonna_disegna(server);
-	return !fine;
+	return true;
+}
+
+/* Dove va il fondo tenue della scelta: il riquadro del gruppo scelto con Super+Tab o, nello
+ * split, la finestra scelta (ai loro posti d'arrivo). Falso: niente scelta. */
+static bool mshell_fondo_meta(struct tinywl_server *server, struct wlr_box *b) {
+	struct mshell_gruppo *g = mshell_tab_gruppo(server);
+	int i = mshell_in_colonna(server, g);
+	if (i < 0) {
+		return false;
+	}
+	struct wlr_box schermo;
+	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);
+	int y = mshell_colonna_y(server, i);
+	if (mshell_ts.aperto == g && mshell_ts.sel_f >= 0 && mshell_ts.sel_f < g->n) {
+		struct wlr_box dove[MSHELL_GRUPPO_MAX];
+		mshell_split_posti(server, g, y, dove);
+		*b = dove[mshell_ts.sel_f];
+		return true;
+	}
+	*b = (struct wlr_box){ schermo.x + MSHELL_COLONNA_X, y, MSHELL_RIQUADRO_L, mshell_riquadro_alto(g) };
+	return true;
 }
 
 /* --- spostare finestre e gruppi --- */
@@ -252,6 +260,7 @@ static void mshell_migra(struct tinywl_server *server, struct tinywl_toplevel *t
 	if (c == NULL && (nuovo = mshell_gruppo_nuovo(server)) == NULL) {
 		return;
 	}
+	struct wlr_box da = mshell_volo_da_colonna(server, t);  /* da dove vola */
 	int i = 0;
 	while (i < g->n && g->app[i] != t) {
 		i++;
@@ -279,6 +288,7 @@ static void mshell_migra(struct tinywl_server *server, struct tinywl_toplevel *t
 		mshell_metti_al_posto(t);
 		mshell_porta_al_centro(server, nuovo);
 	} else {
+		mshell_cascata(server, c, t);  /* non proprio sopra un'altra (come il Mac) */
 		struct wlr_box area = mshell_area(server);
 		if (t->posto.x + t->posto.width > area.x + area.width) {
 			t->posto.x = area.x + area.width - t->posto.width;
@@ -296,7 +306,7 @@ static void mshell_migra(struct tinywl_server *server, struct tinywl_toplevel *t
 		mshell_ridisponi(c);
 		mshell_focus_centro(server);
 	}
-	mshell_anim_compare(t);  /* compare con la dissolvenza, come un'app nuova */
+	mshell_volo_entra(server, t, da);  /* vola dalla colonna al suo posto (scrivania-voli.c) */
 	mshell_colonna_rifai(server);
 	mshell_anim_puntatore();
 }
@@ -331,6 +341,7 @@ static void mshell_stacca_al_centro(struct tinywl_server *server, struct tinywl_
 	if (nuovo == NULL) {
 		return;
 	}
+	struct wlr_box da = mshell_volo_da_colonna(server, t);  /* da dove vola */
 	int i = 0;
 	while (i < g->n && g->app[i] != t) {
 		i++;
@@ -341,7 +352,7 @@ static void mshell_stacca_al_centro(struct tinywl_server *server, struct tinywl_
 	mshell_gruppo_entra(nuovo, t);
 	mshell_metti_al_posto(t);
 	mshell_porta_al_centro(server, nuovo);
-	mshell_anim_compare(t);
+	mshell_volo_entra(server, t, da);  /* vola dalla colonna al centro */
 }
 
 /* Chiude tutte le finestre del gruppo g (le app spariscono quando hanno finito). */

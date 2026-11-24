@@ -190,8 +190,10 @@ static void mshell_pulsante(struct wlr_scene_tree *padre, int quale, int x, int 
  * NULL lo toglie. Si ridisegna solo se cambia il testo. */
 static void mshell_suggerimento(struct tinywl_server *server, const char *testo, int x, int y) {
 	if (testo == NULL) {
-		if (mshell_sc.suggerimento != NULL) {
-			wlr_scene_node_set_enabled(&mshell_sc.suggerimento->node, false);
+		if (mshell_sc.suggerimento != NULL && mshell_sc.suggerimento_testo != NULL) {
+			mshell_sfuma_via(mshell_sc.suggerimento);  /* se ne va sfumando */
+			free(mshell_sc.suggerimento_testo);
+			mshell_sc.suggerimento_testo = NULL;
 		}
 		return;
 	}
@@ -199,7 +201,9 @@ static void mshell_suggerimento(struct tinywl_server *server, const char *testo,
 		mshell_sc.suggerimento = wlr_scene_tree_create(mshell_sc.controlli);
 	}
 	struct wlr_scene_tree *t = mshell_sc.suggerimento;
+	bool compare = mshell_sc.suggerimento_testo == NULL;
 	if (mshell_sc.suggerimento_testo == NULL || strcmp(mshell_sc.suggerimento_testo, testo) != 0) {
+		mshell_sfuma_ferma(t);
 		struct wlr_scene_node *n, *dopo;
 		wl_list_for_each_safe(n, dopo, &t->children, link) {
 			wlr_scene_node_destroy(n);
@@ -230,6 +234,9 @@ static void mshell_suggerimento(struct tinywl_server *server, const char *testo,
 	wlr_scene_node_set_position(&t->node, x, y);
 	wlr_scene_node_set_enabled(&t->node, true);
 	wlr_scene_node_raise_to_top(&t->node);
+	if (compare) {
+		mshell_sfuma_entra(t);  /* compare sfumando */
+	}
 }
 
 /* --- i controlli sulla finestra --- */
@@ -372,7 +379,14 @@ static void mshell_pill_metti(struct mshell_pill *p, struct tinywl_toplevel *t) 
 	int lati, fila = t != NULL ? mshell_ctrl_y(t, &lati) : 0;
 	bool uguali = t == p->t && (t == NULL || (t->posto.width == p->l && fila == p->fila &&
 		p->titolo != NULL && strcmp(titolo, p->titolo) == 0));
+	bool cambia = t != p->t;  /* passano a un'altra finestra (o compaiono, o spariscono) */
 	if (!uguali) {
+		/* quelle di prima se ne vanno sfumando; se cambia solo la misura o il titolo, si rifanno */
+		if (cambia) {
+			mshell_sfuma_via(p->albero);
+		} else {
+			mshell_sfuma_ferma(p->albero);
+		}
 		p->t = t;
 		p->l = t != NULL ? t->posto.width : 0;
 		p->fila = fila;
@@ -382,6 +396,9 @@ static void mshell_pill_metti(struct mshell_pill *p, struct tinywl_toplevel *t) 
 	}
 	if (t != NULL) {
 		wlr_scene_node_set_position(&p->albero->node, t->posto.x, t->posto.y);
+		if (cambia) {
+			mshell_sfuma_entra(p->albero);  /* quelle nuove compaiono sfumando */
+		}
 	}
 }
 
@@ -579,6 +596,7 @@ static void mshell_libera(struct tinywl_toplevel *t) {
 
 static void mshell_scelta_chiudi(void) {
 	if (mshell_sc.scelta != NULL) {
+		mshell_sfuma_via(mshell_sc.scelta);  /* il pannello se ne va sfumando (animazioni.c) */
 		wlr_scene_node_destroy(&mshell_sc.scelta->node);
 		mshell_sc.scelta = NULL;
 	}
@@ -589,6 +607,7 @@ static void mshell_scelta_chiudi(void) {
 static void mshell_scelta_disegna(struct tinywl_server *server, struct tinywl_toplevel *t) {
 	struct mshell_gruppo *g = mshell_sc.scelta_gruppo;
 	if (mshell_sc.scelta != NULL) {
+		mshell_sfuma_ferma(mshell_sc.scelta);
 		wlr_scene_node_destroy(&mshell_sc.scelta->node);
 	}
 	mshell_sc.scelta = wlr_scene_tree_create(mshell_sc.controlli);
@@ -690,6 +709,7 @@ static void mshell_scelta_apri(struct tinywl_server *server, struct tinywl_tople
 	mshell_sc.scelta_box = (struct wlr_box){ 0 };
 	mshell_sc.opzione_accesa = -1;
 	mshell_scelta_disegna(server, t);
+	mshell_sfuma_entra(mshell_sc.scelta);  /* compare sfumando */
 }
 
 /* --- togliere dal gruppo e unire --- */
@@ -711,6 +731,7 @@ static void mshell_togli_dal_gruppo(struct tinywl_server *server, struct tinywl_
 	if (nuovo == NULL) {
 		return;
 	}
+	struct wlr_box da = mshell_volo_vero(t);  /* da dove vola */
 	mshell_colonna_in_cima(server, nuovo);
 	int i = 0;
 	while (i < g->n && g->app[i] != t) {
@@ -725,6 +746,7 @@ static void mshell_togli_dal_gruppo(struct tinywl_server *server, struct tinywl_
 	mshell_ridisponi(g);
 	mshell_focus_centro(server);
 	mshell_colonna_rifai(server);
+	mshell_volo_verso_colonna(server, t, nuovo, da);  /* si rimpicciolisce e vola nella colonna */
 	mshell_anim_puntatore();
 }
 
@@ -740,13 +762,15 @@ static void mshell_unisci(struct tinywl_server *server, struct mshell_gruppo *g,
 		return;
 	}
 	struct wlr_box area = mshell_area(server);
-	struct tinywl_toplevel *davanti = NULL;
+	struct tinywl_toplevel *davanti = NULL, *entrate[MSHELL_GRUPPO_MAX];
+	int n_entrate = 0;
 	while (g->n > 0 && c->n < MSHELL_GRUPPO_MAX) {
 		struct tinywl_toplevel *t = g->app[0];  /* dal fondo, cosi' quella davanti resta davanti */
 		memmove(&g->app[0], &g->app[1], (size_t)(g->n - 1) * sizeof(g->app[0]));
 		g->n--;
 		mshell_gruppo_entra(c, t);
 		davanti = t;
+		entrate[n_entrate++] = t;
 	}
 	if (davanti != NULL) {
 		davanti->posto.x = (int)x - davanti->posto.width / 2;
@@ -764,6 +788,16 @@ static void mshell_unisci(struct tinywl_server *server, struct mshell_gruppo *g,
 			davanti->posto.y = mshell_finestra_cima(server);
 		}
 		mshell_metti_al_posto(davanti);
+	}
+	/* non proprio sopra un'altra (come il Mac); poi volano al loro posto da dove si e' lasciato il
+	 * gruppo (la miniatura che seguiva il puntatore) */
+	for (int i = 0; i < n_entrate; i++) {
+		struct tinywl_toplevel *t = entrate[i];
+		mshell_cascata(server, c, t);
+		mshell_metti_al_posto(t);
+		int l, a;
+		mshell_mini_misura(t, MSHELL_FANTASMA_L, MSHELL_FANTASMA_A, &l, &a);
+		mshell_volo_entra(server, t, (struct wlr_box){ (int)x - l / 2, (int)y - a / 2, l, a });
 	}
 	if (g->n == 0) {
 		mshell_colonna_togli(server, g);

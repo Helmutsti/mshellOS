@@ -116,6 +116,10 @@ struct mshell_gruppo {
 	struct tinywl_toplevel *app[MSHELL_GRUPPO_MAX];  /* dal fondo: l'ultima sta davanti */
 	int n;
 	int disposizione;  /* la disposizione scelta con "Disponi" (-1: finestre libere) */
+	/* dove si vede il suo riquadro nella colonna mentre scorre (scrivania.c, mshell_colonna_y_vista) */
+	bool y_noto;
+	int y_da, y_a;
+	int64_t y_t0;  /* 0: fermo */
 };
 
 /* For brevity's sake, struct members are annotated where they are used. */

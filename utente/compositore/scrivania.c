@@ -89,6 +89,9 @@ static struct {
 	struct tinywl_server *server;
 	struct wlr_scene_tree *colonna;        /* la colonna dei gruppi */
 	bool sopra;                            /* la colonna sta sopra le finestre */
+	bool col_vista;                        /* la colonna si vede (o sta entrando) */
+	double col_da, col_a;                  /* la colonna scivola da x a x (0: al suo posto) */
+	int64_t col_t0;                        /* da quando (0: ferma) */
 	struct mshell_gruppo *acceso;          /* il gruppo della colonna sotto il puntatore */
 	struct wl_event_source *rifai;         /* il rifacimento della colonna in attesa */
 	struct wl_list icone;                  /* mshell_icona.link */
@@ -134,24 +137,20 @@ struct mshell_volo {
 	struct tinywl_toplevel *t;     /* NULL: la finestra se n'e' andata durante il volo */
 	struct wlr_scene_tree *albero; /* la sua miniatura in volo */
 	struct wlr_box da, a;          /* da dove a dove (la finestra vera, sullo schermo) */
+	int64_t inizio;
+	bool accendi;                  /* la finestra vera aspetta spenta e torna nel gruppo alla fine */
 };
 static struct {
 	struct wlr_scene_tree *albero;  /* sopra le finestre, sotto i controlli */
+	struct wlr_scene_tree *nascoste;  /* spento: le finestre vere che aspettano la fine del volo */
 	bool corre;
-	int64_t inizio;
 	struct mshell_volo volo[MSHELL_VOLI_MAX];
 	int n;
 	struct mshell_gruppo *arriva;   /* il gruppo che arriva al centro: si accende alla fine */
 	struct mshell_gruppo *atterra;  /* quello che va nella colonna: il riquadro alla fine */
-	struct mshell_gruppo *col_g[MSHELL_GRUPPI_MAX];  /* i riquadri che scorrono, */
-	int col_da[MSHELL_GRUPPI_MAX];                   /* e da dove */
-	int col_n;
 } mshell_voli;
-/* dove stavano i riquadri della colonna prima di un cambio */
+/* prima di un cambio al centro */
 struct mshell_voli_prima {
-	struct mshell_gruppo *g[MSHELL_GRUPPI_MAX];
-	int y[MSHELL_GRUPPI_MAX];
-	int n;
 	int entra_y;  /* il riquadro del gruppo che arriva al centro (-1: non era nella colonna) */
 };
 static void mshell_voli_prima(struct tinywl_server *server, struct mshell_gruppo *entra,
@@ -177,12 +176,13 @@ static struct {
 	struct wlr_box cella[MSHELL_GRUPPO_MAX];  /* le finestre dello split, sullo schermo */
 	struct tinywl_toplevel *cella_t[MSHELL_GRUPPO_MAX];
 	int n_celle;
+	bool fondo_noto;                 /* il fondo tenue della scelta: dove si vede, */
+	struct wlr_box fondo_da, fondo_a;  /* da dove a dove scivola, */
+	int64_t fondo_t0;                /* da quando (0: fermo) */
 	bool disp;                       /* Super+Alt+Tab: si sta scegliendo la disposizione */
 	int z_volte;                     /* quante Z con Super tenuto (Z Z: libera la scrivania) */
 	struct tinywl_toplevel *z_t;     /* la finestra mandata nel vassoio dalla prima Z */
 } mshell_ts = { .sel_f = -1 };
-static void mshell_tasti_riquadro(struct tinywl_server *server, struct mshell_gruppo *g,
-	struct wlr_scene_tree *r);
 static void mshell_spaccato_disegna(struct tinywl_server *server);
 static bool mshell_split_di(struct mshell_gruppo *g);
 static int mshell_split_alto(struct mshell_gruppo *g, int pila);
@@ -190,6 +190,10 @@ static bool mshell_tasti_tiene_colonna(void);
 static bool mshell_tasti_clic(struct tinywl_server *server, double px, double py);
 static void mshell_tasti_dimentica(struct tinywl_toplevel *t);
 static void mshell_colonna_mostra(struct tinywl_server *server);
+static int mshell_colonna_disegna(void *data);
+static bool mshell_fondo_meta(struct tinywl_server *server, struct wlr_box *b);
+static void mshell_fondo_scelta(struct wlr_scene_tree *padre, int x, int y, int l, int a, int raggio);
+static bool mshell_ventaglio_scatto(struct tinywl_server *server, int64_t ora);
 static int mshell_in_colonna(struct tinywl_server *server, struct mshell_gruppo *g);
 static struct wlr_box mshell_icone_box(struct tinywl_server *server, int i);
 
@@ -411,6 +415,7 @@ static void mshell_colonna_togli(struct tinywl_server *server, struct mshell_gru
 			memmove(&server->gruppo[k], &server->gruppo[k + 1],
 				(size_t)(server->n_gruppi - 1 - k) * sizeof(server->gruppo[0]));
 			server->n_gruppi--;
+			g->y_noto = false;  /* quando torna nella colonna, ci compare al suo posto */
 			return;
 		}
 	}
@@ -551,6 +556,39 @@ static void mshell_gruppo_esce(struct tinywl_server *server, struct tinywl_tople
 	mshell_colonna_rifai(server);
 }
 
+/* L'APERTURA TRASLATA, COME SUL MAC (la persona, 23/11/2026: "le finestre continuano ad aprirsi
+ * una sull'altra"): se nel punto in cui va la finestra t c'e' gia' l'angolo di un'altra (del gruppo
+ * g; con g NULL, di qualsiasi gruppo), t scende in basso a destra di MSHELL_CASCATA, finche' trova
+ * un punto libero; se esce dallo spazio delle finestre ricomincia in alto a sinistra. Non vale per
+ * i gruppi disposti con "Disponi". */
+#define MSHELL_CASCATA 28
+static void mshell_cascata(struct tinywl_server *server, struct mshell_gruppo *g, struct tinywl_toplevel *t) {
+	if (g != NULL && g->disposizione >= 0) {
+		return;
+	}
+	struct wlr_box area = mshell_area(server);
+	for (int giri = 0; giri < 32; giri++) {
+		bool sopra = false;
+		struct tinywl_toplevel *w;
+		wl_list_for_each(w, &server->toplevels, link) {
+			if (w != t && w->gruppo != NULL && (g == NULL || w->gruppo == g) &&
+					abs(w->posto.x - t->posto.x) < 8 && abs(w->posto.y - t->posto.y) < 8) {
+				sopra = true;
+			}
+		}
+		if (!sopra) {
+			return;
+		}
+		t->posto.x += MSHELL_CASCATA;
+		t->posto.y += MSHELL_CASCATA;
+		if (t->posto.x + t->posto.width > area.x + area.width ||
+				t->posto.y + t->posto.height > area.y + area.height) {
+			t->posto.x = area.x + MSHELL_CASCATA;
+			t->posto.y = mshell_finestra_cima(server);
+		}
+	}
+}
+
 /* La finestra che compare la prima volta: il suo gruppo e il suo posto (vedi in cima). */
 static void mshell_assegna(struct tinywl_server *server, struct tinywl_toplevel *t) {
 	struct wlr_box geo;
@@ -580,6 +618,9 @@ static void mshell_assegna(struct tinywl_server *server, struct tinywl_toplevel 
 	t->posto.y = a.y + (a.height - geo.height) / 2;
 	if (t->posto.y < mshell_finestra_cima(server)) {
 		t->posto.y = mshell_finestra_cima(server);  /* le pill devono starci sopra */
+	}
+	if (tm == NULL) {
+		mshell_cascata(server, NULL, t);  /* non proprio sopra un'altra finestra */
 	}
 	mshell_gruppo_entra(g, t);
 	mshell_metti_al_posto(t);
@@ -754,7 +795,6 @@ static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *
 	 * evidenza al passaggio del puntatore: tolta dalla persona, 23/11/2026) */
 	const float trasparente[4] = { 0, 0, 0, 0 };
 	wlr_scene_rect_create(r, MSHELL_RIQUADRO_L, mshell_riquadro_alto(g), trasparente);
-	mshell_tasti_riquadro(server, g, r);  /* il fondo tenue, se e' scelto da tastiera */
 	/* le miniature, dalla piu' dietro (cosi' quella davanti sta sopra); col gruppo aperto le
 	 * disegna lo split (scrivania-tasti.c) */
 	int cima = mshell_riquadro_cima(g);
@@ -813,12 +853,135 @@ static int mshell_colonna_y(struct tinywl_server *server, int i) {
 /* LA COLONNA E' NASCOSTA quando al centro ci sono finestre (la persona, 23/11/2026: "il vassoio
  * deve essere normalmente nascosto se ci sono pagine sullo schermo"): si vede col centro vuoto, e
  * quando sale sopra le finestre (il puntatore al bordo sinistro, Super+Tab, lo split). */
+/* Dove sta adesso la colonna, in orizzontale (0: al suo posto; negativo: fuori a sinistra). */
+static double mshell_colonna_x(int64_t ora) {
+	if (mshell_sc.col_t0 == 0) {
+		return mshell_sc.col_da;
+	}
+	double e = mshell_anim_curva_dolce(mshell_sc.col_t0, MSHELL_DURATA_MEDIA, ora);
+	return mshell_sc.col_da + (mshell_sc.col_a - mshell_sc.col_da) * e;
+}
+
 static void mshell_colonna_mostra(struct tinywl_server *server) {
 	if (mshell_sc.colonna == NULL) {
 		return;
 	}
 	struct mshell_gruppo *c = server->centro;
-	wlr_scene_node_set_enabled(&mshell_sc.colonna->node, mshell_sc.sopra || c == NULL || c->n == 0);
+	bool vista = mshell_sc.sopra || c == NULL || c->n == 0;
+	if (vista == mshell_sc.col_vista) {
+		return;
+	}
+	/* SCIVOLA da sinistra (e torna a sinistra), come la striscia dello Stage Manager (la persona,
+	 * 23/11/2026) */
+	int64_t ora = mshell_anim_adesso();
+	double adesso = mshell_colonna_x(ora);
+	mshell_sc.col_vista = vista;
+	mshell_sc.col_da = adesso;
+	mshell_sc.col_a = vista ? 0 : -MSHELL_COLONNA_FINE;
+	if (vista) {
+		wlr_scene_node_set_enabled(&mshell_sc.colonna->node, true);
+	}
+	if (mshell_anim_spenta()) {
+		mshell_sc.col_t0 = 0;
+		mshell_sc.col_da = mshell_sc.col_a;
+		wlr_scene_node_set_position(&mshell_sc.colonna->node, (int)mshell_sc.col_a, 0);
+		wlr_scene_node_set_enabled(&mshell_sc.colonna->node, vista);
+		return;
+	}
+	mshell_sc.col_t0 = ora;
+	mshell_anim_avvia();
+}
+
+/* Uno scatto del timer delle animazioni (animazioni.c): la colonna che scivola, i riquadri che
+ * scorrono, il fondo della scelta, lo split. True se qualcosa si muove ancora. */
+static bool mshell_colonna_scatto(struct tinywl_server *server, int64_t ora) {
+	if (mshell_sc.colonna == NULL) {
+		return false;
+	}
+	bool ancora = false;
+	if (mshell_sc.col_t0 != 0) {
+		wlr_scene_node_set_position(&mshell_sc.colonna->node, (int)mshell_colonna_x(ora), 0);
+		if (mshell_anim_curva_dolce(mshell_sc.col_t0, MSHELL_DURATA_MEDIA, ora) >= 1) {
+			mshell_sc.col_t0 = 0;
+			mshell_sc.col_da = mshell_sc.col_a;
+			if (!mshell_sc.col_vista) {
+				wlr_scene_node_set_enabled(&mshell_sc.colonna->node, false);
+			}
+		} else {
+			ancora = true;
+		}
+	}
+	bool rifai = mshell_ts.fondo_t0 != 0 || mshell_ventaglio_scatto(server, ora);
+	for (int i = 0; i < server->n_gruppi && !rifai; i++) {
+		rifai = server->gruppo[i]->y_t0 != 0;
+	}
+	if (rifai) {
+		mshell_colonna_disegna(server);
+		ancora = true;
+	}
+	return ancora;
+}
+
+/* Dove si vede adesso il riquadro i-esimo della colonna: quando il suo posto cambia (un gruppo
+ * nasce, sparisce, cambia misura, i gruppi si riordinano) ci scorre in MSHELL_DURATA_MEDIA. Mentre
+ * lo split si apre o si chiude segue il posto di ogni momento. */
+static int mshell_colonna_y_vista(struct tinywl_server *server, int i) {
+	struct mshell_gruppo *g = server->gruppo[i];
+	int y = mshell_colonna_y(server, i);
+	if (!g->y_noto || mshell_ts.vent_da != 0 || mshell_anim_spenta()) {
+		g->y_noto = true;
+		g->y_da = g->y_a = y;
+		g->y_t0 = 0;
+		return y;
+	}
+	int64_t ora = mshell_anim_adesso();
+	double e = g->y_t0 != 0 ? mshell_anim_curva_dolce(g->y_t0, MSHELL_DURATA_MEDIA, ora) : 1;
+	int adesso = (int)(g->y_da + (g->y_a - g->y_da) * e + 0.5);
+	if (y != g->y_a) {
+		g->y_da = adesso;
+		g->y_a = y;
+		g->y_t0 = ora;
+		mshell_anim_avvia();
+		return adesso;
+	}
+	if (e >= 1) {
+		g->y_t0 = 0;
+	}
+	return adesso;
+}
+
+/* Il fondo tenue della scelta (scrivania-tasti.c, mshell_fondo_meta): scivola dalla scelta di
+ * prima alla nuova in MSHELL_DURATA_MEDIA. */
+static void mshell_fondo_disegna(struct tinywl_server *server) {
+	struct wlr_box meta;
+	if (!mshell_fondo_meta(server, &meta)) {
+		mshell_ts.fondo_noto = false;
+		return;
+	}
+	int64_t ora = mshell_anim_adesso();
+	struct wlr_box b = meta;
+	if (!mshell_ts.fondo_noto || mshell_ts.vent_da != 0 || mshell_anim_spenta()) {
+		mshell_ts.fondo_noto = true;
+		mshell_ts.fondo_da = mshell_ts.fondo_a = meta;
+		mshell_ts.fondo_t0 = 0;
+	} else {
+		double e = mshell_ts.fondo_t0 != 0 ? mshell_anim_curva_dolce(mshell_ts.fondo_t0, MSHELL_DURATA_MEDIA, ora) : 1;
+		struct wlr_box d = mshell_ts.fondo_da, a = mshell_ts.fondo_a;
+		b = (struct wlr_box){ (int)(d.x + (a.x - d.x) * e + 0.5), (int)(d.y + (a.y - d.y) * e + 0.5),
+			(int)(d.width + (a.width - d.width) * e + 0.5), (int)(d.height + (a.height - d.height) * e + 0.5) };
+		if (memcmp(&meta, &mshell_ts.fondo_a, sizeof(meta)) != 0) {
+			mshell_ts.fondo_da = b;
+			mshell_ts.fondo_a = meta;
+			mshell_ts.fondo_t0 = ora;
+			mshell_anim_avvia();
+		} else if (e >= 1) {
+			mshell_ts.fondo_t0 = 0;
+		}
+	}
+	struct wlr_scene_tree *p = wlr_scene_tree_create(mshell_sc.colonna);
+	mshell_fondo_scelta(p, b.x, b.y, b.width, b.height, mshell_ts.aperto != NULL && mshell_ts.sel_f >= 0 ?
+		8 /* come le miniature delle disposizioni (MSHELL_SCELTA_RAGGIO) */ : mshell_sc.raggio_pannello);
+	wlr_scene_node_lower_to_bottom(&p->node);  /* dietro le miniature */
 }
 
 static int mshell_colonna_disegna(void *data) {
@@ -837,6 +1000,7 @@ static int mshell_colonna_disegna(void *data) {
 			mshell_colonna_y_vista(server, i));  /* a meta' strada, se sta scorrendo */
 	}
 	mshell_spaccato_disegna(server);  /* scrivania-tasti.c */
+	mshell_fondo_disegna(server);
 	mshell_colonna_mostra(server);
 	return 0;
 }
@@ -888,6 +1052,7 @@ static void mshell_scrivania_invio(struct tinywl_server *server, struct tinywl_t
  * colonna; sopra, i controlli. */
 static void mshell_scrivania_avvia(struct tinywl_server *server, struct wlr_scene_tree *fondo) {
 	mshell_sc.server = server;
+	mshell_anim_conosci(server);  /* le animazioni della scrivania partono anche senza app */
 	if (!wl_list_empty(&fondo->children)) {
 		struct wlr_scene_node *n = wl_container_of(fondo->children.next, n, link);
 		if (n->type == WLR_SCENE_NODE_BUFFER && wlr_scene_buffer_from_node(n)->buffer != NULL) {
@@ -898,6 +1063,7 @@ static void mshell_scrivania_avvia(struct tinywl_server *server, struct wlr_scen
 	server->albero_gruppi = wlr_scene_tree_create(&server->scene->tree);
 	mshell_voli.albero = wlr_scene_tree_create(&server->scene->tree);  /* i voli, sopra le finestre */
 	mshell_sc.colonna = wlr_scene_tree_create(&server->scene->tree);
+	mshell_sc.col_vista = true;  /* all'inizio si vede (il centro e' vuoto) */
 	wlr_scene_node_place_below(&mshell_sc.colonna->node, &server->albero_gruppi->node);
 	mshell_sc.controlli = wlr_scene_tree_create(&server->scene->tree);
 	mshell_controlli_avvia();
