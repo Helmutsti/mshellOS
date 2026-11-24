@@ -27,6 +27,9 @@
  *                    sempre tenendo Super, libera la scrivania: tutto il gruppo (con la finestra
  *                    della prima Z, che ci rientra) va nel vassoio e il centro resta vuoto.
  *   Super+spazio     il pannello di ricerca (livelli.c).
+ *   CON SHIFT si scorre al contrario (la persona, 24/11/2026): Super+Shift+Tab il gruppo prima,
+ *                    Super+Alt lasciando Alt con Shift giu' la finestra prima, Super+Alt+Shift+Tab
+ *                    la disposizione prima.
  * (Il vassoio che si apriva tenendo Super da solo e' stato tolto: la persona, 23/11/2026.)
  *
  * LO SPLIT (la persona: "un'animazione di split come su Stage Manager del Mac"; poi "disporre le
@@ -373,15 +376,16 @@ static struct tinywl_toplevel *mshell_tab_finestra(struct tinywl_server *server)
 	return g->app[g->n - 1 - mshell_ts.sel_f];
 }
 
-static void mshell_tab_avanti(struct tinywl_server *server) {
-	if (server->n_gruppi == 0) {
+static void mshell_tab_avanti(struct tinywl_server *server, bool indietro) {
+	int n = server->n_gruppi;
+	if (n == 0) {
 		return;
 	}
 	if (!mshell_ts.tab) {
 		mshell_ts.tab = true;
-		mshell_ts.tab_i = 0;
+		mshell_ts.tab_i = indietro ? n - 1 : 0;
 	} else {
-		mshell_ts.tab_i = (mshell_ts.tab_i + 1) % server->n_gruppi;
+		mshell_ts.tab_i = (mshell_ts.tab_i + (indietro ? n - 1 : 1)) % n;
 	}
 	mshell_split_via();  /* lo split del gruppo di prima si chiude */
 	mshell_colonna_sopra(server, true);
@@ -466,7 +470,7 @@ static bool mshell_tab_tasto(struct tinywl_server *server, xkb_keysym_t sym) {
 
 /* --- il giro delle finestre, le disposizioni, Super+Z --- */
 
-static void mshell_giro_avanti(struct tinywl_server *server) {
+static void mshell_giro_avanti(struct tinywl_server *server, bool indietro) {
 	struct mshell_gruppo *c = server->centro;
 	if (c == NULL || c->n < 2) {
 		return;
@@ -480,7 +484,7 @@ static void mshell_giro_avanti(struct tinywl_server *server) {
 		mshell_ts.giro_i = 0;
 	}
 	for (int k = 0; k < mshell_ts.giro_n; k++) {  /* la prossima che c'e' ancora */
-		mshell_ts.giro_i = (mshell_ts.giro_i + 1) % mshell_ts.giro_n;
+		mshell_ts.giro_i = (mshell_ts.giro_i + (indietro ? mshell_ts.giro_n - 1 : 1)) % mshell_ts.giro_n;
 		struct tinywl_toplevel *t = mshell_ts.giro_t[mshell_ts.giro_i];
 		if (t != NULL && t->gruppo == c) {
 			focus_toplevel(t, t->xdg_toplevel->base->surface);
@@ -490,7 +494,7 @@ static void mshell_giro_avanti(struct tinywl_server *server) {
 }
 
 /* Super+Alt+Tab: apre la scelta delle disposizioni sulla finestra attiva, poi passa alla dopo. */
-static void mshell_disp_avanti(struct tinywl_server *server) {
+static void mshell_disp_avanti(struct tinywl_server *server, bool indietro) {
 	struct mshell_gruppo *c = server->centro;
 	if (c == NULL || c->n == 0) {
 		return;
@@ -504,9 +508,10 @@ static void mshell_disp_avanti(struct tinywl_server *server) {
 				adesso = j;  /* (libera: la prima) */
 			}
 		}
-		mshell_sc.opzione_accesa = (adesso + 1) % k;  /* si parte dalla dopo, come Super+Tab */
+		mshell_sc.opzione_accesa = (adesso + (indietro ? k - 1 : 1)) % k;  /* dalla dopo (o prima) */
 	} else {
-		mshell_sc.opzione_accesa = (mshell_sc.opzione_accesa + 1) % mshell_sc.n_opzioni;
+		int k = mshell_sc.n_opzioni;
+		mshell_sc.opzione_accesa = (mshell_sc.opzione_accesa + (indietro ? k - 1 : 1)) % k;
 	}
 	mshell_scelta_disegna(server, mshell_scelta_t);
 }
@@ -588,6 +593,10 @@ static bool mshell_tasti(struct tinywl_server *server, xkb_keysym_t sym, bool pr
 		}
 		return true;
 	}
+	if (sym == XKB_KEY_Shift_L || sym == XKB_KEY_Shift_R) {
+		mshell_ts.shift_giu = premuto;  /* con Shift si scorre al contrario; Shift va anche alle app */
+		return false;
+	}
 	if (sym == XKB_KEY_Alt_L || sym == XKB_KEY_Alt_R) {
 		if (premuto && server->super_giu) {
 			mshell_ts.alt_giu = true;
@@ -597,7 +606,7 @@ static bool mshell_tasti(struct tinywl_server *server, xkb_keysym_t sym, bool pr
 		if (!premuto && mshell_ts.alt_giu) {
 			mshell_ts.alt_giu = false;
 			if (server->super_giu && !mshell_ts.alt_altro) {
-				mshell_giro_avanti(server);
+				mshell_giro_avanti(server, mshell_ts.shift_giu);
 			}
 			return true;
 		}
@@ -640,12 +649,15 @@ static bool mshell_tasti(struct tinywl_server *server, xkb_keysym_t sym, bool pr
 		mshell_livelli_cassetto(server);
 		return true;
 	case XKB_KEY_Tab:
+	case XKB_KEY_ISO_Left_Tab: {  /* (Shift+Tab) */
+		bool indietro = sym == XKB_KEY_ISO_Left_Tab || mshell_ts.shift_giu;
 		if (mshell_ts.alt_giu) {
-			mshell_disp_avanti(server);  /* Super+Alt+Tab: la disposizione */
+			mshell_disp_avanti(server, indietro);  /* Super+Alt+Tab: la disposizione */
 		} else {
-			mshell_tab_avanti(server);
+			mshell_tab_avanti(server, indietro);
 		}
 		return true;
+	}
 	case XKB_KEY_Escape:
 		if (mshell_ts.disp) {
 			mshell_ts.disp = false;

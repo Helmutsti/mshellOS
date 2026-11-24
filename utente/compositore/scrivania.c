@@ -166,6 +166,7 @@ static struct {
 	bool tab;                        /* Super+Tab: si sta scegliendo un gruppo, */
 	int tab_i;                       /* questo (indice nella colonna) */
 	bool alt_giu, alt_altro;         /* Super+Alt: Alt giu', e se intanto si e' premuto altro */
+	bool shift_giu;                  /* Shift giu': si scorre al contrario */
 	bool giro;                       /* il giro delle finestre con Super+Alt, */
 	struct tinywl_toplevel *giro_t[MSHELL_GRUPPO_MAX];  /* nell'ordine di quando e' cominciato */
 	int giro_n, giro_i;
