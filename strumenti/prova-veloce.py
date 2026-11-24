@@ -103,11 +103,18 @@ def compila():
 
 # --- 2. il QEMU di prova ---
 
+SCRIVI = False  # --scrivi: il disco di prova si scrive davvero (niente -snapshot)
+
+
 def accendi():
     if not DISCO_BASE.exists():
         sys.exit(f"FALLITA: manca build/{NOME_DISCO}: serve una costruzione completa (agente principale)")
     if not DISCO.exists() or DISCO.stat().st_mtime < DISCO_BASE.stat().st_mtime:
-        shutil.copyfile(DISCO_BASE, DISCO)
+        if MAC:
+            DISCO.unlink(missing_ok=True)
+            subprocess.run(["cp", "-c", str(DISCO_BASE), str(DISCO)], check=True)  # copia istantanea (APFS)
+        else:
+            shutil.copyfile(DISCO_BASE, DISCO)
         scrivi("copiato il disco di prova")
     if MAC:
         # la macchina ARM di QEMU con l'accelerazione del Mac (hvf); niente tastiera di serie: una USB
@@ -121,9 +128,11 @@ def accendi():
         video = ["-vga", "none", "-device", "virtio-vga,xres=1280,yres=800"]
         usb = ["-device", "qemu-xhci", "-device", "usb-tablet"]
     argomenti = [QEMU, *macchina,
-                 "-drive", f"if=none,id=disco,file={DISCO},format=raw", "-snapshot",
+                 "-drive", f"if=none,id=disco,file={DISCO},format=raw",
+                 *([] if SCRIVI else ["-snapshot"]),
                  "-device", "virtio-blk-pci,drive=disco,bootindex=1",
                  *video, *usb, "-display", "none",
+                 "-nic", "user,model=virtio-net-pci",  # la rete (QEMU fa da router, con DHCP)
                  "-monitor", f"tcp:127.0.0.1:{P_MONITOR},server=on,wait=off",
                  "-serial", f"tcp:127.0.0.1:{P_SERIALE},server=on,wait=off",
                  "-qmp", f"tcp:127.0.0.1:{P_QMP},server=on,wait=off"]
@@ -372,7 +381,11 @@ def main():
     a.add_argument("-c", help="il copione scritto qui, istruzioni separate da ;")
     a.add_argument("--posto", type=int, default=0, help="il QEMU di prova da usare (agenti in parallelo)")
     a.add_argument("--spegni", action="store_true", help="spegne il QEMU di prova")
+    a.add_argument("--scrivi", action="store_true",
+                   help="accende il QEMU di prova scrivendo davvero sul disco di prova (per metterci le app)")
     args = a.parse_args()
+    global SCRIVI
+    SCRIVI = args.scrivi
     if args.spegni:
         spegni()
         return

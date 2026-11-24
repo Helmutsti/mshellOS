@@ -11,6 +11,10 @@
  * "Prova", la riempie del colore scuro e aspetta. Esce quando il compositore le chiede di
  * chiudersi (Super+X). Quello che fa lo scrive su stderr ("prova: ...").
  *
+ * LA BARRA DEL TITOLO: la finestra non ne disegna una sua e lo dice al compositore con l'accordo
+ * sulla barra (xdg-decoration, "server_side"): cosi' mshell le mette la sua capsula, come alle app
+ * che lasciano la barra al sistema (le app GTK, che la disegnano da se', non la hanno).
+ *
  * IL BUFFER e' un foglio di memoria condivisa (memfd), dato al compositore con wl_shm; uno per
  * ogni misura, e il compositore lo restituisce (release) quando non gli serve piu'. */
 #define _GNU_SOURCE
@@ -21,6 +25,7 @@
 #include <unistd.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
+#include "xdg-decoration-unstable-v1-client-protocol.h"
 
 #define COLORE 0xFF242426u   /* lo scuro della finestra */
 #define LARGHEZZA_DA_SOLA 640 /* se il compositore lascia scegliere (misura 0) */
@@ -70,6 +75,7 @@ static void scrivi_parola(uint32_t *pixel, int l, int a) {
 static struct wl_compositor *compositore;
 static struct wl_shm *shm;
 static struct xdg_wm_base *base;
+static struct zxdg_decoration_manager_v1 *decorazioni;  /* l'accordo sulla barra (se c'e') */
 static int chiusa, da_disegnare;
 static int32_t chiesta_l, chiesta_a;   /* la misura dell'ultimo configure */
 
@@ -85,6 +91,8 @@ static void globale(void *dati, struct wl_registry *registro, uint32_t nome, con
         shm = wl_registry_bind(registro, nome, &wl_shm_interface, 1);
     else if (!strcmp(interfaccia, xdg_wm_base_interface.name))
         base = wl_registry_bind(registro, nome, &xdg_wm_base_interface, versione < 3 ? versione : 3);
+    else if (!strcmp(interfaccia, zxdg_decoration_manager_v1_interface.name))
+        decorazioni = wl_registry_bind(registro, nome, &zxdg_decoration_manager_v1_interface, 1);
 }
 static void globale_tolto(void *dati, struct wl_registry *registro, uint32_t nome) { (void)dati; (void)registro; (void)nome; }
 static const struct wl_registry_listener registro_ascolto = { globale, globale_tolto };
@@ -180,6 +188,11 @@ int main(int argc, char **argv) {
         for (char *c = nome; *c; c++) if (*c >= 'A' && *c <= 'Z') *c = (char)(*c - 'A' + 'a');
     }
     xdg_toplevel_set_app_id(finestra, nome);
+    if (decorazioni != NULL) {  /* la barra la fa il sistema (la capsula di mshell) */
+        struct zxdg_toplevel_decoration_v1 *d =
+            zxdg_decoration_manager_v1_get_toplevel_decoration(decorazioni, finestra);
+        zxdg_toplevel_decoration_v1_set_mode(d, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+    }
     wl_surface_commit(superficie);     /* senza contenuto: il compositore risponde con il configure */
 
     while (!chiusa) {

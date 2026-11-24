@@ -27,7 +27,7 @@ GtkWidget *mshell_comandi_nuovi(void);
 
 /* L'ELENCO DELLE APP (elenco-app.c): chiama "cambiato" con il titolo dell'app col focus ("" se
  * nessuna) ogni volta che cambia. */
-void mshell_elenco_app_avvia(void (*cambiato)(const char *titolo));
+void mshell_elenco_app_avvia(void);
 /* Se c'e' gia' un'app aperta con uno di questi nomi (app_id; l'elenco finisce con NULL), chiede
  * al compositore di attivarla e da' vero. */
 gboolean mshell_elenco_app_attiva(const char *const *nomi);

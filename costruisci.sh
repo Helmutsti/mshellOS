@@ -93,7 +93,13 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # XKB_DEFAULT_LAYOUT=it: LA TASTIERA ITALIANA (decisione della persona). Il compositore chiede a
 # xkbcommon la mappa dei tasti senza dire quale: xkbcommon allora la prende da queste variabili
 # (e i file da xkb-data).
-# "-s mshell-barra": il compositore, appena pronto, fa partire la barra di stato.
+# "-s ...": il compositore, appena pronto, fa due cose:
+#   1. dice ai servizi dell'utente (systemd --user) dov'e' lo schermo (WAYLAND_DISPLAY): il
+#      portale delle app (xdg-desktop-portal-gtk) parte da solo quando un'app lo chiama, come
+#      servizio dell'utente, e senza saperlo non si apre ("cannot open display"); allora le app
+#      e la barra aspettano invano le impostazioni (fino a 25 secondi). E' quello che fanno le
+#      altre scrivanie Wayland (GNOME, sway).
+#   2. fa partire la barra di stato.
 # VARIABILI_COMPOSITORE: quelle in piu' che chiede la macchina (macchine/<nome>.conf).
 cat > "$RADICE/etc/greetd/config.toml" <<FINE
 # fatto da costruisci.sh
@@ -105,7 +111,7 @@ command = "/usr/sbin/agreety --cmd /bin/sh"
 user = "_greetd"
 
 [initial_session]
-command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it ${VARIABILI_COMPOSITORE} mshell-compositore -s mshell-barra"
+command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it ${VARIABILI_COMPOSITORE} mshell-compositore -s \"systemctl --user import-environment WAYLAND_DISPLAY; exec mshell-barra\""
 user = "utente1"
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"
@@ -115,6 +121,27 @@ cat > "$S/greetd.service.d/tty1.conf" <<'FINE'
 After=getty@tty1.service
 Conflicts=getty@tty1.service
 FINE
+# LA RETE (la persona, 24/11/2026: "quello che c'e' gia' nel modo piu' semplice possibile, niente
+# pacchetti aggiuntivi"): systemd-networkd, che e' dentro systemd, accende ogni scheda via cavo e
+# chiede l'indirizzo con DHCP. I NOMI (flathub.org -> indirizzo): senza systemd-resolved (un
+# pacchetto in piu') nessuno scrive /etc/resolv.conf, e /etc e' in sola lettura: lo si scrive qui
+# una volta, con due server pubblici (Quad9 e Cloudflare). Il Wi-Fi verra' dopo.
+mkdir -p "$RADICE/etc/systemd/network"
+cat > "$RADICE/etc/systemd/network/20-cavo.network" <<'FINE'
+# fatto da costruisci.sh: ogni scheda via cavo prende l'indirizzo con DHCP
+[Match]
+Type=ether
+
+[Network]
+DHCP=yes
+FINE
+rm -f "$RADICE/etc/resolv.conf"
+cat > "$RADICE/etc/resolv.conf" <<'FINE'
+# fatto da costruisci.sh: i server dei nomi (il sistema e' in sola lettura)
+nameserver 9.9.9.9
+nameserver 1.1.1.1
+FINE
+systemctl --root="$RADICE" enable systemd-networkd.service >/dev/null 2>&1
 # I SERVIZI CHE NON SERVONO (decisione della persona): il sistema si ricostruisce da capo a
 # ogni modifica, quindi quello che rifanno dopo un aggiornamento si fa qui, una volta sola
 # (l'elenco delle librerie, le spiegazioni dei messaggi del registro).
@@ -144,24 +171,17 @@ python3 strumenti/sfondo.py risorse/sfondi/samurai.jpg "$SCHERMO_LARGHEZZA" "$SC
 rm -f "$RADICE/etc/localtime"
 cp /usr/share/zoneinfo/Europe/Rome "$RADICE/etc/localtime"
 echo "Europe/Rome" > "$RADICE/etc/timezone"
-# IL PUNTATORE: le immagini disegnate in Figma (risorse/puntatore/, 32x32 con l'ombra; il
-# puntatore e' 24x24 dentro, quindi misura nominale 24) diventano il tema Xcursor "mshell" con
-# xcursorgen. Ogni riga della descrizione: misura nominale, punto caldo x e y, immagine e, per
-# l'attesa animata, i millesimi di secondo di ogni fotogramma (12 fotogrammi, un giro al
-# secondo). I punti caldi vengono dal vecchio disegni/Puntatore/descrizione.md. I file hanno i
-# nomi standard dei temi Xcursor; gli altri nomi dello stesso puntatore sono collegamenti.
+# IL PUNTATORE: le immagini disegnate in Figma (risorse/puntatore/, 32x32 con l'ombra),
+# rimpicciolite da strumenti/puntatore.py tutte alla stessa altezza (lo dice li'), diventano il
+# tema Xcursor "mshell" con xcursorgen (misura nominale 24; l'attesa animata ha 12 fotogrammi, un
+# giro al secondo). I file hanno i nomi standard dei temi Xcursor; gli altri nomi dello stesso
+# puntatore sono collegamenti.
 # Il tema "default" (quello che chiedono il compositore e i programmi se nessuno dice altro)
 # eredita da "mshell": cosi' vale per tutti senza variabili d'ambiente.
 P=/tmp/puntatore
 rm -rf "$P"
 mkdir -p "$P" "$RADICE/usr/share/icons/mshell/cursors" "$RADICE/usr/share/icons/default"
-echo "24 6 3 risorse/puntatore/normale.png" > "$P/default"
-echo "24 14 12 risorse/puntatore/testo.png" > "$P/text"
-echo "24 11 4 risorse/puntatore/collegamento.png" > "$P/pointer"
-echo "24 6 3 risorse/puntatore/divieto.png" > "$P/not-allowed"
-for i in 00 01 02 03 04 05 06 07 08 09 10 11; do
-    echo "24 14 12 risorse/puntatore/attesa-$i.png 83"
-done > "$P/wait"
+python3 strumenti/puntatore.py "$P"
 for nome in default text pointer not-allowed wait; do
     xcursorgen "$P/$nome" "$RADICE/usr/share/icons/mshell/cursors/$nome"
 done
@@ -189,6 +209,12 @@ echo "3c. carattere IBM Plex Sans"
 mkdir -p "$RADICE/usr/share/fonts/truetype/ibm-plex-sans"
 cp risorse/caratteri/ibm-plex-sans/* "$RADICE/usr/share/fonts/truetype/ibm-plex-sans/"
 chroot "$RADICE" /usr/bin/fc-cache -f
+# LE IMPOSTAZIONI PER LE APP (GSettings): i valori di mshell (risorse/impostazioni/) sopra quelli
+# di partenza; l'indice delle impostazioni si rifa' qui con lo strumento della libreria GLib del
+# sistema (quello che usa Debian quando installa).
+echo "3c. impostazioni per le app"
+cp risorse/impostazioni/*.gschema.override "$RADICE/usr/share/glib-2.0/schemas/"
+chroot "$RADICE" sh -c '/usr/lib/*/glib-2.0/glib-compile-schemas /usr/share/glib-2.0/schemas'
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
 DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"
@@ -242,7 +268,19 @@ systemd-sysusers --root="$RADICE" >/dev/null
 # nell'albero dei dati (/data/home diventa /home), sua e chiusa agli altri (700).
 useradd --root "$RADICE" --uid 1000 --user-group --no-create-home --home-dir /home/utente1     --shell /bin/sh utente1
 mkdir -m 700 "$DATI/home/utente1"
-chown 1000:1000 "$DATI/home/utente1"
+# FLATHUB PER UTENTE1 (la persona, 24/11/2026: le app si installano per l'utente, nella sua Home,
+# senza permessi da amministratore). Si aggiunge qui, con flatpak del sistema stesso, la fonte
+# Flathub (risorse/flatpak/flathub.flatpakrepo, con la chiave che controlla le firme) nel deposito
+# di utente1 (~/.local/share/flatpak): alla prima accensione si puo' gia' installare.
+mkdir -p "$RADICE/tmp/casa"
+cp risorse/flatpak/flathub.flatpakrepo "$RADICE/tmp/"
+mount --bind /dev "$RADICE/dev"
+mount -t proc proc "$RADICE/proc"
+chroot "$RADICE" env HOME=/tmp/casa flatpak remote-add --user --if-not-exists flathub /tmp/flathub.flatpakrepo
+umount "$RADICE/proc" "$RADICE/dev"
+mv "$RADICE/tmp/casa/.local" "$DATI/home/utente1/.local"
+rm -rf "$RADICE/tmp/casa" "$RADICE/tmp/flathub.flatpakrepo"
+chown -R 1000:1000 "$DATI/home/utente1"
 
 # --- 5. il kernel tutto-in-uno ---
 echo "5. UKI"
@@ -256,7 +294,7 @@ SETTORI_MB=2048
 MISURA_AVVIO=64
 MISURA_SISTEMA=$(( $(du -sm "$RADICE" | cut -f1) * 13 / 10 + 64 ))
 INIZIO_SISTEMA=$((1 + MISURA_AVVIO))
-MISURA_DATI=1024                  # i dati: per ora 1 GB (il file del disco e' "sparso")
+MISURA_DATI=8192                  # i dati: 8 GB, per le app Flatpak (il file del disco e' "sparso")
 INIZIO_DATI=$((INIZIO_SISTEMA + MISURA_SISTEMA))
 TOTALE=$((INIZIO_DATI + MISURA_DATI + 1))
 echo "6. disco: avvio $MISURA_AVVIO MB, system $MISURA_SISTEMA MB, data $MISURA_DATI MB"

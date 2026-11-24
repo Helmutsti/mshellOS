@@ -239,7 +239,7 @@ static bool mshell_fondo_meta(struct tinywl_server *server, struct wlr_box *b) {
 		*b = dove[mshell_ts.sel_f];
 		return true;
 	}
-	*b = (struct wlr_box){ schermo.x + MSHELL_COLONNA_X, y, MSHELL_RIQUADRO_L, mshell_riquadro_alto(g) };
+	*b = (struct wlr_box){ schermo.x + MSHELL_COLONNA_X, y, mshell_riquadro_largo(g), mshell_riquadro_alto(g) };
 	return true;
 }
 
@@ -302,8 +302,8 @@ static void mshell_migra(struct tinywl_server *server, struct tinywl_toplevel *t
 		if (t->posto.y + t->posto.height > area.y + area.height) {
 			t->posto.y = area.y + area.height - t->posto.height;
 		}
-		if (t->posto.y < mshell_finestra_cima(server)) {
-			t->posto.y = mshell_finestra_cima(server);
+		if (t->posto.y < mshell_finestra_cima(t)) {
+			t->posto.y = mshell_finestra_cima(t);
 		}
 		mshell_metti_al_posto(t);
 		mshell_ridisponi(c);

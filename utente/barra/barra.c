@@ -3,8 +3,8 @@
  *
  * LA BARRA e' una striscia trasparente alta 32 px in cima allo schermo, su tutta la larghezza,
  * nei 32 px di bordo che le app lasciano liberi. Sta nel livello "top" del compositore (sopra le
- * app) e non chiede spazio alle app (zona esclusiva 0). A sinistra il titolo dell'app col focus
- * (lo dice il compositore, elenco-app.c); a destra giorno e ora, la campanella e il menu: sono
+ * app) e non chiede spazio alle app (zona esclusiva 0). A sinistra niente (il titolo dell'app col
+ * focus e' stato tolto, la persona 24/11/2026); a destra giorno e ora, la campanella e il menu: sono
  * pulsanti, e ognuno apre il suo menu a tendina (calendario, notifiche, comandi rapidi).
  *
  * I MENU (calendario, notifiche, comandi rapidi) sono menu a comparsa di Wayland (xdg_popup):
@@ -34,8 +34,8 @@
  * SIGUSR1 ("apri o chiudi il pannello"): e' il modo piu' semplice, perche' il compositore sa gia'
  * quale programma e' la barra (quello delle superfici "mshell-barra...") e non serve un canale
  * apposta. Mentre il pannello e' aperto (come nel disegno) la barra resta sopra di lui: passa dal
- * livello "top" a "overlay", prende i colori del tema (sta sul vetro, non piu' sulla foto), non
- * mostra il titolo dell'app e la lente ha il fondo del pulsante aperto. Aprire un menu della barra
+ * livello "top" a "overlay", prende i colori del tema (sta sul vetro, non piu' sulla foto) e la
+ * lente ha il fondo del pulsante aperto. Aprire un menu della barra
  * chiude il pannello. */
 #include <glib-unix.h>
 #include <signal.h>
@@ -51,8 +51,6 @@ static GtkWidget *menu[MENU_QUANTI];      /* i menu a comparsa (GtkPopover) */
 static GtkWidget *pulsante[MENU_QUANTI];  /* i pulsanti della barra (GtkMenuButton), uno per menu */
 static GtkWidget *pannello[MENU_QUANTI];  /* i pannelli dei menu */
 static GtkWidget *riga;                   /* il contenuto della barra */
-static GtkWidget *titolo_app;             /* il pulsante col titolo dell'app col focus */
-static GtkWidget *riga_titolo;            /* il posto del titolo: non si vede col pannello aperto */
 static GtkWidget *orologio;               /* la scritta con giorno e ora */
 static GtkWidget *barra;                  /* la superficie della barra */
 static GtkWidget *lente;                  /* il pulsante del pannello di ricerca */
@@ -200,7 +198,6 @@ static void cassetto_cambiato(gboolean aperto) {
 		aperto ? GTK_LAYER_SHELL_LAYER_OVERLAY : GTK_LAYER_SHELL_LAYER_TOP);
 	gtk_widget_remove_css_class(barra, aperto ? "scuro" : tema);
 	gtk_widget_add_css_class(barra, aperto ? tema : "scuro");
-	gtk_widget_set_visible(riga_titolo, !aperto);
 	if (aperto) {
 		gtk_widget_add_css_class(lente, "aperto");
 	} else {
@@ -217,12 +214,6 @@ static void lente_premuta(GtkButton *b, gpointer dati) {
 static gboolean segnale_cassetto(gpointer dati) {
 	mshell_cassetto_apri_chiudi();
 	return G_SOURCE_CONTINUE;
-}
-
-static void titolo_cambiato(const char *titolo) {
-	GtkWidget *scritta = gtk_widget_get_first_child(titolo_app);
-	gtk_label_set_text(GTK_LABEL(scritta), titolo);
-	gtk_widget_set_visible(titolo_app, titolo[0] != '\0');
 }
 
 static GtkWidget *nuovo_pulsante(GtkWidget *contenuto, enum menu quale) {
@@ -249,20 +240,6 @@ static GtkWidget *crea_barra(void) {
 
 	riga = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_widget_add_css_class(riga, "riga-barra");
-
-	/* il titolo dell'app col focus: ha l'aspetto di un pulsante, ma per ora non apre niente */
-	titolo_app = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gtk_widget_add_css_class(titolo_app, "pulsante");
-	GtkWidget *scritta = gtk_label_new("");
-	gtk_widget_add_css_class(scritta, "etichetta");
-	gtk_widget_add_css_class(scritta, "primario");
-	gtk_label_set_ellipsize(GTK_LABEL(scritta), PANGO_ELLIPSIZE_END);
-	gtk_box_append(GTK_BOX(titolo_app), scritta);
-	gtk_widget_set_visible(titolo_app, FALSE);
-	gtk_widget_set_valign(titolo_app, GTK_ALIGN_CENTER);
-	riga_titolo = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-	gtk_box_append(GTK_BOX(riga_titolo), titolo_app);
-	gtk_box_append(GTK_BOX(riga), riga_titolo);
 
 	GtkWidget *spazio = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
 	gtk_widget_set_hexpand(spazio, TRUE);
@@ -347,7 +324,7 @@ int main(int argc, char *argv[]) {
 	mshell_cassetto_crea(tema, cassetto_cambiato);
 	g_unix_signal_add(SIGUSR1, segnale_cassetto, NULL);
 	scocca_minuto(NULL);
-	mshell_elenco_app_avvia(titolo_cambiato);
+	mshell_elenco_app_avvia();
 	gtk_window_present(GTK_WINDOW(barra));
 
 	GMainLoop *giro = g_main_loop_new(NULL, FALSE);

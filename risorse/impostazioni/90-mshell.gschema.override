@@ -1,0 +1,7 @@
+# Le impostazioni di mshell per le app (GSettings), lette dal portale (xdg-desktop-portal-gtk) e
+# date alle app Flatpak.
+# I pulsanti della barra delle app GTK (la persona, 24/11/2026): riduci, ingrandisci e chiudi.
+# "Riduci" manda la finestra nella colonna, "ingrandisci" apre la scelta delle disposizioni
+# (come "Disponi"): li riceve mshell (utente/compositore/tinywl.c).
+[org.gnome.desktop.wm.preferences]
+button-layout='appmenu:minimize,maximize,close'

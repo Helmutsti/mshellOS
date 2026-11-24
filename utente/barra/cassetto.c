@@ -37,8 +37,8 @@
  * LE APP vengono dai file .desktop (lo standard freedesktop) delle cartelle in "cartelle": quelle
  * del sistema e quelle che esporta Flatpak. Si rileggono a ogni apertura, cosi' un'app appena
  * installata c'e' subito. L'icona si prende dal tema delle icone (o dal file, se il .desktop da' un
- * percorso), solo se e' un'immagine PNG: per le SVG servirebbe librsvg, che non c'e'. Senza icona,
- * un riquadro con l'iniziale (le icone vere verranno dopo). */
+ * percorso): SVG (con librsvg, la persona 24/11/2026) o PNG. Senza icona, un riquadro con
+ * l'iniziale. */
 #include <string.h>
 #include <gio/gdesktopappinfo.h>
 #include <gtk4-layer-shell.h>
@@ -123,33 +123,25 @@ static GtkWidget *scritta(const char *testo, const char *stile1, const char *sti
 	return l;
 }
 
-/* Il percorso dell'icona PNG dell'app, o NULL. */
-static char *file_icona(GAppInfo *app, int misura) {
+/* L'icona dell'app, disegnata alla misura giusta (SVG o PNG, dal tema delle icone o da un file), o
+ * NULL se l'app non ne ha una. Gli SVG li legge librsvg (la persona, 24/11/2026). */
+static GdkPaintable *icona_app(GAppInfo *app, int misura) {
 	GIcon *icona = g_app_info_get_icon(app);
-	char *percorso = NULL;
 	if (icona == NULL) {
 		return NULL;
 	}
 	if (G_IS_FILE_ICON(icona)) {
-		percorso = g_file_get_path(g_file_icon_get_file(G_FILE_ICON(icona)));
-	} else {
-		GtkIconTheme *tema = gtk_icon_theme_get_for_display(gdk_display_get_default());
-		if (!gtk_icon_theme_has_gicon(tema, icona)) {
+		GFile *f = g_file_icon_get_file(G_FILE_ICON(icona));
+		if (!g_file_query_exists(f, NULL)) {
 			return NULL;
 		}
-		GtkIconPaintable *p = gtk_icon_theme_lookup_by_gicon(tema, icona, misura, 1,
-			GTK_TEXT_DIR_NONE, 0);
-		GFile *f = gtk_icon_paintable_get_file(p);
-		if (f != NULL) {
-			percorso = g_file_get_path(f);
-			g_object_unref(f);
-		}
-		g_object_unref(p);
+		return GDK_PAINTABLE(gtk_icon_paintable_new_for_file(f, misura, 1));
 	}
-	if (percorso != NULL && !g_str_has_suffix(percorso, ".png")) {
-		g_clear_pointer(&percorso, g_free);
+	GtkIconTheme *tema = gtk_icon_theme_get_for_display(gdk_display_get_default());
+	if (!gtk_icon_theme_has_gicon(tema, icona)) {
+		return NULL;
 	}
-	return percorso;
+	return GDK_PAINTABLE(gtk_icon_theme_lookup_by_gicon(tema, icona, misura, 1, GTK_TEXT_DIR_NONE, 0));
 }
 
 /* Il quadrato dell'icona, grande "misura": l'immagine dell'app, o l'iniziale del nome. */
@@ -163,13 +155,15 @@ static GtkWidget *riquadro(GAppInfo *app, const char *nome, int misura) {
 	 * esplicitamente, "vexpand" non passa a chi lo contiene) */
 	gtk_widget_set_vexpand(r, FALSE);
 	gtk_widget_set_hexpand(r, FALSE);
-	char *png = file_icona(app, misura);
-	if (png != NULL) {
-		GtkWidget *immagine = gtk_picture_new_for_filename(png);
-		gtk_picture_set_content_fit(GTK_PICTURE(immagine), GTK_CONTENT_FIT_CONTAIN);
+	GdkPaintable *icona = icona_app(app, misura);
+	if (icona != NULL) {
+		/* GtkImage con la misura in pixel: resta grande esattamente quanto il riquadro (una
+		 * GtkPicture prenderebbe la misura naturale dell'immagine e allargherebbe il riquadro) */
+		GtkWidget *immagine = gtk_image_new_from_paintable(icona);
+		gtk_image_set_pixel_size(GTK_IMAGE(immagine), misura);
 		gtk_widget_set_vexpand(immagine, TRUE);
 		gtk_box_append(GTK_BOX(r), immagine);
-		g_free(png);
+		g_object_unref(icona);
 	} else {
 		gtk_widget_add_css_class(r, "senza-icona");
 		char iniziale[8] = "";

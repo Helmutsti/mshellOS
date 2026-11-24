@@ -77,7 +77,9 @@
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>  /* MSHELL: il puntatore chiesto per nome */
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>  /* MSHELL: l'accordo sulla barra del titolo */
 #include <wlr/util/box.h>  /* MSHELL: i posti delle app */
 #include <wlr/util/log.h>
 #include <xkbcommon/xkbcommon.h>
@@ -141,6 +143,8 @@ struct tinywl_server {
 	struct wl_listener new_xdg_toplevel;
 	struct wl_listener new_xdg_popup;
 	struct wl_list toplevels;
+	struct wlr_xdg_decoration_manager_v1 *decorazioni;  /* MSHELL: l'accordo sulla barra */
+	struct wl_listener nuova_decorazione;
 
 	struct wlr_cursor *cursor;
 	struct wlr_xcursor_manager *cursor_mgr;
@@ -153,6 +157,8 @@ struct tinywl_server {
 	struct wlr_seat *seat;
 	struct wl_listener new_input;
 	struct wl_listener request_cursor;
+	struct wlr_cursor_shape_manager_v1 *forme;  /* MSHELL: il puntatore chiesto per nome */
+	struct wl_listener forma;
 	struct wl_listener request_set_selection;
 	struct wl_list keyboards;
 	enum tinywl_cursor_mode cursor_mode;
@@ -203,6 +209,14 @@ struct tinywl_toplevel {
 	struct wl_listener request_resize;
 	struct wl_listener request_maximize;
 	struct wl_listener request_fullscreen;
+	struct wl_listener request_minimize;  /* MSHELL: il pulsante "riduci" della barra dell'app */
+	/* MSHELL: L'ACCORDO SULLA BARRA DEL TITOLO (xdg-decoration; la persona, 24/11/2026): l'app che lo
+	 * usa e lascia la barra al sistema ha la capsula di mshell; quella che non lo usa (le app GTK) o
+	 * che chiede di disegnarla da se' tiene la sua, e la capsula non c'e'. NULL: nessun accordo. */
+	struct wlr_xdg_toplevel_decoration_v1 *decorazione;
+	struct wl_listener decorazione_modo;
+	struct wl_listener decorazione_via;
+	char *app_vera;  /* MSHELL: il nome vero dell'app, per l'icona (NULL: non ancora letto; scrivania.c) */
 	struct mshell_gruppo *gruppo;  /* MSHELL: il suo gruppo (NULL: in nessuno ancora; scrivania.c) */
 	struct wlr_box posto;  /* MSHELL: dove sta la finestra vera sullo schermo (scrivania.c) */
 	struct wlr_box libero;  /* MSHELL: dove stava libera prima di essere disposta (width 0: mai) */
@@ -229,6 +243,10 @@ struct tinywl_keyboard {
 	struct wl_listener destroy;
 };
 
+/* MSHELL: l'accordo sulla barra del titolo (piu' sotto, vicino alle richieste delle finestre) */
+static bool mshell_ha_capsula(struct tinywl_toplevel *t);
+static void mshell_decorazione_rispondi(struct tinywl_toplevel *t);
+static void mshell_decorazione_lascia(struct tinywl_toplevel *t);
 /* MSHELL: dai livelli e dall'elenco delle app (livelli.c, incluso piu' sotto) */
 static bool mshell_livelli_tiene_tastiera(struct tinywl_server *server);
 static void mshell_elenco_attiva(struct tinywl_server *server, struct tinywl_toplevel *t);
@@ -484,6 +502,25 @@ static void seat_request_cursor(struct wl_listener *listener, void *data) {
 	}
 }
 
+/* MSHELL: IL PUNTATORE CHIESTO PER NOME (cursor-shape; la persona, 24/11/2026: i puntatori tutti
+ * uguali). L'app dice quale puntatore vuole ("text", "pointer", "wait"...) e lo disegna il
+ * compositore col tema "mshell" (costruisci.sh), invece di mandarne uno suo: le app Flatpak non
+ * vedono i temi del sistema e userebbero i loro, di un'altra misura e un altro disegno. Se il tema
+ * non ha quel nome, il puntatore normale. Solo per l'app che ha il puntatore, come sopra. */
+static void mshell_forma_puntatore(struct wl_listener *listener, void *data) {
+	struct tinywl_server *server = wl_container_of(listener, server, forma);
+	struct wlr_cursor_shape_manager_v1_request_set_shape_event *e = data;
+	if (e->seat_client != server->seat->pointer_state.focused_client ||
+			e->device_type != WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_POINTER) {
+		return;
+	}
+	const char *nome = wlr_cursor_shape_v1_name(e->shape);
+	if (wlr_xcursor_manager_get_xcursor(server->cursor_mgr, nome, 1) == NULL) {
+		nome = "default";
+	}
+	wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, nome);
+}
+
 static void seat_request_set_selection(struct wl_listener *listener, void *data) {
 	/* This event is raised by the seat when a client wants to set the selection,
 	 * usually when the user copies something. wlroots allows compositors to
@@ -550,8 +587,8 @@ static void process_cursor_move(struct tinywl_server *server, uint32_t time) {
 	struct tinywl_toplevel *toplevel = server->grabbed_toplevel;
 	toplevel->posto.x = (int)(server->cursor->x - server->grab_x);
 	toplevel->posto.y = (int)(server->cursor->y - server->grab_y);
-	if (toplevel->posto.y < mshell_finestra_cima(server)) {
-		toplevel->posto.y = mshell_finestra_cima(server);  /* MSHELL: non sale oltre (scrivania-controlli.c) */
+	if (toplevel->posto.y < mshell_finestra_cima(toplevel)) {
+		toplevel->posto.y = mshell_finestra_cima(toplevel);  /* MSHELL: non sale oltre (scrivania-controlli.c) */
 	}
 	mshell_metti_al_posto(toplevel);
 }
@@ -577,8 +614,8 @@ static void process_cursor_resize(struct tinywl_server *server, uint32_t time) {
 
 	if (server->resize_edges & WLR_EDGE_TOP) {
 		new_top = border_y;
-		if (new_top < mshell_finestra_cima(server)) {
-			new_top = mshell_finestra_cima(server);  /* MSHELL: non sale oltre (scrivania-controlli.c) */
+		if (new_top < mshell_finestra_cima(toplevel)) {
+			new_top = mshell_finestra_cima(toplevel);  /* MSHELL: non sale oltre (scrivania-controlli.c) */
 		}
 		if (new_top >= new_bottom) {
 			new_top = new_bottom - 1;
@@ -904,6 +941,7 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 		 * MSHELL: la misura la sceglie l'app (0,0, come tinywl); il gruppo e il posto li prende
 		 * quando compare (xdg_toplevel_map, scrivania.c). */
 		wlr_xdg_toplevel_set_size(toplevel->xdg_toplevel, 0, 0);
+		mshell_decorazione_rispondi(toplevel);  /* MSHELL: chi disegna la barra */
 	} else if (toplevel->gruppo != NULL) {
 		/* MSHELL: la misura della finestra vera la decide l'app (anche quando cambia da se');
 		 * la geometria puo' cambiare a ogni invio: si rimette al posto */
@@ -930,6 +968,7 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	/* MSHELL: di solito e' gia' uscita dal gruppo quando e' sparita; per sicurezza */
 	mshell_gruppo_esce(toplevel->server, toplevel);
 	mshell_anim_dimentica(toplevel);  /* MSHELL: animazioni.c */
+	g_free(toplevel->app_vera);  /* MSHELL */
 	free(toplevel->ombre);  /* MSHELL: i nodi dell'ombra se ne vanno con l'albero della finestra */
 
 	wl_list_remove(&toplevel->map.link);
@@ -940,6 +979,10 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
 	wl_list_remove(&toplevel->request_resize.link);
 	wl_list_remove(&toplevel->request_maximize.link);
 	wl_list_remove(&toplevel->request_fullscreen.link);
+	wl_list_remove(&toplevel->request_minimize.link);
+	if (toplevel->decorazione != NULL) {
+		mshell_decorazione_lascia(toplevel);
+	}
 
 	free(toplevel);
 }
@@ -1018,6 +1061,73 @@ static void xdg_toplevel_request_maximize(
 	if (toplevel->xdg_toplevel->base->initialized) {
 		wlr_xdg_surface_schedule_configure(toplevel->xdg_toplevel->base);
 	}
+	/* MSHELL: il pulsante "ingrandisci" della barra dell'app fa come "Disponi" della capsula (la
+	 * persona, 24/11/2026): si apre la scelta delle disposizioni (scrivania-controlli.c) */
+	if (toplevel->xdg_toplevel->base->surface->mapped && toplevel->gruppo != NULL) {
+		focus_toplevel(toplevel, toplevel->xdg_toplevel->base->surface);
+		mshell_scelta_apri(toplevel->server, toplevel);
+	}
+}
+
+/* MSHELL: il pulsante "riduci" della barra dell'app fa come "-" della capsula: la finestra lascia
+ * il suo gruppo e va nella colonna (scrivania-controlli.c) */
+static void xdg_toplevel_request_minimize(struct wl_listener *listener, void *data) {
+	struct tinywl_toplevel *toplevel = wl_container_of(listener, toplevel, request_minimize);
+	if (toplevel->xdg_toplevel->base->surface->mapped && toplevel->gruppo != NULL) {
+		mshell_togli_dal_gruppo(toplevel->server, toplevel);
+	}
+}
+
+/* --- MSHELL: L'ACCORDO SULLA BARRA DEL TITOLO (xdg-decoration) ---
+ * Si risponde all'app solo quando la sua finestra e' pronta (dopo il primo invio, come chiede
+ * wlroots): se ha chiesto di disegnare la barra da se' la disegna lei, altrimenti la fa il
+ * sistema (la capsula). */
+static void mshell_decorazione_rispondi(struct tinywl_toplevel *t) {
+	if (t->decorazione == NULL || !t->xdg_toplevel->base->initialized) {
+		return;
+	}
+	wlr_xdg_toplevel_decoration_v1_set_mode(t->decorazione,
+		t->decorazione->requested_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE ?
+		WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE : WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+	mshell_controlli_segui(t);  /* la capsula compare o sparisce */
+}
+
+static void mshell_decorazione_modo(struct wl_listener *listener, void *data) {
+	struct tinywl_toplevel *t = wl_container_of(listener, t, decorazione_modo);
+	mshell_decorazione_rispondi(t);
+}
+
+static void mshell_decorazione_lascia(struct tinywl_toplevel *t) {
+	wl_list_remove(&t->decorazione_modo.link);
+	wl_list_remove(&t->decorazione_via.link);
+	t->decorazione = NULL;
+}
+
+static void mshell_decorazione_via(struct wl_listener *listener, void *data) {
+	struct tinywl_toplevel *t = wl_container_of(listener, t, decorazione_via);
+	mshell_decorazione_lascia(t);
+	mshell_controlli_segui(t);  /* niente piu' accordo: la barra e' dell'app */
+}
+
+static void mshell_nuova_decorazione(struct wl_listener *listener, void *data) {
+	struct wlr_xdg_toplevel_decoration_v1 *d = data;
+	struct wlr_scene_tree *albero = d->toplevel->base->data;
+	struct tinywl_toplevel *t = albero != NULL ? albero->node.data : NULL;
+	if (t == NULL || t->decorazione != NULL) {
+		return;
+	}
+	t->decorazione = d;
+	t->decorazione_modo.notify = mshell_decorazione_modo;
+	wl_signal_add(&d->events.request_mode, &t->decorazione_modo);
+	t->decorazione_via.notify = mshell_decorazione_via;
+	wl_signal_add(&d->events.destroy, &t->decorazione_via);
+	mshell_decorazione_rispondi(t);
+}
+
+/* MSHELL: la finestra t ha la capsula di mshell (la barra la disegna il sistema). */
+static bool mshell_ha_capsula(struct tinywl_toplevel *t) {
+	return t->decorazione != NULL &&
+		t->decorazione->requested_mode != WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_CLIENT_SIDE;
 }
 
 static void xdg_toplevel_request_fullscreen(
@@ -1068,6 +1178,8 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
 	wl_signal_add(&xdg_toplevel->events.request_maximize, &toplevel->request_maximize);
 	toplevel->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
 	wl_signal_add(&xdg_toplevel->events.request_fullscreen, &toplevel->request_fullscreen);
+	toplevel->request_minimize.notify = xdg_toplevel_request_minimize;  /* MSHELL */
+	wl_signal_add(&xdg_toplevel->events.request_minimize, &toplevel->request_minimize);
 }
 
 static void xdg_popup_commit(struct wl_listener *listener, void *data) {
@@ -1340,6 +1452,10 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
 	server.new_xdg_popup.notify = server_new_xdg_popup;
 	wl_signal_add(&server.xdg_shell->events.new_popup, &server.new_xdg_popup);
+	/* MSHELL: l'accordo sulla barra del titolo (vedi mshell_nuova_decorazione) */
+	server.decorazioni = wlr_xdg_decoration_manager_v1_create(server.wl_display);
+	server.nuova_decorazione.notify = mshell_nuova_decorazione;
+	wl_signal_add(&server.decorazioni->events.new_toplevel_decoration, &server.nuova_decorazione);
 
 	/*
 	 * Creates a cursor, which is a wlroots utility for tracking the cursor
@@ -1388,6 +1504,9 @@ int main(int argc, char *argv[]) {
 	wl_signal_add(&server.backend->events.new_input, &server.new_input);
 	server.seat = wlr_seat_create(server.wl_display, "seat0");
 	mshell_livelli_seat(&server);  /* MSHELL: la fine delle prese dei menu a comparsa (livelli.c) */
+	server.forme = wlr_cursor_shape_manager_v1_create(server.wl_display, 1);  /* MSHELL */
+	server.forma.notify = mshell_forma_puntatore;
+	wl_signal_add(&server.forme->events.request_set_shape, &server.forma);
 	server.request_cursor.notify = seat_request_cursor;
 	wl_signal_add(&server.seat->events.request_set_cursor,
 			&server.request_cursor);

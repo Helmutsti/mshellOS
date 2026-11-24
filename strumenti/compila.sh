@@ -28,25 +28,33 @@ PROTOCOLLI=$(pkg-config --variable=pkgdatadir wayland-protocols)
 MIEI=utente/compositore/protocolli
 wayland-scanner server-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.h"
 wayland-scanner server-header "$MIEI/wlr-layer-shell-unstable-v1.xml" "$C/wlr-layer-shell-unstable-v1-protocol.h"
+# il puntatore chiesto per nome dalle app (cursor-shape): lo disegna il compositore col tema mshell
+wayland-scanner server-header "$PROTOCOLLI/staging/cursor-shape/cursor-shape-v1.xml" "$C/cursor-shape-v1-protocol.h"
 wayland-scanner client-header "$MIEI/wlr-foreign-toplevel-management-unstable-v1.xml" \
     "$C/wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 wayland-scanner private-code "$MIEI/wlr-foreign-toplevel-management-unstable-v1.xml" \
     "$C/wlr-foreign-toplevel-management-unstable-v1-protocol.c"
 wayland-scanner client-header "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-client-protocol.h"
 wayland-scanner private-code "$PROTOCOLLI/stable/xdg-shell/xdg-shell.xml" "$C/xdg-shell-protocol.c"
+# l'accordo sulla barra del titolo: l'app di prova chiede la capsula di mshell
+DECORAZIONE="$PROTOCOLLI/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
+wayland-scanner client-header "$DECORAZIONE" "$C/xdg-decoration-unstable-v1-client-protocol.h"
+wayland-scanner private-code "$DECORAZIONE" "$C/xdg-decoration-unstable-v1-protocol.c"
 # Il compositore si porta dentro SceneFX (la libreria statica compilata negli attrezzi,
 # strumenti/Dockerfile) e usa le librerie di OpenGL del sistema (EGL, GLES 2, GBM, DRM).
 # --export-dynamic: le funzioni della scena di SceneFX si vedono anche da wlroots, che le chiama
 # per le superfici delle app e dei livelli (spiegato in utente/compositore/effetti.c).
 # pangocairo: il testo e le icone della scrivania (scrivania.c); nel sistema c'e' gia', lo porta GTK.
+# librsvg: le icone SVG delle app (scrivania.c).
 SCENEFX=$(pkg-config --variable=libdir scenefx-0.2)/libscenefx-0.2.a
 gcc -O2 -Werror -DWLR_USE_UNSTABLE -I"$C" \
-    $(pkg-config --cflags scenefx-0.2 wlroots-0.18 wayland-server xkbcommon pangocairo) \
+    $(pkg-config --cflags scenefx-0.2 wlroots-0.18 wayland-server xkbcommon pangocairo librsvg-2.0) \
     -o "$RADICE/usr/bin/mshell-compositore" utente/compositore/tinywl.c "$SCENEFX" \
     -Wl,--export-dynamic \
-    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon egl glesv2 gbm libdrm pixman-1 pangocairo) -lm
+    $(pkg-config --libs wlroots-0.18 wayland-server xkbcommon egl glesv2 gbm libdrm pixman-1 pangocairo librsvg-2.0) -lm
 gcc -O2 -Wall -Werror -I"$C" -o "$RADICE/usr/bin/mshell-prova" \
-    utente/prove/app-scura.c "$C/xdg-shell-protocol.c" $(pkg-config --libs wayland-client)
+    utente/prove/app-scura.c "$C/xdg-shell-protocol.c" "$C/xdg-decoration-unstable-v1-protocol.c" \
+    $(pkg-config --libs wayland-client)
 mkdir -p "$RADICE/usr/share/applications"
 cp utente/prove/mshell-prova*.desktop "$RADICE/usr/share/applications/"  # Prova e Uno..Sei
 # gtk4-layer-shell va prima di wayland-client (lo chiede la sua documentazione)

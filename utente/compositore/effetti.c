@@ -228,6 +228,12 @@ static void mshell_effetti_app(struct wlr_scene_tree *albero, struct wlr_xdg_sur
 	mshell_effetti_angoli(superficie, xdg);
 	struct wlr_box geo;
 	wlr_xdg_surface_get_geometry(xdg, &geo);
+	/* il ritaglio sposta l'albero della superficie di -geo.x, -geo.y (l'angolo della geometria
+	 * finisce nell'origine dell'albero dell'app): le app GTK, con l'ombra intorno, finivano in
+	 * alto a sinistra di quanto e' larga l'ombra. Qui si rimette al suo posto naturale (0, 0),
+	 * dove la geometria e' dove dice l'app, come contano la scrivania (mshell_metti_al_posto
+	 * toglie geo.x e geo.y dal posto), l'ombra qui sotto e i menu dell'app. */
+	wlr_scene_node_set_position(superficie, 0, 0);
 	mshell_effetti_ombre_metti(albero, ombre, geo, MSHELL_RAGGIO_FINESTRA, mshell_ombre_finestra,
 		MSHELL_STRATI_FINESTRA);
 }

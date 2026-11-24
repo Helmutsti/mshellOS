@@ -50,12 +50,14 @@
  * sistema (MSHELL_TEMA, token.c), come la barra. Il suggerimento della schermata 8 ("Puntatore al
  * bordo sinistro: tornano i gruppi") non c'e': spiega il disegno, non e' un aiuto per chi lo usa.
  *
- * LE ICONE DELLE APP: per ora un quadrato arrotondato colorato con l'iniziale del nome dell'app
- * (come il pannello di ricerca della barra quando un'app non ha un'icona PNG); il colore viene dal
- * nome. Le icone vere arriveranno con le app (Flatpak). Testo con pango e cairo, che nel sistema
- * ci sono gia' (li porta GTK). */
+ * LE ICONE DELLE APP: l'icona vera dell'app (la persona, 24/11/2026), cercata dal suo file .desktop
+ * (la riga Icon=) nel tema "hicolor" delle app Flatpak e del sistema, disegnata con librsvg se e'
+ * un SVG (quasi tutte le app di Flathub) o letta con cairo se e' un PNG. Se l'app non ha icona: un
+ * quadrato arrotondato colorato con la sua iniziale (come il pannello di ricerca della barra); il
+ * colore viene dal nome. Testo con pango e cairo, che nel sistema ci sono gia' (li porta GTK). */
 #include <math.h>  /* fabs */
 #include <pango/pangocairo.h>
+#include <librsvg/rsvg.h>
 
 /* Le misure del disegno (schermata "1 · Al lavoro") */
 #define MSHELL_COLONNA_X 16          /* la colonna dal bordo sinistro */
@@ -68,6 +70,7 @@
 #define MSHELL_MINI_PASSO_Y 10       /* piu' in alto */
 #define MSHELL_MINI_RIDUCI 0.06      /* e un po' piu' piccole */
 #define MSHELL_MINI_QUANTE 3
+#define MSHELL_ICONA_PIXEL (2 * MSHELL_ICONA)  /* l'immagine dell'icona, al doppio */
 #define MSHELL_ICONA 36              /* l'icona dell'app, in basso a sinistra nel riquadro */
 #define MSHELL_ICONA_X 8
 #define MSHELL_ICONA_PASSO 30        /* le icone delle altre app del gruppo, a destra e sotto */
@@ -129,7 +132,7 @@ static void mshell_controlli_metti(struct tinywl_server *server, struct tinywl_t
 static void mshell_scelta_chiudi(void);
 static void mshell_pill_aggiorna(struct tinywl_server *server);
 static struct tinywl_toplevel *mshell_scelta_t;  /* (scrivania-controlli.c) */
-static int mshell_finestra_cima(struct tinywl_server *server);
+static int mshell_finestra_cima(struct tinywl_toplevel *t);
 static void mshell_controlli_avvia(void);
 
 /* Il passaggio da un gruppo all'altro (scrivania-voli.c). */
@@ -280,7 +283,163 @@ static const char *const mshell_icona_colori[] = {
 	"base-rosso-saturo-scuro", "base-menta-saturo-scuro", "base-marrone-saturo-scuro",
 };
 
-/* L'icona provvisoria dell'app "nome" (vedi in cima), fatta la prima volta e poi tenuta. */
+/* Le cartelle dove stanno i file .desktop (in applications/) e le icone (in icons/), dalle app
+ * Flatpak dell'utente a quelle del sistema. */
+static char **mshell_cartelle_dati(void) {
+	const char *casa = g_get_home_dir();
+	char **c = g_new0(char *, 5);
+	c[0] = g_build_filename(casa, ".local/share/flatpak/exports/share", NULL);
+	c[1] = g_strdup("/var/lib/flatpak/exports/share");
+	c[2] = g_build_filename(casa, ".local/share", NULL);
+	c[3] = g_strdup("/usr/share");
+	return c;
+}
+
+/* IL NOME VERO DELL'APP della finestra t: per un'app Flatpak quello con cui e' installata (lo dice
+ * la sua scatola, nel file /.flatpak-info che Flatpak le mette dentro: la Calcolatrice di GNOME
+ * chiama la sua finestra "gnome-calculator", ma e' installata come "org.gnome.Calculator", come il
+ * suo file .desktop e la sua icona; lo stesso fa GNOME); per le altre il nome della finestra
+ * (app_id). Si legge una volta e si tiene. */
+static const char *mshell_app_vera(struct tinywl_toplevel *t) {
+	if (t->app_vera == NULL) {
+		pid_t pid = 0;
+		wl_client_get_credentials(wl_resource_get_client(t->xdg_toplevel->resource), &pid, NULL, NULL);
+		char *f = g_strdup_printf("/proc/%d/root/.flatpak-info", (int)pid);
+		GKeyFile *k = g_key_file_new();
+		if (pid > 0 && g_key_file_load_from_file(k, f, G_KEY_FILE_NONE, NULL)) {
+			t->app_vera = g_key_file_get_string(k, "Application", "name", NULL);
+		}
+		g_key_file_free(k);
+		g_free(f);
+		if (t->app_vera == NULL) {
+			t->app_vera = g_strdup(t->xdg_toplevel->app_id != NULL ? t->xdg_toplevel->app_id : "");
+		}
+	}
+	return t->app_vera;
+}
+
+/* Il file dell'icona dell'app "nome" (il nome vero, mshell_app_vera), o NULL. */
+static char *mshell_icona_file(const char *nome) {
+	if (nome == NULL || nome[0] == '\0') {
+		return NULL;
+	}
+	char **cartelle = mshell_cartelle_dati();
+	/* il nome dell'icona: dalla riga Icon= del file .desktop, altrimenti l'app_id stesso */
+	char *icona = NULL;
+	char *desktop = g_strconcat(nome, ".desktop", NULL);
+	for (int i = 0; cartelle[i] != NULL && icona == NULL; i++) {
+		char *f = g_build_filename(cartelle[i], "applications", desktop, NULL);
+		GKeyFile *k = g_key_file_new();
+		if (g_key_file_load_from_file(k, f, G_KEY_FILE_NONE, NULL)) {
+			icona = g_key_file_get_string(k, "Desktop Entry", "Icon", NULL);
+		}
+		g_key_file_free(k);
+		g_free(f);
+	}
+	g_free(desktop);
+	/* se non c'e' un file col suo nome, quello che dice che la finestra e' sua (StartupWMClass: la
+	 * Calcolatrice di GNOME si chiama "gnome-calculator", il suo file "org.gnome.Calculator") */
+	for (int i = 0; cartelle[i] != NULL && icona == NULL; i++) {
+		char *dir = g_build_filename(cartelle[i], "applications", NULL);
+		GDir *d = g_dir_open(dir, 0, NULL);
+		const char *voce;
+		while (d != NULL && icona == NULL && (voce = g_dir_read_name(d)) != NULL) {
+			if (!g_str_has_suffix(voce, ".desktop")) {
+				continue;
+			}
+			char *f = g_build_filename(dir, voce, NULL);
+			GKeyFile *k = g_key_file_new();
+			if (g_key_file_load_from_file(k, f, G_KEY_FILE_NONE, NULL)) {
+				char *classe = g_key_file_get_string(k, "Desktop Entry", "StartupWMClass", NULL);
+				if (classe != NULL && g_ascii_strcasecmp(classe, nome) == 0) {
+					icona = g_key_file_get_string(k, "Desktop Entry", "Icon", NULL);
+				}
+				g_free(classe);
+			}
+			g_key_file_free(k);
+			g_free(f);
+		}
+		if (d != NULL) {
+			g_dir_close(d);
+		}
+		g_free(dir);
+	}
+	if (icona == NULL) {
+		icona = g_strdup(nome);
+	}
+	char *trovato = NULL;
+	if (g_path_is_absolute(icona)) {
+		if (g_file_test(icona, G_FILE_TEST_IS_REGULAR)) {
+			trovato = g_strdup(icona);
+		}
+	} else {
+		/* il tema hicolor (prima il disegno vettoriale, poi le immagini dalla piu' grande) e
+		 * pixmaps */
+		static const char *const misure[] = { "scalable", "512x512", "256x256", "128x128", "96x96",
+			"64x64", "48x48", NULL };
+		static const char *const tipi[] = { ".svg", ".png", NULL };
+		for (int i = 0; cartelle[i] != NULL && trovato == NULL; i++) {
+			for (int m = 0; misure[m] != NULL && trovato == NULL; m++) {
+				for (int e = 0; tipi[e] != NULL && trovato == NULL; e++) {
+					char *base = g_strconcat(icona, tipi[e], NULL);
+					char *f = g_build_filename(cartelle[i], "icons/hicolor", misure[m], "apps", base, NULL);
+					if (g_file_test(f, G_FILE_TEST_IS_REGULAR)) {
+						trovato = f;
+					} else {
+						g_free(f);
+					}
+					g_free(base);
+				}
+			}
+			for (int e = 0; tipi[e] != NULL && trovato == NULL; e++) {
+				char *base = g_strconcat(icona, tipi[e], NULL);
+				char *f = g_build_filename(cartelle[i], "pixmaps", base, NULL);
+				if (g_file_test(f, G_FILE_TEST_IS_REGULAR)) {
+					trovato = f;
+				} else {
+					g_free(f);
+				}
+				g_free(base);
+			}
+		}
+	}
+	g_free(icona);
+	g_strfreev(cartelle);
+	return trovato;
+}
+
+/* Disegna nel quadrato "lato" x "lato" di cr l'icona del file f (SVG o PNG). Falso se non ci riesce. */
+static bool mshell_icona_disegna(cairo_t *cr, const char *f, int lato) {
+	if (g_str_has_suffix(f, ".svg")) {
+		RsvgHandle *h = rsvg_handle_new_from_file(f, NULL);
+		if (h == NULL) {
+			return false;
+		}
+		RsvgRectangle dove = { 0, 0, lato, lato };
+		bool ok = rsvg_handle_render_document(h, cr, &dove, NULL);
+		g_object_unref(h);
+		return ok;
+	}
+	cairo_surface_t *png = cairo_image_surface_create_from_png(f);
+	if (cairo_surface_status(png) != CAIRO_STATUS_SUCCESS) {
+		cairo_surface_destroy(png);
+		return false;
+	}
+	int l = cairo_image_surface_get_width(png), a = cairo_image_surface_get_height(png);
+	double scala = (double)lato / (l > a ? l : a);
+	cairo_save(cr);
+	cairo_translate(cr, (lato - l * scala) / 2, (lato - a * scala) / 2);
+	cairo_scale(cr, scala, scala);
+	cairo_set_source_surface(cr, png, 0, 0);
+	cairo_pattern_set_filter(cairo_get_source(cr), CAIRO_FILTER_GOOD);
+	cairo_paint(cr);
+	cairo_restore(cr);
+	cairo_surface_destroy(png);
+	return true;
+}
+
+/* L'icona dell'app "nome" (vedi in cima), fatta la prima volta e poi tenuta. E' disegnata al
+ * doppio della misura (MSHELL_ICONA_PIXEL), cosi' resta nitida anche sugli schermi densi. */
 static struct mshell_pixel *mshell_icona(const char *nome) {
 	const char *chiave = nome != NULL ? nome : "";
 	struct mshell_icona *i;
@@ -297,9 +456,13 @@ static struct mshell_pixel *mshell_icona(const char *nome) {
 	mshell_token_colore(mshell_icona_colori[h % (sizeof(mshell_icona_colori) / sizeof(mshell_icona_colori[0]))],
 		colore);
 
-	int lato = MSHELL_ICONA;
+	int lato = MSHELL_ICONA_PIXEL;
 	cairo_surface_t *cs = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, lato, lato);
 	cairo_t *cr = cairo_create(cs);
+	char *file = mshell_icona_file(nome);
+	bool vera = file != NULL && mshell_icona_disegna(cr, file, lato);
+	g_free(file);
+	if (!vera) {
 	/* il quadrato arrotondato (il raggio delle icone del disegno: 22,5% del lato) */
 	double r = lato * 0.225;
 	cairo_new_sub_path(cr);
@@ -327,6 +490,7 @@ static struct mshell_pixel *mshell_icona(const char *nome) {
 	pango_cairo_show_layout(cr, pl);
 	pango_font_description_free(fd);
 	g_object_unref(pl);
+	}
 	cairo_destroy(cr);
 
 	struct mshell_pixel *p = mshell_pixel_da_cairo(cs);
@@ -586,7 +750,7 @@ static void mshell_cascata(struct tinywl_server *server, struct mshell_gruppo *g
 		if (t->posto.x + t->posto.width > area.x + area.width ||
 				t->posto.y + t->posto.height > area.y + area.height) {
 			t->posto.x = area.x + MSHELL_CASCATA;
-			t->posto.y = mshell_finestra_cima(server);
+			t->posto.y = mshell_finestra_cima(t);
 		}
 	}
 }
@@ -618,8 +782,8 @@ static void mshell_assegna(struct tinywl_server *server, struct tinywl_toplevel 
 	t->posto.height = geo.height;
 	t->posto.x = a.x + (a.width - geo.width) / 2;
 	t->posto.y = a.y + (a.height - geo.height) / 2;
-	if (t->posto.y < mshell_finestra_cima(server)) {
-		t->posto.y = mshell_finestra_cima(server);  /* le pill devono starci sopra */
+	if (t->posto.y < mshell_finestra_cima(t)) {
+		t->posto.y = mshell_finestra_cima(t);  /* le pill devono starci sopra */
 	}
 	if (tm == NULL) {
 		mshell_cascata(server, NULL, t);  /* non proprio sopra un'altra finestra */
@@ -759,7 +923,7 @@ static int mshell_riquadro_icone(struct mshell_gruppo *g) {
 	const char *nomi[MSHELL_ICONE_QUANTE];
 	int n_nomi = 0;
 	for (int i = g->n - 1; i >= 0 && n_nomi < MSHELL_ICONE_QUANTE; i--) {
-		const char *nome = g->app[i]->xdg_toplevel->app_id;
+		const char *nome = mshell_app_vera(g->app[i]);
 		nome = nome != NULL ? nome : "";
 		bool gia = false;
 		for (int j = 0; j < n_nomi; j++) {
@@ -770,6 +934,29 @@ static int mshell_riquadro_icone(struct mshell_gruppo *g) {
 		}
 	}
 	return n_nomi;
+}
+
+/* LA LARGHEZZA DEL RIQUADRO (la persona, 24/11/2026: "il riquadro si stringe intorno alla
+ * miniatura, altezza fissa e larghezza variabile"): quanto serve alle miniature (di misura come
+ * prima, al massimo MSHELL_MINI_L x MSHELL_MINI_A) e alle icone, con lo stesso margine a destra del
+ * riquadro pieno; al massimo MSHELL_RIQUADRO_L. Con lo split aperto resta pieno. */
+static int mshell_riquadro_largo(struct mshell_gruppo *g) {
+	if (mshell_split_di(g) || g->n == 0) {
+		return MSHELL_RIQUADRO_L;
+	}
+	int destra = 0;
+	int quante = g->n < MSHELL_MINI_QUANTE ? g->n : MSHELL_MINI_QUANTE;
+	for (int k = 0; k < quante; k++) {
+		double riduci = 1 - MSHELL_MINI_RIDUCI * k;
+		int l, a;
+		mshell_mini_misura(g->app[g->n - 1 - k], MSHELL_MINI_L * riduci, MSHELL_MINI_A * riduci, &l, &a);
+		int d = MSHELL_MINI_X + MSHELL_MINI_PASSO_X * k + l;
+		destra = d > destra ? d : destra;
+	}
+	int icone = MSHELL_ICONA_X + MSHELL_ICONA_PASSO * (mshell_riquadro_icone(g) - 1) + MSHELL_ICONA;
+	destra = icone > destra ? icone : destra;
+	int l = destra + (MSHELL_RIQUADRO_L - MSHELL_MINI_X - MSHELL_MINI_L);
+	return l < MSHELL_RIQUADRO_L ? l : MSHELL_RIQUADRO_L;
 }
 
 static int mshell_riquadro_alto(struct mshell_gruppo *g) {
@@ -796,7 +983,7 @@ static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *
 	/* il fondo del riquadro, trasparente: prende i clic anche dove non c'e' una miniatura (niente
 	 * evidenza al passaggio del puntatore: tolta dalla persona, 23/11/2026) */
 	const float trasparente[4] = { 0, 0, 0, 0 };
-	wlr_scene_rect_create(r, MSHELL_RIQUADRO_L, mshell_riquadro_alto(g), trasparente);
+	wlr_scene_rect_create(r, mshell_riquadro_largo(g), mshell_riquadro_alto(g), trasparente);
 	/* le miniature, dalla piu' dietro (cosi' quella davanti sta sopra); col gruppo aperto le
 	 * disegna lo split (scrivania-tasti.c) */
 	int cima = mshell_riquadro_cima(g);
@@ -809,7 +996,7 @@ static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *
 	const char *nomi[MSHELL_ICONE_QUANTE];
 	int n_nomi = 0;
 	for (int i = g->n - 1; i >= 0 && n_nomi < MSHELL_ICONE_QUANTE; i--) {
-		const char *nome = g->app[i]->xdg_toplevel->app_id;
+		const char *nome = mshell_app_vera(g->app[i]);
 		nome = nome != NULL ? nome : "";
 		bool gia = false;
 		for (int j = 0; j < n_nomi; j++) {
@@ -825,6 +1012,7 @@ static void mshell_riquadro(struct tinywl_server *server, struct mshell_gruppo *
 			continue;
 		}
 		struct wlr_scene_buffer *b = wlr_scene_buffer_create(r, &p->base);
+		wlr_scene_buffer_set_dest_size(b, MSHELL_ICONA, MSHELL_ICONA);
 		wlr_scene_node_set_position(&b->node, MSHELL_ICONA_X + MSHELL_ICONA_PASSO * j, icona_y);
 		b->point_accepts_input = mshell_niente_clic;
 	}
@@ -1034,7 +1222,7 @@ static struct mshell_gruppo *mshell_colonna_gruppo_a(struct tinywl_server *serve
 	wlr_output_layout_get_box(server->output_layout, NULL, &schermo);
 	for (int i = 0; i < server->n_gruppi; i++) {
 		struct wlr_box r = { schermo.x + MSHELL_COLONNA_X, mshell_colonna_y(server, i),
-			MSHELL_RIQUADRO_L, mshell_riquadro_alto(server->gruppo[i]) };
+			mshell_riquadro_largo(server->gruppo[i]), mshell_riquadro_alto(server->gruppo[i]) };
 		if (wlr_box_contains_point(&r, lx, ly)) {
 			return server->gruppo[i];
 		}

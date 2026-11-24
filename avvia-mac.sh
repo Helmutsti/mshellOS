@@ -40,7 +40,7 @@ pgrep -xq UTM || { open -a UTM; sleep 3; }
 if [ ! -d "$(dirname "$disco")" ]; then
     osascript <<FINE >/dev/null
 tell application "UTM"
-    make new virtual machine with properties {backend:qemu, configuration:{name:"$vm", architecture:"aarch64", machine:"virt", memory:2048, cpu cores:4, hypervisor:true, uefi:true, drives:{{interface:VirtIO, raw:true, source:(POSIX file "$qui/build/disco-qemu-mac.img")}}, displays:{{hardware:"virtio-gpu-gl-pci"}}, network interfaces:{}}}
+    make new virtual machine with properties {backend:qemu, configuration:{name:"$vm", architecture:"aarch64", machine:"virt", memory:2048, cpu cores:4, hypervisor:true, uefi:true, drives:{{interface:VirtIO, raw:true, source:(POSIX file "$qui/build/disco-qemu-mac.img")}}, displays:{{hardware:"virtio-gpu-gl-pci"}}, network interfaces:{{hardware:"virtio-net-pci", mode:shared}}}}
 end tell
 FINE
 else

@@ -20,4 +20,14 @@ libwayland-client0  # la libreria con cui le app parlano al compositore Wayland:
 libgtk-4-1       # GTK 4, la libreria delle finestre e dei controlli: con lei sono fatti la barra di stato e i suoi menu (mshell-barra)
 libgtk4-layer-shell0  # gtk4-layer-shell: fa di una finestra GTK una superficie dei "livelli" del compositore (la barra in cima allo schermo, i menu sopra le app)
 xkb-data         # le descrizioni delle tastiere (disposizioni dei tasti): il compositore le legge per capire i tasti
+# FLATPAK (approvato dalla persona il 24/11/2026: flatpak con le sue ~43 dipendenze, i certificati,
+# il portale con le sue ~63 dipendenze, quasi tutte audio e video, e la finestra di scelta GTK)
+flatpak          # installa, aggiorna e fa partire le app (l'unico modo di installarle), ognuna chiusa nella sua scatola (bubblewrap)
+ca-certificates  # i certificati delle autorita': servono per i collegamenti sicuri con Flathub
+xdg-desktop-portal      # il "portale": le app chiuse nella scatola chiedono al sistema di aprire e salvare file, aprire link, il tema
+xdg-desktop-portal-gtk  # la finestra per aprire e salvare file del portale, quella GTK gia' pronta (la persona: poi la facciamo noi da zero)
+# LE ICONE SVG (la persona, 24/11/2026: le icone vere delle app, che su Flathub sono quasi tutte
+# disegni vettoriali SVG; torna sulla decisione di non avere librsvg):
+librsvg2-2       # librsvg, la libreria che legge e disegna gli SVG: il compositore ci disegna le icone delle app (colonna e capsula)
+librsvg2-common  # il pezzo che insegna a GTK a leggere gli SVG: le icone delle app nel pannello di ricerca (mshell-barra)
 greetd           # il gestore dell'accesso (display manager): all'accensione apre da solo la sessione di utente1 e lancia la scrivania; poi sara' la schermata di accesso

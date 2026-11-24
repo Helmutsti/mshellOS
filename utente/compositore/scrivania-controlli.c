@@ -279,10 +279,14 @@ static bool mshell_caps_a_cavallo(struct tinywl_toplevel *t) {
 
 /* IL PIU' IN ALTO DOVE PUO' STARE UNA FINESTRA LIBERA (la persona, 23/11/2026): abbastanza in basso
  * perche' la sua capsula ci stia sopra, sotto la barra. Spostandola (o ridimensionandola dal bordo
- * alto) non sale oltre: cosi' la capsula non salta mai a cavallo del bordo. */
-static int mshell_finestra_cima(struct tinywl_server *server) {
+ * alto) non sale oltre: cosi' la capsula non salta mai a cavallo del bordo. Una finestra con la
+ * barra sua (senza capsula, tinywl.c) puo' arrivare fin sotto la barra. */
+static int mshell_finestra_cima(struct tinywl_toplevel *t) {
 	struct wlr_box s;
-	wlr_output_layout_get_box(server->output_layout, NULL, &s);
+	wlr_output_layout_get_box(t->server->output_layout, NULL, &s);
+	if (!mshell_ha_capsula(t)) {
+		return s.y + MSHELL_CTRL_SOTTO_BARRA;
+	}
 	return s.y + MSHELL_CTRL_SOTTO_BARRA + MSHELL_CAPS_ALTO + MSHELL_CTRL_STACCO;
 }
 
@@ -373,7 +377,7 @@ static void mshell_pill_rifai(struct mshell_pill *p, struct tinywl_toplevel *t) 
 	int cx = c.x - t->posto.x, cy = c.y - t->posto.y, d = MSHELL_CAPS_DENTRO;
 	mshell_rett(albero, cx, cy, c.width, c.height, MSHELL_CAPS_ALTO / 2, mshell_sc.colore_elevata, 1.0f);
 	if (el > 0) {
-		struct mshell_pixel *ic = mshell_icona(t->xdg_toplevel->app_id);
+		struct mshell_pixel *ic = mshell_icona(mshell_app_vera(t));
 		if (ic != NULL) {
 			struct wlr_scene_buffer *b = wlr_scene_buffer_create(albero, &ic->base);
 			wlr_scene_buffer_set_dest_size(b, MSHELL_CTRL_ICONA, MSHELL_CTRL_ICONA);
@@ -399,6 +403,9 @@ static void mshell_pill_rifai(struct mshell_pill *p, struct tinywl_toplevel *t) 
 static void mshell_pill_metti(struct mshell_pill *p, struct tinywl_toplevel *t) {
 	if (p->albero == NULL) {
 		return;
+	}
+	if (t != NULL && !mshell_ha_capsula(t)) {
+		t = NULL;  /* la barra la disegna l'app (l'accordo sulla barra, tinywl.c): niente capsula */
 	}
 	const char *titolo = t != NULL && t->xdg_toplevel->title != NULL ? t->xdg_toplevel->title : "";
 	int lati, fila = t != NULL ? mshell_ctrl_y(t, &lati) : 0;
@@ -469,10 +476,16 @@ static void mshell_controlli_metti(struct tinywl_server *server, struct tinywl_t
 
 /* La finestra t si e' mossa (o ha cambiato misura o titolo): le sue pill la seguono. */
 static void mshell_controlli_segui(struct tinywl_toplevel *t) {
+	bool sua = false;
 	for (int k = 0; k < 2 && t != NULL; k++) {
-		if (mshell_pill[k].t == t) {
-			mshell_pill_metti(&mshell_pill[k], t);
-		}
+		sua = sua || mshell_pill[k].t == t;
+	}
+	struct mshell_gruppo *c = t != NULL ? mshell_al_centro(t->server) : NULL;
+	bool attiva = c != NULL && c->n > 0 && c->app[c->n - 1] == t;
+	if (sua || attiva || (t != NULL && t == mshell_sc.sotto)) {
+		/* la capsula segue la finestra e puo' passare da sopra a cavallo del bordo (e al contrario):
+		 * si ricalcola anche se si vede */
+		mshell_pill_aggiorna(t->server);
 	}
 }
 
@@ -832,8 +845,8 @@ static void mshell_unisci(struct tinywl_server *server, struct mshell_gruppo *g,
 		if (davanti->posto.y + davanti->posto.height > area.y + area.height) {
 			davanti->posto.y = area.y + area.height - davanti->posto.height;
 		}
-		if (davanti->posto.y < mshell_finestra_cima(server)) {
-			davanti->posto.y = mshell_finestra_cima(server);
+		if (davanti->posto.y < mshell_finestra_cima(davanti)) {
+			davanti->posto.y = mshell_finestra_cima(davanti);
 		}
 		mshell_metti_al_posto(davanti);
 	}
