@@ -479,6 +479,10 @@ static void mshell_livelli_crea(struct tinywl_server *server) {
 		&mshell_sc.colonna->node);
 	wlr_scene_node_place_below(&l->albero[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM]->node,
 		&mshell_sc.colonna->node);
+	/* la capsula a cavallo del bordo alto delle finestre sta sopra la barra (livello "top"), sotto
+	 * il livello "overlay" (scrivania-controlli.c) */
+	mshell_sc.controlli_alti = wlr_scene_tree_create(&server->scene->tree);
+	wlr_scene_node_place_above(&mshell_sc.controlli_alti->node, &l->albero[ZWLR_LAYER_SHELL_V1_LAYER_TOP]->node);
 	l->shell = wlr_layer_shell_v1_create(server->wl_display, 4);
 	l->nuova_superficie.notify = mshell_livelli_nuova_superficie;
 	wl_signal_add(&l->shell->events.new_surface, &l->nuova_superficie);

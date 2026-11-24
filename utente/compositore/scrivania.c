@@ -103,6 +103,7 @@ static struct {
 	int fantasma_dx, fantasma_dy;          /* dal puntatore all'angolo della miniatura */
 	/* i controlli sulla finestra */
 	struct wlr_scene_tree *controlli;      /* sopra le finestre */
+	struct wlr_scene_tree *controlli_alti; /* sopra la barra in alto: la capsula a cavallo del bordo */
 	struct tinywl_toplevel *sotto;         /* la finestra coi controlli (NULL: nessuna) */
 	/* la scelta delle disposizioni */
 	struct wlr_scene_tree *scelta;         /* NULL: chiusa */

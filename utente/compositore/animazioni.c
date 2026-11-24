@@ -44,6 +44,7 @@
 /* Le durate. I nomi dei token sono una proposta, da confermare: durata/breve e durata/media. */
 #define MSHELL_DURATA_BREVE 150  /* token "durata/breve" (proposta, da confermare): dissolvenze */
 #define MSHELL_DURATA_MEDIA 250  /* token "durata/media" (proposta, da confermare): scorrimenti */
+#define MSHELL_DURATA_CAPSULA 90  /* la capsula sulla finestra (la persona: "una transizione molto rapida") */
 #define MSHELL_DURATA_GRUPPI 250  /* il passaggio da un gruppo all'altro (la persona, 23/11/2026: prima 350, poi "abbassa": 250) */
 #define MSHELL_ANIM_PASSO_MS 16  /* uno scatto del timer: circa 60 al secondo */
 
@@ -235,6 +236,7 @@ struct mshell_sfuma {
 	struct wlr_scene_node *nodo[MSHELL_SFUMA_NODI];
 	float colore[MSHELL_SFUMA_NODI][4];  /* il colore pieno (l'opacita' per le immagini) */
 	int64_t inizio;
+	int durata;
 	bool esce;
 };
 
@@ -297,7 +299,7 @@ static void mshell_sfuma_ferma(struct wlr_scene_tree *albero) {
 	}
 }
 
-static void mshell_sfuma_parti(struct wlr_scene_tree *albero, bool esce) {
+static void mshell_sfuma_parti(struct wlr_scene_tree *albero, bool esce, int durata) {
 	struct mshell_sfuma *s = calloc(1, sizeof(*s));
 	if (s == NULL) {
 		if (esce) {
@@ -307,6 +309,7 @@ static void mshell_sfuma_parti(struct wlr_scene_tree *albero, bool esce) {
 	}
 	s->albero = albero;
 	s->esce = esce;
+	s->durata = durata;
 	s->inizio = mshell_anim_adesso();
 	mshell_sfuma_raccogli(s, albero);
 	mshell_sfuma_metti(s, esce ? 1 : 0);
@@ -314,18 +317,22 @@ static void mshell_sfuma_parti(struct wlr_scene_tree *albero, bool esce) {
 	mshell_anim_avvia();
 }
 
-/* Quello che c'e' nell'albero compare sfumando. */
-static void mshell_sfuma_entra(struct wlr_scene_tree *albero) {
+/* Quello che c'e' nell'albero compare sfumando, in "durata" ms. */
+static void mshell_sfuma_entra_in(struct wlr_scene_tree *albero, int durata) {
 	mshell_sfuma_ferma(albero);
 	if (mshell_anim.server == NULL || mshell_anim_spenta() || wl_list_empty(&albero->children)) {
 		return;
 	}
-	mshell_sfuma_parti(albero, false);
+	mshell_sfuma_parti(albero, false, durata);
 }
 
-/* Quello che c'e' nell'albero se ne va sfumando: passa in un albero accanto (stesso posto), che si
- * butta alla fine; l'albero resta vuoto, pronto per altro. */
-static void mshell_sfuma_via(struct wlr_scene_tree *albero) {
+static void mshell_sfuma_entra(struct wlr_scene_tree *albero) {
+	mshell_sfuma_entra_in(albero, MSHELL_DURATA_BREVE);
+}
+
+/* Quello che c'e' nell'albero se ne va sfumando in "durata" ms: passa in un albero accanto (stesso
+ * posto), che si butta alla fine; l'albero resta vuoto, pronto per altro. */
+static void mshell_sfuma_via_in(struct wlr_scene_tree *albero, int durata) {
 	mshell_sfuma_ferma(albero);
 	if (wl_list_empty(&albero->children)) {
 		return;
@@ -348,7 +355,11 @@ static void mshell_sfuma_via(struct wlr_scene_tree *albero) {
 	wl_list_for_each_safe(n, dopo, &albero->children, link) {
 		wlr_scene_node_reparent(n, via);
 	}
-	mshell_sfuma_parti(via, true);
+	mshell_sfuma_parti(via, true, durata);
+}
+
+static void mshell_sfuma_via(struct wlr_scene_tree *albero) {
+	mshell_sfuma_via_in(albero, MSHELL_DURATA_BREVE);
 }
 
 /* Mette l'opacita' "o" a tutte le immagini di un albero (l'app con i suoi menu). */
@@ -508,7 +519,7 @@ static int mshell_anim_scatto(void *data) {
 
 	struct mshell_sfuma *sf, *sf_dopo;
 	wl_list_for_each_safe(sf, sf_dopo, &mshell_anim.sfumature, link) {
-		double e = mshell_anim_curva(sf->inizio, MSHELL_DURATA_BREVE, ora);
+		double e = mshell_anim_curva(sf->inizio, sf->durata, ora);
 		mshell_sfuma_metti(sf, (float)(sf->esce ? 1 - e : e));
 		if (e >= 1) {
 			if (sf->esce) {

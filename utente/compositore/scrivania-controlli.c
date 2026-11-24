@@ -13,6 +13,11 @@
 #define MSHELL_CTRL_SINISTRA 6       /* l'etichetta: margine a sinistra (prima dell'icona), */
 #define MSHELL_CTRL_DESTRA 10        /* a destra, */
 #define MSHELL_CTRL_FRA 6            /* fra l'icona e il testo */
+#define MSHELL_CAPS_ALTO 32          /* la capsula: alta, */
+#define MSHELL_CAPS_DENTRO 3         /* margine fra il bordo e l'etichetta o i pulsanti, */
+#define MSHELL_CAPS_FRA 8            /* fra l'etichetta e i pulsanti (con la lineetta in mezzo), */
+#define MSHELL_CAPS_PASSAGGIO 48     /* a cavallo del bordo: la zona in cima alla finestra che la fa comparire */
+#define MSHELL_CAPS_PULSANTI (P_QUANTI * MSHELL_CTRL_ALTO + (P_QUANTI - 1) * MSHELL_CTRL_PASSO)
 #define MSHELL_DISP_SPAZIO 16        /* le finestre disposte: dai bordi e fra l'una e l'altra */
 #define MSHELL_SCELTA_BORDO 24       /* il pannello della scelta: margine interno */
 #define MSHELL_SCELTA_MINI_L 184     /* una miniatura di disposizione */
@@ -44,6 +49,7 @@ struct mshell_pill {
 	char *titolo;                   /* il titolo per cui sono state disegnate */
 };
 static struct mshell_pill mshell_pill[2];
+static bool mshell_dentro(struct wlr_box b, double x, double y);
 static struct tinywl_toplevel *mshell_scelta_t;  /* la finestra da cui si e' aperta la scelta */
 
 /* Definita in tinywl.c: la finestra (del gruppo al centro) sotto il punto. */
@@ -241,74 +247,88 @@ static void mshell_suggerimento(struct tinywl_server *server, const char *testo,
 
 /* --- i controlli sulla finestra --- */
 
-/* DOVE STANNO I CONTROLLI (la persona, 23/11/2026: pill sopra la finestra, non dentro; sotto se
- * sopra e' piu' comodo). Se il gruppo e' disposto, dentro la finestra in alto. Altrimenti: sopra la finestra, staccati di MSHELL_CTRL_STACCO, se restano sotto la
- * barra; altrimenti sotto, se c'e' posto prima del fondo dello schermo; altrimenti (una finestra
- * alta quanto lo schermo) dentro, in alto. Restituisce la y della fila rispetto alla finestra vera
- * e mette in *lati il margine dai suoi bordi a sinistra e a destra. */
+/* LA CAPSULA (la persona, 24/11/2026: "alternativa 2", nel disegno "Barra del titolo – capsula
+ * unica centrata"): il nome della finestra e i tre pulsanti in una sola capsula, centrata sulla
+ * finestra. DOVE STA: sopra la finestra, staccata di MSHELL_CTRL_STACCO, se resta sotto la barra
+ * e il gruppo non e' disposto; altrimenti (finestre disposte, finestre alte quanto lo schermo) A
+ * CAVALLO DEL BORDO alto, meta' fuori e meta' dentro, e si vede solo col puntatore in cima alla
+ * finestra (MSHELL_CAPS_PASSAGGIO) o sulla capsula. Compare e sparisce con una dissolvenza molto
+ * rapida (MSHELL_DURATA_CAPSULA). Restituisce la y della capsula rispetto alla finestra vera
+ * (*lati resta per chi la usava: sempre 0). */
 static int mshell_ctrl_y_calcola(struct tinywl_toplevel *t, int *lati) {
-	/* LE FINESTRE DISPOSTE ("Disponi"): pill sempre dentro, in alto (la persona, 23/11/2026,
-	 * strada A del disegno "Pill e finestre disposte": fuori si accavallavano fra una finestra e
-	 * l'altra) */
-	if (t->gruppo != NULL && t->gruppo->disposizione >= 0) {
-		*lati = MSHELL_CTRL_MARGINE;
-		return MSHELL_CTRL_MARGINE;
-	}
+	*lati = 0;
 	struct wlr_box s;
 	wlr_output_layout_get_box(t->server->output_layout, NULL, &s);
-	*lati = 0;
-	int sopra = -MSHELL_CTRL_STACCO - MSHELL_CTRL_ALTO;
-	if (t->posto.y + sopra >= s.y + MSHELL_CTRL_SOTTO_BARRA) {
+	int sopra = -MSHELL_CTRL_STACCO - MSHELL_CAPS_ALTO;
+	bool disposta = t->gruppo != NULL && t->gruppo->disposizione >= 0;
+	if (!disposta && t->posto.y + sopra >= s.y + MSHELL_CTRL_SOTTO_BARRA) {
 		return sopra;
 	}
-	int sotto = t->posto.height + MSHELL_CTRL_STACCO;
-	if (t->posto.y + sotto + MSHELL_CTRL_ALTO <= s.y + s.height - 4) {
-		return sotto;
-	}
-	*lati = MSHELL_CTRL_MARGINE;
-	return MSHELL_CTRL_MARGINE;
+	return -MSHELL_CAPS_ALTO / 2;  /* a cavallo del bordo */
 }
 
 static int mshell_ctrl_y(struct tinywl_toplevel *t, int *lati) {
 	return mshell_ctrl_y_calcola(t, lati);
 }
 
+/* Vero se la capsula della finestra t sta a cavallo del bordo (si vede solo al passaggio). */
+static bool mshell_caps_a_cavallo(struct tinywl_toplevel *t) {
+	int lati;
+	return mshell_ctrl_y(t, &lati) == -MSHELL_CAPS_ALTO / 2;
+}
+
 /* IL PIU' IN ALTO DOVE PUO' STARE UNA FINESTRA LIBERA (la persona, 23/11/2026): abbastanza in basso
- * perche' le sue pill ci stiano sopra, sotto la barra. Spostandola (o ridimensionandola dal bordo
- * alto) non sale oltre: cosi' le pill non saltano mai dall'altra parte. */
+ * perche' la sua capsula ci stia sopra, sotto la barra. Spostandola (o ridimensionandola dal bordo
+ * alto) non sale oltre: cosi' la capsula non salta mai a cavallo del bordo. */
 static int mshell_finestra_cima(struct tinywl_server *server) {
 	struct wlr_box s;
 	wlr_output_layout_get_box(server->output_layout, NULL, &s);
-	return s.y + MSHELL_CTRL_SOTTO_BARRA + MSHELL_CTRL_ALTO + MSHELL_CTRL_STACCO;
+	return s.y + MSHELL_CTRL_SOTTO_BARRA + MSHELL_CAPS_ALTO + MSHELL_CTRL_STACCO;
+}
+
+/* La larghezza dell'etichetta nella capsula della finestra t (0 se la capsula non si vede). */
+static int mshell_caps_etichetta(struct tinywl_toplevel *t) {
+	for (int k = 0; k < 2; k++) {
+		if (mshell_pill[k].t == t) {
+			return mshell_pill[k].etichetta_l;
+		}
+	}
+	return 0;
+}
+
+/* La capsula della finestra t con un'etichetta larga "el", sullo schermo. */
+static struct wlr_box mshell_caps_box_l(struct tinywl_toplevel *t, int el) {
+	int lati, y = mshell_ctrl_y(t, &lati);
+	int l = MSHELL_CAPS_DENTRO + el + MSHELL_CAPS_FRA + MSHELL_CAPS_PULSANTI + MSHELL_CAPS_DENTRO;
+	return (struct wlr_box){ t->posto.x + (t->posto.width - l) / 2, t->posto.y + y, l, MSHELL_CAPS_ALTO };
+}
+
+static struct wlr_box mshell_caps_box(struct tinywl_toplevel *t) {
+	return mshell_caps_box_l(t, mshell_caps_etichetta(t));
 }
 
 /* Dove sta il pulsante "quale" della finestra t, sullo schermo. */
 static struct wlr_box mshell_pulsante_box(struct tinywl_toplevel *t, int quale) {
-	int lati, y = mshell_ctrl_y(t, &lati);
-	int destra = t->posto.x + t->posto.width - lati;
-	int x = destra - MSHELL_CTRL_ALTO - (P_QUANTI - 1 - quale) * (MSHELL_CTRL_ALTO + MSHELL_CTRL_PASSO);
-	return (struct wlr_box){ x, t->posto.y + y, MSHELL_CTRL_ALTO, MSHELL_CTRL_ALTO };
+	int el = mshell_caps_etichetta(t);
+	struct wlr_box c = mshell_caps_box_l(t, el);
+	int x = c.x + MSHELL_CAPS_DENTRO + el + MSHELL_CAPS_FRA + quale * (MSHELL_CTRL_ALTO + MSHELL_CTRL_PASSO);
+	return (struct wlr_box){ x, c.y + MSHELL_CAPS_DENTRO, MSHELL_CTRL_ALTO, MSHELL_CTRL_ALTO };
 }
 
-/* Il nome della finestra t, sullo schermo (largo 0 se le sue pill non si vedono). */
+/* Il nome della finestra t, sullo schermo (largo 0 se la sua capsula non si vede). */
 static struct wlr_box mshell_etichetta_box(struct tinywl_toplevel *t) {
-	int lati, y = mshell_ctrl_y(t, &lati);
-	int l = 0;
-	for (int k = 0; k < 2; k++) {
-		if (mshell_pill[k].t == t) {
-			l = mshell_pill[k].etichetta_l;
-		}
-	}
-	return (struct wlr_box){ t->posto.x + lati, t->posto.y + y, l, MSHELL_CTRL_ALTO };
+	int el = mshell_caps_etichetta(t);
+	struct wlr_box c = mshell_caps_box_l(t, el);
+	return (struct wlr_box){ c.x + MSHELL_CAPS_DENTRO, c.y + MSHELL_CAPS_DENTRO, el, MSHELL_CTRL_ALTO };
 }
 
-/* La striscia dei controlli piu' lo stacco dalla finestra: finche' il puntatore e' li', i controlli
- * restano (passando dalla finestra alle pill). */
+/* La zona della capsula: sopra la finestra, la striscia dalla capsula al bordo (finche' il
+ * puntatore e' li', la capsula resta, passando dalla finestra alla capsula); a cavallo del bordo,
+ * dalla capsula fino a MSHELL_CAPS_PASSAGGIO dentro la finestra (li' la capsula compare). */
 static struct wlr_box mshell_ctrl_striscia(struct tinywl_toplevel *t) {
 	int lati, y = mshell_ctrl_y(t, &lati);
-	int da = y < 0 ? y : (y >= t->posto.height ? t->posto.height : y);
-	int a = y < 0 ? 0 : y + MSHELL_CTRL_ALTO;
-	return (struct wlr_box){ t->posto.x, t->posto.y + da, t->posto.width, a - da };
+	int a = mshell_caps_a_cavallo(t) ? MSHELL_CAPS_PASSAGGIO : 0;
+	return (struct wlr_box){ t->posto.x, t->posto.y + y, t->posto.width, a - y };
 }
 
 /* Il nome dell'app da mostrare, con l'iniziale maiuscola ("nautilus" -> "Nautilus"). */
@@ -330,7 +350,7 @@ static void mshell_pill_rifai(struct mshell_pill *p, struct tinywl_toplevel *t) 
 	if (t == NULL) {
 		return;
 	}
-	/* l'etichetta: icona e "App – Titolo", in un ovale; non oltre i pulsanti */
+	/* l'etichetta: icona e "App – Titolo"; la capsula non va oltre la finestra */
 	char app[64], testo[320];
 	mshell_nome_app(t->xdg_toplevel->app_id, app, sizeof(app));
 	const char *titolo = t->xdg_toplevel->title;
@@ -339,30 +359,35 @@ static void mshell_pill_rifai(struct mshell_pill *p, struct tinywl_toplevel *t) 
 	} else {
 		snprintf(testo, sizeof(testo), "%s", app);
 	}
-	int lati, cy = mshell_ctrl_y(t, &lati);
-	int spazio = t->posto.width - 2 * lati - P_QUANTI * (MSHELL_CTRL_ALTO + MSHELL_CTRL_PASSO)
-		- MSHELL_CTRL_PASSO;
-	int massimo = spazio - (MSHELL_CTRL_SINISTRA + MSHELL_CTRL_ICONA + MSHELL_CTRL_FRA + MSHELL_CTRL_DESTRA);
+	int fisso = MSHELL_CTRL_SINISTRA + MSHELL_CTRL_ICONA + MSHELL_CTRL_FRA + MSHELL_CTRL_DESTRA;
+	int massimo = t->posto.width - 2 * MSHELL_CTRL_MARGINE - 2 * MSHELL_CAPS_DENTRO - MSHELL_CAPS_FRA -
+		MSHELL_CAPS_PULSANTI - fisso;
+	int el = 0, tl = 0, ta = 0;
 	if (massimo > 20) {
-		int tl, ta;
 		mshell_testo_misura(testo, MSHELL_FONT_MEDIO, MSHELL_CTRL_TESTO, massimo, &tl, &ta);
-		int l = MSHELL_CTRL_SINISTRA + MSHELL_CTRL_ICONA + MSHELL_CTRL_FRA + tl + MSHELL_CTRL_DESTRA;
-		mshell_rett(albero, lati, cy, l, MSHELL_CTRL_ALTO,
-			MSHELL_CTRL_ALTO / 2, mshell_sc.colore_elevata, 1.0f);
+		el = fisso + tl;
+	}
+	p->etichetta_l = el;
+	/* la capsula, nelle coordinate della finestra vera (superficie/elevata, tutta tonda) */
+	struct wlr_box c = mshell_caps_box_l(t, el);
+	int cx = c.x - t->posto.x, cy = c.y - t->posto.y, d = MSHELL_CAPS_DENTRO;
+	mshell_rett(albero, cx, cy, c.width, c.height, MSHELL_CAPS_ALTO / 2, mshell_sc.colore_elevata, 1.0f);
+	if (el > 0) {
 		struct mshell_pixel *ic = mshell_icona(t->xdg_toplevel->app_id);
 		if (ic != NULL) {
 			struct wlr_scene_buffer *b = wlr_scene_buffer_create(albero, &ic->base);
 			wlr_scene_buffer_set_dest_size(b, MSHELL_CTRL_ICONA, MSHELL_CTRL_ICONA);
-			wlr_scene_node_set_position(&b->node, lati + MSHELL_CTRL_SINISTRA,
-				cy + (MSHELL_CTRL_ALTO - MSHELL_CTRL_ICONA) / 2);
+			wlr_scene_node_set_position(&b->node, cx + d + MSHELL_CTRL_SINISTRA,
+				cy + (MSHELL_CAPS_ALTO - MSHELL_CTRL_ICONA) / 2);
 		}
-		mshell_scritta(albero, testo, MSHELL_FONT_MEDIO, MSHELL_CTRL_TESTO,
-			mshell_sc.colore_testo,
-			lati + MSHELL_CTRL_SINISTRA + MSHELL_CTRL_ICONA + MSHELL_CTRL_FRA,
-			cy + (MSHELL_CTRL_ALTO - ta) / 2, massimo, false);
-		p->etichetta_l = l;
+		mshell_scritta(albero, testo, MSHELL_FONT_MEDIO, MSHELL_CTRL_TESTO, mshell_sc.colore_testo,
+			cx + d + MSHELL_CTRL_SINISTRA + MSHELL_CTRL_ICONA + MSHELL_CTRL_FRA,
+			cy + (MSHELL_CAPS_ALTO - ta) / 2, massimo, false);
+		/* la lineetta fra l'etichetta e i pulsanti (il testo al 12%) */
+		mshell_rett(albero, cx + d + el + MSHELL_CAPS_FRA / 2, cy + (MSHELL_CAPS_ALTO - 16) / 2, 1, 16, 0,
+			mshell_sc.colore_testo, 0.12f);
 	}
-	/* i pulsanti, a destra */
+	/* i pulsanti, a destra nella capsula */
 	for (int i = 0; i < P_QUANTI; i++) {
 		struct wlr_box b = mshell_pulsante_box(t, i);
 		mshell_pulsante(albero, i, b.x - t->posto.x, b.y - t->posto.y);
@@ -383,7 +408,7 @@ static void mshell_pill_metti(struct mshell_pill *p, struct tinywl_toplevel *t) 
 	if (!uguali) {
 		/* quelle di prima se ne vanno sfumando; se cambia solo la misura o il titolo, si rifanno */
 		if (cambia) {
-			mshell_sfuma_via(p->albero);
+			mshell_sfuma_via_in(p->albero, MSHELL_DURATA_CAPSULA);
 		} else {
 			mshell_sfuma_ferma(p->albero);
 		}
@@ -392,25 +417,48 @@ static void mshell_pill_metti(struct mshell_pill *p, struct tinywl_toplevel *t) 
 		p->fila = fila;
 		free(p->titolo);
 		p->titolo = strdup(titolo);
+		/* a cavallo del bordo la capsula sale sopra la barra in alto (che altrimenti ne coprirebbe la
+		 * parte di sopra); sopra la finestra sta coi controlli, sotto i menu della barra */
+		struct wlr_scene_tree *padre = t != NULL && mshell_caps_a_cavallo(t) && mshell_sc.controlli_alti != NULL ?
+			mshell_sc.controlli_alti : mshell_sc.controlli;
+		if (p->albero->node.parent != padre) {
+			wlr_scene_node_reparent(&p->albero->node, padre);
+		}
 		mshell_pill_rifai(p, t);
 	}
 	if (t != NULL) {
 		wlr_scene_node_set_position(&p->albero->node, t->posto.x, t->posto.y);
 		if (cambia) {
-			mshell_sfuma_entra(p->albero);  /* quelle nuove compaiono sfumando */
+			mshell_sfuma_entra_in(p->albero, MSHELL_DURATA_CAPSULA);  /* compare, molto in fretta */
 		}
 	}
 }
 
 /* Le pill della finestra attiva e di quella sotto il puntatore (mshell_sc.sotto). */
+/* Vero se la capsula di t si vede adesso: sopra la finestra sempre; a cavallo del bordo solo col
+ * puntatore nella sua zona (in cima alla finestra o sulla capsula). */
+static bool mshell_caps_si_vede(struct tinywl_server *server, struct tinywl_toplevel *t) {
+	if (t == NULL || !mshell_caps_a_cavallo(t)) {
+		return true;
+	}
+	return mshell_dentro(mshell_ctrl_striscia(t), server->cursor->x, server->cursor->y);
+}
+
 static void mshell_pill_aggiorna(struct tinywl_server *server) {
 	struct mshell_gruppo *c = mshell_al_centro(server);
 	struct tinywl_toplevel *attiva = c != NULL && c->n > 0 ? c->app[c->n - 1] : NULL;
+	if (!mshell_caps_si_vede(server, attiva)) {
+		attiva = NULL;
+	}
 	if (c != NULL && c == mshell_voli.arriva) {
 		attiva = NULL;  /* sta arrivando in volo: le pill compaiono all'arrivo */
 	}
 	mshell_pill_metti(&mshell_pill[0], attiva);
-	mshell_pill_metti(&mshell_pill[1], mshell_sc.sotto != attiva ? mshell_sc.sotto : NULL);
+	struct tinywl_toplevel *sotto = mshell_sc.sotto;
+	if (sotto == attiva || !mshell_caps_si_vede(server, sotto)) {
+		sotto = NULL;
+	}
+	mshell_pill_metti(&mshell_pill[1], sotto);
 }
 
 /* La finestra sotto il puntatore e' t (NULL: nessuna): le sue pill compaiono. */
