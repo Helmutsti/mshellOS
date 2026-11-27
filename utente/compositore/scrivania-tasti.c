@@ -21,7 +21,8 @@
  *   Super+Alt+1..9   la finestra 1..9 del gruppo al centro (1: quella davanti).
  *   Super+Alt+Tab    la scelta delle disposizioni del gruppo al centro (il pannello di
  *                    "Disponi"): ogni Tab passa alla disposizione dopo, quella accesa si applica
- *                    quando si lascia Super; Esc (con Super giu') chiude senza cambiare.
+ *                    quando si lascia Super; Esc (con Super giu') chiude senza cambiare. Dopo
+ *                    quelle del gruppo vengono quelle della sola finestra attiva (la seconda fila).
  *   Super+X          chiude la finestra attiva.
  *   Super+Z          manda la finestra attiva nel vassoio (come il pulsante "–"). Una seconda Z,
  *                    sempre tenendo Super, libera la scrivania: tutto il gruppo (con la finestra
@@ -502,7 +503,7 @@ static void mshell_disp_avanti(struct tinywl_server *server, bool indietro) {
 	if (!mshell_ts.disp || mshell_sc.scelta == NULL) {
 		mshell_ts.disp = true;
 		mshell_scelta_apri(server, c->app[c->n - 1]);
-		int scelte[5], k = mshell_disp_scelte_pannello(c->n, scelte), adesso = 0;
+		int scelte[8], fila1, k = mshell_disp_scelte_pannello(c->n, scelte, &fila1), adesso = 0;
 		for (int j = 0; j < k; j++) {
 			if (scelte[j] == c->disposizione) {
 				adesso = j;  /* (libera: la prima) */

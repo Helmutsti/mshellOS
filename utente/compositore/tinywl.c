@@ -185,6 +185,9 @@ struct tinywl_server {
 	 * puntatore o un'icona che cambiano ridisegnano solo il loro pezzo, senza rifare la
 	 * sfocatura (niente quadratini, poca fatica). */
 	struct wlr_scene_optimized_blur *sfocato;
+	/* MSHELL: ogni superficie che nasce, per rifare la sfocatura conservata quando una sotto il
+	 * vetro cambia (livelli.c) */
+	struct wl_listener nuova_superficie_vista;
 };
 
 struct tinywl_output {
@@ -955,10 +958,8 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
 		mshell_scrivania_invio(toplevel->server, toplevel);  /* la miniatura, se e' in colonna */
 	}
 	mshell_anim_dopo_invio(toplevel);  /* MSHELL: l'opacita' se sta comparendo (animazioni.c) */
-	if (mshell_livelli_vetro_aperto(toplevel->server)) {
-		/* MSHELL: l'app sotto il vetro e' cambiata: la sfocatura conservata va rifatta */
-		wlr_scene_optimized_blur_mark_dirty(toplevel->server->sfocato);
-	}
+	/* MSHELL: se e' sotto il vetro aperto, la sfocatura conservata la rifa' livelli.c
+	 * (mshell_superficie_vista_commit), per lei e per le sue sottosuperfici */
 }
 
 static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
@@ -1403,7 +1404,8 @@ int main(int argc, char *argv[]) {
 	 * to dig your fingers in and play with their behavior if you want. Note that
 	 * the clients cannot set the selection directly without compositor approval,
 	 * see the handling of the request_set_selection event below.*/
-	wlr_compositor_create(server.wl_display, 5, server.renderer);
+	struct wlr_compositor *compositore =
+		wlr_compositor_create(server.wl_display, 5, server.renderer);
 	wlr_subcompositor_create(server.wl_display);
 	wlr_data_device_manager_create(server.wl_display);
 
@@ -1441,6 +1443,7 @@ int main(int argc, char *argv[]) {
 
 	/* MSHELL: i livelli (sotto e sopra le finestre) e l'elenco delle app: livelli.c */
 	mshell_livelli_crea(&server);
+	mshell_sotto_vetro_avvia(&server, compositore);  /* MSHELL: livelli.c */
 
 	/* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
 	 * used for application windows. For more detail on shells, refer to

@@ -211,6 +211,83 @@ static bool mshell_livelli_vetro_aperto(struct tinywl_server *server) {
 	return false;
 }
 
+/* LA SFOCATURA CONSERVATA SI RIFA' QUANDO CAMBIA QUALCOSA SOTTO IL VETRO. Il vetro grande (il
+ * cassetto, i menu della barra) mostra l'immagine sfocata conservata (il nodo "sfocato" di
+ * tinywl.c), che SceneFX rifa' solo quando e' "sporca": se un'app sotto disegna e nessuno lo
+ * dice, sotto il vetro resta ferma (un video in Firefox si fermava finche' il cassetto era
+ * aperto). Prima la si sporcava a ogni invio della finestra dell'app; ma molte app disegnano in
+ * una sottosuperficie che invia da sola (Firefox, i lettori video) e la finestra non invia
+ * niente. Per questo si guarda ogni superficie di ogni programma: se sta sotto il vetro e invia
+ * mentre il vetro e' aperto, l'immagine sfocata si rifa'. */
+struct mshell_superficie_vista {
+	struct tinywl_server *server;
+	struct wlr_surface *superficie;
+	struct wl_listener commit;
+	struct wl_listener destroy;
+};
+
+/* Vero se la superficie si disegna sotto il vetro: una finestra di un'app, i suoi menu a comparsa
+ * e le sue sottosuperfici, o una superficie dei livelli "background" e "bottom". Quelle dei
+ * livelli "top" e "overlay" (la barra, il cassetto, i loro menu) stanno sopra. */
+static bool mshell_sotto_il_vetro(struct wlr_surface *s) {
+	while (s != NULL) {
+		struct wlr_subsurface *sotto = wlr_subsurface_try_from_wlr_surface(s);
+		if (sotto != NULL) {
+			s = sotto->parent;
+			continue;
+		}
+		struct wlr_xdg_surface *xdg = wlr_xdg_surface_try_from_wlr_surface(s);
+		if (xdg != NULL) {
+			if (xdg->role == WLR_XDG_SURFACE_ROLE_TOPLEVEL) {
+				return true;
+			}
+			if (xdg->role == WLR_XDG_SURFACE_ROLE_POPUP && xdg->popup != NULL) {
+				s = xdg->popup->parent;  /* il menu sta dove sta il suo genitore */
+				continue;
+			}
+			return false;
+		}
+		struct wlr_layer_surface_v1 *ls = wlr_layer_surface_v1_try_from_wlr_surface(s);
+		if (ls != NULL) {
+			return ls->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP;
+		}
+		return false;
+	}
+	return false;
+}
+
+static void mshell_superficie_vista_commit(struct wl_listener *listener, void *data) {
+	struct mshell_superficie_vista *v = wl_container_of(listener, v, commit);
+	if (mshell_livelli_vetro_aperto(v->server) && mshell_sotto_il_vetro(v->superficie)) {
+		wlr_scene_optimized_blur_mark_dirty(v->server->sfocato);
+	}
+}
+
+static void mshell_superficie_vista_destroy(struct wl_listener *listener, void *data) {
+	struct mshell_superficie_vista *v = wl_container_of(listener, v, destroy);
+	wl_list_remove(&v->commit.link);
+	wl_list_remove(&v->destroy.link);
+	free(v);
+}
+
+static void mshell_nuova_superficie_vista(struct wl_listener *listener, void *data) {
+	struct tinywl_server *server = wl_container_of(listener, server, nuova_superficie_vista);
+	struct wlr_surface *superficie = data;
+	struct mshell_superficie_vista *v = calloc(1, sizeof(*v));
+	v->server = server;
+	v->superficie = superficie;
+	v->commit.notify = mshell_superficie_vista_commit;
+	wl_signal_add(&superficie->events.commit, &v->commit);
+	v->destroy.notify = mshell_superficie_vista_destroy;
+	wl_signal_add(&superficie->events.destroy, &v->destroy);
+}
+
+/* All'avvio, dopo il compositore: guarda le superfici che nascono (vedi sopra). */
+static void mshell_sotto_vetro_avvia(struct tinywl_server *server, struct wlr_compositor *c) {
+	server->nuova_superficie_vista.notify = mshell_nuova_superficie_vista;
+	wl_signal_add(&c->events.new_surface, &server->nuova_superficie_vista);
+}
+
 static void mshell_livello_commit(struct wl_listener *listener, void *data) {
 	struct mshell_livello *s = wl_container_of(listener, s, commit);
 	struct wlr_layer_surface_v1 *ls = s->superficie;

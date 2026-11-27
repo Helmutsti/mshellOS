@@ -37,7 +37,10 @@
 
 enum { P_DISPONI, P_RIDUCI, P_CHIUDI, P_QUANTI };
 enum mshell_disp { D_TUTTO, D_COLONNE, D_RIGHE, D_2P1, D_1P2, D_1S2, D_GRIGLIA,
-	D_LIBERA };  /* LIBERA (la persona, 23/11/2026): sgancia le finestre, che tornano dove stavano */
+	D_LIBERA,  /* LIBERA (la persona, 23/11/2026): sgancia le finestre, che tornano dove stavano */
+	/* LA SOLA FINESTRA ATTIVA (la persona, 27/11/2026): non sono disposizioni del gruppo, che
+	 * resta libero; la finestra attiva va a tutto lo schermo o a una meta' */
+	D_SOLA_TUTTO, D_SOLA_SINISTRA, D_SOLA_DESTRA };
 
 /* LE PILL (la persona, 23/11/2026): la finestra attiva (quella davanti del gruppo al centro) le
  * mostra SEMPRE; un'altra finestra le mostra quando il puntatore e' su di lei o sulla zona delle
@@ -523,6 +526,10 @@ static struct wlr_box mshell_disp_posto(int d, int n, int i, struct wlr_box a) {
 		return i == 0 ? mshell_parte(a, 2, 0, false) : mshell_parte(mshell_parte(a, 2, 1, false), 2, i - 1, true);
 	case D_GRIGLIA:
 		return mshell_parte(mshell_parte(a, 2, i / 2, false), 2, i % 2, true);
+	case D_SOLA_SINISTRA:  /* le meta' come le due colonne con due finestre */
+		return mshell_parte(a, 2, 0, true);
+	case D_SOLA_DESTRA:
+		return mshell_parte(a, 2, 1, true);
 	default:
 		return a;
 	}
@@ -554,6 +561,9 @@ static void mshell_disp_nome(int d, int n, char *dove, size_t quanto) {
 	switch (d) {
 	case D_TUTTO: snprintf(dove, quanto, "Tutto lo schermo"); return;
 	case D_LIBERA: snprintf(dove, quanto, "Libera"); return;
+	case D_SOLA_TUTTO: snprintf(dove, quanto, "Tutto lo schermo"); return;
+	case D_SOLA_SINISTRA: snprintf(dove, quanto, "Metà sinistra"); return;
+	case D_SOLA_DESTRA: snprintf(dove, quanto, "Metà destra"); return;
 	case D_RIGHE: snprintf(dove, quanto, "1 / 1"); return;
 	case D_2P1: snprintf(dove, quanto, "2+1"); return;
 	case D_1P2: snprintf(dove, quanto, "1+2"); return;
@@ -578,10 +588,37 @@ static struct wlr_box mshell_disp_area(struct tinywl_server *server) {
 	return a;
 }
 
-/* Le scelte del pannello "Disponi": prima "Libera", poi quelle per n finestre. */
-static int mshell_disp_scelte_pannello(int n, int scelte[5]) {
+/* Le scelte del pannello "Disponi": nella prima fila "Libera" e quelle per n finestre (quante in
+ * *fila1), nella seconda quelle della sola finestra attiva. Con una finestra sola "Tutto lo
+ * schermo" e' gia' nella prima fila e non si ripete. */
+static int mshell_disp_scelte_pannello(int n, int scelte[8], int *fila1) {
 	scelte[0] = D_LIBERA;
-	return 1 + mshell_disp_scelte(n, &scelte[1]);
+	int k = 1 + mshell_disp_scelte(n, &scelte[1]);
+	*fila1 = k;
+	if (n == 0) {
+		return k;
+	}
+	if (n > 1) {
+		scelte[k++] = D_SOLA_TUTTO;
+	}
+	scelte[k++] = D_SOLA_SINISTRA;
+	scelte[k++] = D_SOLA_DESTRA;
+	return k;
+}
+
+/* La finestra attiva del gruppo (quella davanti) va al posto d (D_SOLA_*); le altre restano dove
+ * sono, dietro. Il gruppo non e' piu' disposto, come quando si sposta una finestra a mano. */
+static void mshell_disponi_sola(struct tinywl_server *server, struct mshell_gruppo *g, int d) {
+	if (g->n == 0) {
+		return;
+	}
+	struct tinywl_toplevel *t = g->app[g->n - 1];
+	g->disposizione = -1;
+	t->posto = mshell_disp_posto(d, 1, 0, mshell_disp_area(server));
+	if (t->xdg_toplevel->base->initialized) {
+		wlr_xdg_toplevel_set_size(t->xdg_toplevel, t->posto.width, t->posto.height);
+	}
+	mshell_anim_sposta(t);
 }
 
 /* Dove torna la finestra t con "Libera": dove stava prima di essere disposta (se lo era). */
@@ -610,6 +647,10 @@ static void mshell_sgancia(struct mshell_gruppo *g) {
 static void mshell_disponi_gruppo(struct tinywl_server *server, struct mshell_gruppo *g, int d) {
 	if (d == D_LIBERA) {
 		mshell_sgancia(g);
+		return;
+	}
+	if (d >= D_SOLA_TUTTO) {
+		mshell_disponi_sola(server, g, d);
 		return;
 	}
 	for (int i = 0; i < g->n; i++) {
@@ -672,11 +713,17 @@ static void mshell_scelta_disegna(struct tinywl_server *server, struct tinywl_to
 		wlr_scene_node_destroy(&mshell_sc.scelta->node);
 	}
 	mshell_sc.scelta = wlr_scene_tree_create(mshell_sc.controlli);
-	int scelte[5];
-	int k = mshell_disp_scelte_pannello(g->n, scelte);
+	int scelte[8], fila1;
+	int k = mshell_disp_scelte_pannello(g->n, scelte, &fila1);
 	mshell_sc.n_opzioni = k;
-	int pl = 2 * MSHELL_SCELTA_BORDO + k * MSHELL_SCELTA_MINI_L + (k - 1) * MSHELL_SCELTA_SPAZIO;
-	int pa = MSHELL_SCELTA_BORDO + 20 + 16 + MSHELL_SCELTA_MINI_A + 8 + 16 + MSHELL_SCELTA_BORDO;
+	/* le file: la prima per il gruppo, la seconda (se c'e') per la sola finestra attiva; il
+	 * pannello e' largo quanto la fila piu' lunga */
+	int colonne = fila1 > k - fila1 ? fila1 : k - fila1;
+	int fila_a = MSHELL_SCELTA_MINI_A + 8 + 16;  /* una miniatura col suo nome */
+	int file = k > fila1 ? 2 : 1;
+	int pl = 2 * MSHELL_SCELTA_BORDO + colonne * MSHELL_SCELTA_MINI_L + (colonne - 1) * MSHELL_SCELTA_SPAZIO;
+	int pa = MSHELL_SCELTA_BORDO + 20 + 16 + file * fila_a + (file - 1) * MSHELL_SCELTA_SPAZIO +
+		MSHELL_SCELTA_BORDO;
 	if (mshell_sc.scelta_box.width == 0) {
 		/* la prima volta: sotto i pulsanti della finestra, allineato al suo bordo destro, dentro
 		 * lo schermo */
@@ -719,8 +766,10 @@ static void mshell_scelta_disegna(struct tinywl_server *server, struct tinywl_to
 	double sy = (double)MSHELL_SCELTA_MINI_A / schermo.height;
 	struct wlr_buffer *sfondo = mshell_sc.sfondo;  /* l'immagine dello sfondo, per le anteprime */
 	for (int j = 0; j < k; j++) {
-		int x = MSHELL_SCELTA_BORDO + j * (MSHELL_SCELTA_MINI_L + MSHELL_SCELTA_SPAZIO);
-		int y = MSHELL_SCELTA_BORDO + 20 + 16;
+		bool sola = j >= fila1;  /* la seconda fila */
+		int col = sola ? j - fila1 : j;
+		int x = MSHELL_SCELTA_BORDO + col * (MSHELL_SCELTA_MINI_L + MSHELL_SCELTA_SPAZIO);
+		int y = MSHELL_SCELTA_BORDO + 20 + 16 + (sola ? fila_a + MSHELL_SCELTA_SPAZIO : 0);
 		bool accesa = j == mshell_sc.opzione_accesa;
 		mshell_sc.opzione[j] = (struct wlr_box){ b.x + x, b.y + y, MSHELL_SCELTA_MINI_L, MSHELL_SCELTA_MINI_A };
 		mshell_sc.opzione_disp[j] = scelte[j];
@@ -738,7 +787,7 @@ static void mshell_scelta_disegna(struct tinywl_server *server, struct tinywl_to
 			mshell_rett(p, x, y, MSHELL_SCELTA_MINI_L, MSHELL_SCELTA_MINI_A, MSHELL_SCELTA_RAGGIO,
 				mshell_sc.colore_vetro, 1.0f);
 		}
-		for (int i = 0; i < g->n; i++) {
+		for (int i = 0; i < (sola ? 1 : g->n); i++) {  /* nella seconda fila solo quella attiva */
 			struct wlr_box w = scelte[j] == D_LIBERA ? mshell_posto_libero(g->app[g->n - 1 - i]) :
 				mshell_disp_posto(scelte[j], g->n, i, area);
 			int wx = x + (int)((w.x - schermo.x) * sx + 0.5), wy = y + (int)((w.y - schermo.y) * sy + 0.5);

@@ -41,6 +41,10 @@
  * spazio). La finestra davanti prende il primo posto. Il gruppo si ricorda la disposizione: se
  * una finestra entra o esce, le altre si ridispongono; se se ne sposta una a mano, il gruppo torna
  * libero.
+ * SOTTO, UNA SECONDA FILA con le disposizioni della SOLA FINESTRA ATTIVA (la persona, 27/11/2026:
+ * "di solito full screen, di lato sx o dx"): tutto lo schermo, meta' sinistra, meta' destra. Ci si
+ * arriva anche continuando a scorrere da tastiera. La finestra attiva va al suo posto, le altre del
+ * gruppo restano dove sono (dietro) e il gruppo torna libero, come spostandola a mano.
  *
  * COME NEL DISEGNO (la persona, 23/11/2026: "deve essere come il disegno, ombre e tutto"): le
  * finestre e le loro miniature hanno l'ombra/finestra (effetti.c); etichetta e pulsanti sono
@@ -113,8 +117,8 @@ static struct {
 	struct mshell_gruppo *scelta_gruppo;
 	struct wlr_box scelta_box;             /* il pannello, sullo schermo */
 	int n_opzioni, opzione_accesa;
-	struct wlr_box opzione[5];             /* le miniature, sullo schermo */
-	int opzione_disp[5];                   /* la disposizione di ciascuna */
+	struct wlr_box opzione[8];             /* le miniature, sullo schermo */
+	int opzione_disp[8];                   /* la disposizione di ciascuna */
 	float colore_testo[4], colore_elevata[4], colore_focus[4], colore_vetro[4], colore_selezione[4],
 		colore_azione[4], colore_azione_testo[4];
 	int raggio_pannello;

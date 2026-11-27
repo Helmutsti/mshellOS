@@ -31,3 +31,9 @@ xdg-desktop-portal-gtk  # la finestra per aprire e salvare file del portale, que
 librsvg2-2       # librsvg, la libreria che legge e disegna gli SVG: il compositore ci disegna le icone delle app (colonna e capsula)
 librsvg2-common  # il pezzo che insegna a GTK a leggere gli SVG: le icone delle app nel pannello di ricerca (mshell-barra)
 greetd           # il gestore dell'accesso (display manager): all'accensione apre da solo la sessione di utente1 e lancia la scrivania; poi sara' la schermata di accesso
+# L'AUDIO (la persona, 27/11/2026: "seguiamo le orme di chi ha fatto prima di noi", cioe' PipeWire
+# come Fedora, Ubuntu, Debian con GNOME e SteamOS). Si portano dietro 13 librerie (~20 MB in tutto, con questi tre),
+# tra cui il suono via FireWire (libffado2) e via rete (libroc0.4), richieste dai moduli di PipeWire.
+pipewire         # il servizio del suono: mescola i suoni di tutte le app e li manda alla scheda audio
+pipewire-pulse   # il "traduttore": le app che parlano come PulseAudio (Firefox, quasi tutte quelle di Flathub) suonano con PipeWire
+wireplumber      # il "regista" di PipeWire: sceglie dove va il suono (casse, cuffie) e ricorda il volume
