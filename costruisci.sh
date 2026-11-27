@@ -171,6 +171,18 @@ python3 strumenti/sfondo.py risorse/sfondi/samurai.jpg "$SCHERMO_LARGHEZZA" "$SC
 rm -f "$RADICE/etc/localtime"
 cp /usr/share/zoneinfo/Europe/Rome "$RADICE/etc/localtime"
 echo "Europe/Rome" > "$RADICE/etc/timezone"
+# LA LINGUA: italiano (la persona, 27/11/2026). Due pezzi:
+#   1. le regole dell'italiano (date, numeri, ordine alfabetico) preparate da localedef degli
+#      attrezzi (i sorgenti vengono dal pacchetto locales, che nel sistema non entra) nella
+#      cartella standard /usr/lib/locale, accanto a C.utf8 che c'e' gia';
+#   2. /etc/locale.conf dice a tutti di usarle: lo leggono systemd (per i servizi del sistema e
+#      dell'utente, come il portale) e PAM all'accesso (/etc/default/locale e' un collegamento a
+#      questo file), quindi la sessione di greetd, il compositore, la barra e le app.
+# Le traduzioni dei programmi (GTK, portale, systemd...) ci sono gia': i pacchetti le portano.
+# Le app Flatpak prendono la lingua dalla sessione; le loro traduzioni le scaricano a parte
+# (vedi "FLATHUB PER UTENTE1").
+localedef -i it_IT -f UTF-8 --no-archive "$RADICE/usr/lib/locale/it_IT.utf8"
+echo "LANG=it_IT.UTF-8" > "$RADICE/etc/locale.conf"
 # IL PUNTATORE: le immagini disegnate in Figma (risorse/puntatore/, 32x32 con l'ombra),
 # rimpicciolite da strumenti/puntatore.py tutte alla stessa altezza (lo dice li'), diventano il
 # tema Xcursor "mshell" con xcursorgen (misura nominale 24; l'attesa animata ha 12 fotogrammi, un
@@ -277,6 +289,10 @@ cp risorse/flatpak/flathub.flatpakrepo "$RADICE/tmp/"
 mount --bind /dev "$RADICE/dev"
 mount -t proc proc "$RADICE/proc"
 chroot "$RADICE" env HOME=/tmp/casa flatpak remote-add --user --if-not-exists flathub /tmp/flathub.flatpakrepo
+# LE TRADUZIONI DELLE APP: Flatpak le scarica a parte (le estensioni ".Locale" delle app e delle
+# loro basi), solo per le lingue che gli si dicono. Si dice qui, una volta, "italiano": vale
+# per ogni installazione, anche fatta da un terminale senza la lingua della sessione.
+chroot "$RADICE" env HOME=/tmp/casa flatpak config --user --set languages it
 umount "$RADICE/proc" "$RADICE/dev"
 mv "$RADICE/tmp/casa/.local" "$DATI/home/utente1/.local"
 rm -rf "$RADICE/tmp/casa" "$RADICE/tmp/flathub.flatpakrepo"

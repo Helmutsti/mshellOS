@@ -45,3 +45,12 @@ RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq 
         -Dexamples=false -Drenderers=gles2 build >/dev/null && \
     ninja -C build >/dev/null && ninja -C build install >/dev/null && \
     cd /tmp && rm -rf scenefx-0.2.1 scenefx-0.2.1.tar.gz
+
+# LA LINGUA ITALIANA (la persona, 27/11/2026: "lingua subito"). Le regole dell'italiano (date,
+# numeri, ordine alfabetico, lettere) le prepara localedef, che c'e' gia' negli attrezzi; i suoi
+# sorgenti (/usr/share/i18n) stanno nel pacchetto locales. Si preparano qui e nel sistema finisce
+# solo il risultato (costruisci.sh, 3c), come per il fuso orario: locales nel sistema non entra.
+#   locales                    i sorgenti delle lingue per localedef
+RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+        locales >/dev/null && \
+    rm -rf /var/lib/apt/lists/*
