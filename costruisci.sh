@@ -72,16 +72,70 @@ sed -i 's#^\(root:[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\)/bin/bash$#\1/bin/sh#' "$RADIC
 ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # LA SCRIVANIA PARTE DA SOLA, COME PERSONA NORMALE (decisione della persona). Il gestore
 # dell'accesso e' greetd (la strada standard, la stessa che usera' la schermata di accesso):
-# all'accensione apre una sessione di utente1 senza chiedere niente (initial_session) e lancia
-# il compositore. Passa da PAM come login, quindi logind registra la
-# sessione su seat0: il compositore (libseat) chiede a logind schermo e tastiera, e utente1 non
-# ha bisogno di gruppi speciali. Quando la sessione finisce, greetd mostra agreety, l'accesso
-# testuale del pacchetto (default_session, con l'utente _greetd creato dal pacchetto).
+# all'accensione apre una sessione di utente1 senza chiedere niente (initial_session). Passa da
+# PAM come login, quindi logind registra la sessione su seat0. Quando la sessione finisce,
+# greetd mostra agreety, l'accesso testuale del pacchetto (default_session, con l'utente _greetd
+# creato dal pacchetto).
 # greetd prende tty1 (Debian gli da' tty7): getty@tty1 non si accende piu' (via il suo
 # collegamento in getty.target) e, come nel greetd originale, i due si escludono.
 # Il pacchetto stesso abilita greetd come display-manager.service (lo vuole graphical.target).
-# Il comando e' con "env" davanti perche' greetd lo lancia come "exec <comando>", e exec non
-# accetta assegnazioni di variabili prima del programma.
+#
+# LA SCRIVANIA E' UN SERVIZIO DI SYSTEMD (la persona, 27/11/2026; come GNOME e niri). Prima la
+# lanciava greetd direttamente, e systemd non sapeva quando la sessione grafica finiva: i
+# portali delle app (che sono fatti per spegnersi con la sessione grafica, PartOf=
+# graphical-session.target) restavano accesi senza schermo e si bloccavano, e dopo ogni
+# riavvio della scrivania app e barra aspettavano 25 secondi a ogni apertura. Ora:
+#   1. greetd lancia mshell-sessione (qui sotto), che passa a systemd dell'utente le
+#      impostazioni della sessione (quale sessione e', la lingua) e gli chiede di avviare la
+#      scrivania (mshell.service), aspettando finche' e' accesa;
+#   2. systemd la avvia; quando e' pronta (systemd-notify nel comando "-s", NotifyAccess=all)
+#      comincia la sessione grafica (graphical-session.target, legato con BindsTo);
+#   3. quando si chiude, per un'uscita o per un errore, mshell-sessione chiude la sessione
+#      grafica (mshell-fine.target, come niri-shutdown.target di niri): systemd spegne i
+#      portali; poi toglie l'indirizzo dello schermo e finisce, e greetd vede la sessione
+#      chiusa. Se invece si chiude la sessione di greetd (systemctl stop greetd, come fa la
+#      prova veloce), mshell-sessione chiude la sessione grafica allo stesso modo, e con lei la
+#      scrivania, prima di uscire.
+#      La chiusura e' "senza eccezioni" (--job-mode=replace-irreversibly): un'app che perde lo
+#      schermo, spegnendosi, richiama il portale, che chiede di riaccendere la sua parte
+#      grafica; senza, quella richiesta rimasta a meta' blocca la chiusura (systemd: "transaction
+#      is destructive") e i portali restano accesi senza schermo.
+# Il compositore chiede schermo e tastiera a logind (libseat): da servizio e' fuori dalla
+# sessione di greetd, e logind la riconosce dalla variabile XDG_SESSION_ID che gli passa
+# mshell-sessione (come fanno GNOME e niri). utente1 non ha bisogno di gruppi speciali.
+cat > "$RADICE/etc/greetd/config.toml" <<'FINE'
+# fatto da costruisci.sh
+[terminal]
+vt = 1
+
+[default_session]
+command = "/usr/sbin/agreety --cmd /bin/sh"
+user = "_greetd"
+
+[initial_session]
+command = "/usr/bin/mshell-sessione"
+user = "utente1"
+FINE
+cat > "$RADICE/usr/bin/mshell-sessione" <<'FINE'
+#!/bin/sh
+# mshell-sessione (fatto da costruisci.sh): lo lancia greetd all'accesso; avvia la scrivania
+# come servizio di systemd dell'utente e aspetta che finisca (spiegato in costruisci.sh).
+# chiude la sessione grafica: i portali, poi la scrivania (legata alla sessione con BindsTo)
+fine() {
+	systemctl --user start --job-mode=replace-irreversibly mshell-fine.target
+}
+trap fine TERM HUP INT
+systemctl --user reset-failed mshell.service graphical-session.target 2>/dev/null
+systemctl --user import-environment XDG_SESSION_ID XDG_SEAT XDG_VTNR XDG_SESSION_TYPE XDG_SESSION_CLASS LANG
+# in sottofondo, perche' "wait" si interrompe quando arriva un segnale e la scrivania si ferma
+systemctl --user --wait start mshell.service &
+wait $!
+wait $!
+fine
+systemctl --user unset-environment WAYLAND_DISPLAY XDG_SESSION_ID XDG_SEAT XDG_VTNR XDG_SESSION_TYPE XDG_SESSION_CLASS
+FINE
+chmod 755 "$RADICE/usr/bin/mshell-sessione"
+# LA SCRIVANIA PER SYSTEMD. Le variabili:
 # WLR_RENDERER_ALLOW_SOFTWARE=1: il compositore disegna con OpenGL ES 2 (SceneFX, per gli effetti:
 # utente/compositore/effetti.c); dove non c'e' una scheda video vera (QEMU) OpenGL lo fa Mesa con
 # il processore (llvmpipe), e senza questa variabile il compositore si rifiuterebbe di partire.
@@ -93,26 +147,37 @@ ln -sf /dev/null "$S/getty-static.service"   # di Debian: i getty su tty2-tty6
 # XKB_DEFAULT_LAYOUT=it: LA TASTIERA ITALIANA (decisione della persona). Il compositore chiede a
 # xkbcommon la mappa dei tasti senza dire quale: xkbcommon allora la prende da queste variabili
 # (e i file da xkb-data).
-# "-s ...": il compositore, appena pronto, fa due cose:
-#   1. dice ai servizi dell'utente (systemd --user) dov'e' lo schermo (WAYLAND_DISPLAY): il
-#      portale delle app (xdg-desktop-portal-gtk) parte da solo quando un'app lo chiama, come
-#      servizio dell'utente, e senza saperlo non si apre ("cannot open display"); allora le app
-#      e la barra aspettano invano le impostazioni (fino a 25 secondi). E' quello che fanno le
-#      altre scrivanie Wayland (GNOME, sway).
-#   2. fa partire la barra di stato.
 # VARIABILI_COMPOSITORE: quelle in piu' che chiede la macchina (macchine/<nome>.conf).
-cat > "$RADICE/etc/greetd/config.toml" <<FINE
-# fatto da costruisci.sh
-[terminal]
-vt = 1
+# "-s ...": il compositore, appena pronto, fa tre cose:
+#   1. dice ai servizi dell'utente dov'e' lo schermo (WAYLAND_DISPLAY): i portali e le app
+#      lanciate da systemd lo trovano;
+#   2. dice a systemd che e' pronto: comincia la sessione grafica, i portali possono partire;
+#   3. fa partire la barra di stato.
+mkdir -p "$RADICE/usr/lib/systemd/user"
+cat > "$RADICE/usr/lib/systemd/user/mshell.service" <<FINE
+# fatto da costruisci.sh: la scrivania di mshell
+[Unit]
+Description=mshell, la scrivania
+BindsTo=graphical-session.target
+Before=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target
 
-[default_session]
-command = "/usr/sbin/agreety --cmd /bin/sh"
-user = "_greetd"
-
-[initial_session]
-command = "env WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it ${VARIABILI_COMPOSITORE} mshell-compositore -s \"systemctl --user import-environment WAYLAND_DISPLAY; exec mshell-barra\""
-user = "utente1"
+[Service]
+Type=notify
+NotifyAccess=all
+Environment=WLR_RENDERER_ALLOW_SOFTWARE=1 LP_NUM_THREADS=0 XKB_DEFAULT_LAYOUT=it ${VARIABILI_COMPOSITORE}
+ExecStart=/usr/bin/mshell-compositore -s "systemctl --user import-environment WAYLAND_DISPLAY; systemd-notify --ready; exec mshell-barra"
+ExecStopPost=/usr/bin/systemctl --user unset-environment WAYLAND_DISPLAY
+FINE
+cat > "$RADICE/usr/lib/systemd/user/mshell-fine.target" <<'FINE'
+# fatto da costruisci.sh: la fine della sessione grafica (la avvia mshell-sessione)
+[Unit]
+Description=mshell, fine della sessione grafica
+DefaultDependencies=no
+StopWhenUnneeded=yes
+Conflicts=graphical-session.target graphical-session-pre.target
+After=graphical-session.target graphical-session-pre.target
 FINE
 rm -f "$S/getty.target.wants/getty@tty1.service"
 mkdir -p "$S/greetd.service.d"
