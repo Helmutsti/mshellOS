@@ -29,14 +29,14 @@ rm -rf "$RADICE"
 # (build/cache/radice-<impronta>.tar), con l'impronta di pacchetti.txt e di questo script. Se
 # l'archivio c'e', si riparte da li' (secondi) invece di riscaricare e reinstallare (minuti).
 # il kernel non e' in pacchetti.txt: dipende dal processore, lo dice la macchina (KERNEL)
-PACCHETTI=$( (sed 's/#.*//' pacchetti.txt; echo "$KERNEL") | tr -s ' \t\n' '\n' | grep -v '^$' | paste -sd, -)
-IMPRONTA=$( (cat pacchetti.txt strumenti/Dockerfile; echo "$KERNEL") | sha256sum | cut -c1-16)
+PACCHETTI=$( (sed 's/#.*//' pacchetti.txt; echo "$KERNEL $FIRMWARE") | tr -s ' \t\n' '\n' | grep -v '^$' | paste -sd, -)
+IMPRONTA=$( (cat pacchetti.txt strumenti/Dockerfile; echo "$KERNEL $FIRMWARE") | sha256sum | cut -c1-16)
 ARCHIVIO="$B/cache/radice-$IMPRONTA.tar"
 if [ ! -f "$ARCHIVIO" ]; then
     echo "1. mmdebstrap: essential + $PACCHETTI"
     mkdir -p "$B/cache"
     rm -f "$B/cache/radice-"*.tar
-    mmdebstrap --quiet --mode=root --variant=essential --include="$PACCHETTI" \
+    mmdebstrap --quiet --mode=root --variant=essential --components="main non-free-firmware" --include="$PACCHETTI" \
         trixie "$B/cache/parziale.tar" http://deb.debian.org/debian
     mv "$B/cache/parziale.tar" "$ARCHIVIO"
 else
@@ -207,6 +207,17 @@ nameserver 9.9.9.9
 nameserver 1.1.1.1
 FINE
 systemctl --root="$RADICE" enable systemd-networkd.service >/dev/null 2>&1
+# IL WI-FI (la persona, 27/11/2026: iwd). iwd si collega alla rete (comando iwctl); l'indirizzo lo
+# chiede systemd-networkd con DHCP, come per il cavo (iwd lascia fare a lui: e' il suo modo normale).
+cat > "$RADICE/etc/systemd/network/30-wifi.network" <<'FINE'
+# fatto da costruisci.sh: ogni scheda Wi-Fi collegata da iwd prende l'indirizzo con DHCP
+[Match]
+Type=wlan
+
+[Network]
+DHCP=yes
+FINE
+systemctl --root="$RADICE" enable iwd.service >/dev/null 2>&1
 # I SERVIZI CHE NON SERVONO (decisione della persona): il sistema si ricostruisce da capo a
 # ogni modifica, quindi quello che rifanno dopo un aggiornamento si fa qui, una volta sola
 # (l'elenco delle librerie, le spiegazioni dei messaggi del registro).
@@ -294,7 +305,7 @@ cp risorse/impostazioni/*.gschema.override "$RADICE/usr/share/glib-2.0/schemas/"
 chroot "$RADICE" sh -c '/usr/lib/*/glib-2.0/glib-compile-schemas /usr/share/glib-2.0/schemas'
 
 # --- 4. via i pacchetti "da terminale" e "per installare" ---
-DA_TERMINALE="bash grep sed findutils diffutils tar gzip hostname bsdutils ncurses-base ncurses-bin debianutils"
+DA_TERMINALE="grep sed findutils diffutils tar gzip hostname bsdutils ncurses-bin debianutils"
 PER_INSTALLARE="dpkg init-system-helpers perl-base sysvinit-utils mawk adduser passwd"
 # avanzi: li volevano i pacchetti "per installare" o il kernel di Debian (il suo archivio d'avvio
 # lo faremmo con initramfs-tools; noi lo facciamo con dracut degli attrezzi). Nel sistema acceso
@@ -343,7 +354,10 @@ systemd-sysusers --root="$RADICE" >/dev/null
 # scrive /etc/passwd, /etc/group e /etc/shadow della radice (--root) come farebbe nel sistema;
 # la password resta bloccata ("!"): entra solo con l'accesso automatico. La Home si crea a mano
 # nell'albero dei dati (/data/home diventa /home), sua e chiusa agli altri (700).
-useradd --root "$RADICE" --uid 1000 --user-group --no-create-home --home-dir /home/utente1     --shell /bin/sh utente1
+# La shell e' bash (la persona, 27/11/2026: per il terminale). Il gruppo netdev le permette di
+# comandare il Wi-Fi (iwctl): iwd risponde solo all'amministratore e a quel gruppo.
+groupadd --root "$RADICE" --system netdev
+useradd --root "$RADICE" --uid 1000 --user-group --groups netdev --no-create-home --home-dir /home/utente1 --shell /bin/bash utente1
 mkdir -m 700 "$DATI/home/utente1"
 # FLATHUB PER UTENTE1 (la persona, 24/11/2026: le app si installano per l'utente, nella sua Home,
 # senza permessi da amministratore). Si aggiunge qui, con flatpak del sistema stesso, la fonte
@@ -358,6 +372,16 @@ chroot "$RADICE" env HOME=/tmp/casa flatpak remote-add --user --if-not-exists fl
 # loro basi), solo per le lingue che gli si dicono. Si dice qui, una volta, "italiano": vale
 # per ogni installazione, anche fatta da un terminale senza la lingua della sessione.
 chroot "$RADICE" env HOME=/tmp/casa flatpak config --user --set languages it
+# LE APP GIA' DENTRO (APP_FLATPAK della macchina, di solito vuoto): per le macchine senza internet
+# (la chiavetta del portatile, la persona 27/11/2026) le app si scaricano qui da Flathub, con la
+# loro base, e finiscono nella Home di utente1 come se le avesse installate lei.
+if [ -n "$APP_FLATPAK" ]; then
+    echo "4c. app Flatpak: $APP_FLATPAK"
+    # /var e' gia' nell'albero dei dati: si aggancia come nel sistema acceso (Flatpak usa /var/tmp)
+    mount --bind "$DATI/var" "$RADICE/var"
+    chroot "$RADICE" env HOME=/tmp/casa flatpak install --user --noninteractive -y flathub $APP_FLATPAK >/dev/null
+    umount "$RADICE/var"
+fi
 umount "$RADICE/proc" "$RADICE/dev"
 mv "$RADICE/tmp/casa/.local" "$DATI/home/utente1/.local"
 rm -rf "$RADICE/tmp/casa" "$RADICE/tmp/flathub.flatpakrepo"

@@ -69,6 +69,17 @@ static void disegna(GtkDrawingArea *area, cairo_t *cr, int larghezza, int altezz
 		cairo_new_sub_path(cr);
 		cairo_arc(cr, 11, 11, 8, 0, 2 * G_PI);
 		break;
+	case ICONA_SPEGNI:
+		/* lucide "power" (il pulsante per spegnere, la persona 27/11/2026):
+		 *   M12 2v10
+		 *   M18.4 6.6a9 9 0 1 1-12.77.04
+		 * l'arco va da 18.4,6.6 a 5.63,6.64 passando sotto: centro 12.03,12.96, raggio 9,
+		 * da -45 a 224.6 gradi */
+		cairo_move_to(cr, 12, 2);
+		cairo_line_to(cr, 12, 12);
+		cairo_new_sub_path(cr);
+		arco(cr, 12.03, 12.96, 9, -45, 224.6, FALSE);
+		break;
 	}
 	cairo_stroke(cr);
 }

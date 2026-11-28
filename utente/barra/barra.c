@@ -210,8 +210,12 @@ static void lente_premuta(GtkButton *b, gpointer dati) {
 	mshell_cassetto_apri_chiudi();
 }
 
-/* Super+spazio, detto dal compositore. */
+/* Super+spazio, detto dal compositore. Non mentre si chiede se spegnere (spegni.c): quel
+ * riquadro sta sopra tutto e tiene la tastiera finche' non si risponde. */
 static gboolean segnale_cassetto(gpointer dati) {
+	if (mshell_spegni_aperto()) {
+		return G_SOURCE_CONTINUE;
+	}
 	mshell_cassetto_apri_chiudi();
 	return G_SOURCE_CONTINUE;
 }
@@ -322,6 +326,7 @@ int main(int argc, char *argv[]) {
 	barra = crea_barra();
 	crea_menu(tema);
 	mshell_cassetto_crea(tema, cassetto_cambiato);
+	mshell_spegni_crea(tema);
 	g_unix_signal_add(SIGUSR1, segnale_cassetto, NULL);
 	scocca_minuto(NULL);
 	mshell_elenco_app_avvia();

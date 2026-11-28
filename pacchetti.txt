@@ -37,3 +37,13 @@ greetd           # il gestore dell'accesso (display manager): all'accensione apr
 pipewire         # il servizio del suono: mescola i suoni di tutte le app e li manda alla scheda audio
 pipewire-pulse   # il "traduttore": le app che parlano come PulseAudio (Firefox, quasi tutte quelle di Flathub) suonano con PipeWire
 wireplumber      # il "regista" di PipeWire: sceglie dove va il suono (casse, cuffie) e ricorda il volume
+# IL WI-FI E IL TERMINALE (la persona, 27/11/2026, per la prova sul portatile: "altrimenti non posso
+# fare nulla su questo sistema"). I firmware delle schede Wi-Fi dipendono dalla macchina: stanno in
+# macchine/<nome>.conf (FIRMWARE), come il kernel.
+iwd              # il servizio del Wi-Fi (di Intel): cerca le reti, manda la password, resta collegato; si usa col comando iwctl. L'indirizzo lo chiede systemd-networkd, come per il cavo
+bash             # la shell comoda per il terminale (frecce per richiamare i comandi, completamento con Tab): torna tra i pacchetti del sistema, prima era tra quelli "da terminale" tolti
+ncurses-base     # le descrizioni dei terminali (cosa manda ogni tasto, come si cancella una riga): senza, bash non riconosce il terminale e frecce e Tab non vanno (la persona, 27/11/2026)
+# LO SPEGNIMENTO (la persona, 27/11/2026)
+polkitd          # polkit: dice a systemd chi puo' fare cosa; la persona seduta al computer puo' spegnerlo dal pulsante della barra senza essere l'amministratore (come in GNOME e KDE)
+# L'OROLOGIO (la persona, 28/11/2026: sul portatile la data era sbagliata di giorni)
+systemd-timesyncd  # il servizio di systemd che, appena c'e' rete, prende l'ora esatta da internet e corregge quella del sistema

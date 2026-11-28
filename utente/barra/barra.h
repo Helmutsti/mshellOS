@@ -6,7 +6,7 @@
 /* LE ICONE (icone.c): disegnate con cairo dai tracciati delle icone Lucide, nel colore del
  * testo del widget (la proprieta' CSS "color"). */
 enum mshell_icona { ICONA_CAMPANELLA, ICONA_MENU, ICONA_FRECCIA_SINISTRA, ICONA_FRECCIA_DESTRA,
-	ICONA_CERCA };
+	ICONA_CERCA, ICONA_SPEGNI };
 GtkWidget *mshell_icona_nuova(enum mshell_icona quale);                      /* 16 px */
 GtkWidget *mshell_icona_nuova_misura(enum mshell_icona quale, int misura);
 
@@ -24,6 +24,11 @@ GtkWidget *mshell_calendario_nuovo(void);
 void mshell_calendario_aggiorna(GtkWidget *calendario, GDateTime *adesso, gboolean torna_a_oggi);
 GtkWidget *mshell_notifiche_nuove(void);
 GtkWidget *mshell_comandi_nuovi(void);
+
+/* LO SPEGNIMENTO (spegni.c): la richiesta di conferma al centro dello schermo. */
+void mshell_spegni_crea(const char *tema);
+void mshell_spegni_chiedi(void);
+gboolean mshell_spegni_aperto(void);
 
 /* L'ELENCO DELLE APP (elenco-app.c): chiama "cambiato" con il titolo dell'app col focus ("" se
  * nessuna) ogni volta che cambia. */

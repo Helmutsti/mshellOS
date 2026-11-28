@@ -110,6 +110,76 @@ window {
 	background-color: var(--controllo-sfondo);
 }
 
+/* il titolo con, a destra, il pulsante per spegnere (la persona, 27/11/2026): l'icona (non il
+ * pulsante) sta sul bordo del contenuto, come le frecce del calendario, e la riga resta alta
+ * quanto il titolo */
+.riga-titolo > .spegni {
+	margin: -2px -4px -2px 0;
+}
+
+.spegni:hover {
+	background-color: var(--controllo-sopra-vetro);
+}
+
+.spegni:active {
+	background-color: var(--controllo-selezione-vetro);
+}
+
+/* LA RICHIESTA DI CONFERMA per spegnere (spegni.c): lo schermo scurito (superficie/velo) e al
+ * centro un riquadro pieno con gli angoli e l'ombra dei pannelli sopra il resto; due pulsanti
+ * alti altezza/s, quello che conferma con i colori dell'azione */
+.velo {
+	background-color: var(--superficie-velo);
+}
+
+.riquadro-conferma {
+	min-width: 288px;  /* come i pannelli dei menu */
+	padding: var(--spazio-24);
+	border-spacing: var(--spazio-24);
+	border-radius: var(--raggio-finestra);
+	background-color: var(--superficie-elevata);
+	box-shadow:
+		0 var(--effetto-ombra-sovrapposto-2-y) var(--effetto-ombra-sovrapposto-2-raggio) var(--effetto-ombra-sovrapposto-2-allarga) var(--effetto-ombra-sovrapposto-2-colore),
+		0 var(--effetto-ombra-sovrapposto-3-y) var(--effetto-ombra-sovrapposto-3-raggio) var(--effetto-ombra-sovrapposto-3-allarga) var(--effetto-ombra-sovrapposto-3-colore),
+		0 var(--effetto-ombra-sovrapposto-4-y) var(--effetto-ombra-sovrapposto-4-raggio) var(--effetto-ombra-sovrapposto-4-allarga) var(--effetto-ombra-sovrapposto-4-colore);
+}
+
+.scelte-conferma {
+	border-spacing: var(--gap-m);
+}
+
+.pulsante-conferma {
+	min-height: var(--altezza-s);
+	padding: 0 var(--padding-s);
+	border-radius: var(--raggio-controllo);
+}
+
+.pulsante-conferma.annulla {
+	background-color: var(--controllo-sfondo);
+	color: var(--testo-primario);
+}
+
+.pulsante-conferma.annulla:hover {
+	background-color: var(--controllo-sfondo-sopra);
+}
+
+.pulsante-conferma.annulla:active {
+	background-color: var(--controllo-sfondo-premuto);
+}
+
+.pulsante-conferma.conferma {
+	background-color: var(--azione-sfondo);
+	color: var(--azione-testo);
+}
+
+.pulsante-conferma.conferma:hover {
+	background-color: var(--azione-sfondo-sopra);
+}
+
+.pulsante-conferma.conferma:active {
+	background-color: var(--azione-sfondo-premuto);
+}
+
 /* 6. IL PANNELLO DI RICERCA (cassetto.c; misure dal disegno "Ricerca nuovo stile", pagina
  * "Scrivania" di Figma). Tutto lo schermo e' di vetro (la sfocatura la fa il compositore,
  * effetti.c); sopra, le pagine in alto al centro (scorrono in orizzontale) e le linguette in fondo. */
